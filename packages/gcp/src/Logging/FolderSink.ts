@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   createOwnership,
@@ -149,8 +150,32 @@ export type FolderSink = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  FolderSinkLookup
 >;
+
+/**
+ * Props for {@link FolderSink.lookup}: find a folder sink this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface FolderSinkLookup {
+  /**
+   * Sink id (the `{sink}` segment of `{parent}/sinks/{sink}`). Limited to
+   * 100 characters: letters, digits, underscores, hyphens, periods; first
+   * character must be alphanumeric.
+   */
+  sinkId: string;
+  /**
+   * Folder id (`folders/{folder}` or the numeric id).
+   */
+  folderId?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging sink owned by a folder (or the stack project).
@@ -191,6 +216,17 @@ export type FolderSink = Resource<
  *   filter: "severity>=WARNING",
  *   description: "warnings and errors",
  * });
+ * ```
+ *
+ * ### Looking up an existing folder sink
+ * `FolderSink.lookup` references a folder sink Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * folder sink.
+ *
+ * **Example:** Reference an existing folder sink
+ * ```typescript
+ * const folderSink = GCP.Logging.FolderSink.lookup({ sinkId: "my-sink" });
  * ```
  *
  * @resource
@@ -276,6 +312,15 @@ export const FolderSinkProvider = () =>
       if (!idChanged && !folderChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ sinkId, folderId }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = scopeParent(env.project, folderId);
+      const name = resourceName(parent, sinkId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, parent);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

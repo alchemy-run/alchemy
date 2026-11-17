@@ -6,6 +6,7 @@ import * as deploymentmanager from "@distilled.cloud/gcp/deploymentmanager_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -85,6 +86,13 @@ test.provider(
             target,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.DeploymentManager.Deployment.lookup({
+          deploymentId: created.deploymentId,
+          deletePolicy: created.deletePolicy,
+        }),
+        created,
       );
 
       expect(created.name).toEqual(expect.any(String));

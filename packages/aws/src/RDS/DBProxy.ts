@@ -127,8 +127,18 @@ export interface DBProxy extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBProxyLookup
 > {}
+
+/**
+ * Props for {@link DBProxy.lookup}: find a DB proxy this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBProxyLookup {
+  /** The db proxy name of the existing DB proxy. */
+  dbProxyName: string;
+}
 
 /**
  * An RDS Proxy for pooled Lambda-to-Aurora connectivity.
@@ -166,6 +176,17 @@ export interface DBProxy extends Resource<
  *   dbProxyName: proxy.dbProxyName,
  *   dbClusterIdentifiers: [cluster.dbClusterIdentifier],
  * });
+ * ```
+ *
+ * ### Looking up an existing DB proxy
+ * `DBProxy.lookup` references a DB proxy Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbProxyName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DB proxy
+ * ```typescript
+ * const existing = AWS.RDS.DBProxy.lookup({ dbProxyName: "my-db-proxy" });
+ * const endpoint = existing.endpoint;
  * ```
  *
  * @resource
@@ -266,6 +287,10 @@ export const DBProxyProvider = () =>
           if (olds?.engineFamily !== news.engineFamily) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbProxyName }) {
+          const proxy = yield* readProxy(dbProxyName);
+          return proxy?.DBProxyArn ? toAttrs({ proxy, tags: {} }) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =

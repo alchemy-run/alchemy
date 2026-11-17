@@ -12,6 +12,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Url from "effect/http/Url";
 import * as Match from "effect/Match";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -223,6 +224,12 @@ export interface OAuthClientSpec {
    * standard, default) or the query string (PlanetScale's documented form).
    */
   readonly tokenTransport?: "body" | "query";
+  /**
+   * Hosts besides the device authorization endpoint's own that may serve the
+   * device verification page (WorkOS answers on `api.auth.<domain>` but sends
+   * users to `auth.<domain>`). Always https.
+   */
+  readonly verificationHosts?: ReadonlyArray<string>;
 }
 
 export interface OAuthClient {
@@ -321,9 +328,22 @@ const generatePKCE = Effect.fn(function* (length = 96) {
 const TokenResponse = Schema.Struct({
   access_token: Schema.String,
   refresh_token: Schema.optional(Schema.String),
-  expires_in: Schema.Number,
+  // WorkOS omits it; the access token's JWT `exp` claim is used instead.
+  expires_in: Schema.optional(Schema.Number),
   scope: Schema.optional(Schema.String),
 });
+
+const decodeJwtClaims = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ exp: Schema.Number })),
+);
+
+/** The `exp` claim (seconds) of a JWT access token, if it is one. */
+const jwtExpiry = (token: string): number | undefined => {
+  const payload = token.split(".")[1];
+  if (payload === undefined) return undefined;
+  const json = Result.getOrUndefined(Base64Url.decodeString(payload));
+  return json === undefined ? undefined : Option.getOrUndefined(decodeJwtClaims(json))?.exp;
+};
 
 const DeviceAuthorizationResponse = Schema.Struct({
   device_code: Schema.String,
@@ -407,12 +427,26 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
       });
     }
     const now = yield* Clock.currentTimeMillis;
+    const exp = jwtExpiry(json.access_token);
+    const expires =
+      json.expires_in !== undefined
+        ? now + json.expires_in * 1000
+        : exp !== undefined
+          ? exp * 1000
+          : undefined;
+    if (expires === undefined) {
+      return yield* new OAuthInvalidResponse({
+        endpoint,
+        status: 200,
+        reason: "the token response has no expires_in and the access token is not a JWT",
+      });
+    }
     return {
       type: "oauth" as const,
       clientId: spec.clientId,
       access: Redacted.make(json.access_token),
       refresh,
-      expires: now + json.expires_in * 1000,
+      expires,
       scopes: json.scope?.split(" ") ?? previous?.scopes ?? [],
     } satisfies OAuthCredentials;
   });
@@ -475,6 +509,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
     // trust https URLs on the authorization server's own host (RFC 8628
     // §5.4, remote phishing).
     const expectedHost = new URL(endpoint).host;
+    const trustedHosts = new Set([expectedHost, ...(spec.verificationHosts ?? [])]);
     const trustedUrl = (value: string) => {
       const untrusted = () => new UntrustedVerificationUriError({ url: value, expectedHost });
       return Url.fromString(value).pipe(
@@ -484,7 +519,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
             url.protocol === "https:" &&
             url.username === "" &&
             url.password === "" &&
-            url.host === expectedHost,
+            trustedHosts.has(url.host),
           untrusted,
         ),
         Effect.fromResult,

@@ -4,6 +4,7 @@ description: Run an HTTP server on AWS Lambda Web Functions — an Effect fetch 
 ---
 
 import Timeline from "../../../../components/diagrams/Timeline.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 A Lambda Web Function runs an HTTP server on Lambda. Where a [Lambda Function](/aws/compute/lambda) runs one invocation at a time per environment, a Web Function's environment is a long-running server that takes many requests at once, up to 128. Responses stream to the client as your server writes them, and there's nothing to run while nobody calls it.
 
@@ -92,9 +93,7 @@ export default Alchemy.Stack(
 );
 ```
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 The `url` looks like `https://<id>.<shard>.lambda-web.us-west-2.on.aws`.
 Every deploy publishes a new revision and moves all traffic to it.

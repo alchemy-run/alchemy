@@ -74,8 +74,22 @@ export interface DataSource extends Resource<
      * Name of the data source.
      */
     name: string;
-  }
+  },
+  never,
+  undefined,
+  DataSourceLookup
 > {}
+
+/**
+ * Props for {@link DataSource.lookup}: find a knowledge base data source this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DataSourceLookup {
+  /** The knowledge base the data source feeds. */
+  knowledgeBaseId: string;
+  /** The id of the existing data source. */
+  dataSourceId: string;
+}
 
 /**
  * A data source attached to an Amazon Bedrock {@link KnowledgeBase} — the
@@ -100,6 +114,16 @@ export interface DataSource extends Resource<
  *   },
  *   dataDeletionPolicy: "DELETE",
  * });
+ * ```
+ *
+ * ### Looking up an existing knowledge base data source
+ * `DataSource.lookup` references a knowledge base data source Alchemy doesn't manage (created in the
+ * console or by another stack), found by `knowledgeBaseId` and `dataSourceId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing knowledge base data source
+ * ```typescript
+ * const docs = AWS.Bedrock.DataSource.lookup({ knowledgeBaseId, dataSourceId: "ABCDEFGHIJ" });
  * ```
  *
  * @resource
@@ -157,6 +181,15 @@ export const DataSourceProvider = () =>
         // requires the KB id, so this returns empty (the engine keys off state).
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* ({ knowledgeBaseId, dataSourceId }) {
+          const ds = yield* getDsOrUndefined(knowledgeBaseId, dataSourceId);
+          if (ds === undefined || ds.status === "DELETING") return undefined;
+          return {
+            knowledgeBaseId: ds.knowledgeBaseId,
+            dataSourceId: ds.dataSourceId,
+            name: ds.name,
+          };
+        }),
         read: Effect.fn(function* ({ olds, output }) {
           const knowledgeBaseId = output?.knowledgeBaseId ?? olds?.knowledgeBaseId;
           const dataSourceId = output?.dataSourceId;

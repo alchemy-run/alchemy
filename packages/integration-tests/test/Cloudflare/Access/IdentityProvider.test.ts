@@ -8,16 +8,13 @@ import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
 import * as Cause from "effect/Cause";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { testName } from "../../names.ts";
-import IdpLookupWorker from "./fixtures/idp-lookup-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -157,6 +154,61 @@ test.provider(
 
       yield* stack.destroy();
       yield* expectGone(undefined, accountId, initial.identityProviderId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
+);
+
+test.provider(
+  "passkeys: auto-prompt converges in place and an application allows it",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const domain = `${testName("alchemy-zt-passkeys")}.${zoneName}`;
+      const deploy = (loginPageAutoPrompt: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(adopt(true));
+            const passkeys = yield* Cloudflare.Access.IdentityProvider("Passkeys", {
+              type: "passkeys",
+              config: { loginPageAutoPrompt },
+            });
+            const app = yield* Cloudflare.Access.Application("PasskeysApp", {
+              type: "self_hosted",
+              domain,
+              allowedIdps: [passkeys.identityProviderId],
+            });
+            return { passkeys, app };
+          }),
+        );
+      const liveAutoPrompt = (identityProviderId: string) =>
+        getIdp(undefined, accountId, identityProviderId).pipe(
+          Effect.map(
+            (live) =>
+              (live.config as { loginPageAutoPrompt?: boolean | null }).loginPageAutoPrompt ??
+              false,
+          ),
+        );
+
+      const initial = yield* deploy(false);
+      expect(initial.passkeys.type).toEqual("passkeys");
+      expect(yield* liveAutoPrompt(initial.passkeys.identityProviderId)).toBe(false);
+
+      const liveApp = (yield* zeroTrust.getAccessApplicationForAccount({
+        accountId,
+        appId: initial.app.applicationId,
+      })) as unknown as { allowedIdps?: ReadonlyArray<string> | null };
+      expect(liveApp.allowedIdps ?? []).toEqual([initial.passkeys.identityProviderId]);
+
+      // Turning on the automatic browser prompt is an in-place update.
+      const updated = yield* deploy(true);
+      expect(updated.passkeys.identityProviderId).toEqual(initial.passkeys.identityProviderId);
+      expect(yield* liveAutoPrompt(updated.passkeys.identityProviderId)).toBe(true);
+
+      yield* stack.destroy();
+      yield* expectGone(undefined, accountId, initial.passkeys.identityProviderId);
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
 );
@@ -531,144 +583,6 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:access", "live"] },
 );
 
-test.provider(
-  "getIdentityProvider data source feeds another resource's props",
-  (stack) =>
-    Effect.gen(function* () {
-      const { accountId } = yield* yield* CloudflareEnvironment;
-
-      yield* stack.destroy();
-
-      const NAME = testName("alchemy-zt-idp-lookup");
-
-      // First deploy creates the IdP alone so the live IdP exists before
-      // the next plan's data-source Output resolves.
-      const idp = yield* stack.deploy(
-        Cloudflare.Access.IdentityProvider("LookupOidc", {
-          name: NAME,
-          type: "oidc",
-          config: oidcConfig,
-        }),
-      );
-
-      // Second deploy consumes the lookup Output IN PLACE OF a resource
-      // reference: `allowedIdps` receives the looked-up id — the "gate an
-      // application on an IdP managed outside the stack" use case.
-      const result = yield* stack.deploy(
-        Effect.gen(function* () {
-          const same = yield* Cloudflare.Access.IdentityProvider("LookupOidc", {
-            name: NAME,
-            type: "oidc",
-            config: oidcConfig,
-          });
-          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(adopt(true));
-          const app = yield* Cloudflare.Access.Application("LookupGatedApp", {
-            type: "self_hosted",
-            domain: `${testName("alchemy-test-idp-lookup")}.${zoneName}`,
-            sessionDuration: "24h",
-            allowedIdps: [
-              Cloudflare.Access.getIdentityProvider({ name: NAME }).identityProviderId.as<string>(),
-            ],
-          });
-          return {
-            deployedId: same.identityProviderId,
-            app,
-            missing: Cloudflare.Access.getIdentityProvider({
-              name: "alchemy-zt-idp-lookup-nonexistent",
-            }),
-          };
-        }),
-      );
-
-      expect(result.deployedId).toEqual(idp.identityProviderId);
-      expect(result.missing).toBeUndefined();
-      expect(result.app.applicationId).toBeTruthy();
-
-      // The application's allowed-IdP list must carry the looked-up id —
-      // verified out-of-band against the live application.
-      const liveApp = yield* zeroTrust
-        .getAccessApplicationForAccount({ accountId, appId: result.app.applicationId })
-        .pipe(
-          Effect.retry({ while: (e): boolean => e._tag === "Forbidden", ...forbiddenRetryPolicy }),
-        );
-      const allowed =
-        (liveApp as { allowedIdps?: ReadonlyArray<string | null> | null }).allowedIdps ?? [];
-      expect(allowed).toContain(idp.identityProviderId);
-
-      yield* stack.destroy();
-      yield* expectGone(undefined, idp.accountId, idp.identityProviderId);
-    }).pipe(logLevel),
-  {
-    tags: ["provider:cloudflare", "provider:cloudflare:access", "provider:cloudflare:zone", "live"],
-  },
-);
-
-// The lookup Worker finds its IdP by display name, which it reads from
-// `IDP_LOOKUP_NAME` at deploy time (see fixtures/idp-lookup-worker.ts).
-const IDP_LOOKUP_NAME = (process.env.IDP_LOOKUP_NAME = testName("alchemy-zt-idp-worker-lookup"));
-
-class LookupNotServing extends Data.TaggedError("LookupNotServing")<{ message: string }> {}
-
-test.provider(
-  "GetIdentityProvider binding resolves the IdP at runtime inside a Worker",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-
-      const deployed = yield* stack.deploy(
-        Effect.gen(function* () {
-          const idp = yield* Cloudflare.Access.IdentityProvider("WorkerLookupOidc", {
-            name: IDP_LOOKUP_NAME,
-            type: "oidc",
-            config: oidcConfig,
-          });
-          const worker = yield* IdpLookupWorker;
-          return { idp, worker };
-        }),
-      );
-
-      // Anchor on the expected marker, never a bare 200 — fresh workers.dev
-      // hostnames serve a placeholder with 200 while propagating, and the
-      // freshly-minted scoped token can 403 (→ worker 500) for ~30s.
-      const client = yield* HttpClient.HttpClient;
-      const body = yield* client.get(`${deployed.worker.url}/`).pipe(
-        Effect.flatMap((res) =>
-          Effect.gen(function* () {
-            const text = yield* res.text;
-            if (res.status !== 200 || !text.includes("identityProviderId")) {
-              return yield* new LookupNotServing({
-                message: `status=${res.status} body=${text.slice(0, 300)}`,
-              });
-            }
-            return JSON.parse(text) as { identityProviderId: string | null; type: string | null };
-          }),
-        ),
-        Effect.retry({
-          while: (e): boolean => e._tag === "LookupNotServing",
-          schedule: Schedule.max([
-            Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("5 seconds")]),
-            Schedule.recurs(15),
-          ]),
-        }),
-      );
-
-      expect(body.identityProviderId).toEqual(deployed.idp.identityProviderId);
-      expect(body.type).toEqual("oidc");
-
-      yield* stack.destroy();
-      yield* expectGone(undefined, deployed.idp.accountId, deployed.idp.identityProviderId);
-    }).pipe(logLevel),
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:access",
-      "provider:cloudflare:worker",
-      "live",
-    ],
-    timeout: 180_000,
-  },
-);
-
 // Compile-time contract of the per-type configs — never executed. The
 // discriminated Props union must reject a config from the wrong provider
 // type and enforce each type's required fields. Type-level assertions
@@ -682,6 +596,9 @@ type Assert<T extends true> = T;
 // Valid shapes are accepted.
 type _OkOidc = Assert<Extends<{ type: "oidc"; config: typeof oidcConfig }, IdpProps>>;
 type _OkPin = Assert<Extends<{ type: "onetimepin" }, IdpProps>>;
+type _OkPasskeys = Assert<
+  Extends<{ type: "passkeys"; config: { loginPageAutoPrompt: boolean } }, IdpProps>
+>;
 type _OkSaml = Assert<
   Extends<
     {

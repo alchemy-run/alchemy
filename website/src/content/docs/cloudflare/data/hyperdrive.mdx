@@ -61,7 +61,7 @@ export default Alchemy.Stack(
 ```
 
 Neon's auth is API-key-based. After this change,
-`bun alchemy profile edit --add Neon` either reads `NEON_API_KEY`
+`alchemy profile edit --add Neon` either reads `NEON_API_KEY`
 from the environment (good for CI) or stores a key under
 `~/.alchemy/credentials/<profile>/neon-stored.json`.
 
@@ -87,7 +87,7 @@ export default Alchemy.Stack(
 ```
 
 PlanetScale's auth uses an API token id + secret.
-`bun alchemy profile edit --add Planetscale` either reads `PLANETSCALE_API_TOKEN_ID`,
+`alchemy profile edit --add Planetscale` either reads `PLANETSCALE_API_TOKEN_ID`,
 `PLANETSCALE_API_TOKEN`, and `PLANETSCALE_ORGANIZATION` from the
 environment (good for CI) or stores the credentials under
 `~/.alchemy/credentials/<profile>/planetscale-stored.json`.
@@ -114,7 +114,7 @@ export default Alchemy.Stack(
 ```
 
 PlanetScale's auth uses an API token id + secret.
-`bun alchemy profile edit --add Planetscale` either reads `PLANETSCALE_API_TOKEN_ID`,
+`alchemy profile edit --add Planetscale` either reads `PLANETSCALE_API_TOKEN_ID`,
 `PLANETSCALE_API_TOKEN`, and `PLANETSCALE_ORGANIZATION` from the
 environment (good for CI) or stores the credentials under
 `~/.alchemy/credentials/<profile>/planetscale-stored.json`.
@@ -329,7 +329,7 @@ MySQLBranch → MySQLPassword → Hyperdrive on the deploy graph.
 
 ## Dev mode and the pooled origin
 
-In `bun alchemy dev`, alchemy doesn't create a Hyperdrive config at
+In `alchemy dev`, alchemy doesn't create a Hyperdrive config at
 all — the local Worker gets a connection string that points straight
 at the database. With Hyperdrive out of the path, nothing pools
 those local connections, so point the `dev` override at the
@@ -575,9 +575,7 @@ export default Alchemy.Stack(
 
 ## Deploy
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Watch the deploy plan: alchemy creates the database, then the
 branch, then the credentials (for PlanetScale), then the Hyperdrive

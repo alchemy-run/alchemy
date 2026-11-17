@@ -3,33 +3,31 @@ title: What is Better Auth?
 description: The concepts behind Better Auth — the auth server, users, accounts, sessions and cookies, sign-in providers, the signing secret, the database and its migrations, and middleware — and how @alchemy.run/better-auth models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
 
 [Better Auth](https://better-auth.com) is a TypeScript library that runs sign-in inside your own app. Your users, their sessions and their linked accounts live in your own database, not a third party's, and the routes that sign people in and out are served by your own server.
 
 Take one small app: a Worker with email and password sign-in, GitHub sign-in, and an API that only signed-in users may call. A browser signs in through the auth routes. Better Auth checks the credentials, stores a session in your database and sets a cookie. Your API's middleware reads the cookie and gives each handler the current user.
 
-<DAG
+<Tree
   nodes={[
-    { id: "browser", label: "browser", type: "cookie", col: 0, row: 0 },
-    { id: "routes", label: "/api/auth/*", type: "auth routes", tone: "accent", col: 1, row: 0 },
-    { id: "mw", label: "middleware", type: "current user", col: 1, row: 1 },
-    { id: "api", label: "/api/notes", type: "your handler", col: 1, row: 2 },
-    { id: "user", label: "user", type: "table", col: 3, row: 0 },
-    { id: "session", label: "session", type: "table", col: 3, row: 1 },
+    { id: "app", label: "Api", type: "your Worker or Lambda", icon: "brand:betterauth", areas: ["routes", "mw", "api"], phoneAreas: ["routes routes", "mw api"], colGap: 2.5 },
+    { id: "routes", label: "/api/auth/*", type: "auth routes", parent: "app", tone: "accent", icon: "log-in" },
+    { id: "mw", label: "middleware", type: "current user", parent: "app", icon: "shield-check" },
+    { id: "api", label: "/api/notes", type: "your handler", parent: "app", icon: "file-code" },
+    { id: "db", label: "AuthDb", type: "your database", icon: "database", areas: ["user", "session"], phoneAreas: ["user session"] },
+    { id: "user", label: "user", type: "table", parent: "db", icon: "table" },
+    { id: "session", label: "session", type: "table", parent: "db", icon: "table" },
   ]}
-  groups={[
-    { id: "app", label: "Your Worker or Lambda", nodes: ["routes", "mw", "api"] },
-    { id: "db", label: "AuthDb · your database", nodes: ["user", "session"] },
+  areas={["app db"]}
+  colGap={4}
+  links={[
+    { from: "routes", to: "db", label: "writes" },
+    { from: "mw", to: "db", label: "reads" },
+    { from: "mw", to: "api", label: "then" },
   ]}
-  edges={[
-    { from: "browser", to: "routes", label: "sign in" },
-    { from: "browser", to: "mw", label: "request" },
-    { from: "routes", to: "user", label: "users, sessions" },
-    { from: "mw", to: "session", label: "reads session" },
-    { from: "mw", to: "api" },
-  ]}
-  caption="Better Auth runs inside your app and keeps its tables in your database. Sign-in writes a session, and every later request reads it back."
+  caption="Better Auth runs inside your app and keeps its tables in your database. Signing in from the browser writes a session cookie, and every later request's middleware reads the session back before your handler runs."
 />
 
 ## The auth server

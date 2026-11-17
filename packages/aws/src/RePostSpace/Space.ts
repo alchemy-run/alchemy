@@ -154,8 +154,23 @@ export interface Space extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  SpaceLookup
 > {}
+
+/**
+ * Props for {@link Space.lookup}: find a re:Post space this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type SpaceLookup =
+  | {
+      /** The id of the existing space. */
+      spaceId: string;
+    }
+  | {
+      /** The name of the existing space. */
+      name: string;
+    };
 
 /**
  * An AWS re:Post Private space — a private, organization-scoped version of
@@ -194,6 +209,16 @@ export interface Space extends Resource<
  *   subdomain: "my-org-secure",
  *   userKMSKey: key.keyArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing re:Post space
+ * `Space.lookup` references a re:Post space Alchemy doesn't manage (created in the
+ * console or by another stack), found by `spaceId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing re:Post space
+ * ```typescript
+ * const community = AWS.RePostSpace.Space.lookup({ name: "community" });
  * ```
  *
  * @resource
@@ -339,6 +364,14 @@ export const SpaceProvider = () =>
             return items.filter(Predicate.isNotUndefined);
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const spaceId =
+            "spaceId" in props ? props.spaceId : (yield* findByName(props.name))?.spaceId;
+          if (spaceId === undefined) return undefined;
+          const space = yield* getSpaceOrUndefined(spaceId);
+          if (space === undefined || space.status.startsWith("DELETE")) return undefined;
+          return yield* toAttrs(space);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           let spaceId = output?.spaceId;
           if (spaceId === undefined) {

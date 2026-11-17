@@ -80,8 +80,18 @@ export interface ClusterParameterGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterParameterGroupLookup
 > {}
+
+/**
+ * Props for {@link ClusterParameterGroup.lookup}: find a cluster parameter group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterParameterGroupLookup {
+  /** The cluster parameter group name of the existing cluster parameter group. */
+  clusterParameterGroupName: string;
+}
 
 /**
  * An Amazon Redshift cluster parameter group — a named set of database
@@ -106,6 +116,16 @@ export interface ClusterParameterGroup extends Resource<
  *     statement_timeout: "60000",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster parameter group
+ * `ClusterParameterGroup.lookup` references a cluster parameter group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterParameterGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster parameter group
+ * ```typescript
+ * const existing = AWS.Redshift.ClusterParameterGroup.lookup({ clusterParameterGroupName: "my-cluster-parameter-group" });
  * ```
  *
  * @resource
@@ -178,6 +198,13 @@ export const ClusterParameterGroupProvider = () =>
           if (olds?.family !== news.family || olds?.description !== news.description) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ clusterParameterGroupName: name }) {
+          const group = yield* readGroup(name);
+          if (!group?.ParameterGroupName) return undefined;
+          const attrs = yield* toAttrs(group);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

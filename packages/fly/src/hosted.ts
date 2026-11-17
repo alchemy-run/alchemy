@@ -9,9 +9,12 @@ import {
   type PackageInstall,
 } from "alchemy/Bundle/InstalledPackages";
 import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
+import { hashDirectory } from "alchemy/Command/Memo";
 import { safeHttpEffect } from "alchemy/Http";
+import * as Output from "alchemy/Output";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createContainerRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
+import { packEnvValueKeepRedacted } from "alchemy/RuntimeContext";
 import {
   copyExtraFiles,
   contextRootOf,
@@ -55,16 +58,25 @@ export const createFlyHostRuntimeContext =
       const wrapped = serveFlyRpc(methods, safeHttpEffect(handler));
       const boots =
         shape === undefined || shape.fetch !== undefined || Object.keys(methods).length > 0;
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the Fly host provides FileSystem to every runner; HostRuntimeContext["serve"] can't name it
       return serveBase(
         wrapped,
         boots ? { shape: { ...shape, fetch: shape?.fetch ?? wrapped } } : options,
       ) as Effect.Effect<void, never, any>;
     };
+    // Keep the `Redacted` wrapper outside the packed string so the Service
+    // reconcile can store those values as App secrets instead of Machine env.
+    const set: HostRuntimeContext["set"] = (bindingId, output) =>
+      Effect.sync(() => {
+        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        base.env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
+        return key;
+      });
     // A Service runs on Fly Machines, which mint OIDC tokens for their
     // bindings to exchange with AWS and GCP (see `internal/Oidc.ts`).
     return Object.assign(
       base,
-      type === "Fly.Service" ? { serve, oidcToken: flyOidcToken } : { serve },
+      type === "Fly.Service" ? { serve, set, oidcToken: flyOidcToken } : { serve, set },
     );
   };
 
@@ -195,10 +207,14 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
   const active = bindings.filter(
     (binding: ResourceBinding<ServiceBinding> & { action?: string }) => binding.action !== "delete",
   );
-  const env = toEnvRecord(
-    active
-      .map((binding) => binding?.data?.env)
-      .reduce<Record<string, any>>((acc, value) => ({ ...acc, ...value }), {}),
+  const merged = active
+    .map((binding) => binding?.data?.env)
+    .reduce<Record<string, any>>((acc, value) => ({ ...acc, ...value }), {});
+  const env = toEnvRecord(merged);
+  // Names of bound `Config` values and Redacted outputs. Only the names:
+  // the values stay in `env` until the Service moves them into App secrets.
+  const secretNames = Object.keys(toEnvRecord(merged)).filter((key) =>
+    Redacted.isRedacted(merged[key]),
   );
   const mounts: DiskSpec[] = [];
   const seen = new Set<string>();
@@ -265,7 +281,16 @@ export const collectBindingState = (bindings: readonly ResourceBinding<ServiceBi
       });
     }
   }
-  return { env, mounts, redis, buckets, postgres, targets, callers: [...callers].sort() };
+  return {
+    env,
+    secretNames,
+    mounts,
+    redis,
+    buckets,
+    postgres,
+    targets,
+    callers: [...callers].sort(),
+  };
 };
 
 /**
@@ -548,10 +573,10 @@ export const createFlyHostedSupport = ({
         );
         const entryRel = posixRelUnder(root, realMain, path) ?? path.basename(realMain);
         const dest = path.join(contextDir, entryRel);
-        if (!(yield* fs.exists(dest).pipe(Effect.orElseSucceed(() => false)))) {
-          yield* fs.makeDirectory(path.dirname(dest), { recursive: true });
-          yield* fs.copy(realMain, dest, { overwrite: true });
-        }
+        // The context directory is reused across deploys: always copy the
+        // entry, or a changed entry ships the previous deploy's copy.
+        yield* fs.makeDirectory(path.dirname(dest), { recursive: true });
+        yield* fs.copy(realMain, dest, { overwrite: true });
       }
       return contextDir;
     });
@@ -592,7 +617,79 @@ export const createFlyHostedSupport = ({
     return codeHash;
   });
 
-  return { alchemyEnv, bundleProgram, computeCodeHash, resolveImage, hash };
+  /** A Docker build context's content hash: its image changes when any file in it does. */
+  const contextHash = Effect.fn(function* (context: string) {
+    return (yield* hashDirectory({ cwd: context })).slice(0, 16);
+  });
+
+  /**
+   * Build the image a `context` directory's `Dockerfile` describes, as it
+   * is, and push it to `registry.fly.io/{appName}:{logicalId}-{hash}`.
+   * When `previousHash` matches, skip build and push.
+   */
+  const resolveContextImage = Effect.fn(function* (input: {
+    id: string;
+    appName: string;
+    context: string;
+    remote: boolean | undefined;
+    previousHash?: string;
+    session?: { note: (message: string) => Effect.Effect<void> };
+  }) {
+    const note = input.session?.note ?? ((_message: string) => Effect.void);
+    const codeHash = yield* contextHash(input.context);
+    const imageRef = `${FLY_REGISTRY}/${input.appName}:${sanitizeImageRepo(input.id)}-${codeHash}`;
+    if (input.previousHash === codeHash) return { imageRef, codeHash };
+
+    const minted = yield* machines.createAppDeployToken({ app_name: input.appName });
+    const token =
+      minted.token === undefined || Redacted.isRedacted(minted.token)
+        ? minted.token
+        : Redacted.make(minted.token);
+    if (token === undefined || Redacted.value(token).length === 0) {
+      return yield* new DeployTokenMissing({ appName: input.appName });
+    }
+    const registry = { server: FLY_REGISTRY, username: "x", password: token };
+
+    if (input.remote !== false) {
+      yield* note(`Building ${imageRef} on a Fly remote builder...`);
+      yield* buildOnRemoteBuilder({
+        docker,
+        appName: input.appName,
+        contextDir: input.context,
+        imageRef,
+        platform: MACHINE_PLATFORM,
+        registry,
+        note,
+      });
+      yield* note(`Pushed ${imageRef}`);
+      return { imageRef, codeHash };
+    }
+
+    if (!(yield* imageExists(imageRef))) {
+      yield* note(`Building container image ${imageRef}...`);
+      yield* docker.image.build({
+        context: input.context,
+        tag: imageRef,
+        platform: MACHINE_PLATFORM,
+      });
+    }
+    yield* note(`Pushing ${imageRef}...`);
+    yield* docker.image
+      .push(imageRef, registry)
+      .pipe(Effect.retry({ times: 3, schedule: pushBackoff }));
+    yield* note(`Pushed ${imageRef}`);
+    return { imageRef, codeHash };
+  });
+
+  return {
+    alchemyEnv,
+    bundleProgram,
+    computeCodeHash,
+    resolveImage,
+    hash,
+    contextHash,
+    resolveContextImage,
+  };
 };
 
 /**

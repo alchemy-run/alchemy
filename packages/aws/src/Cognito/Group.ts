@@ -45,8 +45,20 @@ export interface Group extends Resource<
     userPoolId: string;
   },
   never,
-  Providers
+  Providers,
+  GroupLookup
 > {}
+
+/**
+ * Props for {@link Group.lookup}: find a group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface GroupLookup {
+  /** The user pool the group belongs to. */
+  userPoolId: string;
+  /** The name of the existing group. */
+  groupName: string;
+}
 
 /**
  * A group within an Amazon Cognito user pool. Groups organize users, appear
@@ -71,6 +83,16 @@ export interface Group extends Resource<
  *   roleArn: role.roleArn,
  *   precedence: 1,
  * });
+ * ```
+ *
+ * ### Looking up an existing group
+ * `Group.lookup` references a group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `userPoolId` and `groupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing group
+ * ```typescript
+ * const admins = AWS.Cognito.Group.lookup({ userPoolId, groupName: "admins" });
  * ```
  *
  * @resource
@@ -101,6 +123,10 @@ export const GroupProvider = () =>
         // doctrine.
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* ({ userPoolId, groupName }) {
+          const observed = yield* getGroup(userPoolId, groupName);
+          return observed === undefined ? undefined : { groupName, userPoolId };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const userPoolId = output?.userPoolId ?? olds?.userPoolId;
           if (userPoolId === undefined) return undefined;

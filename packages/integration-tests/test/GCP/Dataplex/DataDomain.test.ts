@@ -6,6 +6,7 @@ import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -83,6 +84,13 @@ test.provider.skipIf(!runLifecycle)(
             contacts: contactsA,
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Dataplex.DataDomain.lookup({
+          dataDomainId: created.dataDomainId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/dataDomains/");

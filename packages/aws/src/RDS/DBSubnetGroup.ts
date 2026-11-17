@@ -71,8 +71,18 @@ export interface DBSubnetGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBSubnetGroupLookup
 > {}
+
+/**
+ * Props for {@link DBSubnetGroup.lookup}: find a DB subnet group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBSubnetGroupLookup {
+  /** The db subnet group name of the existing DB subnet group. */
+  dbSubnetGroupName: string;
+}
 
 /**
  * An RDS DB subnet group for Aurora clusters, instances, and proxies.
@@ -95,6 +105,16 @@ export interface DBSubnetGroup extends Resource<
  *   dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
  *   vpcSecurityGroupIds: [dbSecurityGroup.groupId],
  * });
+ * ```
+ *
+ * ### Looking up an existing DB subnet group
+ * `DBSubnetGroup.lookup` references a DB subnet group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbSubnetGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DB subnet group
+ * ```typescript
+ * const existing = AWS.RDS.DBSubnetGroup.lookup({ dbSubnetGroupName: "my-db-subnet-group" });
  * ```
  *
  * @resource
@@ -136,6 +156,23 @@ export const DBSubnetGroupProvider = () =>
           if ((yield* toName(id, olds ?? {})) !== (yield* toName(id, news ?? {}))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbSubnetGroupName: name }) {
+          const group = yield* readGroup(name);
+          if (!group?.DBSubnetGroupName) {
+            return undefined;
+          }
+          return {
+            dbSubnetGroupName: group.DBSubnetGroupName,
+            dbSubnetGroupArn: group.DBSubnetGroupArn,
+            vpcId: group.VpcId,
+            subnetIds: (group.Subnets ?? []).flatMap((subnet) =>
+              subnet.SubnetIdentifier ? [subnet.SubnetIdentifier] : [],
+            ),
+            status: group.SubnetGroupStatus,
+            supportedNetworkTypes: group.SupportedNetworkTypes,
+            tags: yield* readTags(group.DBSubnetGroupArn),
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name =

@@ -146,8 +146,18 @@ export interface Assessment extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AssessmentLookup
 > {}
+
+/**
+ * Props for {@link Assessment.lookup}: find an assessment this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AssessmentLookup {
+  /** The id of the existing assessment. */
+  assessmentId: string;
+}
 
 /**
  * An AWS Audit Manager assessment — an active evidence-collection engagement
@@ -183,6 +193,16 @@ export interface Assessment extends Resource<
  *   },
  *   roles: [{ roleType: "PROCESS_OWNER", roleArn: owner.roleArn }],
  * });
+ * ```
+ *
+ * ### Looking up an existing assessment
+ * `Assessment.lookup` references an assessment Alchemy doesn't manage (created in the
+ * console or by another stack), found by `assessmentId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing assessment
+ * ```typescript
+ * const existing = AWS.AuditManager.Assessment.lookup({ assessmentId: "..." });
  * ```
  *
  * @resource
@@ -274,6 +294,12 @@ export const AssessmentProvider = () =>
               assessment === undefined ? [] : [toAttributes(assessment)],
             );
           }),
+        lookup: Effect.fn(function* ({ assessmentId }) {
+          const assessment = yield* readAssessmentById(assessmentId);
+          if (!assessment) return undefined;
+          const attrs = toAttributes(assessment);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const assessment = output?.assessmentId
             ? yield* readAssessmentById(output.assessmentId)

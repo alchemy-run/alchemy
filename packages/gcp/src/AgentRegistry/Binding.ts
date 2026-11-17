@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -120,8 +121,33 @@ export type Binding = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BindingLookup
 >;
+
+/**
+ * Props for {@link Binding.lookup}: find a binding this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface BindingLookup {
+  /**
+   * Binding id (the `{binding}` segment of
+   * `projects/{project}/locations/{location}/bindings/{binding}`). Must be
+   * 4-63 characters matching `^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`.
+   */
+  bindingId: string;
+  /**
+   * Location of the binding (`us-central1`, `global`, …). Multi-region `us`
+   * and `eu` are not supported.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Agent Registry binding connecting a source agent to a target
@@ -166,6 +192,18 @@ export type Binding = Resource<
  *   targetIdentifier: tools.mcpServerId,
  *   displayName: "orchestrator tools v2",
  *   description: "updated routing",
+ * });
+ * ```
+ *
+ * ### Looking up an existing binding
+ * `Binding.lookup` references a binding Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared binding.
+ *
+ * **Example:** Reference an existing binding
+ * ```typescript
+ * const binding = GCP.AgentRegistry.Binding.lookup({
+ *   bindingId: "my-binding",
  * });
  * ```
  *
@@ -266,6 +304,15 @@ export const BindingProvider = () =>
           (previousTarget !== undefined && previousTarget !== news.targetIdentifier),
       });
     }),
+
+    lookup: Effect.fn(function* ({ bindingId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, COLLECTION, bindingId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

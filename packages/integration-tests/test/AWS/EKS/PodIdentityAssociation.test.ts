@@ -1,7 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
-import { PodIdentityAssociation } from "@alchemy.run/aws/EKS";
+import { Network } from "@alchemy.run/aws/EC2/Network";
+import { Cluster, PodIdentityAssociation } from "@alchemy.run/aws/EKS";
+import { Role } from "@alchemy.run/aws/IAM";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as eks from "@distilled.cloud/aws/eks";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 
@@ -36,37 +39,85 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:eks", "live"] },
 );
 
-// Full deploy test: an EKS cluster takes ~10+ minutes to provision, which is far
-// too heavy for CI. Gate the deploy behind a pre-existing cluster supplied via
-// AWS_TEST_EKS_CLUSTER; an entitled account with a standing cluster runs this
-// unchanged. Deploys an association, asserts it appears in the
-// exhaustively-paginated `list()`, then tears down.
-test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
-  "list enumerates the deployed pod identity association",
+const podTrustPolicy = {
+  Version: "2012-10-17" as const,
+  Statement: [
+    {
+      Effect: "Allow" as const,
+      Principal: { Service: "pods.eks.amazonaws.com" },
+      Action: ["sts:AssumeRole", "sts:TagSession"],
+    },
+  ],
+};
+
+// Full deploy test on its own Auto Mode cluster (~10 min create, ~5 min
+// delete), so it skips under `--fast`. Deploys an association, moves it to a
+// second role and back, asserts it appears in the exhaustively-paginated
+// `list()`, then tears down. Two updates in a row also cover the per-request
+// clientRequestToken, though EKS applied pod identity updates even when the
+// token repeated (unlike Addon, Cluster and Nodegroup updates).
+test.provider.skipIf(!!process.env.FAST)(
+  "updates the role and lists the deployed pod identity association",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const clusterName = process.env.AWS_TEST_EKS_CLUSTER!;
-      const roleArn = process.env.AWS_TEST_EKS_POD_ROLE_ARN!;
+      const deploy = (role: "first" | "second") =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const network = yield* Network("PodIdentityNetwork", {
+              cidrBlock: "10.90.0.0/16",
+              availabilityZones: 2,
+            });
+            const cluster = yield* Cluster("PodIdentityCluster", {
+              compute: "auto",
+              resourcesVpcConfig: {
+                subnetIds: network.publicSubnetIds,
+                endpointPublicAccess: true,
+              },
+            });
+            const first = yield* Role("PodIdentityFirstRole", {
+              assumeRolePolicyDocument: podTrustPolicy,
+            });
+            const second = yield* Role("PodIdentitySecondRole", {
+              assumeRolePolicyDocument: podTrustPolicy,
+            });
+            const association = yield* PodIdentityAssociation("ListPodIdentity", {
+              clusterName: cluster.clusterName,
+              namespace: "default",
+              serviceAccount: "alchemy-test-list-sa",
+              roleArn: role === "first" ? first.roleArn : second.roleArn,
+            });
+            return {
+              association,
+              firstRoleArn: first.roleArn,
+              secondRoleArn: second.roleArn,
+            };
+          }),
+        );
 
-      const association = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* PodIdentityAssociation("ListPodIdentity", {
-            clusterName,
-            namespace: "default",
-            serviceAccount: "alchemy-test-list-sa",
-            roleArn,
-          });
-        }),
-      );
+      const roleArn = (association: PodIdentityAssociation["Attributes"]) =>
+        eks
+          .describePodIdentityAssociation({
+            clusterName: association.clusterName,
+            associationId: association.associationId,
+          })
+          .pipe(Effect.map((response) => response.association?.roleArn));
+
+      const created = yield* deploy("first");
+      expect(yield* roleArn(created.association)).toBe(created.firstRoleArn);
+
+      const moved = yield* deploy("second");
+      expect(yield* roleArn(moved.association)).toBe(moved.secondRoleArn);
+
+      const movedBack = yield* deploy("first");
+      expect(yield* roleArn(movedBack.association)).toBe(movedBack.firstRoleArn);
 
       const provider = yield* Provider.findProvider(PodIdentityAssociation);
       const all = yield* provider.list();
-
-      expect(all.some((a) => a.associationId === association.associationId)).toBe(true);
+      expect(all.some((a) => a.associationId === movedBack.association.associationId)).toBe(true);
 
       yield* stack.destroy();
     }),
-  { tags: ["provider:aws", "provider:aws:eks", "live"], timeout: 600_000 },
+  { tags: ["provider:aws", "provider:aws:eks", "live"], timeout: 2_400_000 },
 );

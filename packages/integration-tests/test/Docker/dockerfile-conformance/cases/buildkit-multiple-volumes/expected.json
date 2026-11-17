@@ -1,0 +1,18 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "foo",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "VOLUME",
+          "line": 3,
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

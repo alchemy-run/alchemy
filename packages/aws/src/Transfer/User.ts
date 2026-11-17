@@ -93,8 +93,20 @@ export interface User extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  UserLookup
 > {}
+
+/**
+ * Props for {@link User.lookup}: find a user this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface UserLookup {
+  /** The server the user belongs to. */
+  serverId: string;
+  /** The name of the existing user. */
+  userName: string;
+}
 
 /**
  * A user of an AWS Transfer Family server (service-managed identity
@@ -110,6 +122,16 @@ export interface User extends Resource<
  *   homeDirectory: "/my-bucket/alice",
  *   sshPublicKeyBody: "ssh-ed25519 AAAA...",
  * });
+ * ```
+ *
+ * ### Looking up an existing user
+ * `User.lookup` references a user Alchemy doesn't manage (created in the
+ * console or by another stack), found by `serverId` and `userName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing user
+ * ```typescript
+ * const partner = AWS.Transfer.User.lookup({ serverId, userName: "partner" });
  * ```
  *
  * @resource
@@ -173,6 +195,10 @@ export const UserProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ serverId, userName }) {
+          const user = yield* describe(serverId, userName);
+          return user?.UserName ? yield* toAttrs(serverId, user) : undefined;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const serverId = output?.serverId ?? olds?.serverId;
           const userName = output?.userName ?? olds?.userName;

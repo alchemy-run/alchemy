@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -91,8 +92,46 @@ export type BucketsDatasetsLink = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BucketsDatasetsLinkLookup
 >;
+
+/**
+ * Props for {@link BucketsDatasetsLink.lookup}: find a buckets datasets
+ * link this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface BucketsDatasetsLinkLookup {
+  /**
+   * Link id (the `{link}` segment of
+   * `.../datasets/{dataset}/links/{link}`). Also used as the linked
+   * BigQuery dataset id, so it may contain only letters, digits, and
+   * underscores and must start with a letter.
+   */
+  linkId: string;
+  /**
+   * Bucket location used when `dataset` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent observability dataset. Full name
+   * `projects/{project}/locations/{l
+   * ocation}/buckets/{bucket}/datasets/{dataset}` or the dataset id
+   * (combined with `bucket` and `location`). A dataset may have at most one
+   * link.
+   */
+  dataset: string;
+  /**
+   * Parent bucket used when `dataset` is a bare id. Full name or the bucket
+   * id.
+   */
+  bucket?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Observability dataset link that creates a linked BigQuery
@@ -134,6 +173,20 @@ export type BucketsDatasetsLink = Resource<
  *   dataset:
  *     "projects/my-project/locations/us-central1/buckets/_Trace/datasets/Spans",
  *   description: "updated analytics",
+ * });
+ * ```
+ *
+ * ### Looking up an existing buckets datasets link
+ * `BucketsDatasetsLink.lookup` references a buckets datasets link Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared buckets datasets link.
+ *
+ * **Example:** Reference an existing buckets datasets link
+ * ```typescript
+ * const bucketsDatasetsLink = GCP.Observability.BucketsDatasetsLink.lookup({
+ *   linkId: "my-link",
+ *   dataset: "my-dataset",
  * });
  * ```
  *
@@ -266,6 +319,22 @@ export const BucketsDatasetsLinkProvider = () =>
       if (!idChanged && !datasetChanged && !bucketChanged) return undefined;
       return { action: "replace" as const, deleteFirst: true };
     }),
+
+    lookup: Effect.fn(function* ({ linkId, location: lookupLocation, dataset, bucket }) {
+      const env = yield* GcpEnvironment.current;
+      const location = lookupLocation ?? env.region;
+      const parent = resolveDatasetParent(dataset ?? "", bucket, location, env.project);
+      const name = linkResourceName(
+        parent.project,
+        parent.location,
+        parent.bucketId,
+        parent.datasetId,
+        linkId,
+      );
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, parent.project, parent.location, parent.bucketId, parent.datasetId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

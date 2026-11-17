@@ -191,3 +191,24 @@ test.provider(
     timeout: 120_000,
   },
 );
+
+test.provider(
+  "declared without props, it deploys and destroys",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      // Every prop is optional, so the declaration needs no props object.
+      // It reaches Cloudflare either way: entitled accounts create the map,
+      // the testing account gets the typed entitlement error.
+      const result = yield* stack
+        .deploy(Cloudflare.Addressing.AddressMap("NoProps"))
+        .pipe(Effect.result);
+      if (Result.isSuccess(result)) {
+        expect(result.success.addressMapId).toBeTruthy();
+      } else {
+        expect(result.failure._tag).toEqual("FeatureNotEnabled");
+      }
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:cloudflare", "provider:cloudflare:addressing", "live"] },
+);

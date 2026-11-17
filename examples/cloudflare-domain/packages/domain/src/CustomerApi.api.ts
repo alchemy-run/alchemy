@@ -2,8 +2,8 @@ import * as Domain from "@alchemy.run/domain";
 import { Bank } from "./Bank.model.ts";
 
 /**
- * What the customer app reaches: commands to change things, the Account
- * aggregate and views to read and watch, and the ledger to page through.
+ * What the customer app reaches: commands to change things, views and a
+ * stream to read and watch, and the ledger to page through.
  * Each entry authorizes itself, through its `decide` or `validate`.
  */
 export class CustomerApi extends Domain.Api("CustomerApi", {
@@ -17,6 +17,5 @@ export class CustomerApi extends Domain.Api("CustomerApi", {
   ],
   views: ["CustomerDashboard", "AccountSummary", "Statement", "AccountTransfers", "TransferStatus"],
   streams: ["AccountCard"],
-  aggregates: ["Account"],
   queries: ["AccountLedger"],
 }) {}

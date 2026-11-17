@@ -4,6 +4,7 @@ description: Deploy from GitHub Actions with Workload Identity Federation — pr
 sidebar:
   order: 5
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 In [Part 4](/gcp/tutorial/part-4) you deployed stages by hand. Now
 GitHub Actions does it: pushes to `main` deploy `prod`, pull requests
@@ -21,9 +22,7 @@ from [Part 1](/gcp/tutorial/part-1#where-state-lives). Your first
 deploy created it. In CI, a missing bucket fails the run instead of
 being created, so make sure it exists:
 
-```sh
-bun alchemy state bootstrap --backend gcp
-```
+<PackageManagers run="alchemy state bootstrap --backend gcp" />
 
 ## Create the identity pool
 
@@ -55,10 +54,9 @@ The next stack creates a service account and grants it project roles.
 That needs more permission than your app does. Create a separate
 profile for it:
 
-```sh
-bun alchemy profile create admin
-bun alchemy profile edit --profile admin --add GCP
-```
+<PackageManagers run="alchemy profile create admin" />
+
+<PackageManagers run="alchemy profile edit --profile admin --add GCP" />
 
 Pick a key that can administer IAM in the project. Add a GitHub
 credential when prompted: `gh-cli` if you have the GitHub CLI,
@@ -196,9 +194,7 @@ of them are secret, so store them as repository variables:
 
 Run it once from your laptop:
 
-```sh
-bun alchemy deploy --config stacks/github.ts --profile admin
-```
+<PackageManagers run="alchemy deploy --config stacks/github.ts --profile admin" />
 
 The three variables appear under **Settings → Secrets and variables →
 Actions → Variables**.

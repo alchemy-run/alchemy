@@ -1,4 +1,4 @@
-import { withRequestOptions, type StripeOpError } from "@distilled.cloud/stripe";
+import type { StripeOpError } from "@distilled.cloud/stripe";
 import {
   GetBillingCreditGrants,
   GetBillingCreditGrant,
@@ -189,8 +189,18 @@ export type CreditGrant = Resource<
     metadata: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  CreditGrantLookup
 >;
+
+/**
+ * Props for {@link CreditGrant.lookup}: find a credit grant this stack
+ * doesn't manage by its id.
+ */
+export interface CreditGrantLookup {
+  /** Stripe credit grant id, e.g. `"credgr_61A2b3C4d5E6f7G8h"`. */
+  id: string;
+}
 
 /**
  * A Stripe Credit Grant — prepaid or promotional billing credits allocated
@@ -249,6 +259,16 @@ export type CreditGrant = Resource<
  *   customer: customer.id,
  *   amount: { type: "monetary", monetary: { currency: "usd", value: 1000 } },
  * });
+ * ```
+ *
+ * ### Looking up an existing credit grant
+ * `CreditGrant.lookup` references a credit grant Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing credit grant
+ * ```typescript
+ * const ref = Stripe.CreditGrant.lookup({ id: "credgr_61A2b3C4d5E6f7G8h" });
  * ```
  *
  * @resource
@@ -490,6 +510,11 @@ export const CreditGrantProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -536,11 +561,8 @@ export const CreditGrantProvider = () =>
           ...(news.effectiveAt !== undefined ? { effective_at: news.effectiveAt } : {}),
           ...(news.expiresAt !== undefined ? { expires_at: news.expiresAt } : {}),
           ...(news.priority !== undefined ? { priority: news.priority } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-credit-grant-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-credit-grant-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

@@ -53,13 +53,39 @@ export const encodeOwnership = (
   return text ? `${marker}\n${text}` : marker;
 };
 
+/** The key a compact marker stores its stack/stage/id hash under. */
+const HASH_KEY = "alchemy-hash";
+
+// FNV-1a, twice with different seeds: deterministic and dependency-free.
+const fnv = (value: string, seed: number) => {
+  let hash = seed;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+};
+
+const ownershipHash = (labels: Record<string, string>) => {
+  const key = [alchemyLabelKeys.stack, alchemyLabelKeys.stage, alchemyLabelKeys.id]
+    .map((k) => labels[k] ?? "")
+    .join("\u0000");
+  return fnv(key, 0x811c9dc5) + fnv(key, 0x01000193);
+};
+
+/**
+ * The marker, then the user's text, within `maxLength`. A marker that does not
+ * fit (a long stack and stage) is written as a hash of the stack, stage and id
+ * instead, so it is never cut and still identifies its owner.
+ */
 export const encodeOwnershipLine = (
   labels: Record<string, string>,
   text: string | undefined,
   maxLength = MAX_DISPLAY_NAME_LENGTH,
 ): string => {
-  const marker = markerOf(labels);
-  if (!text) return marker.slice(0, maxLength);
+  const full = markerOf(labels);
+  const marker = full.length <= maxLength ? full : `[alchemy ${HASH_KEY}=${ownershipHash(labels)}]`;
+  if (!text) return marker;
   return `${marker} ${text}`.slice(0, maxLength);
 };
 
@@ -91,6 +117,8 @@ export const hasOwnershipMarker = (text: string | undefined) =>
 export const ownedByAlchemy = (id: string, text: string | undefined) =>
   Effect.gen(function* () {
     const { labels } = parseOwnership(text);
+    const hash = labels[HASH_KEY];
+    if (hash !== undefined) return hash === ownershipHash(yield* createInternalLabels(id));
     return yield* hasAlchemyLabels(id, labels);
   });
 

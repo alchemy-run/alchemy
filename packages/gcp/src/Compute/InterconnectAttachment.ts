@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -207,8 +208,31 @@ export type InterconnectAttachment = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InterconnectAttachmentLookup
 >;
+
+/**
+ * Props for {@link InterconnectAttachment.lookup}: find an interconnect
+ * attachment this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface InterconnectAttachmentLookup {
+  /**
+   * Attachment name (RFC1035, 1-63 characters).
+   */
+  interconnectAttachmentName: string;
+  /**
+   * Region the attachment lives in. `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine Interconnect VLAN attachment.
@@ -241,6 +265,19 @@ export type InterconnectAttachment = Resource<
  *   interconnect: interconnect.selfLink,
  *   vlanTag8021q: 100,
  *   bandwidth: "BPS_1G",
+ * });
+ * ```
+ *
+ * ### Looking up an existing interconnect attachment
+ * `InterconnectAttachment.lookup` references an interconnect attachment
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared interconnect attachment.
+ *
+ * **Example:** Reference an existing interconnect attachment
+ * ```typescript
+ * const interconnectAttachment = GCP.Compute.InterconnectAttachment.lookup({
+ *   interconnectAttachmentName: "my-interconnect-attachment",
  * });
  * ```
  *
@@ -474,6 +511,14 @@ export const InterconnectAttachmentProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ interconnectAttachmentName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, interconnectAttachmentName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

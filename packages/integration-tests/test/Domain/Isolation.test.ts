@@ -11,8 +11,7 @@ import { Activity } from "effect/workflow";
 // One aggregate and one view definition, used by two independent models.
 class Opened extends Domain.Event("Opened", { owner: Schema.String }) {}
 class Open extends Domain.Command("Open", {
-  target: Schema.String,
-  input: { owner: Schema.String },
+  input: { id: Schema.String, owner: Schema.String },
   events: [Opened],
 }) {}
 class Account extends Domain.Aggregate("Account", {
@@ -20,6 +19,7 @@ class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ owner: Schema.NullOr(Schema.String) }),
   initial: { owner: null },
   commands: [Open],
+  keyOf: (command) => command.id,
   decide: { Open: (_, { owner }) => [new Opened({ owner })] },
   evolve: { Opened: (_, { owner }) => ({ owner }) },
 }) {}
@@ -45,7 +45,7 @@ const OpenAccountLive = OpenAccount.toLayer(
     return Effect.fn(function* ({ key, owner }) {
       yield* Activity.make({
         name: "open",
-        execute: accounts.send(key, new Open({ owner })).pipe(Effect.asVoid),
+        execute: accounts.send(new Open({ id: key, owner })).pipe(Effect.asVoid),
       });
     });
   }),
@@ -60,15 +60,17 @@ describe("Domain model isolation", { tags: ["unit", "local"] }, () => {
       const billing = yield* Layer.build(Billing.layer(Layer.empty)).pipe(Effect.provide(platform));
       const audit = yield* Layer.build(Audit.layer(Layer.empty)).pipe(Effect.provide(platform));
 
-      const receipt = yield* Context.get(billing, Account).send("a-1", new Open({ owner: "sam" }));
+      const receipt = yield* Context.get(billing, Account).send(
+        new Open({ id: "a-1", owner: "sam" }),
+      );
       const atLeast = { stream: receipt.stream, version: receipt.version };
 
-      expect(yield* Context.get(billing, Account).state("a-1")).toEqual({ owner: "sam" });
-      expect(yield* Context.get(billing, Owners).query(Account.ref("a-1"), { atLeast })).toEqual(
+      expect(yield* Context.get(billing, Account).get("a-1")).toEqual({ owner: "sam" });
+      expect(yield* Context.get(billing, Owners).get(Account.ref("a-1"), { atLeast })).toEqual(
         Option.some({ owner: "sam" }),
       );
-      expect(yield* Context.get(audit, Account).state("a-1")).toEqual({ owner: null });
-      expect(yield* Context.get(audit, Owners).query(Account.ref("a-1"))).toEqual(Option.none());
+      expect(yield* Context.get(audit, Account).get("a-1")).toEqual({ owner: null });
+      expect(yield* Context.get(audit, Owners).get(Account.ref("a-1"))).toEqual(Option.none());
     }).pipe(Effect.scoped),
   );
 
@@ -86,8 +88,8 @@ describe("Domain model isolation", { tags: ["unit", "local"] }, () => {
       yield* salesRun.result;
       yield* supportRun.result;
 
-      expect(yield* Context.get(sales, Account).state("s-1")).toEqual({ owner: "sam" });
-      expect(yield* Context.get(support, Account).state("s-1")).toEqual({ owner: "alex" });
+      expect(yield* Context.get(sales, Account).get("s-1")).toEqual({ owner: "sam" });
+      expect(yield* Context.get(support, Account).get("s-1")).toEqual({ owner: "alex" });
     }).pipe(Effect.scoped),
   );
 

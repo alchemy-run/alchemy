@@ -1,0 +1,76 @@
+---
+title: Modal
+description: Run Functions, Servers and Sandboxes on Modal with Alchemy. Declare apps, images, volumes and secrets in TypeScript, and create sandboxes from any Worker or Lambda.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+Modal is a cloud platform that runs your code in containers, with GPUs on demand. Functions and Servers scale from zero with traffic, and Sandboxes are containers your code creates while it runs, for code it doesn't trust. Images, Volumes, Dicts, Queues and Secrets live next to them, and you pay per second for what runs.
+
+**New to Modal?** Start with [What is Modal?](/modal/what-is-modal).
+
+## A quick example
+
+A warm image is built once, at deploy, on Modal's builders: an image with git, then the repository cloned into it:
+
+```typescript title="src/Sandbox.ts"
+import * as Modal from "@alchemy.run/modal";
+
+export const Coder = Modal.App("Coder", {});
+
+export const Node = Modal.Image("Node", {
+  app: Coder,
+  image: "node:22-bookworm",
+  commands: ["RUN apt-get update && apt-get install -y git"],
+});
+
+export const Warm = Modal.Image("Warm", {
+  app: Coder,
+  from: Node,
+  run: ["git clone --depth 1 https://github.com/sindresorhus/is /work"],
+});
+```
+
+A runtime starts a sandbox from `Warm` for each task, with the repository already in `/work`, and stops it when the task is done:
+
+```typescript
+const sandboxes = yield* Modal.CreateSandbox(Warm);
+const sandbox = yield* sandboxes.create({ timeout: "5 minutes" });
+const result = yield* sandbox.exec(["git", "-C", "/work", "log", "-1"]);
+yield* sandbox.terminate();
+```
+
+And the Stack deploys them:
+
+```typescript title="alchemy.run.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Modal from "@alchemy.run/modal";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Warm } from "./src/Sandbox.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Modal.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const warm = yield* Warm;
+    return { image: warm.imageId };
+  }),
+);
+```
+
+From a Cloudflare Worker, a sandbox runs its command as its program and writes the output to a Volume, which the Worker reads back; the [tutorial](/modal/tutorial/part-2) builds that.
+
+## Where to start
+
+**Want to build?** Start with [Setup](/modal/setup) to sign in to Modal, then the [tutorial](/modal/tutorial/part-1), which builds a sandbox per user one step at a time.
+
+**Looking for something specific?** Every section of these docs is listed below, and every resource is in the generated [API reference](/providers).
+
+## The docs
+
+<HubMap />

@@ -2,8 +2,20 @@
 title: Accounts and tokens
 description: How GitHub accounts and organizations own repositories, which token Alchemy acts as and the scopes it needs, and how OIDC lets workflows reach a cloud with no stored secret.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 A repository belongs to an **account**: a person, or an **organization** that many people share, with teams and per-repository permissions. Alchemy acts as whoever its GitHub token belongs to, so the token decides which repositories it can change.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme", type: "organization · teams, permissions" },
+    { id: "api", label: "api", type: "repository", parent: "org", tone: "accent", specs: [["Actions", "secrets, variables"]] },
+    { id: "web", label: "web", type: "repository", parent: "org", tone: "accent", specs: [["Actions", "secrets, variables"]] },
+    { id: "legacy", label: "legacy", type: "repository · not managed", parent: "org", tone: "muted", side: true },
+  ]}
+  scopes={[{ on: "org", label: "token: repo, workflow" }]}
+  caption="Alchemy acts as whoever owns its token, so the token's scopes and that account's access decide which repositories it can change. A machine account can be limited to the repositories it manages."
+/>
 
 ## Sign in with a profile
 

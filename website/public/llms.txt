@@ -38,7 +38,7 @@ The noun graph and its semantics: Stacks of Resources and Actions, data flow via
 - [Resources](https://alchemy.run/infrastructure-as-code/resource) — Resources are named cloud entities with input properties and output attributes.
 - [Actions](https://alchemy.run/infrastructure-as-code/action) — A node in the dependency graph that runs an Effect during apply when its inputs change.
 - [Inputs & Outputs](https://alchemy.run/infrastructure-as-code/outputs) — Output<T> is alchemy's lazy reference type — the lazy values that flow between resources, get composed with .pipe, mapped, interpolated, and resolved during deploy.
-- [References](https://alchemy.run/infrastructure-as-code/references) — Read an already-deployed Resource or Stack at plan time — Resource.ref by Logical ID with optional stack/stage props, or import a Stack tag and depend on its outputs.
+- [References](https://alchemy.run/infrastructure-as-code/references) — Read an already-deployed Resource or Stack at plan time — Resource.ref by Logical ID with optional stack/stage props, Resource.lookup for resources Alchemy doesn't manage, or import a Stack tag and depend on its outputs.
 - [Resource Lifecycle](https://alchemy.run/infrastructure-as-code/resource-lifecycle) — How alchemy plans, applies, replaces, and destroys resources — and how to think about idempotency and recovery.
 - [Renaming Resources](https://alchemy.run/infrastructure-as-code/renaming) — Migrate a resource's state across a logical ID change instead of replacing it.
 - [Providers](https://alchemy.run/infrastructure-as-code/provider) — Providers implement the lifecycle operations for a resource type — reconcile, delete, diff, read, and more.
@@ -53,6 +53,7 @@ How app code and infrastructure compose: Runtime, Bindings, the Construction and
 
 - [Runtime](https://alchemy.run/infrastructure-as-effects/runtime) — A Runtime is a Resource that carries the code it runs — a Worker, Lambda Function, Container, or Server declared with the Effectful Constructor pattern. Bind what you need, return what you expose.
 - [Bindings](https://alchemy.run/infrastructure-as-effects/binding) — A Binding connects a Resource to a Worker or Lambda. One line declares the capability and generates the permissions, the configuration, and a typed client.
+- [Identity Federation](https://alchemy.run/infrastructure-as-effects/identity-federation) — How a binding reaches another cloud with the identity the host's platform already signs, instead of a long-lived key, and which runtimes and clouds support it.
 - [Layers](https://alchemy.run/infrastructure-as-effects/layers) — A Layer defines a service contract with swappable implementations. In Alchemy, a Layer can encapsulate Resources and Bindings, so shared services carry their own infrastructure and permissions.
 - [Event Sources](https://alchemy.run/infrastructure-as-effects/event-sources) — An event source is a binding that runs your Function when something happens on a resource — one call wires the event-source mapping, the permissions, and a typed handler.
 - [Sinks](https://alchemy.run/infrastructure-as-effects/sinks) — A Sink is the write-side dual of an Event Source — a Binding that exposes a resource as an Effect Sink, batching writes into the batch API with least-privilege IAM.
@@ -313,8 +314,10 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 ## AWS — Compute
 
 - [Lambda MicroVMs](https://alchemy.run/aws/compute/microvms) — Build a Firecracker MicroVM image from TypeScript or a Dockerfile, then launch and drive isolated stateful instances from a Lambda Function with typed lifecycle bindings and RPC.
+- [Nitro Sandboxes](https://alchemy.run/aws/compute/nitro-sandboxes) — How Nitro Sandboxes run each ECS task, EKS pod or self-managed workload in its own lightweight VM on your EC2 instances, the difference between isolated and confidential modes, and how to turn them on for ECS, EKS and EC2.
 - [EC2](https://alchemy.run/aws/compute/ec2) — How EC2 instances give you a whole virtual machine, how to launch one from an image into a subnet, how to run your Effect program on it as a service, and how to reach it.
 - [ECS](https://alchemy.run/aws/compute/ecs) — How ECS runs containers on Fargate through clusters, task definitions, tasks and services, and how to run a server, a one-off job or a scheduled job from an image, a Dockerfile or an Effect program.
+- [ECS Sandboxes](https://alchemy.run/aws/compute/ecs-sandboxes) — Create a Nitro Sandbox per user or session on ECS from a Lambda Function, then run commands, use files, open terminals and call ports in it through a typed handle.
 - [Effect workflows](https://alchemy.run/aws/compute/effect-workflows) — Run Effect workflows on AWS Lambda durable functions. Host them in an AWS.Lambda.WorkflowFunction, start runs from other functions with AWS.Lambda.DurableFunctionEngine, and let them sleep and wait durably.
 - [EKS](https://alchemy.run/aws/compute/eks) — Stand up an EKS Auto Mode cluster on a Network and run containers on it — Deployments for servers, Jobs for run-to-completion work, Manifests for everything else. No YAML, no kubectl.
 - [HyperPod](https://alchemy.run/aws/compute/hyperpod) — Provision SageMaker HyperPod clusters — Slurm or EKS orchestrated — and run ML workloads on them with sbatch, raw manifests, or effectful Jobs with task governance.
@@ -363,7 +366,7 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 ## AWS — Messaging & events
 
 - [DynamoDB Streams](https://alchemy.run/aws/messaging/dynamodb-streams) — How a DynamoDB Stream records every change to a table in order, what each change record carries, and how a Function consumes changes and checkpoints at the first failure.
-- [EventBridge & Scheduler](https://alchemy.run/aws/messaging/eventbridge) — How EventBridge buses route events to targets by matching their content, how runtimes publish and consume events, and how EventBridge Scheduler runs Functions, Queues and tasks on a schedule.
+- [EventBridge & Scheduler](https://alchemy.run/aws/messaging/eventbridge) — How EventBridge buses route events to targets by matching their content, how runtimes publish and consume events, and how EventBridge Scheduler runs Functions, Queues and tasks on a schedule, including schedules created at runtime.
 - [Kinesis](https://alchemy.run/aws/messaging/kinesis) — How Kinesis Data Streams keep records in order per partition key across shards, how runtimes write records and consume them in batches, and how retention, replay and checkpoints work.
 - [S3 events](https://alchemy.run/aws/messaging/s3-events) — How a Bucket notifies a Function when objects are created or deleted, what each notification carries, and how to process notifications as an Effect Stream.
 - [SNS](https://alchemy.run/aws/messaging/sns) — How SNS Topics broadcast one message to every subscriber, how to publish from a runtime, subscribe Functions and Queues, and filter what each subscriber receives.
@@ -376,7 +379,7 @@ A linear five-part walkthrough from zero to a tested, CI-deployed AWS project. E
 
 ## AWS — Security & secrets
 
-- [Federated identity](https://alchemy.run/aws/security/federated-identity) — How a Cloud Run service reaches AWS, and a Lambda reaches GCP, through workload identity federation instead of long-lived keys.
+- [Federated identity](https://alchemy.run/aws/security/federated-identity) — How Cloud Run services and Fly Services reach AWS, and a Lambda reaches GCP, through workload identity federation instead of long-lived keys.
 - [Secrets & env](https://alchemy.run/aws/security/secrets-env) — How configuration and secrets reach a runtime on AWS, as environment variables from effect/Config or as Secrets Manager secrets read through a binding, and when to use each.
 
 ## AWS — Observability
@@ -461,7 +464,7 @@ Google Cloud as Stack resources — Cloud Run services and jobs, Firestore, Pub/
 
 ## GCP — Security & secrets
 
-- [Federated identity](https://alchemy.run/gcp/security/federated-identity) — How a Lambda reaches GCP, and a Cloud Run service reaches AWS, through workload identity federation instead of long-lived keys.
+- [Federated identity](https://alchemy.run/gcp/security/federated-identity) — How a Lambda or Fly Service reaches GCP, and a Cloud Run service reaches AWS, through workload identity federation instead of long-lived keys.
 - [IAM & bindings](https://alchemy.run/gcp/security/iam) — What a GCP binding does — the per-runtime service account, the role it grants, where the grant lands, and how removing a binding revokes it.
 - [Secret Manager & KMS](https://alchemy.run/gcp/security/secrets-kms) — Keep API keys in Secret Manager and read them per request, encrypt data with Cloud KMS, and pass plain config through env.
 
@@ -481,6 +484,7 @@ The Fly hub: overview, What is Fly? (organizations, Apps, Machines, regions, the
 - [Fly](https://alchemy.run/fly) — Run Effect programs on Fly.io with Alchemy. Declare Services, Machines, Volumes, Postgres, Redis and Tigris in TypeScript, in the regions near your users.
 - [What is Fly?](https://alchemy.run/fly/what-is-fly) — The concepts behind Fly.io — organizations, Apps, Machines, regions, the Fly proxy, private networking, Volumes, managed data, secrets and certificates — and how @alchemy.run/fly models each of them.
 - [Organizations and tokens](https://alchemy.run/fly/organizations-and-tokens) — How a Fly organization holds your Apps and billing, how an organization token decides where Alchemy deploys, and how to keep production in its own organization.
+- [Federated identity](https://alchemy.run/fly/federated-identity) — How a Fly Service reaches AWS and GCP with the OIDC tokens its Machines sign, instead of a stored access key or service account key.
 - [Setup](https://alchemy.run/fly/setup) — Create a Fly org, generate an API token, and store it in a profile.
 - [IPs & certificates](https://alchemy.run/fly/networking) — Public and private Fly Services, App addresses, and certificates for your own hostname.
 
@@ -632,6 +636,79 @@ The Railway hub: overview, What is Railway? (workspaces, projects, environments,
 - [Waku](https://alchemy.run/railway/frontend/waku) — Deploy a Waku app to Railway with Railway.Website.Waku — RSC server on a container Service, SSG pages in the image, and Waku's own dev server under alchemy dev.
 - [Octane](https://alchemy.run/railway/frontend/octane) — Deploy an OctaneJS app to Railway with Railway.Website.Octane — SSR plus client assets on one Service, and Octane's own Vite dev server under alchemy dev.
 
+## DigitalOcean
+
+DigitalOcean: App Platform runtimes and Functions, Droplets, Kubernetes, MicroVM sandboxes, Spaces, Managed Databases, GenAI agents and inference, networking and monitoring, with bindings that give each runtime a key to one resource.
+
+- [DigitalOcean](https://alchemy.run/digitalocean) — Run Effect programs on DigitalOcean with Alchemy. Declare Apps, Functions, Droplets, Kubernetes, Spaces, Managed Databases, AI agents and networking in one TypeScript program.
+- [What is DigitalOcean?](https://alchemy.run/digitalocean/what-is-digitalocean) — The concepts behind DigitalOcean — teams, tokens, projects, regions, App Platform, Functions, Droplets, Kubernetes, Sandboxes, Spaces, Managed Databases, AI agents, networking and monitoring — and how @alchemy.run/digitalocean models each of them.
+- [Setup](https://alchemy.run/digitalocean/setup) — Install Alchemy and connect it to DigitalOcean — create a personal access token for your team and store it in a profile.
+- [Teams, projects and tokens](https://alchemy.run/digitalocean/teams-projects-and-tokens) — How a DigitalOcean team holds your resources and billing, how a personal access token decides where Alchemy deploys, how to keep production in its own team, and the narrower keys bindings create for your runtimes.
+
+## DigitalOcean — Tutorial
+
+- [Part 1: Your First App](https://alchemy.run/digitalocean/tutorial/part-1) — Create a Stack, write an Effect HTTP handler, and deploy it to App Platform with its own Container Registry.
+- [Part 2: Store Files in Spaces](https://alchemy.run/digitalocean/tutorial/part-2) — Declare a Spaces bucket, give the App a key that reaches only that bucket, and read and write objects from a handler.
+- [Part 3: Add a Postgres Database](https://alchemy.run/digitalocean/tutorial/part-3) — Declare a managed PostgreSQL cluster, apply SQL migrations on every deploy, and query it from the App with its connection string.
+- [Part 4: Run a Nightly Job](https://alchemy.run/digitalocean/tutorial/part-4) — Schedule an App Platform job from the same program, so a report of the day's visits lands in Spaces every night.
+- [Part 5: Ship to Production](https://alchemy.run/digitalocean/tutorial/part-5) — Deploy a second copy of the Stack as a stage, give production its own team and profile, deploy from CI, and tear down what you no longer need.
+
+## DigitalOcean — Security
+
+- [Secrets](https://alchemy.run/digitalocean/security/secrets) — Give DigitalOcean Apps and Functions API keys and passwords as Config values from .env or a secrets manager, or keep shared values in DigitalOcean Secrets and read them with ReadSecret.
+
+## DigitalOcean — Compute
+
+- [App Platform](https://alchemy.run/digitalocean/compute/app-platform) — Run an Effect or async program on DigitalOcean App Platform as an HTTPS service, with instance sizes, scheduled jobs, alerts, secrets and the team's Container Registry.
+- [Choosing a runtime](https://alchemy.run/digitalocean/compute/choosing-a-runtime) — How App Platform services and jobs, Functions, Kubernetes and Droplets differ in what starts them, how they scale and what they cost, and how to choose one for each part of an app.
+- [Droplets](https://alchemy.run/digitalocean/compute/droplets) — Run DigitalOcean Droplets with cloud-init, SSH keys, volumes, snapshots, backups and autoscale pools, and know which changes update a Droplet in place and which replace it.
+- [Functions](https://alchemy.run/digitalocean/compute/functions) — Run Effect or async handlers as DigitalOcean Functions, deploy single-file functions in any runtime, schedule them with triggers, and call them from other runtimes with a scoped access key.
+- [Kubernetes](https://alchemy.run/digitalocean/compute/kubernetes) — Create DigitalOcean Kubernetes (DOKS) clusters and node pools, apply manifests from the same Stack, pull images from the team's registry, install 1-Click apps and forward logs.
+- [Sandboxes](https://alchemy.run/digitalocean/compute/sandboxes) — Create DigitalOcean MicroVM sandboxes from a template while your program runs, run untrusted code in them, expose a port, pause and resume them, and delete them when done.
+
+## DigitalOcean — Data
+
+- [Managed Databases](https://alchemy.run/digitalocean/data/managed-databases) — Run managed PostgreSQL, MySQL, Valkey, MongoDB, Kafka and OpenSearch clusters on DigitalOcean, apply SQL migrations on deploy, connect from runtimes, and add users, pools, replicas and trusted sources.
+- [Spaces](https://alchemy.run/digitalocean/data/spaces) — Store objects in DigitalOcean Spaces buckets, read and write them from any runtime with keys scoped to one bucket, serve them through the CDN, and set CORS, versioning and lifecycle rules.
+- [Vector Databases](https://alchemy.run/digitalocean/data/vector-databases) — Run a managed Weaviate vector database on DigitalOcean and connect to it from a runtime with its endpoints and API key.
+- [Volumes and NFS](https://alchemy.run/digitalocean/data/volumes-nfs) — Give Droplets disks that outlive them with Block Storage Volumes, share files between Droplets and Kubernetes nodes with managed NFS, and snapshot Volumes.
+
+## DigitalOcean — Networking
+
+- [DNS](https://alchemy.run/digitalocean/networking/dns) — Host domains on DigitalOcean DNS and manage their records from a Stack, pointing names at Droplets, load balancers and reserved IPs.
+- [Firewalls](https://alchemy.run/digitalocean/networking/firewalls) — Control which traffic reaches DigitalOcean Droplets with Cloud Firewalls, applied by Droplet id or by tag, with inbound and outbound rules.
+- [Load balancers and certificates](https://alchemy.run/digitalocean/networking/load-balancers) — Spread traffic across DigitalOcean Droplets with load balancers, terminate HTTPS with Let's Encrypt or your own certificates, and check backend health.
+- [Reserved IPs](https://alchemy.run/digitalocean/networking/reserved-ips) — Keep a public address on DigitalOcean that stays the same when the Droplet behind it is replaced, and move it between Droplets.
+- [VPCs and NAT](https://alchemy.run/digitalocean/networking/vpcs) — Put Droplets, Kubernetes clusters and databases on a private DigitalOcean VPC, peer two VPCs, and give private machines one outbound address with a NAT gateway.
+
+## DigitalOcean — Observability
+
+- [Monitoring and Insights](https://alchemy.run/digitalocean/observability/monitoring) — Watch DigitalOcean resources with uptime checks, Droplet alert policies and Insights alert rules, send alerts to email, Slack or webhooks, forward Kubernetes logs, and query metrics and logs from a runtime.
+
+## DigitalOcean — AI
+
+- [Action Gateway](https://alchemy.run/digitalocean/ai/action-gateway) — Give agents tools through DigitalOcean's Action Gateway, with toolbelts, MCP endpoints, approval rules, output views, your own MCP servers, provider credentials and per-actor limits.
+- [Agent harness](https://alchemy.run/digitalocean/ai/agent-harness) — Run coding agents like OpenCode and Claude Code in DigitalOcean Harness Runtime sessions, each in its own sandbox, start them from your App, and schedule them with triggers.
+- [GenAI agents](https://alchemy.run/digitalocean/ai/genai-agents) — Build DigitalOcean GenAI Platform agents with instructions, knowledge bases, function calls and routes to other agents, and call them from any runtime with a key of their own.
+- [Inference](https://alchemy.run/digitalocean/ai/inference) — Call models by name with DigitalOcean Serverless Inference from any runtime (chat, embeddings, images, speech, video and batches), or serve an open-weight model on GPUs reserved for you with Dedicated Inference.
+
+## DigitalOcean — Frontend
+
+- [Astro](https://alchemy.run/digitalocean/frontend/astro) — Deploy a Astro app to DigitalOcean App Platform with DigitalOcean.Website.Astro, built on your machine and served by an App, with Astro's own dev server under alchemy dev.
+- [Next.js](https://alchemy.run/digitalocean/frontend/nextjs) — Deploy a Next.js app to DigitalOcean App Platform with DigitalOcean.Website.Nextjs, built on your machine and served by an App, with Next.js's own dev server under alchemy dev.
+- [Nuxt](https://alchemy.run/digitalocean/frontend/nuxt) — Deploy a Nuxt app to DigitalOcean App Platform with DigitalOcean.Website.Nuxt, built on your machine and served by an App, with Nuxt's own dev server under alchemy dev.
+- [SvelteKit](https://alchemy.run/digitalocean/frontend/sveltekit) — Deploy a SvelteKit app to DigitalOcean App Platform with DigitalOcean.Website.SvelteKit, built on your machine and served by an App, with SvelteKit's own dev server under alchemy dev.
+- [SolidStart](https://alchemy.run/digitalocean/frontend/solidstart) — Deploy a SolidStart app to DigitalOcean App Platform with DigitalOcean.Website.SolidStart, built on your machine and served by an App, with SolidStart's own dev server under alchemy dev.
+- [React Router](https://alchemy.run/digitalocean/frontend/react-router) — Deploy a React Router app to DigitalOcean App Platform with DigitalOcean.Website.ReactRouter, built on your machine and served by an App, with React Router's own dev server under alchemy dev.
+- [TanStack Start](https://alchemy.run/digitalocean/frontend/tanstack-start) — Deploy a TanStack Start app to DigitalOcean App Platform with DigitalOcean.Website.TanStackStart, built on your machine and served by an App, with TanStack Start's own dev server under alchemy dev.
+- [Waku](https://alchemy.run/digitalocean/frontend/waku) — Deploy a Waku app to DigitalOcean App Platform with DigitalOcean.Website.Waku, built on your machine and served by an App, with Waku's own dev server under alchemy dev.
+- [Vinext](https://alchemy.run/digitalocean/frontend/vinext) — Deploy a Vinext app to DigitalOcean App Platform with DigitalOcean.Website.Vinext, built on your machine and served by an App, with Vinext's own dev server under alchemy dev.
+- [Vite](https://alchemy.run/digitalocean/frontend/vite) — Deploy a Vite app to DigitalOcean App Platform with DigitalOcean.Website.Vite, built on your machine and served by an App, with Vite's own dev server under alchemy dev.
+- [Vocs](https://alchemy.run/digitalocean/frontend/vocs) — Deploy a Vocs app to DigitalOcean App Platform with DigitalOcean.Website.Vocs, built on your machine and served by an App, with Vocs's own dev server under alchemy dev.
+- [Foldkit](https://alchemy.run/digitalocean/frontend/foldkit) — Deploy a Foldkit app to DigitalOcean App Platform with DigitalOcean.Website.Foldkit, built on your machine and served by an App, with Foldkit's own dev server under alchemy dev.
+- [Octane](https://alchemy.run/digitalocean/frontend/octane) — Deploy a Octane app to DigitalOcean App Platform with DigitalOcean.Website.Octane, built on your machine and served by an App, with Octane's own dev server under alchemy dev.
+- [Websites](https://alchemy.run/digitalocean/frontend/websites) — Deploy Astro, Next.js, Nuxt, SvelteKit, SolidStart, React Router, TanStack Start, Waku, Vinext, Vite, Vocs, Foldkit, Octane and static sites to DigitalOcean App Platform from one Stack.
+
 ## PlanetScale
 
 Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.
@@ -655,6 +732,7 @@ Neon backend resources: Postgres branches, Functions, private object storage, ma
 - [Neon](https://alchemy.run/neon) — Declare Neon Postgres projects, branches and roles, plus Functions, storage, Auth, the Data API and AI Gateway, in an Alchemy Stack, with a branch per preview stage.
 - [What is Neon?](https://alchemy.run/neon/what-is-neon) — The concepts behind Neon — organizations, projects, branches, computes, roles, connections, migrations, and the Functions, storage, Auth, Data API and AI Gateway around them — and how @alchemy.run/neon models each of them.
 - [Setup](https://alchemy.run/neon/setup) — Prepare Neon credentials, service access, regions, and external dependencies before deploying with Alchemy.
+- [Organizations and keys](https://alchemy.run/neon/organizations-and-keys) — How a Neon organization holds your projects and their branches, how an API key and orgId decide where Alchemy deploys, and why apps connect with their own credentials.
 - [Functions](https://alchemy.run/neon/functions) — How Neon Functions run Node.js Fetch handlers next to a branch's database, in native or Effect form, how they subscribe to uploads and schedules, and why every handler authenticates its callers.
 - [Storage](https://alchemy.run/neon/storage) — How Neon Buckets store files on a branch through an S3-compatible API, how typed Objects hold configuration as values, and how Functions read and write them through bindings.
 - [Organization governance](https://alchemy.run/neon/governance) — Manage existing Neon organization access, billing alerts, and private-network associations with explicit ownership and restoration.
@@ -709,6 +787,245 @@ Turso SQLite databases as Stack resources: groups, databases, migrations, connec
 - [Preview databases](https://alchemy.run/turso/preview-databases) — Give every pull request its own copy of your staging database.
 - [Tokens](https://alchemy.run/turso/tokens) — Create tokens for apps that run outside your Stack.
 - [Team & organization](https://alchemy.run/turso/organization) — Invite teammates and change your Turso organization's settings.
+
+## E2B
+
+E2B sandboxes for agents: what E2B is, team and API keys, network rules and egress secrets, templates, sandboxes from any Worker, warm snapshots and forks, programs baked into templates, volumes, and lifecycle events.
+
+- [E2B](https://alchemy.run/e2b) — Run sandboxes for agents on E2B with Alchemy. Declare templates, warm snapshots, volumes and secrets in TypeScript, and create sandboxes from any Worker or Function.
+- [What is E2B?](https://alchemy.run/e2b/what-is-e2b) — The concepts behind E2B — teams and API keys, templates, sandboxes, snapshots and forks, volumes, network rules and secrets, and lifecycle events — and how @alchemy.run/e2b models each of them.
+- [Setup](https://alchemy.run/e2b/setup) — Install @alchemy.run/e2b, sign in to E2B with a profile, and deploy from CI.
+- [Part 1: Build a Template and a Snapshot](https://alchemy.run/e2b/tutorial/part-1) — Declare an E2B template and a snapshot of it with a repository cloned, both built at deploy time, so every sandbox starts ready.
+- [Part 2: Start Sandboxes from It](https://alchemy.run/e2b/tutorial/part-2) — A Cloudflare Worker that starts a fresh E2B sandbox from the Warm snapshot for each request.
+- [Part 3: A Copy per User](https://alchemy.run/e2b/tutorial/part-3) — Give each user an E2B sandbox started from the Warm snapshot, which pauses with their changes and resumes when they come back.
+- [Part 4: Update the Template](https://alchemy.run/e2b/tutorial/part-4) — Change the E2B template, redeploy, and see the snapshot rebuilt on it, while existing sandboxes keep what they started with.
+- [Part 5: Testing](https://alchemy.run/e2b/tutorial/part-5) — Deploy the Stack in a test, start sandboxes from the Warm snapshot, and check what they contain.
+- [Part 6: Stages and CI](https://alchemy.run/e2b/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own E2B template, snapshot and Worker.
+- [Team & API keys](https://alchemy.run/e2b/api-keys) — How an E2B team holds your templates and sandboxes, how your profile picks the team Alchemy deploys to, and what key each host gets instead of yours.
+- [Network & secrets](https://alchemy.run/e2b/network-and-secrets) — Limit where a sandbox can connect, and add credentials to its requests without the sandbox seeing them.
+- [Templates](https://alchemy.run/e2b/templates) — Build the images your sandboxes boot from, from a registry image, a Dockerfile, or another template.
+- [Sandboxes](https://alchemy.run/e2b/sandboxes) — Create sandboxes from a Worker, run commands, read and write files, and manage their lifecycle.
+- [Snapshots & forks](https://alchemy.run/e2b/snapshots) — Start sandboxes from a warm base, snapshot a running sandbox, and fork one into copies.
+- [Template programs](https://alchemy.run/e2b/programs) — Run your own Effect program, or a plain JavaScript program, in every sandbox.
+- [Volumes](https://alchemy.run/e2b/volumes) — Keep files that outlive sandboxes, mount them by name, and read or write them without a sandbox.
+- [Lifecycle events](https://alchemy.run/e2b/lifecycle-events) — Handle sandbox lifecycle events in a Worker as E2B sends them.
+
+## Archil — start here
+
+Archil runs commands, processes and programs against durable disks in Firecracker microVMs: serverless exec, sandboxes, programs and websites, branches, and mounts in your own Containers and ECS tasks.
+
+- [Archil](https://alchemy.run/archil) — Run commands, processes and programs serverlessly against durable disks, in Firecracker microVMs, with Alchemy. Declare disks, sandboxes, images and branches in TypeScript.
+- [What is Archil?](https://alchemy.run/archil/what-is-archil) — The concepts behind Archil — organizations and API keys, regions, disks, serverless exec, sandboxes, images, mounts, disk users, branches and egress policy — and how @alchemy.run/archil models each of them.
+- [Setup](https://alchemy.run/archil/setup) — Install the Archil provider, create an API key, and store it in a profile.
+
+## Archil — Tutorial
+
+- [Part 1: Set Up a Sandbox](https://alchemy.run/archil/tutorial/part-1) — Install Alchemy, and declare an Archil sandbox that clones a repository onto its disk at deploy time.
+- [Part 2: Fork It for Each Request](https://alchemy.run/archil/tutorial/part-2) — A program in its own Archil sandbox that forks the set-up sandbox for each request, runs a command, and deletes the fork.
+- [Part 3: A Fork per User](https://alchemy.run/archil/tutorial/part-3) — Give each user an Archil fork of the set-up sandbox, found again by name, which keeps their changes.
+- [Part 4: Update the Sandbox](https://alchemy.run/archil/tutorial/part-4) — Change the commands that set up the Archil sandbox, redeploy, and see new forks start from the new one while existing forks keep theirs.
+- [Part 5: Testing](https://alchemy.run/archil/tutorial/part-5) — Deploy the Stack in a test, fork the set-up sandbox, and check what the fork contains.
+- [Part 6: Stages and CI](https://alchemy.run/archil/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own set-up Archil sandbox and program, from GitHub Actions.
+
+## Archil — Accounts & access
+
+- [Organization and keys](https://alchemy.run/archil/organization-and-keys) — How an Archil account or organization holds your disks, sandboxes and images, how an API key decides where Alchemy deploys, and what access each host gets instead of your key.
+- [Credentials and bindings](https://alchemy.run/archil/security/credentials) — What each host gets to reach Archil, deploy-time resources vs run-time clients, and who owns what your app creates.
+- [Network](https://alchemy.run/archil/security/network) — Control what a sandbox can reach, and add credentials to its requests on the way out.
+
+## Archil — Compute
+
+- [Choosing a runtime](https://alchemy.run/archil/compute/choosing-a-runtime) — Serverless exec, program sandboxes, sandboxes created at run time, and mounts on your own hosts, and when to use each.
+- [Programs](https://alchemy.run/archil/compute/programs) — Run your program in its own Archil sandbox, in the Effect or async form, at a public https URL.
+- [Sandboxes](https://alchemy.run/archil/compute/sandboxes) — Firecracker microVMs with disks mounted, declared as a dev box or created per task.
+- [Images](https://alchemy.run/archil/compute/images) — Boot sandboxes from public images, private registries, or a Dockerfile built on your machine and pushed for Archil to pull.
+
+## Archil — Storage
+
+- [Disks](https://alchemy.run/archil/storage/disks) — Create disks per user at run time, share a few at deploy time, run commands against them, and read their files by key.
+- [Mounting](https://alchemy.run/archil/storage/mounting) — Mount Archil disks in program sandboxes, your own Containers, and ECS tasks.
+- [Branches and checkpoints](https://alchemy.run/archil/storage/branches) — Seed a disk once, checkpoint it at deploy time, and copy a writable branch per session in milliseconds.
+- [Your own bucket](https://alchemy.run/archil/storage/your-own-bucket) — Keep a disk's files as ordinary objects in your own S3, R2, GCS or Azure bucket, with no keys for S3.
+
+## Boat
+
+Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.
+
+- [Boat](https://alchemy.run/boat) — Run sandboxes on Boat with Alchemy. Declare sandboxes, snapshots, environments and webhooks in TypeScript, and create sandboxes from any Worker or Function.
+- [What is Boat?](https://alchemy.run/boat/what-is-boat) — The concepts behind Boat — accounts and API keys, sandboxes and their lifecycle, snapshots and forks, environments, credential profiles and the AI credentials proxy, ports and webhooks — and how @alchemy.run/boat models each of them.
+- [Setup](https://alchemy.run/boat/setup) — Install @alchemy.run/boat, sign in to Boat with a profile, and deploy from CI.
+- [Part 1: Build a Snapshot](https://alchemy.run/boat/tutorial/part-1) — Declare a Boat snapshot that clones a repository and installs tools at deploy time, so every sandbox starts ready.
+- [Part 2: Start Sandboxes from It](https://alchemy.run/boat/tutorial/part-2) — A Cloudflare Worker that starts a fresh Boat sandbox from the Golden snapshot for each request.
+- [Part 3: A Copy per User](https://alchemy.run/boat/tutorial/part-3) — Give each user a Boat sandbox started from the Golden snapshot, which keeps their changes and resumes when they come back.
+- [Part 4: Update the Snapshot](https://alchemy.run/boat/tutorial/part-4) — Change the Golden snapshot, redeploy, and see new sandboxes start from the new disk while existing ones keep theirs.
+- [Part 5: Testing](https://alchemy.run/boat/tutorial/part-5) — Deploy the Stack in a test, start sandboxes from the Golden snapshot, and check what they contain.
+- [Part 6: Stages and CI](https://alchemy.run/boat/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own Boat snapshot and Worker.
+- [Account & API keys](https://alchemy.run/boat/account-and-keys) — How a Boat account holds your sandboxes, how an API key limits what a caller can do, and the key each host gets instead of yours.
+- [Credentials & bindings](https://alchemy.run/boat/security/credentials) — What each host gets to reach Boat, deploy-time resources vs clients your app runs, and who owns the sandboxes your app creates.
+- [Environments & secrets](https://alchemy.run/boat/security/environments) — Boat environments — the variables, secret files and credentials a sandbox starts with, versioned on every change.
+- [Credential profiles](https://alchemy.run/boat/security/credential-profiles) — Boat credential profiles — the AI keys and API secrets a sandbox gets, and the proxy that keeps the real ones out of it.
+- [Choosing a runtime](https://alchemy.run/boat/sandboxes/choosing-a-runtime) — Program sandboxes, a declared dev box, and sandboxes created per task, and when to use each.
+- [Sandboxes](https://alchemy.run/boat/sandboxes/sandboxes) — Boat sandboxes — machine sizes, auto-stop, stop and resume, labels — declared as a long-lived dev box or created per task from a Worker or Function.
+- [Programs](https://alchemy.run/boat/sandboxes/programs) — Run an Effect HTTP program in its own Boat sandbox, served at a URL, restarted in place when its code changes.
+- [Snapshots & forks](https://alchemy.run/boat/sandboxes/snapshots) — Save a Boat sandbox's disk as a named snapshot, start sandboxes from it, and fork a sandbox into copies.
+- [Ports & URLs](https://alchemy.run/boat/sandboxes/ports) — Serve a port of a Boat sandbox at an HTTPS URL, protected by a token or public, and call it or proxy to it from a Worker.
+- [Lifecycle events](https://alchemy.run/boat/sandboxes/lifecycle-events) — Receive Boat's sandbox lifecycle events — ready, stopped, failed, restored — in a Cloudflare Worker, checked against Boat's signature and filtered to your stack's sandboxes.
+
+## Rivet
+
+Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, AWS, GCP, Kubernetes, Fly, Hetzner or Railway (or Rivet Cloud), with key-value storage, SQL and alarms, called by name from any runtime.
+
+- [Rivet](https://alchemy.run/rivet) — Build on Rivet with Alchemy. Declare Durable Objects and Durable Streams in TypeScript, run the control plane and its nodes on the cloud you choose or on Rivet Cloud, and call any instance by name from any runtime.
+- [What is Rivet?](https://alchemy.run/rivet/what-is-rivet) — The concepts behind Rivet — Actors, one instance per name, state that lives with it, sleeping and waking, calls, the control plane, namespaces, pools, the gateway, Rivet Services and Rivet Cloud — and how @alchemy.run/rivet models each of them.
+- [Setup](https://alchemy.run/rivet/setup) — Install the Rivet provider, the provider for the cloud you run it on, and get Docker ready to run Rivet on your machine.
+- [Control planes and namespaces](https://alchemy.run/rivet/namespaces) — What holds a Rivet app — a control plane you run or Rivet Cloud, divided into namespaces — how Alchemy gives each stage its own namespace, and when to give an environment a control plane of its own.
+- [Tokens and networks](https://alchemy.run/rivet/tokens-and-networks) — Who can reach a Rivet control plane and with what — the admin token and everything that holds it, the HTTPS address each control plane gets without a domain, nodes that only connect out, and the credentials a deploy needs in CI.
+- [Secrets](https://alchemy.run/rivet/secrets) — Give a Rivet Durable Object an API key or a password with Config, hand a control plane its object storage keys, and choose where each stage's values come from.
+- [Part 1: Your First Durable Object](https://alchemy.run/rivet/tutorial/part-1) — Run a Rivet control plane and pool on Docker, and deploy a chat room that counts its visitors.
+- [Part 2: Messages in SQL](https://alchemy.run/rivet/tutorial/part-2) — Give each room a SQL table of messages, and post and read them over HTTP.
+- [Part 3: Clear Idle Rooms](https://alchemy.run/rivet/tutorial/part-3) — Use a Durable Object alarm to clear a room's messages an hour after the last one.
+- [Part 4: Run It on Hetzner](https://alchemy.run/rivet/tutorial/part-4) — Move the chat rooms from Docker to Hetzner Cloud by swapping the control plane, the pool and the API's host.
+- [Four ways to build Actors](https://alchemy.run/rivet/actors) — Build Rivet Actors as Alchemy Durable Objects, with RivetKit, with RivetKit's Effect SDK, or in Rust — what each one is for, and how all four deploy to the same control planes and pools.
+- [Durable Object](https://alchemy.run/rivet/durable-objects) — What a Rivet Durable Object is — a class with one instance per name, each with its own state — and how one is written, from its two phases and methods to fetch, alarm, and keeping its code out of its callers.
+- [Storage](https://alchemy.run/rivet/storage) — What each Rivet Durable Object instance keeps — key-value entries, a SQL database and one alarm — and how to change it safely.
+- [Concurrency](https://alchemy.run/rivet/concurrency) — How a Rivet Durable Object runs calls in parallel, how a transaction keeps a read and a write together, and how Workers.InputGate gives code written for Cloudflare the same rule it has there.
+- [Calling a Durable Object](https://alchemy.run/rivet/calling) — How any runtime calls a Rivet Durable Object by name — methods, streams, typed errors, HTTP requests, and calls from one Durable Object to another.
+- [RivetKit Actors](https://alchemy.run/rivet/rivetkit) — Deploy Actors written with RivetKit, unchanged, to a Rivet control plane and pool on any cloud.
+- [RivetKit Effect Actors](https://alchemy.run/rivet/rivetkit-effect) — Deploy Actors written with RivetKit's Effect SDK, unchanged, to a Rivet control plane and pool on any cloud.
+- [Rust Actors](https://alchemy.run/rivet/rivetkit-rust) — Deploy Actors written with RivetKit's Rust SDK, unchanged, to a Rivet control plane and pool. Alchemy compiles the crate into the pool's node image.
+- [Durable Streams](https://alchemy.run/rivet/durable-streams) — Append-only logs with a replayable history, one per key, served by Rivet Services — declare one with its message Schema, append, read from an offset, follow it live, and choose its wire format as a Layer.
+- [Control Plane](https://alchemy.run/rivet/control-planes) — What a Rivet control plane does, how to run one as a Layer on any cloud, how many engines it needs, and how to use one you already have.
+- [Pool](https://alchemy.run/rivet/pools) — How a Rivet pool decides which machines run your Durable Objects, and when to share a pool, split one, or scale it.
+- [Docker](https://alchemy.run/rivet/docker) — Run a Rivet control plane and pools of nodes on a Docker swarm, on your machine or a server.
+- [AWS](https://alchemy.run/rivet/aws) — Run a Rivet control plane on EC2 or ECS, and pools of nodes on Fargate or EC2.
+- [GCP](https://alchemy.run/rivet/gcp) — Run a Rivet control plane on Compute Engine, and pools of nodes on Cloud Run or Compute Engine.
+- [Kubernetes](https://alchemy.run/rivet/kubernetes) — Run a Rivet control plane and pools of nodes on any Kubernetes cluster — EKS, GKE, kind or your own.
+- [Fly](https://alchemy.run/rivet/fly) — Run a Rivet control plane on Fly Machines and pools of nodes on a Fly Service.
+- [Hetzner](https://alchemy.run/rivet/hetzner) — Run a Rivet control plane and pools of nodes on Hetzner Cloud Servers.
+- [Railway](https://alchemy.run/rivet/railway) — Run pools of Rivet nodes on Railway, on a control plane on another cloud.
+- [Rivet Cloud](https://alchemy.run/rivet/rivet-cloud) — Use Rivet Cloud as the control plane, sign in to it from the alchemy CLI or CI, and run your nodes on Rivet Cloud or on any cloud.
+
+## Effect Cluster
+
+Effect Cluster entities, workflows, singletons and crons, on a Postgres database and a pool of runners you run on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or on Cloudflare Durable Objects, called by id from any runtime.
+
+- [Effect Cluster](https://alchemy.run/cluster) — Run Effect Cluster entities, workflows, singletons and crons with Alchemy — a Postgres database and a pool of runners on Docker, AWS, GCP, Kubernetes, Fly or Hetzner, or Durable Objects on Cloudflare.
+- [What is Effect Cluster?](https://alchemy.run/cluster/what-is-effect-cluster) — The concepts behind Effect Cluster — entities addressed by id, messages handled one at a time, shards, runners and pools, the database, workflows, singletons and crons — and how @alchemy.run/effect-cluster deploys them.
+- [Setup](https://alchemy.run/cluster/setup) — Install the Effect Cluster provider and get Docker ready to run a cluster on your machine.
+- [Part 1: Your First Entity](https://alchemy.run/cluster/tutorial/part-1) — Run an Effect Cluster database and runners on Docker, and deploy a chat room entity that tracks who's in it.
+- [Part 2: Signed-In Members](https://alchemy.run/cluster/tutorial/part-2) — Add Effect RPC middleware so a room only lets signed-in users join, and provide it with the pool.
+- [Part 3: Invitations](https://alchemy.run/cluster/tutorial/part-3) — Add a durable workflow that invites someone to a room, waits for their answer, and lets them in.
+- [Part 4: Run It on AWS](https://alchemy.run/cluster/tutorial/part-4) — Move the chat rooms from Docker to AWS by swapping the database, the pool and the API's host.
+- [Entities](https://alchemy.run/cluster/entities) — How an Effect Cluster entity is written in Alchemy — its declaration, its two-phase implementation, its instances, and where its code lives.
+- [Calling an entity](https://alchemy.run/cluster/calling) — Call an Effect Cluster entity from any runtime by id — RPCs, streams, typed errors, fire-and-forget messages and headers.
+- [RPC middleware](https://alchemy.run/cluster/middleware) — Authenticate and enrich every message to an entity with Effect RPC middleware — a server side that runs on the pool and a client side that runs in the caller.
+- [Workflows](https://alchemy.run/cluster/workflows) — Durable workflows on Effect Cluster — persisted activities, durable sleeps, signals, compensations and child workflows — declared and implemented like an entity and started from any runtime.
+- [Singletons](https://alchemy.run/cluster/singletons) — Run one fiber across the whole cluster with an Effect Cluster singleton — on exactly one runner, moved when that runner stops.
+- [Crons](https://alchemy.run/cluster/crons) — Run a job on a schedule with an Effect Cluster cron — once per scheduled time across the cluster, with the schedule on its Layer.
+- [Existing programs](https://alchemy.run/cluster/existing-programs) — Deploy an Effect Cluster program you already have, unchanged, on a pool of its own, and call its entities from any runtime.
+- [Databases](https://alchemy.run/cluster/databases) — The Postgres an Effect Cluster coordinates through — what runners keep in it, and how to run one on any cloud or connect to one you have.
+- [Pools](https://alchemy.run/cluster/pools) — How a pool of Effect Cluster runners hosts your entities, workflows, singletons and crons — what's bundled together, shard groups, the gateway, and how to split work across pools.
+- [Docker](https://alchemy.run/cluster/docker) — Run an Effect Cluster's database and runners on a Docker swarm, on your machine or a server.
+- [AWS](https://alchemy.run/cluster/aws) — Run an Effect Cluster's database on RDS and its runners on ECS Fargate, called from Lambda or anywhere through a load balancer.
+- [GCP](https://alchemy.run/cluster/gcp) — Run an Effect Cluster's database and runners on Compute Engine, called from Cloud Run or anywhere through a regional load balancer.
+- [Kubernetes](https://alchemy.run/cluster/kubernetes) — Run an Effect Cluster's database and runners on any Kubernetes cluster — EKS, GKE, or kind on your machine.
+- [Fly](https://alchemy.run/cluster/fly) — Run an Effect Cluster's database and runners on Fly.io, on a private network, with the gateway at the pool's fly.dev address.
+- [Hetzner](https://alchemy.run/cluster/hetzner) — Run an Effect Cluster's database and runners on Hetzner Cloud Servers, on a private Network, behind a Load Balancer.
+- [Cloudflare](https://alchemy.run/cluster/cloudflare) — Run an Effect Cluster's entities, workflows, singletons and crons on Cloudflare Durable Objects, with no database and no servers to manage.
+
+## Daytona
+
+Daytona sandboxes from Workers and Lambda: what Daytona is, organizations and scoped API keys, snapshots (images, Dockerfile builds, warm bases), sandboxes and their lifecycle, programs in a sandbox, volumes, the toolbox, network limits and previews, secrets the sandbox can't read, regions and runners, and telemetry.
+
+- [Daytona](https://alchemy.run/daytona) — Run code you don't fully trust in Daytona sandboxes. Declare snapshots, volumes and secrets in your Stack, and create, drive and delete sandboxes from any Worker or Lambda.
+- [What is Daytona?](https://alchemy.run/daytona/what-is-daytona) — The concepts behind Daytona — organizations, API keys, regions and runners, snapshots, sandboxes and their lifecycle, the toolbox, previews, volumes, network limits and secrets — and how @alchemy.run/daytona models each of them.
+- [Setup](https://alchemy.run/daytona/setup) — Sign Alchemy in to Daytona, or give it an API key.
+
+## Daytona — Tutorial
+
+- [Part 1: Build a Warm Snapshot](https://alchemy.run/daytona/tutorial/part-1) — Declare a Daytona snapshot of an image, and a warm snapshot of it with a repository cloned, both built at deploy time.
+- [Part 2: Start Sandboxes from It](https://alchemy.run/daytona/tutorial/part-2) — A Cloudflare Worker that starts a fresh Daytona sandbox from the warm snapshot for each request.
+- [Part 3: A Copy per User](https://alchemy.run/daytona/tutorial/part-3) — Give each user a Daytona sandbox started from the warm snapshot, which stops when idle and starts again with their changes.
+- [Part 4: Update the Snapshot](https://alchemy.run/daytona/tutorial/part-4) — Move the Daytona snapshots to a new Node.js version, redeploy, and see new sandboxes start from it while existing ones keep theirs.
+- [Part 5: Testing](https://alchemy.run/daytona/tutorial/part-5) — Deploy the Stack in a test, start sandboxes from the warm snapshot, and check what they contain.
+- [Part 6: Stages and CI](https://alchemy.run/daytona/tutorial/part-6) — Deploy a stage per environment and per pull request, each with its own Daytona snapshots and Worker.
+
+## Daytona — Accounts & access
+
+- [Organizations and API keys](https://alchemy.run/daytona/organizations-and-keys) — How a Daytona organization holds your sandboxes and bill, how your profile picks the organization Alchemy deploys to, and the API key each Worker gets.
+- [Members and roles](https://alchemy.run/daytona/organization/organization) — Give people access to a Daytona organization with roles, invitations and members, sign them in with single sign-on, and set organization defaults.
+- [Secrets](https://alchemy.run/daytona/security/secrets) — Give a Daytona sandbox credentials it can use but not read, shared or one per user, with values from .env or a secrets manager.
+
+## Daytona — Sandboxes
+
+- [Programs in a sandbox](https://alchemy.run/daytona/sandboxes/programs) — Run an Effect program you write inside a Daytona sandbox, redeploy it without losing the sandbox, mount volumes into it, and install mount clients with a derived snapshot.
+- [Regions and runners](https://alchemy.run/daytona/sandboxes/runners) — Where Daytona sandboxes run — shared regions, the region a sandbox picks, and a region of your own with runners on machines you operate.
+- [Sandboxes](https://alchemy.run/daytona/sandboxes/sandboxes) — How a Daytona sandbox moves between started, stopped, archived and deleted, and how to create sandboxes per request or per user from a Worker, or declare a long-lived dev box in your Stack.
+- [Snapshots](https://alchemy.run/daytona/sandboxes/snapshots) — Pull an image, build a Dockerfile on Daytona, or capture a warm base that sandboxes start from.
+- [Toolbox](https://alchemy.run/daytona/sandboxes/toolbox) — Run commands, edit files, use git and language servers, open previews and SSH into a sandbox.
+- [Volumes](https://alchemy.run/daytona/sandboxes/volumes) — Keep files in volumes that outlive sandboxes, shared or one per user.
+
+## Daytona — Networking
+
+- [Network and previews](https://alchemy.run/daytona/networking/network) — What a Daytona sandbox can reach — your organization's tier, domain and CIDR allowlists, no network at all — and how preview URLs let the outside reach a port inside it.
+
+## Daytona — Observability
+
+- [Telemetry, webhooks and audit](https://alchemy.run/daytona/observability/telemetry) — Send a Daytona organization's sandbox logs, traces and metrics to your backend, get webhooks for sandbox events, and read usage and the audit log from a Worker.
+
+## Modal
+
+Modal runs code in containers, with GPUs on demand: Functions and Servers that scale from zero, Sandboxes created while your code runs, and Volumes, Dicts, Queues and Secrets beside them.
+
+- [Modal](https://alchemy.run/modal) — Run Functions, Servers and Sandboxes on Modal with Alchemy. Declare apps, images, volumes and secrets in TypeScript, and create sandboxes from any Worker or Lambda.
+- [What is Modal?](https://alchemy.run/modal/what-is-modal) — The concepts behind Modal — workspaces and tokens, environments, apps, images, Functions, Servers, Sandboxes, Volumes, Dicts, Queues and Secrets — and how @alchemy.run/modal models each of them.
+- [Setup](https://alchemy.run/modal/setup) — Log in to Modal, or give Alchemy a Modal token.
+
+## Modal — Tutorial
+
+- [Part 1: Build a Warm Image](https://alchemy.run/modal/tutorial/part-1) — Declare a Modal environment, an app, and a warm image with a repository cloned, all built at deploy time.
+- [Part 2: Start Sandboxes from It](https://alchemy.run/modal/tutorial/part-2) — A Cloudflare Worker that starts a Modal sandbox from the warm image for each command, and reads back its output.
+- [Part 3: A Copy per User](https://alchemy.run/modal/tutorial/part-3) — Give each user a Modal volume of their own, mounted into every sandbox they start from the warm image.
+- [Part 4: Update the Image](https://alchemy.run/modal/tutorial/part-4) — Change the warm Modal image, redeploy, and see new sandboxes start from the new image while users keep their files.
+- [Part 5: Testing](https://alchemy.run/modal/tutorial/part-5) — Deploy the Stack in a test, start a sandbox from the warm image, and check it sees the warm image and the user's files.
+- [Part 6: Stages and CI](https://alchemy.run/modal/tutorial/part-6) — Deploy a stage per environment and per pull request, each in its own Modal environment with its own images.
+
+## Modal — Accounts & access
+
+- [Workspaces and tokens](https://alchemy.run/modal/workspaces-and-tokens) — How a Modal workspace holds everything, how environments keep stages apart, how profiles choose the workspace, and the service users your runtimes act as.
+- [Access control](https://alchemy.run/modal/security/access-control) — Separate workloads with environments, member roles and scoped tokens.
+- [Secrets](https://alchemy.run/modal/security/secrets) — Give Modal Functions, Servers and Sandboxes API keys and passwords as Modal Secrets, as environment variables or added to requests on the way out.
+
+## Modal — Compute
+
+- [Choosing a runtime](https://alchemy.run/modal/compute/choosing-a-runtime) — Functions, Servers, program sandboxes and sandboxes created at run time on Modal, and when to use each.
+
+## Modal — Services
+
+- [Autoscaling](https://alchemy.run/modal/services/autoscaling) — Keep containers warm and cap concurrency for a deployed Modal function.
+- [Call Python functions](https://alchemy.run/modal/services/calling-python) — Call functions you deployed with modal deploy from a Worker or Lambda.
+- [Functions](https://alchemy.run/modal/services/functions) — Run your program as a Modal Function that other runtimes call, on a schedule, or on the web.
+- [Operate services](https://alchemy.run/modal/services/operating) — Read logs, stats and request history, scale, and roll back Modal Functions, Servers and Apps at runtime.
+- [Servers](https://alchemy.run/modal/services/servers) — Run a long-running HTTP server on Modal with regional routing and concurrency-based autoscaling.
+- [Web endpoints](https://alchemy.run/modal/services/web-endpoints) — Serve a Modal Function on the web at a modal.run URL.
+
+## Modal — Sandboxes
+
+- [Images](https://alchemy.run/modal/sandboxes/images) — Build Modal images from a registry image, a Dockerfile, or another image, and start sandboxes with a repository already installed.
+- [Persistent sandboxes](https://alchemy.run/modal/sandboxes/persistent) — One Modal sandbox whose filesystem outlives its sessions, resumed from a Worker.
+- [Programs](https://alchemy.run/modal/sandboxes/programs) — Run your own Effect or Node program in Modal sandboxes and call it over HTTP.
+- [Sandboxes](https://alchemy.run/modal/sandboxes/sandboxes) — Create, find, run commands in, and stop Modal sandboxes from any runtime.
+- [Snapshots](https://alchemy.run/modal/sandboxes/snapshots) — Save a Modal sandbox's files, its memory, or one directory, and start new sandboxes from it.
+
+## Modal — Storage
+
+- [Dicts](https://alchemy.run/modal/storage/dicts) — Share key-value data between Modal sandboxes, functions and Workers.
+- [Queues](https://alchemy.run/modal/storage/queues) — Hand work between Workers, Modal sandboxes and Python functions with a Modal Queue.
+- [Volumes](https://alchemy.run/modal/storage/volumes) — Keep files on Modal volumes and read or write them without a sandbox.
+
+## Modal — Networking
+
+- [Network & tunnels](https://alchemy.run/modal/networking/network) — Limit what a Modal Sandbox can reach, reach its ports through tunnels, and give its traffic static egress IPs.
 
 ## Better Auth
 
@@ -822,18 +1139,31 @@ Products, prices, coupons, customers, payment links, and webhooks as Stack resou
 - [Setup](https://alchemy.run/stripe/setup) — Connect alchemy to Stripe — secret key, profiles, CI, and how Worker bindings get their credentials.
 - [Sell a subscription](https://alchemy.run/stripe/guides/subscriptions) — The full SaaS billing loop on one Cloudflare Worker — hosted Checkout, the Billing Portal, and webhooks that keep an entitlement record your app gates on.
 - [Onboard merchants with Connect](https://alchemy.run/stripe/guides/connect) — Build a Connect platform on a Cloudflare Worker — create Express accounts, send merchants through hosted onboarding, and learn from account.updated when they can take payments.
-- [React to Stripe events](https://alchemy.run/stripe/guides/webhooks) — consumeEvents provisions the webhook endpoint and runs one Effect per delivery. When to use it, which events to listen for, and how to manage the endpoint yourself.
+- [Price your product](https://alchemy.run/stripe/guides/pricing) — Per-seat tiers, packs, pay what you want, several currencies, paid trials and payment links, declared as Stripe resources next to the Worker that sells them.
+- [React to Stripe events](https://alchemy.run/stripe/guides/webhooks) — consumeEvents creates the webhook and runs one Effect per delivery. Which events to listen for, thin events, delivery to a Lambda through EventBridge, and managing the endpoint yourself.
+- [Collect tax and pay out](https://alchemy.run/stripe/guides/tax-and-payouts) — Stripe Tax settings, your business's tax ids, customers' tax status, and the payout schedule, declared in your Stack and restored when you destroy it.
 
 ## Docker
 
 Local and CI Docker as Stack resources — images, containers, networks, and volumes driven through the active Docker CLI context; cloud container runtimes (Cloudflare Containers, ECS) consume the pushed image refs from their own hubs.
 
-- [Docker](https://alchemy.run/docker) — Images, containers, networks, volumes and Swarm services as Stack resources, driven through your active Docker CLI context.
-- [What is Docker?](https://alchemy.run/docker/what-is-docker) — The concepts behind Docker — the engine and contexts, images and Dockerfiles, registries, containers, networks, volumes and Swarm — and how @alchemy.run/docker models each of them.
-- [Setup](https://alchemy.run/docker/setup) — Point alchemy at a Docker daemon — the active CLI context and the DOCKER_BIN override.
-- [Local services: Postgres with containers, networks, and volumes](https://alchemy.run/docker/local-services) — Run a local Postgres for development as alchemy resources — a pinned image, a named network and volume, a Redacted password, and a healthchecked container that converges on every deploy.
-- [Build & push images](https://alchemy.run/docker/build-and-push) — Build a container image from a Dockerfile, push it to a registry, and hand the resulting image reference to Cloudflare Containers or AWS ECS.
-- [Docker Swarm](https://alchemy.run/docker/swarm) — Provision a swarm and deploy replicated services to it, from local dev to a remote VPS
+- [Docker](https://alchemy.run/docker) — Docker builds applications into images and runs them as isolated containers on a Docker engine, on your laptop, a CI runner or a server.
+- [What is Docker?](https://alchemy.run/docker/what-is-docker) — The concepts behind Docker — engines and contexts, images and Dockerfiles, registries, containers, networks, volumes and Swarm — and how @alchemy.run/docker models each of them.
+- [Setup](https://alchemy.run/docker/setup) — Install @alchemy.run/docker, register its providers, and point Alchemy at a Docker or Podman engine.
+- [Engines & contexts](https://alchemy.run/docker/engines-and-contexts) — How a Docker context chooses the engine a resource lands on — the CLI's current context, a Docker.Context over SSH or TCP, an existing context by lookup — and who can reach an engine.
+- [Registries & credentials](https://alchemy.run/docker/registries) — Give an image its registry credentials as a Redacted Config value, push without docker login, pull private base images, and read the password from a secrets manager per stage.
+- [Build images](https://alchemy.run/docker/build-images) — Build an image from a Dockerfile with Docker.Image — build args, multi-stage targets, platforms, build secrets — and know when a deploy rebuilds it.
+- [Build caches](https://alchemy.run/docker/build-caches) — Keep an image's build layers in a registry or GitHub Actions cache, so fresh CI runners skip the steps that didn't change.
+- [Pull & mirror images](https://alchemy.run/docker/remote-images) — Pull an existing image with Docker.RemoteImage, pin it so deploys stop re-pulling, and re-tag and push it into your own registry.
+- [Images on cloud runtimes](https://alchemy.run/docker/cloud-runtimes) — Hand a pushed image's reference or digest to ECS, Cloudflare Containers, Cloud Run or Kubernetes, let those runtimes build with your local Docker, and write Dockerfiles inline with Dockerfile.inline.
+- [Containers](https://alchemy.run/docker/containers) — Run an image as a Docker.Container — start it, publish ports, pass secrets through its environment, health-check it, reach the host — and know which changes recreate it.
+- [Networks](https://alchemy.run/docker/networks) — Connect containers on a Docker.Network so they reach each other by name, cut a network off from the internet, pin its subnet, and attach to networks you didn't create.
+- [Volumes](https://alchemy.run/docker/volumes) — Keep a container's data in a Docker.Volume so it survives the container being recreated, mount host directories, and know when a volume and its data are deleted.
+- [Limits & security](https://alchemy.run/docker/limits-and-security) — Cap a container's memory, CPU and processes, run it as an unprivileged user with a read-only filesystem and no capabilities, apply seccomp and AppArmor profiles, and rotate its logs.
+- [Swarms](https://alchemy.run/docker/swarm) — Turn an engine into a swarm with Docker.Swarm, locally or on a server over SSH, use a swarm you didn't create, and grow it to more nodes.
+- [Services](https://alchemy.run/docker/services) — Run replicated containers on a swarm with Docker.Service — publish ports through the routing mesh, roll out new images with automatic rollback, connect services on overlay networks, mount Swarm secrets, and place tasks on nodes.
+- [Effectful services](https://alchemy.run/docker/effectful-services) — Write a Swarm service as an Effect program in your own code — Alchemy bundles it into an image on the swarm's engine, serves its fetch handler, runs its background loops and gives it the Config it reads.
+- [Local Postgres](https://alchemy.run/docker/local-services) — Run Postgres for local development as Stack resources — a pinned image, a network and a volume, a Redacted password, and a health-checked container.
 
 ## Kubernetes
 
@@ -907,9 +1237,9 @@ TLS certificates from any ACME certificate authority as Stack resources, validat
 
 ## Domain
 
-A domain-driven design framework: model commands, events, aggregates, views, projections, policies, and sagas once, then host them on Durable Objects or in memory.
+A domain-driven design framework: model commands, events, aggregates, views, projections, policies, and sagas once, then host them on Cloudflare, Rivet, Effect Cluster or in memory.
 
-- [Domain](https://alchemy.run/domain) — A domain-driven design framework for Effect. Model your business as commands, aggregates, events, views, projections and policies, test it in memory, and run it on Cloudflare Durable Objects.
+- [Domain](https://alchemy.run/domain) — A domain-driven design framework for Effect. Model your business as commands, aggregates, decisions, events, views, projections and policies, test it in memory, and run it on Durable Objects on Cloudflare, Rivet or Effect Cluster.
 - [What is Domain-Driven Design?](https://alchemy.run/domain/what-is-ddd) — The concepts of Domain-Driven Design, event sourcing and CQRS, and how they fit together to model a business.
 - [Project layout](https://alchemy.run/domain/project-layout) — How to lay out an @alchemy.run/domain project. One file per building block, named after its noun and its kind; folders per subdomain; a pure domain package, a server package that hosts it, and a foldkit web package, wired in one stack.
 - [Part 1: Model an account](https://alchemy.run/domain/tutorial/part-1) — Declare events, commands and rejections, decide them in an aggregate, and check it with stories.
@@ -921,38 +1251,42 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Part 7: Observe it](https://alchemy.run/domain/tutorial/part-7) — Send the bank's traces and logs to Axiom, follow a deposit through every Durable Object it reaches, and trace clicks from the browser.
 - [Part 8: Change a deployed model](https://alchemy.run/domain/tutorial/part-8) — Change what a view computes after it has data, add a view over every account, and follow what each deploy does with the events already recorded.
 - [Domain Model](https://alchemy.run/domain/model) — What a domain model contains, how it processes every command, and how you declare, run and use one.
-- [Command](https://alchemy.run/domain/command) — How a command names its target, carries its data, declares every outcome, and reaches its aggregate exactly once.
+- [Command](https://alchemy.run/domain/command) — How a command names the instance it is for, carries its data, declares every outcome, and is handled exactly once.
 - [Event](https://alchemy.run/domain/event) — What an event records, what to put in it, how it's stored, and how the rest of the model consumes it.
 - [Aggregate](https://alchemy.run/domain/aggregate) — How an aggregate holds state, decides commands, applies events, and keeps its rules consistent.
+- [Decision](https://alchemy.run/domain/decision) — How a decision implements one command across several aggregate instances, and commits what it records on all of them or on none.
 - [View](https://alchemy.run/domain/view) — How a view folds events into a read model per key, emits events of its own, combines other views, and serves reads.
 - [Projection](https://alchemy.run/domain/projection) — How a projection consumes events into a store you own, in order per key, batched and replayable, and why it never sends commands.
 - [Stream](https://alchemy.run/domain/stream) — How a stream keeps a keyed, append-only log that a projection writes and clients read through an Api, with its latest entry as the current value.
-- [Query](https://alchemy.run/domain/query) — How a query serves a projection's store to clients across keys, typed, authorized per request and per row, paged by cursor, and consistent with the caller's own writes.
+- [Query](https://alchemy.run/domain/query) — How a query serves a projection's store to clients across keys, typed, authorized by its handler, paged by cursor, and consistent with the caller's own writes.
 - [Policy](https://alchemy.run/domain/policy) — How a policy reacts to events with commands and calls to outside systems, and how to make it safe to run more than once.
 - [Saga](https://alchemy.run/domain/saga) — A process that spans several aggregates and takes time, run step by step as an Effect workflow, with steps that undo earlier ones when a later one fails.
 - [External System](https://alchemy.run/domain/external-system) — Declare the outside systems your model calls in the model's own language, implement them with Layers, and turn their events into commands.
 - [Api](https://alchemy.run/domain/api) — How an Api publishes a model to one kind of client, how it's served, and how a typed client calls it.
+- [Annotations](https://alchemy.run/domain/annotations) — Describe every declaration in an @alchemy.run/domain model, show the descriptions in MCP tools, CLI help and OpenAPI, and add keys of your own for tooling built on the model.
+- [Cloudflare Durable Objects](https://alchemy.run/domain/cloudflare) — Host a domain model on Durable Objects behind a Worker, with live reads over WebSockets.
+- [Rivet](https://alchemy.run/domain/rivet) — Host a domain model on Rivet Durable Objects, on nodes in any cloud, and serve its Apis from any runtime.
+- [Effect Cluster](https://alchemy.run/domain/effect-cluster) — Host a domain model on Effect Cluster entities, with its state in Postgres and its runners on any cloud.
+- [In memory](https://alchemy.run/domain/in-memory) — Run a domain model in a single process, for tests and for apps that don't need Cloudflare.
 - [Story](https://alchemy.run/domain/story) — A specification you can run. Given some history, when a command is sent, then these events are recorded.
 - [Testing a model](https://alchemy.run/domain/testing-models) — Test your model's rules, views, policies and deadlines with stories that run it in memory.
 - [Testing an Api](https://alchemy.run/domain/testing-apis) — Test what each client may do and see, in process, over HTTP, and against a real deployment.
+- [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api) — Publish an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
+- [CLI](https://alchemy.run/domain/cli) — Run an Api's calls from a terminal, as a person or an agent, against the deployed Api.
+- [MCP](https://alchemy.run/domain/mcp) — Give an agent the commands and reads of an Api as tools, inside the app with Effect AI, or outside it over MCP.
 - [Integrate with Foldkit](https://alchemy.run/domain/foldkit) — Derive Foldkit Commands from an Api, ask its queries, follow View snapshots, and seed the Model from Flags.
 - [Optimistic updates](https://alchemy.run/domain/optimistic-updates) — Show pending intent, confirm it by commandId from a View feed, and retry an unknown outcome safely.
 - [Offline and local first](https://alchemy.run/domain/local-first) — Choose how local an app is, and keep it working offline by recording intents and sending them when the connection returns.
-- [MCP](https://alchemy.run/domain/mcp) — Give an agent the commands and reads of an Api as tools, inside the app with Effect AI, or outside it over MCP.
 - [Sessions and middleware](https://alchemy.run/domain/sessions) — Authenticate every request, carry who is asking into the domain, and sign browsers in with a cookie.
 - [Sign in with better-auth](https://alchemy.run/domain/better-auth) — Sign users in to a Domain Api with GitHub or Google through better-auth, and give every command and view the signed-in user.
 - [Views as security boundaries](https://alchemy.run/domain/view-security) — Decide who may read each view, keep watches honest as data changes hands, and give each audience a view of its own.
-- [Unique values](https://alchemy.run/domain/unique-values) — Keep a value unique across every customer by making the value itself an aggregate.
+- [Unique values](https://alchemy.run/domain/unique-values) — Keep a value unique across every customer by giving the value an aggregate of its own, and deciding the claim together with what it's for.
 - [Deadlines](https://alchemy.run/domain/deadlines) — Give a waiting process a time limit with a scheduled command, and let the aggregate decide whether the deadline or the action wins.
-- [Cloudflare Durable Objects](https://alchemy.run/domain/cloudflare) — Host a domain model on Durable Objects behind a Worker, with live reads over WebSockets.
 - [History at scale](https://alchemy.run/domain/backfill) — How a deploy backfills new views and projections on Cloudflare, how long it takes, and how to run a large Domain within Cloudflare's limits.
-- [In memory](https://alchemy.run/domain/in-memory) — Run a domain model in a single process, for tests and for apps that don't need Cloudflare.
-- [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api) — Publish an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
-- [CLI](https://alchemy.run/domain/cli) — Run an Api's calls from a terminal, as a person or an agent, against the deployed Api.
-- [Observability](https://alchemy.run/domain/observability) — Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes you choose to record.
+- [Observability](https://alchemy.run/domain/observability) — Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes your handlers record.
 
 ## API reference
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~211 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~272 KB) — only fetch it when you need to locate a specific resource's reference page.

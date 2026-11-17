@@ -3,7 +3,7 @@ title: Testing a model
 description: Test your model's rules, views, policies and deadlines with stories that run it in memory.
 ---
 
-Your model is tested with [stories](/domain/story): given some history, when a command is sent, then these events are recorded. This page sets up a story runner and covers what a story can check.
+Your model is tested with [stories](/domain/story): given some history, when a command is sent, then these events are recorded.
 
 ## Create a story runner
 
@@ -41,7 +41,7 @@ it.effect("a withdrawal replies with the balance and updates the views", () =>
   story(
     Story.given(account, opened, new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     asSam,
-    Story.when(account, new WithdrawMoney({ amount: 30 })),
+    Story.when(new WithdrawMoney({ accountId: account.id, amount: 30 })),
     Story.then(account, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
     Story.replied({ balance: 70 }),
     Story.view(AccountSummary, account, { balance: 70 }),
@@ -56,7 +56,7 @@ it.effect("an overdraft is rejected with the evidence", () =>
   story(
     Story.given(account, opened, new MoneyDeposited({ amount: 50, balanceAfter: 50 })),
     asSam,
-    Story.when(account, new WithdrawMoney({ amount: 80 })),
+    Story.when(new WithdrawMoney({ accountId: account.id, amount: 80 })),
     Story.rejected(new InsufficientFunds({ balance: 50, requested: 80 })),
   ),
 );
@@ -116,7 +116,7 @@ it.effect("a risky withdrawal freezes the account", () =>
       new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 }),
     ),
     Story.provide(CurrentActor, customer("c-1")),
-    Story.when(account, new WithdrawMoney({ amount: 60_000 })),
+    Story.when(new WithdrawMoney({ accountId: account.id, amount: 60_000 })),
     Story.then(account, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 30_000 })),
     Story.call(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
     Story.succeed(FraudCheck.score, { risk: 0.95 }),
@@ -170,7 +170,7 @@ const story = Story.make(Bank, {
 
 it.effect("refunds through the real payments adapter", () =>
   story(
-    Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+    Story.when(new RecordSettlement({ accountId: account.id, settlementId: "st_1", amount: 500 })),
     Story.then(account, new SettlementOnClosedAccount({ settlementId: "st_1", amount: 500 })),
     Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
     Story.returned(Payments.refund, { refundId: "re_st_1" }),

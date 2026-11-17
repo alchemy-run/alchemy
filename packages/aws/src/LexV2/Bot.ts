@@ -83,8 +83,23 @@ export interface Bot extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  BotLookup
 > {}
+
+/**
+ * Props for {@link Bot.lookup}: find a bot this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type BotLookup =
+  | {
+      /** The id of the existing bot. */
+      botId: string;
+    }
+  | {
+      /** The name of the existing bot. */
+      botName: string;
+    };
 
 /**
  * An Amazon Lex V2 conversational bot. The bot is the container for locales,
@@ -144,6 +159,17 @@ export interface Bot extends Resource<
  *   botId: version.botId,
  *   botVersion: version.botVersion,
  * });
+ * ```
+ *
+ * ### Looking up an existing bot
+ * `Bot.lookup` references a bot Alchemy doesn't manage (created in the
+ * console or by another stack), found by `botId` or `botName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing bot
+ * ```typescript
+ * const support = AWS.LexV2.Bot.lookup({ botName: "support" });
+ * const botId = support.botId;
  * ```
  *
  * @resource
@@ -218,6 +244,13 @@ export const BotProvider = () =>
             return hydrated.filter(Predicate.isNotUndefined);
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const observed =
+            "botId" in props
+              ? yield* describeBot(props.botId)
+              : yield* findBotByName(props.botName);
+          return observed === undefined ? undefined : yield* attributesOf(observed);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const observed =
             output?.botId !== undefined

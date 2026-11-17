@@ -6,6 +6,7 @@ import * as networkservices from "@distilled.cloud/gcp/networkservices_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -122,6 +123,13 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_LB_ROUTE_EXTENS
             ],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkServices.LbRouteExtension.lookup({
+          lbRouteExtensionId: created.lbRouteExtensionId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/lbRouteExtensions/");

@@ -294,8 +294,20 @@ export type Gateway = Resource<
     zdr: boolean;
   },
   never,
-  Providers
+  Providers,
+  GatewayLookup
 >;
+
+/**
+ * Props for {@link Gateway.lookup}: find an AI Gateway this stack doesn't
+ * manage, by its id.
+ */
+export type GatewayLookup = {
+  /**
+   * The ID of the existing gateway.
+   */
+  id: string;
+};
 
 // Cloudflare's AI Gateway API uses 0 to mean "disabled" for cache TTL and
 // rate limiting fields. Normalize back to null so user-facing semantics
@@ -466,6 +478,18 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  * });
  * ```
  *
+ * ### Looking up an existing gateway
+ * `Gateway.lookup` binds a gateway Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by its `id`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** By ID
+ * ```typescript
+ * const gateway = yield* Cloudflare.AI.QueryGateway(
+ *   Cloudflare.AI.Gateway.lookup({ id: "prod-gateway" }),
+ * );
+ * ```
+ *
  * @resource
  * @product AI Gateway
  * @category AI
@@ -551,6 +575,13 @@ export const GatewayResourceProvider = () =>
           id: output.gatewayId,
         })
         .pipe(Effect.catchTag("GatewayNotFound", () => Effect.void));
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* aiGateway.getAiGateway({ accountId, id: props.id }).pipe(
+        Effect.map((gateway) => mapGateway(gateway, accountId)),
+        Effect.catchTag("GatewayNotFound", () => Effect.undefined),
+      );
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

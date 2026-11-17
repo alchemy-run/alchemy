@@ -87,10 +87,9 @@ returns a typed client for its methods — see
 [Call one Service from another](/fly/compute/services#call-one-service-from-another).
 Bound calls go to `privateUrl` through Fly's proxy, so service checks,
 `autostart`, and the traffic switch of a
-[blue/green deployment](/fly/compute/deployments) apply. Only Services
-that bind the target receive its caller token, and the target checks
-Fly's `Fly-Src` signature, so a method answers only bound callers on
-Fly's private network. The traffic is plain HTTP inside Fly's
+[blue/green deployment](/fly/compute/deployments) apply. The target checks
+Fly's `Fly-Src` signature, which names the calling App, so a method
+answers only the Apps that bind it on Fly's private network. The traffic is plain HTTP inside Fly's
 WireGuard-encrypted network.
 
 Turning `public` on or off updates the Service in place. Its App and

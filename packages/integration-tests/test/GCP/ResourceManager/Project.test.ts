@@ -9,6 +9,7 @@ import { State } from "alchemy/State";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -109,6 +110,10 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test", team: "infra" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.ResourceManager.Project.lookup({ projectId: created.projectId }),
+        created,
       );
 
       expect(created.name).toMatch(/^projects\//);

@@ -2,6 +2,7 @@ import { expect } from "bun:test";
 import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Domain from "@alchemy.run/domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Stripe from "@alchemy.run/stripe";
 import * as Test from "@alchemy.run/test/Bun";
 // Runs under `bun test`: deploying a Worker from Vitest does not yet produce a
@@ -25,7 +26,12 @@ import { sessionClient } from "../packages/domain/src/Session.middleware.ts";
 import { mfa, register, transfer } from "../packages/server/test/flows.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Layer.mergeAll(Cloudflare.providers(), Stripe.providers(), Axiom.providers()),
+  providers: Layer.mergeAll(
+    Cloudflare.providers(),
+    DomainCloudflare.providers(),
+    Stripe.providers(),
+    Axiom.providers(),
+  ),
   state: Alchemy.localState(),
 });
 
@@ -100,20 +106,20 @@ test(
     const alexMain = yield* register(alex, "c-2", "alex");
 
     // a command's reply, computed from the committed state in the account's Durable Object
-    expect((yield* sam.DepositMoney(samMain, { amount: 100 })).reply).toEqual({
+    expect((yield* sam.DepositMoney({ accountId: samMain, amount: 100 })).reply).toEqual({
       balance: 100,
     });
 
     // MFA middleware, and ownership enforced by the aggregate against the session's actor
-    expect((yield* sam.WithdrawMoney(samMain, { amount: 10 }).pipe(Effect.flip))._tag).toBe(
-      "MfaRequired",
-    );
-    expect((yield* sam.WithdrawMoney(samMain, { amount: 10 }, mfa)).reply).toEqual({
+    expect(
+      (yield* sam.WithdrawMoney({ accountId: samMain, amount: 10 }).pipe(Effect.flip))._tag,
+    ).toBe("MfaRequired");
+    expect((yield* sam.WithdrawMoney({ accountId: samMain, amount: 10 }, mfa)).reply).toEqual({
       balance: 90,
     });
-    expect((yield* alex.WithdrawMoney(samMain, { amount: 10 }, mfa).pipe(Effect.flip))._tag).toBe(
-      "NotOwner",
-    );
+    expect(
+      (yield* alex.WithdrawMoney({ accountId: samMain, amount: 10 }, mfa).pipe(Effect.flip))._tag,
+    ).toBe("NotOwner");
 
     // a process manager across three aggregates, followed by the requester through a multi-source view
     const outcome = yield* transfer(sam, {
@@ -178,20 +184,6 @@ test(
       Effect.timeout("20 seconds"),
     );
     expect(resumed).toEqual({ _tag: "CaughtUp", cursor: watched!.cursor });
-
-    // an aggregate's Durable Object reads the same way: its watched cursor ends its history
-    const [account] = yield* sam.Account.watch(samMain).pipe(
-      Stream.take(1),
-      Stream.runCollect,
-      Effect.timeout("20 seconds"),
-    );
-    const history = yield* sam.Account.events(samMain).pipe(
-      Stream.takeUntil((frame) => Domain.Read.isCaughtUp(frame)),
-      Stream.runCollect,
-      Effect.timeout("20 seconds"),
-    );
-    expect(history.at(-1)).toEqual({ _tag: "CaughtUp", cursor: account!.cursor });
-    expect(history.length - 1).toBe(account!.cursor);
 
     // a projection (AccountCards) appends to a stream; its Durable Object pushes each new card
     const card = yield* sam.AccountCard.watch(samMain).pipe(

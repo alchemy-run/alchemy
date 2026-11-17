@@ -1,15 +1,11 @@
 import * as Domain from "@alchemy.run/domain";
 import { customer } from "@bank/domain/Actor";
-import { Bank } from "@bank/domain/Bank.model";
+import { Bank, BankReads } from "@bank/domain/Bank.model";
 import { CurrentActor } from "@bank/domain/CurrentActor.context";
 import {
   MainAccountProvisioning,
   MainAccountProvisioningLive,
 } from "@bank/domain/Customer/MainAccountProvisioning.policy";
-import {
-  UsernameReservation,
-  UsernameReservationLive,
-} from "@bank/domain/Customer/UsernameReservation.policy";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 import { AccountLedger, AccountLedgerLive } from "@bank/domain/Ledger/AccountLedger.query";
 import { Ledger, LedgerLive } from "@bank/domain/Ledger/Ledger.projection";
@@ -21,16 +17,17 @@ import * as Layer from "effect/Layer";
 
 class WebBank extends Domain.Model("WebBank", {
   aggregates: Bank.definitions.aggregates,
+  decisions: Bank.decisions,
   views: Bank.definitions.views,
   streams: Bank.definitions.streams,
   // Registration opens the main account, so the app can write and read it back.
-  policies: [UsernameReservation, MainAccountProvisioning],
+  policies: [MainAccountProvisioning],
   projections: [Ledger],
   queries: [AccountLedger],
 }) {}
 const Hosted = WebBank.layer(
   Layer.mergeAll(
-    UsernameReservationLive,
+    BankReads,
     MainAccountProvisioningLive,
     Layer.merge(LedgerLive, AccountLedgerLive).pipe(Layer.provide(memoryLedger())),
   ),

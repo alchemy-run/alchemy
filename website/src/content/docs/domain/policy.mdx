@@ -9,7 +9,7 @@ A policy is one of the business's standing rules about what to do when something
 
 The name comes from business policy, and that's the point: a policy doesn't just react, it decides. It's triggered by an event, works out whether and how to act, and acts by sending commands to aggregates or calling systems outside the model.
 
-That's a different kind of rule from an aggregate's. An aggregate enforces invariants, which must hold the instant a command commits and can refuse it. A policy applies a procedure, which runs after the event and decides what happens next. This chapter covers how to find the policies in a business, how to declare and implement one, and the one property every policy must have, which is that running it twice does no harm.
+That's a different kind of rule from an aggregate's. An aggregate enforces invariants, which must hold the instant a command commits and can refuse it. A policy applies a procedure, which runs after the event and decides what happens next. Every policy must have one property: running it twice does no harm.
 
 ## Find the policies in your business
 
@@ -53,6 +53,18 @@ The declaration is all the model needs to deliver the right events. Add it to th
 
 `from` can also list several sources. Each source's events still arrive in that source's order, but there is no order between them: see [Partition it by key](#partition-it-by-key).
 
+## Describe it
+
+A policy's last argument is its [annotations](/domain/annotations). No client calls a policy, so its `description` is for the people and the tools that read the model, as `MainAccountProvisioning.annotations`.
+
+```typescript title="src/MainAccountProvisioning.policy.ts"
+export class MainAccountProvisioning extends Domain.Policy(
+  "MainAccountProvisioning",
+  { from: Customer, on: [CustomerRegistered] },
+  { description: "Opens a main account for every new customer." },
+) {}
+```
+
 ## Implement it as a Layer
 
 The implementation is separate from the declaration, because it usually depends on things outside the model's definition: a client for another aggregate, a payment provider, a fraud service. `toLayer` takes an Effect that resolves those once, and returns the handler that runs for each event.
@@ -63,7 +75,7 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
     const accounts = yield* Account;
     return Effect.fn(function* ({ source }) {
       yield* accounts
-        .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
+        .send(new OpenAccount({ accountId: AccountId.make(`${source.id}-main`), owner: source.id }))
         .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
     });
   }),
@@ -236,7 +248,7 @@ An external system is implemented by a Layer, so production can use the vendor's
 Commands sent by people pass through middleware that says who they are. A policy has no caller, so when a command's `decide` needs to know who's acting, the policy says so itself.
 
 ```typescript title="packages/domain/src/Fraud/FraudReview.policy.ts"
-yield* accounts.send(source, new FreezeAccount({ reason: `fraud risk ${risk}` })).pipe(
+yield* accounts.send(new FreezeAccount({ accountId: source.id, reason: `fraud risk ${risk}` })).pipe(
   Effect.provideService(CurrentActor, system("FraudReview")),
 ```
 

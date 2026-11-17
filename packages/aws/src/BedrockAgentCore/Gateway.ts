@@ -94,8 +94,20 @@ export interface Gateway extends Resource<
      * Current status of the gateway (e.g. `READY`).
      */
     status: string;
-  }
+  },
+  never,
+  undefined,
+  GatewayLookup
 > {}
+
+/**
+ * Props for {@link Gateway.lookup}: find a gateway this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface GatewayLookup {
+  /** The id of the existing gateway. */
+  gatewayId: string;
+}
 
 /**
  * An Amazon Bedrock AgentCore Gateway — a managed MCP endpoint that turns
@@ -142,6 +154,16 @@ export interface Gateway extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing gateway
+ * `Gateway.lookup` references a gateway Alchemy doesn't manage (created in the
+ * console or by another stack), found by `gatewayId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing gateway
+ * ```typescript
+ * const existing = AWS.BedrockAgentCore.Gateway.lookup({ gatewayId: "..." });
  * ```
  *
  * @resource
@@ -205,6 +227,15 @@ export const GatewayProvider = () =>
             );
             return hydrated.filter((g) => g !== undefined).map(toAttributes);
           }),
+
+        lookup: Effect.fn(function* ({ gatewayId }) {
+          const gateway = yield* getGatewayOrUndefined(gatewayId);
+          if (gateway === undefined || gateway.status === "DELETING") {
+            return undefined;
+          }
+          const attrs = toAttributes(gateway);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const gateway = output?.gatewayId

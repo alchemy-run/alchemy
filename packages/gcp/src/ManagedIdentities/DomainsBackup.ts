@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -74,8 +75,33 @@ export type DomainsBackup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DomainsBackupLookup
 >;
+
+/**
+ * Props for {@link DomainsBackup.lookup}: find a domains backup this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DomainsBackupLookup {
+  /**
+   * Backup id (the `{backup}` segment of
+   * `.../domains/{domain}/backups/{backup}`).
+   */
+  backupId: string;
+  /**
+   * Parent Managed Microsoft AD domain. Full name
+   * `projects/{project}/locations/global/domains/{domain}` or the domain
+   * FQDN.
+   */
+  domain: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An on-demand backup of a Managed Microsoft AD domain.
@@ -110,6 +136,20 @@ export type DomainsBackup = Resource<
  * const backup = yield* GCP.ManagedIdentities.DomainsBackup("Nightly", {
  *   domain: domain.name,
  *   labels: { env: "prod", team: "identity" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing domains backup
+ * `DomainsBackup.lookup` references a domains backup Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * domains backup.
+ *
+ * **Example:** Reference an existing domains backup
+ * ```typescript
+ * const domainsBackup = GCP.ManagedIdentities.DomainsBackup.lookup({
+ *   backupId: "my-backup",
+ *   domain: "my-domain",
  * });
  * ```
  *
@@ -164,6 +204,15 @@ export const DomainsBackupProvider = () =>
         nextParent: nextDomain,
       });
     }),
+
+    lookup: Effect.fn(function* ({ backupId, domain: lookupDomain }) {
+      const env = yield* GcpEnvironment.current;
+      const domain = domainResourceOf(lookupDomain ?? "", env.project);
+      const name = resourceName(domain, backupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

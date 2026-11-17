@@ -1,5 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
-import { Nodegroup } from "@alchemy.run/aws/EKS";
+import { Network } from "@alchemy.run/aws/EC2/Network";
+import { Cluster, Nodegroup } from "@alchemy.run/aws/EKS";
+import { Role } from "@alchemy.run/aws/IAM";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as eks from "@distilled.cloud/aws/eks";
@@ -54,58 +56,101 @@ test.provider(
   { tags: ["provider:aws", "provider:aws:eks", "live"] },
 );
 
-// Full deploy lifecycle. An EKS cluster + managed node group takes 5+ minutes to
-// provision, far beyond the routine test budget. Gate behind a pre-existing
-// cluster supplied via AWS_TEST_EKS_CLUSTER (+ the node IAM role ARN and two
-// private subnet IDs); an entitled account with a standing cluster runs this
-// unchanged. Deploys a node group, waits for ACTIVE, updates its scaling
-// config, then tears down and asserts it is gone.
-test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
+const clusterTrustPolicy = {
+  Version: "2012-10-17" as const,
+  Statement: [
+    {
+      Effect: "Allow" as const,
+      Principal: { Service: "eks.amazonaws.com" },
+      Action: ["sts:AssumeRole"],
+    },
+  ],
+};
+
+const nodeTrustPolicy = {
+  Version: "2012-10-17" as const,
+  Statement: [
+    {
+      Effect: "Allow" as const,
+      Principal: { Service: "ec2.amazonaws.com" },
+      Action: ["sts:AssumeRole"],
+    },
+  ],
+};
+
+// Full deploy lifecycle on its own cluster (~10 min create, ~5 min delete), so
+// it skips under `--fast`. Deploys a node group, scales it up and back down,
+// then tears down and asserts it is gone. Regression: every config update sent
+// the same clientRequestToken, so EKS answered the second scale as a retry of
+// the first and left the node group at the first scale's size.
+test.provider.skipIf(!!process.env.FAST)(
   "creates, scales, and deletes a managed node group",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const clusterName = process.env.AWS_TEST_EKS_CLUSTER!;
-      const nodeRole = process.env.AWS_TEST_EKS_NODE_ROLE_ARN!;
-      const subnets = (process.env.AWS_TEST_EKS_PRIVATE_SUBNETS ?? "")
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const deploy = (scalingConfig: { minSize: number; maxSize: number; desiredSize: number }) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const network = yield* Network("NodegroupNetwork", {
+              cidrBlock: "10.88.0.0/16",
+              availabilityZones: 2,
+            });
+            const clusterRole = yield* Role("NodegroupClusterRole", {
+              assumeRolePolicyDocument: clusterTrustPolicy,
+              managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonEKSClusterPolicy"],
+            });
+            const nodeRole = yield* Role("NodegroupNodeRole", {
+              assumeRolePolicyDocument: nodeTrustPolicy,
+              managedPolicyArns: [
+                "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
+                "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
+                "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
+              ],
+            });
+            const cluster = yield* Cluster("NodegroupCluster", {
+              roleArn: clusterRole.roleArn,
+              resourcesVpcConfig: {
+                subnetIds: network.publicSubnetIds,
+                endpointPublicAccess: true,
+              },
+              accessConfig: { authenticationMode: "API" },
+            });
+            return yield* Nodegroup("TestNodegroup", {
+              clusterName: cluster.clusterName,
+              nodeRole: nodeRole.roleArn,
+              subnets: network.publicSubnetIds,
+              instanceTypes: ["t3.medium"],
+              scalingConfig,
+            });
+          }),
+        );
 
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Nodegroup("TestNodegroup", {
-            clusterName,
-            nodeRole,
-            subnets,
-            instanceTypes: ["t3.medium"],
-            scalingConfig: { minSize: 1, maxSize: 2, desiredSize: 1 },
-          });
-        }),
-      );
+      const desiredSize = (nodegroup: Nodegroup["Attributes"]) =>
+        eks
+          .describeNodegroup({
+            clusterName: nodegroup.clusterName,
+            nodegroupName: nodegroup.nodegroupName,
+          })
+          .pipe(Effect.map((response) => response.nodegroup?.scalingConfig?.desiredSize));
+
+      const created = yield* deploy({ minSize: 1, maxSize: 2, desiredSize: 1 });
       expect(created.status).toBe("ACTIVE");
-      expect(created.scalingConfig?.desiredSize).toBe(1);
+      expect(yield* desiredSize(created)).toBe(1);
 
-      const scaled = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Nodegroup("TestNodegroup", {
-            clusterName,
-            nodeRole,
-            subnets,
-            instanceTypes: ["t3.medium"],
-            scalingConfig: { minSize: 1, maxSize: 3, desiredSize: 2 },
-          });
-        }),
-      );
+      const scaled = yield* deploy({ minSize: 1, maxSize: 3, desiredSize: 2 });
       expect(scaled.status).toBe("ACTIVE");
-      expect(scaled.scalingConfig?.desiredSize).toBe(2);
+      expect(yield* desiredSize(scaled)).toBe(2);
+
+      const rescaled = yield* deploy({ minSize: 1, maxSize: 3, desiredSize: 1 });
+      expect(rescaled.status).toBe("ACTIVE");
+      expect(yield* desiredSize(rescaled)).toBe(1);
 
       yield* stack.destroy();
 
       const gone = yield* eks
         .describeNodegroup({
-          clusterName,
+          clusterName: created.clusterName,
           nodegroupName: created.nodegroupName,
         })
         .pipe(
@@ -114,5 +159,5 @@ test.provider.skipIf(!process.env.AWS_TEST_EKS_CLUSTER)(
         );
       expect(gone).toBe(true);
     }),
-  { tags: ["provider:aws", "provider:aws:eks", "live"], timeout: 900_000 },
+  { tags: ["provider:aws", "provider:aws:eks", "live"], timeout: 2_700_000 },
 );

@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   controlIdOf,
@@ -116,8 +117,30 @@ export type CollectionsDataStoresControl = Resource<
     associatedServingConfigIds: string[];
   },
   never,
-  Providers
+  Providers,
+  CollectionsDataStoresControlLookup
 >;
+
+/**
+ * Props for {@link CollectionsDataStoresControl.lookup}: find a collections
+ * data stores control this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface CollectionsDataStoresControlLookup {
+  /**
+   * Control id (`[a-z-_]`, 1-63 characters).
+   */
+  controlId: string;
+  /**
+   * Parent data store resource name.
+   */
+  dataStore: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Discovery Engine serving control on a collection data store.
@@ -139,6 +162,20 @@ export type CollectionsDataStoresControl = Resource<
  *     synonyms: ["hello", "hi"],
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing collections data stores control
+ * `CollectionsDataStoresControl.lookup` references a collections data
+ * stores control Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared collections data stores control.
+ *
+ * **Example:** Reference an existing collections data stores control
+ * ```typescript
+ * const collectionsDataStoresControl = GCP.DiscoveryEngine.CollectionsDataStoresControl.lookup({
+ *   controlId: "my-control",
+ *   dataStore: "my-data-store",
+ * });
  * ```
  *
  * @resource
@@ -228,6 +265,15 @@ export const CollectionsDataStoresControlProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ controlId, dataStore }) {
+      const env = yield* GcpEnvironment.current;
+      const name = dataStore !== undefined ? resourceName(dataStore, controlId) : undefined;
+      if (name === undefined) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

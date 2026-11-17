@@ -7,6 +7,5 @@ export class SupportApi extends Domain.Api("SupportApi", {
   commands: ["FreezeAccount", "ChangeOwner", "ApproveTransfer"],
   views: ["AccountSummary", "AccountActivity"],
   streams: [],
-  aggregates: [],
   queries: ["AccountLedger"],
 }) {}

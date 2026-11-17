@@ -99,8 +99,28 @@ export interface Archive extends Resource<
     eventSourceArn: string;
   },
   never,
-  Providers
+  Providers,
+  ArchiveLookup
 > {}
+
+/**
+ * Props for {@link Archive.lookup}: find an archive this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ArchiveLookup {
+  /** The name of the existing archive. *
+   * ### Looking up an existing archive
+   * `Archive.lookup` references an archive Alchemy doesn't manage (created in the
+   * console or by another stack), found by `archiveName`. It is read during
+   * plan/deploy and never created, updated or deleted.
+   *
+   * **Example:** Reference an existing archive
+   * ```typescript
+   * const existing = AWS.EventBridge.Archive.lookup({ archiveName: "..." });
+   * ```
+   */
+  archiveName: string;
+}
 export const Archive = Resource<Archive>("AWS.EventBridge.Archive");
 
 export const ArchiveProvider = () =>
@@ -148,6 +168,19 @@ export const ArchiveProvider = () =>
           if (olds.eventSourceArn !== news.eventSourceArn) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ archiveName }) {
+          const described = yield* eventbridge
+            .describeArchive({ ArchiveName: archiveName })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (!described?.ArchiveName || !described.ArchiveArn) {
+            return undefined;
+          }
+          return {
+            archiveName: described.ArchiveName,
+            archiveArn: described.ArchiveArn as ArchiveArn,
+            eventSourceArn: described.EventSourceArn ?? "",
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // Archives don't support tags; the deterministic physical name is

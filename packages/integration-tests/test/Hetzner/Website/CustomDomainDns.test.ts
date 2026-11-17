@@ -24,14 +24,14 @@ import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
+import { hetznerPrimaryIps } from "../limit.ts";
 
 const { test } = Test.make({
+  limit: hetznerPrimaryIps,
   providers: Layer.mergeAll(Hetzner.providers(), Cloudflare.providers()),
 });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const ZONE = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 const CLOUDFLARE_HOST = `hz-dns.${ZONE}`;
@@ -149,7 +149,7 @@ const tags = [
   "live",
 ];
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "Cloudflare DNS (no zone): A record at the Server IPv4, HTTP 200 on the hostname, removed on destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -194,7 +194,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   { tags, timeout: 600_000 },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "default path (no dns): the A RecordSet in a Hetzner.Zone points the hostname at the Server",
   (stack) =>
     Effect.gen(function* () {

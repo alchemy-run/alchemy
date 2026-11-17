@@ -188,8 +188,28 @@ export interface Connection extends Resource<
     secretArn?: string;
   },
   never,
-  Providers
+  Providers,
+  ConnectionLookup
 > {}
+
+/**
+ * Props for {@link Connection.lookup}: find a connection this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ConnectionLookup {
+  /** The name of the existing connection. *
+   * ### Looking up an existing connection
+   * `Connection.lookup` references a connection Alchemy doesn't manage (created in the
+   * console or by another stack), found by `connectionName`. It is read during
+   * plan/deploy and never created, updated or deleted.
+   *
+   * **Example:** Reference an existing connection
+   * ```typescript
+   * const existing = AWS.EventBridge.Connection.lookup({ connectionName: "..." });
+   * ```
+   */
+  connectionName: string;
+}
 export const Connection = Resource<Connection>("AWS.EventBridge.Connection");
 
 const toCreateAuthParameters = (
@@ -270,6 +290,20 @@ export const ConnectionProvider = () =>
           if (olds.invocationConnectivityParameters && !news.invocationConnectivityParameters) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ connectionName }) {
+          const described = yield* eventbridge
+            .describeConnection({ Name: connectionName })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
+          if (!described?.Name || !described.ConnectionArn) {
+            return undefined;
+          }
+          return {
+            connectionName: described.Name,
+            connectionArn: described.ConnectionArn as ConnectionArn,
+            connectionState: described.ConnectionState ?? "AUTHORIZED",
+            secretArn: described.SecretArn,
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           // Connections don't support tags; the deterministic physical name

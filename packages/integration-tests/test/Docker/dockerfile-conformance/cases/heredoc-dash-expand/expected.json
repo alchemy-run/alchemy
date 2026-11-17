@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ENV",
+          "line": 2,
+          "flags": [],
+          "vars": [
+            [
+              "NAME",
+              "me"
+            ]
+          ]
+        },
+        {
+          "tag": "RUN",
+          "line": 3,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "\u003c\u003c-EXPAND"
+          },
+          "heredocs": [
+            {
+              "name": "EXPAND",
+              "content": "expand $NAME\n",
+              "stripTabs": true,
+              "quoted": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

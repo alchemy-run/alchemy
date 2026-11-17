@@ -1,5 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
-
 /**
  * The `alchemy dev` provider for `AWS.Lambda.Function`: deploys the function
  * into the floci emulator and hot-swaps its code on file change.
@@ -104,6 +102,16 @@ export const FlociFunctionProvider = () =>
             return {
               action: "replace" as const,
               deleteFirst: news.functionName !== undefined,
+            };
+          }
+          if (olds.alias !== news.alias) {
+            // As in the live diff: consumers move to (or off) the alias, whose
+            // ARN is not known until reconcile publishes and creates it. A
+            // bare update would keep the static `qualifiedArn` stable, and
+            // event source mappings would stay on the old target.
+            return {
+              action: "update" as const,
+              stables: ["functionArn", "functionName", "roleName"],
             };
           }
           return undefined;

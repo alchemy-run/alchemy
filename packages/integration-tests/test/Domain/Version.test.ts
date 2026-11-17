@@ -9,13 +9,11 @@ import * as Schema from "effect/Schema";
 class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 class Withdrawn extends Domain.Event("Withdrawn", { amount: Schema.Number }) {}
 class Deposit extends Domain.Command("Deposit", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Deposited],
 }) {}
 class Withdraw extends Domain.Command("Withdraw", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Withdrawn],
 }) {}
 class Account extends Domain.Aggregate("Account", {
@@ -23,6 +21,7 @@ class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit, Withdraw],
+  keyOf: (command) => command.id,
   decide: {
     Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })],
     Withdraw: (_, cmd) => [new Withdrawn({ amount: cmd.amount })],
@@ -130,16 +129,16 @@ const platform = () => {
   };
 };
 
-const send = (id: string, command: Deposit | Withdraw) =>
+const send = (command: Deposit | Withdraw) =>
   Effect.gen(function* () {
     const accounts = yield* Account;
-    yield* accounts.send(Account.ref(id), command);
+    yield* accounts.send(command);
   });
 
 const history = [
-  send("a-1", new Deposit({ amount: 10 })),
-  send("a-1", new Withdraw({ amount: 4 })),
-  send("a-2", new Deposit({ amount: 3 })),
+  send(new Deposit({ id: "a-1", amount: 10 })),
+  send(new Withdraw({ id: "a-1", amount: 4 })),
+  send(new Deposit({ id: "a-2", amount: 3 })),
 ];
 
 describe("Domain view versions", { tags: ["unit", "local"] }, () => {
@@ -155,8 +154,8 @@ describe("Domain view versions", { tags: ["unit", "local"] }, () => {
             const view = yield* SummaryV1;
             // Nothing to wait for, before anything is delivered.
             const { complete } = yield* view.history;
-            const a1 = Option.getOrUndefined(yield* view.query(Account.ref("a-1")));
-            const a2 = Option.getOrUndefined(yield* view.query(Account.ref("a-2")));
+            const a1 = Option.getOrUndefined(yield* view.get(Account.ref("a-1")));
+            const a2 = Option.getOrUndefined(yield* view.get(Account.ref("a-2")));
             return [complete, a1, a2] as const;
           }),
         );
@@ -180,7 +179,7 @@ describe("Domain view versions", { tags: ["unit", "local"] }, () => {
           return [
             before,
             (yield* view.history).complete,
-            Option.getOrUndefined(yield* view.query("all")),
+            Option.getOrUndefined(yield* view.get("all")),
           ] as const;
         }),
       );
@@ -200,7 +199,7 @@ describe("Domain view versions", { tags: ["unit", "local"] }, () => {
           bank.settle.pipe(
             Effect.andThen(
               Effect.gen(function* () {
-                return yield* (yield* Latest).query(Account.ref("a-1"));
+                return yield* (yield* Latest).get(Account.ref("a-1"));
               }),
             ),
           ),
@@ -212,7 +211,7 @@ describe("Domain view versions", { tags: ["unit", "local"] }, () => {
         BankV1,
         Effect.gen(function* () {
           yield* bank.settle;
-          return Option.getOrUndefined(yield* (yield* LatestOfV1).query(Account.ref("a-1")));
+          return Option.getOrUndefined(yield* (yield* LatestOfV1).get(Account.ref("a-1")));
         }),
       );
       expect(top).toEqual({ net: 6 });
@@ -225,10 +224,10 @@ describe("Domain view versions", { tags: ["unit", "local"] }, () => {
       const fresh = yield* bank.deploy(
         BankV1,
         Effect.gen(function* () {
-          yield* send("a-9", new Deposit({ amount: 7 }));
-          yield* send("a-9", new Withdraw({ amount: 2 }));
+          yield* send(new Deposit({ id: "a-9", amount: 7 }));
+          yield* send(new Withdraw({ id: "a-9", amount: 2 }));
           yield* bank.settle;
-          return Option.getOrUndefined(yield* (yield* SummaryV1).query(Account.ref("a-9")));
+          return Option.getOrUndefined(yield* (yield* SummaryV1).get(Account.ref("a-9")));
         }),
       );
       expect(fresh).toEqual({ net: 5 });

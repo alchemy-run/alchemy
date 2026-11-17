@@ -5,6 +5,7 @@ sidebar:
   label: Overview
   order: 1
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 `Prisma.Website` builds your frontend with its own framework and deploys
 it to [Prisma Compute](/prisma/compute/apps). The shared
@@ -71,9 +72,7 @@ that require them.
 [Set up Prisma credentials](/prisma/setup) for live deployments. Install
 the build integration in your frontend project:
 
-```sh
-bun add -d @alchemy.run/frontend-frameworks @vercel/nft
-```
+<PackageManagers dev="@alchemy.run/frontend-frameworks @vercel/nft" />
 
 Keep the framework's own dependencies and config. The integration is
 loaded from your project at build time; `@vercel/nft` traces the runtime
@@ -159,9 +158,7 @@ with its default database, Prisma supplies `DATABASE_URL` and
 
 ## Local development
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 Framework resources run their native dev servers with HMR. `dev` options
 configure the local server; the Website does not create cloud resources.

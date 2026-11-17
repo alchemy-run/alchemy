@@ -1,6 +1,7 @@
 import * as Retry from "@distilled.cloud/cloudflare/Retry";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
+import * as DeployRetry from "alchemy/DeployRetry";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { sha256, sha256Object } from "alchemy/Util";
 import { listFileSystemDirectory, parseIgnoreRules, walkIgnoring } from "alchemy/Util/Ignore";
@@ -432,13 +433,13 @@ const isGatewayError = (error: unknown) =>
   Predicate.isTagged(error, "GatewayTimeout");
 
 /**
- * The SDK's default policy retries gateway errors internally (~20s of
+ * The deploy policy retries gateway errors internally (~20s of
  * backoff) before the caller ever sees one, so the concurrency fallback
  * below could never kick in. Let those surface to the bucket loop; every
  * other transient error keeps the default handling.
  */
 const surfaceGatewayErrors: Retry.Factory = (lastError) => {
-  const base = Retry.makeDefault(lastError);
+  const base = DeployRetry.policy(lastError);
   return {
     ...base,
     while: (error) => !isGatewayError(error) && (base.while?.(error) ?? false),

@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as translate from "@distilled.cloud/gcp/translate_v3";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, currentParent } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -53,6 +54,13 @@ test.provider(
             displayName: "enes",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Translate.AdaptiveMtDataset.lookup({
+          location: created.location,
+          datasetId: created.datasetId,
+        }),
+        created,
       );
 
       expect(created.datasetId).toEqual(expect.any(String));

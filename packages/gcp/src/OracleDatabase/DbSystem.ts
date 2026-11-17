@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -177,8 +178,30 @@ export type DbSystem = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DbSystemLookup
 >;
+
+/**
+ * Props for {@link DbSystem.lookup}: find a db system this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DbSystemLookup {
+  /**
+   * DbSystem id.
+   */
+  dbSystemId: string;
+  /**
+   * Region.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Oracle BaseDB system on Google Cloud.
@@ -199,6 +222,18 @@ export type DbSystem = Resource<
  *   initialDataStorageSizeGb: 256,
  *   licenseModel: "LICENSE_INCLUDED",
  *   databaseEdition: "ENTERPRISE_EDITION",
+ * });
+ * ```
+ *
+ * ### Looking up an existing db system
+ * `DbSystem.lookup` references a db system Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared db system.
+ *
+ * **Example:** Reference an existing db system
+ * ```typescript
+ * const dbSystem = GCP.OracleDatabase.DbSystem.lookup({
+ *   dbSystemId: "my-db-system",
  * });
  * ```
  *
@@ -336,6 +371,15 @@ export const DbSystemProvider = () =>
         extra: nextOdb !== previousOdb || nextShape !== previousShape,
       });
     }),
+
+    lookup: Effect.fn(function* ({ dbSystemId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceNameOf(env.project, location, COLLECTION, dbSystemId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

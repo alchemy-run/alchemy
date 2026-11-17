@@ -77,8 +77,23 @@ export interface Configuration extends Resource<
     engineVersion: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConfigurationLookup
 > {}
+
+/**
+ * Props for {@link Configuration.lookup}: find a broker configuration this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ConfigurationLookup =
+  | {
+      /** The id of the existing configuration. */
+      configurationId: string;
+    }
+  | {
+      /** The name of the existing configuration. */
+      configurationName: string;
+    };
 
 /**
  * An Amazon MQ broker configuration — a versioned document (ActiveMQ XML or
@@ -124,6 +139,18 @@ export interface Configuration extends Resource<
  *     revision: config.configurationRevision,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing broker configuration
+ * `Configuration.lookup` references a broker configuration Alchemy doesn't manage (created in the
+ * console or by another stack), found by `configurationId` or
+`configurationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Apply an existing configuration to a broker
+ * ```typescript
+ * const config = AWS.MQ.Configuration.lookup({ configurationName: "tuned" });
+ * const configurationId = config.configurationId;
  * ```
  *
  * @resource
@@ -207,6 +234,14 @@ export const ConfigurationProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* (props) {
+          const config =
+            "configurationId" in props
+              ? yield* readConfiguration(props.configurationId)
+              : yield* findByName(props.configurationName);
+          return config === undefined ? undefined : toAttrs(config);
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

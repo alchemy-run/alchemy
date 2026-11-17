@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as saasservicemgmt from "@distilled.cloud/gcp/saasservicemgmt_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { location, logLevel, currentProject, runLifecycle, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -58,6 +59,20 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { product, tenant, kind, unit };
         }),
+      );
+      yield* expectFound(
+        GCP.SaasServiceManagement.UnitKind.lookup({
+          unitKindId: created.kind.unitKindId,
+          location: created.kind.location,
+        }),
+        created.kind,
+      );
+      yield* expectFound(
+        GCP.SaasServiceManagement.Unit.lookup({
+          unitId: created.unit.unitId,
+          location: created.unit.location,
+        }),
+        created.unit,
       );
 
       expect(created.unit.name).toContain("/units/");

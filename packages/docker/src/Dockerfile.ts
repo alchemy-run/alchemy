@@ -20,7 +20,6 @@
  * const worker = yield* AWS.ECS.Task(
  *   "Transcoder",
  *   {
- *     cluster,
  *     main: import.meta.url,
  *     dockerfile: Dockerfile.inline`
  *       FROM oven/bun:1
@@ -38,7 +37,6 @@
  * const trainer = yield* AWS.ECS.Task(
  *   "Trainer",
  *   {
- *     cluster,
  *     main: import.meta.url,
  *     dockerfile: Dockerfile.inline`
  *       FROM ${base.imageUri}

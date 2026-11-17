@@ -1,0 +1,109 @@
+---
+title: Network & tunnels
+description: Limit what a Modal Sandbox can reach, reach its ports through tunnels, and give its traffic static egress IPs.
+---
+
+import Boundaries from "../../../../components/diagrams/Boundaries.astro";
+
+A Modal Sandbox reaches the internet unless you limit it. Modal enforces the limit outside the container, so code inside can't lift it. Traffic into a sandbox goes through **tunnels**: each port you open gets a URL of its own.
+
+<Boundaries
+  nodes={[
+    { id: "server", label: "agent", type: "your code", col: 0, row: 0, tone: "accent" },
+    { id: "github", label: "github.com", type: "allowed", col: 1, row: 0 },
+    { id: "pypi", label: "pypi.org", type: "not listed", col: 1, row: 1 },
+  ]}
+  zones={[
+    { id: "sbx", label: "session-sam", type: "Sandbox", nodes: ["server"] },
+    { id: "rest", label: "everything else", nodes: ["pypi"], labelAt: "right" },
+  ]}
+  links={[
+    { from: "server", to: "github", label: "git clone" },
+    { from: "server", to: "rest", kind: "blocked", label: "pip install" },
+  ]}
+  caption="With allowedDomains: ['github.com'], the sandbox reaches GitHub and nothing else. Modal stops the rest outside the container."
+/>
+
+## Block the network
+
+```typescript
+const sandbox = yield* sandboxes.create({ blockNetwork: true });
+```
+
+Nothing leaves the sandbox. Commands, files and tunnels still work, because they go through Modal.
+
+## Allow only some destinations
+
+```typescript
+const sandbox = yield* sandboxes.create({
+  allowedDomains: ["github.com", "registry.npmjs.org"],
+  cidrAllowlist: ["10.0.0.0/8"],
+});
+```
+
+The sandbox reaches these domains and ranges, and nothing else.
+
+## Change it while the sandbox runs
+
+Let an agent install its dependencies, then close the network before it runs the code it wrote:
+
+```typescript
+yield* sandbox.exec(["pnpm", "install"], { cwd: "/work" });
+yield* sandbox.setNetworkAccess({ blockNetwork: true });
+yield* sandbox.exec(["node", "agent-output.mjs"], { cwd: "/work" });
+```
+
+The new policy replaces the old one, and Modal closes the connections it no longer allows. Pass an allow-list to narrow the network instead, or `{}` to open it again.
+
+## Open a port through a tunnel
+
+List the ports when you create the sandbox. Each gets a tunnel, and `getTcpPort` returns its public URL and a client for it:
+
+```typescript
+const sandbox = yield* sandboxes.create({ encryptedPorts: [3000] });
+const port = yield* sandbox.getTcpPort(3000);
+const response = yield* port.fetch(HttpClientRequest.get("/health"));
+```
+
+`port.url` is the tunnel's URL. A Worker in front of the sandbox can forward the request it received:
+
+```typescript
+return yield* port.fetch(yield* HttpServerRequest.HttpServerRequest);
+```
+
+`encryptedPorts` terminate TLS at Modal. `unencryptedPorts` pass raw TCP, for a database or SSH; `port.connect()` opens a socket to either.
+
+## Share one port with a browser
+
+A tunnel URL is public. To hand one port to a browser that shouldn't hold any Modal credentials, create a connect token for it:
+
+```typescript
+const { url, token } = yield* sandbox.connectToken({ port: 8080, userMetadata: user });
+```
+
+The token opens that port and nothing else.
+
+## Leave through static egress IPs
+
+Some APIs only accept calls from known addresses. A `Modal.Proxy` gives sandboxes fixed outbound IPs:
+
+```typescript title="src/network.ts"
+import * as Modal from "@alchemy.run/modal";
+
+export const Egress = Modal.Proxy("Egress", { ips: 1 });
+```
+
+Read its id while the Worker is constructed, then pass it to `create`:
+
+```typescript
+// construction phase
+const egressId = yield* (yield* Egress).proxyId;
+// in a handler
+const sandbox = yield* sandboxes.create({ proxy: { proxyId: yield* egressId } });
+```
+
+The Proxy's `ips` attribute lists the addresses to allow on the other side. Proxies need Modal's Team plan.
+
+A route's `redirect` sends traffic to a `Modal.Proxy` or to a sidecar container, never to a URL of yours, so a gateway such as a Cloudflare Worker can't sit on a sandbox's egress path. To call one, have the code in the sandbox use the gateway's URL as its base URL.
+
+To add an API key to a sandbox's requests without letting it see the key, see [Secrets](/modal/security/secrets#add-it-to-requests-never-into-the-sandbox).

@@ -14,14 +14,14 @@ import {
 
 const Counter = Foldkit.make(CounterApi);
 const target = CounterId.make("one");
-Counter.Reset({ target, input: {}, commandId: "page:0" });
-Counter.Increment({ target, input: { amount: 1 }, commandId: "page:1" });
+Counter.Reset({ input: { counterId: target }, commandId: "page:0" });
+Counter.Increment({ input: { counterId: target, amount: 1 }, commandId: "page:1" });
 // @ts-expect-error the target is branded
-Counter.Increment({ target: "one", input: { amount: 1 }, commandId: "page:1" });
+Counter.Increment({ input: { counterId: "one", amount: 1 }, commandId: "page:1" });
 // @ts-expect-error input uses the decoded side of the transform
-Counter.Increment({ target, input: { amount: "1" }, commandId: "page:1" });
+Counter.Increment({ input: { id: target, amount: "1" }, commandId: "page:1" });
 // @ts-expect-error required command input cannot be omitted
-Counter.Increment({ target, commandId: "page:1" });
+Counter.Increment({ id: { target, commandId: "page:1" } });
 
 const check = (message: typeof Counter.Message.Type) =>
   Counter.Message.match<void>(message, {
@@ -51,7 +51,7 @@ const requirements: Effect.Effect<
   typeof Counter.Message.Type,
   never,
   typeof CounterApi.Client.Identifier
-> = Counter.Increment({ target, input: { amount: 1 }, commandId: "page:1" }).effect;
+> = Counter.Increment({ input: { counterId: target, amount: 1 }, commandId: "page:1" }).effect;
 void check;
 void schema;
 void requirements;
@@ -78,18 +78,6 @@ Counter.Total.watch<{ id: typeof CounterId.Type }, number>({
   ...watchOptions,
   // @ts-expect-error all callbacks produce the selected Message type
   onDefect: () => "failed",
-});
-Counter.Counter.watch(watchOptions);
-Counter.Counter.events({
-  key: () => target,
-  cursor: () => Option.none(),
-  onEntry: (entry) => {
-    const amount: number = entry.event.amount;
-    return amount;
-  },
-  onCaughtUp: (cursor) => cursor,
-  onFailure: () => 0,
-  onDefect: () => 0,
 });
 Counter.Outputs.watch({
   key: () => target,
@@ -162,7 +150,6 @@ class QueryApi extends Domain.Api("QueryApi", {
   commands: [],
   views: [],
   streams: [],
-  aggregates: [],
   queries: ["Entries", "Count"],
 }) {}
 const Queries = Foldkit.make(QueryApi);

@@ -136,8 +136,32 @@ export type BillingSavedQuery = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BillingSavedQueryLookup
 >;
+
+/**
+ * Props for {@link BillingSavedQuery.lookup}: find a billing saved query
+ * this stack doesn't manage by its identifiers.
+ */
+export interface BillingSavedQueryLookup {
+  /**
+   * Saved query id (the `{query}` segment of
+   * `billingAccounts/{billingAccoun
+   * t}/locations/{location}/savedQueries/{query}`). Limited to 100
+   * characters: letters, digits, underscores, hyphens, periods; first
+   * character must be alphanumeric.
+   */
+  savedQueryId: string;
+  /**
+   * Location of the saved query.
+   */
+  location?: string;
+  /**
+   * Billing account id (`XXXXXX-XXXXXX-XXXXXX` or `billingAccounts/{id}`).
+   */
+  billingAccountId?: string;
+}
 
 /**
  * A Cloud Logging saved query owned by a billing account.
@@ -175,6 +199,19 @@ export type BillingSavedQuery = Resource<
  *   displayName: "billing warnings",
  *   loggingQuery: { filter: "severity>=WARNING" },
  *   description: "warnings and errors",
+ * });
+ * ```
+ *
+ * ### Looking up an existing billing saved query
+ * `BillingSavedQuery.lookup` references a billing saved query Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared billing saved query.
+ *
+ * **Example:** Reference an existing billing saved query
+ * ```typescript
+ * const billingSavedQuery = GCP.Logging.BillingSavedQuery.lookup({
+ *   savedQueryId: "my-saved-query",
  * });
  * ```
  *
@@ -287,6 +324,20 @@ export const BillingSavedQueryProvider = () =>
         billingAccountIdOf(news.billingAccountId) !== billingAccountIdOf(previousAccount);
       if (!idChanged && !locationChanged && !accountChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
+    }),
+
+    lookup: Effect.fn(function* ({
+      savedQueryId,
+      location: lookupLocation,
+      billingAccountId: lookupBillingAccountId,
+    }) {
+      const billingAccountId = yield* resolveBillingAccountId(lookupBillingAccountId, undefined);
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(billingAccountId, location, savedQueryId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, billingAccountId, location);
+      return attrs;
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

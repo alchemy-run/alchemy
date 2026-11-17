@@ -85,8 +85,18 @@ export interface Ruleset extends Resource<
     targetArn: string;
   },
   {},
-  Providers
+  Providers,
+  RulesetLookup
 > {}
+
+/**
+ * Props for {@link Ruleset.lookup}: find a ruleset this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RulesetLookup {
+  /** The name of the existing ruleset. */
+  rulesetName: string;
+}
 
 /**
  * An AWS Glue DataBrew ruleset — a set of data-quality rules bound to a
@@ -119,6 +129,16 @@ export interface Ruleset extends Resource<
  *   outputLocation: { bucket: bucket.bucketName, key: "profiles/" },
  *   validationConfigurations: [{ rulesetArn: ruleset.rulesetArn }],
  * });
+ * ```
+ *
+ * ### Looking up an existing ruleset
+ * `Ruleset.lookup` references a ruleset Alchemy doesn't manage (created in the
+ * console or by another stack), found by `rulesetName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing ruleset
+ * ```typescript
+ * const existing = AWS.DataBrew.Ruleset.lookup({ rulesetName: "..." });
  * ```
  *
  * @resource
@@ -176,6 +196,19 @@ export const RulesetProvider = () =>
                 targetArn: r.TargetArn ?? "",
               }));
           }),
+
+        lookup: Effect.fn(function* ({ rulesetName: name }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const ruleset = yield* observe(name);
+          if (ruleset === undefined) return undefined;
+          const arn = ruleset.ResourceArn ?? databrewArn(region, accountId, "ruleset", name);
+          const attrs = {
+            rulesetName: name,
+            rulesetArn: arn,
+            targetArn: ruleset.TargetArn ?? "",
+          };
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

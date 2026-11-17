@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject, runLifecycle, waitUntilGone, zone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -50,6 +51,20 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { topic, subscription };
         }),
+      );
+      yield* expectFound(
+        GCP.PubSubLite.AdminSubscription.lookup({
+          subscriptionId: created.subscription.subscriptionId,
+          location: created.subscription.location,
+        }),
+        created.subscription,
+      );
+      yield* expectFound(
+        GCP.PubSubLite.AdminTopic.lookup({
+          topicId: created.topic.topicId,
+          location: created.topic.location,
+        }),
+        created.topic,
       );
 
       expect(created.subscription.name).toContain("/subscriptions/");

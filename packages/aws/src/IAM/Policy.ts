@@ -176,8 +176,32 @@ export interface Policy extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  PolicyLookup
 > {}
+
+/**
+ * Props for {@link Policy.lookup}: find a managed policy this stack doesn't
+ * manage, by its ARN (including AWS managed policies) or by its name in the
+ * ambient account.
+ */
+export type PolicyLookup =
+  | {
+      /**
+       * The policy's ARN, e.g. `arn:aws:iam::aws:policy/ReadOnlyAccess` for an
+       * AWS managed policy.
+       */
+      policyArn: string;
+    }
+  | {
+      /** The name of a customer managed policy in the ambient account. */
+      policyName: string;
+      /**
+       * The policy's path.
+       * @default "/"
+       */
+      path?: string;
+    };
 
 /**
  * A customer-managed IAM policy.
@@ -197,6 +221,24 @@ export interface Policy extends Resource<
  *       Resource: ["arn:aws:s3:::my-bucket/*"],
  *     }],
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing policy
+ * `Policy.lookup` references a managed policy Alchemy doesn't manage (an
+ * AWS managed policy, or one created in the console or by another stack),
+ * found by `policyArn` or `policyName`. It is read during plan/deploy and
+ * never created, updated or deleted.
+ *
+ * **Example:** Attach an AWS managed policy to a role
+ * ```typescript
+ * const readOnly = AWS.IAM.Policy.lookup({
+ *   policyArn: "arn:aws:iam::aws:policy/ReadOnlyAccess",
+ * });
+ *
+ * const role = yield* AWS.IAM.Role("Auditor", {
+ *   assumeRolePolicyDocument,
+ *   managedPolicyArns: [readOnly.policyArn],
  * });
  * ```
  *
@@ -247,6 +289,39 @@ export const PolicyProvider = () =>
           })
           .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         return parsePolicyDocument(response?.PolicyVersion?.Document);
+      });
+
+      const readPolicyAttributes = Effect.fn(function* (policyArn: string) {
+        const policy = yield* readPolicy(policyArn);
+        if (!policy?.Arn || !policy.PolicyName) {
+          return undefined;
+        }
+
+        const tags = yield* iam.listPolicyTags({
+          PolicyArn: policy.Arn,
+        });
+        const policyDocument = yield* readPolicyDocument({
+          policyArn: policy.Arn,
+          versionId: policy.DefaultVersionId,
+        });
+
+        if (!policyDocument) {
+          return undefined;
+        }
+
+        return {
+          policyArn: policy.Arn as PolicyArn,
+          policyName: policy.PolicyName,
+          policyId: policy.PolicyId,
+          path: policy.Path,
+          defaultVersionId: policy.DefaultVersionId,
+          attachmentCount: policy.AttachmentCount,
+          permissionsBoundaryUsageCount: policy.PermissionsBoundaryUsageCount,
+          isAttachable: policy.IsAttachable,
+          description: policy.Description,
+          policyDocument,
+          tags: toTagRecord(tags.Tags),
+        };
       });
 
       const prunePolicyVersions = Effect.fn(function* (policyArn: string) {
@@ -331,39 +406,18 @@ export const PolicyProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* (props) {
+          const { accountId } = yield* AWSEnvironment.current;
+          return yield* readPolicyAttributes(
+            "policyArn" in props
+              ? props.policyArn
+              : policyArnFromParts({ accountId, path: props.path, policyName: props.policyName }),
+          );
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const policyArn =
             output?.policyArn ?? (yield* toPolicyArn(id, olds ?? ({} as PolicyProps)));
-          const policy = yield* readPolicy(policyArn);
-          if (!policy?.Arn || !policy.PolicyName) {
-            return undefined;
-          }
-
-          const tags = yield* iam.listPolicyTags({
-            PolicyArn: policy.Arn,
-          });
-          const policyDocument = yield* readPolicyDocument({
-            policyArn: policy.Arn,
-            versionId: policy.DefaultVersionId,
-          });
-
-          if (!policyDocument) {
-            return undefined;
-          }
-
-          return {
-            policyArn: policy.Arn as PolicyArn,
-            policyName: policy.PolicyName,
-            policyId: policy.PolicyId,
-            path: policy.Path,
-            defaultVersionId: policy.DefaultVersionId,
-            attachmentCount: policy.AttachmentCount,
-            permissionsBoundaryUsageCount: policy.PermissionsBoundaryUsageCount,
-            isAttachable: policy.IsAttachable,
-            description: policy.Description,
-            policyDocument,
-            tags: toTagRecord(tags.Tags),
-          };
+          return yield* readPolicyAttributes(policyArn);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const policyName = output?.policyName ?? (yield* toPolicyName(id, news));

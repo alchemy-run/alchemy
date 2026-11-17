@@ -1,0 +1,162 @@
+---
+title: RPC middleware
+description: Authenticate and enrich every message to an entity with Effect RPC middleware — a server side that runs on the pool and a client side that runs in the caller.
+---
+
+import Boundaries from "../../../components/diagrams/Boundaries.astro";
+
+RPC middleware wraps every message to an RPC. Its server side runs on the runner, before the handler: it can reject the message, or provide a service the handler uses. Its client side runs in the caller, and usually adds headers.
+
+<Boundaries
+  nodes={[
+    { id: "client", label: "AuthClient", type: "sets x-caller-token", col: 0, row: 0 },
+    { id: "auth", label: "Auth", type: "reads the header", col: 1, row: 0, tone: "accent" },
+    { id: "room", label: "Room handler", type: "yield* CurrentUser", col: 1, row: 1 },
+  ]}
+  zones={[
+    { id: "api", label: "Api", type: "caller", nodes: ["client"] },
+    { id: "pool", label: "Default", type: "pool", nodes: ["auth", "room"] },
+  ]}
+  links={[
+    { from: "client", to: "auth", label: "header" },
+    { from: "auth", to: "room", label: "CurrentUser" },
+  ]}
+  caption="The client side runs in the caller and adds the header. The server side runs on the runner, before the handler, and provides CurrentUser."
+/>
+
+## Declare it
+
+Middleware is Effect's `RpcMiddleware.Service`. This one provides the current user, and fails with `Unauthorized` without a token:
+
+```typescript title="src/Auth.ts"
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Headers from "effect/http/Headers";
+import * as Layer from "effect/Layer";
+import { RpcMiddleware } from "effect/rpc";
+import * as Schema from "effect/Schema";
+
+export class CurrentUser extends Context.Service<CurrentUser, { readonly id: string }>()(
+  "CurrentUser",
+) {}
+
+export class CallerToken extends Context.Service<CallerToken, string>()("CallerToken") {}
+
+export class Unauthorized extends Schema.TaggedError<Unauthorized>()("Unauthorized", {}) {}
+
+export class Auth extends RpcMiddleware.Service<Auth, { provides: CurrentUser }>()("Auth", {
+  error: Unauthorized,
+  requiredForClient: true,
+}) {}
+
+/** Runs on the runner, before every handler of an RPC that uses `Auth`. */
+export const AuthLive = Layer.succeed(Auth, (effect, { headers }) => {
+  const token = headers["x-caller-token"];
+  return token?.startsWith("user:")
+    ? Effect.provideService(effect, CurrentUser, { id: token.slice("user:".length) })
+    : Effect.fail(new Unauthorized());
+});
+
+/** Runs in the caller: puts its token on each request. */
+export const AuthClient = RpcMiddleware.layerClient(Auth, ({ request, next }) =>
+  Effect.gen(function* () {
+    const token = yield* Effect.serviceOption(CallerToken);
+    return yield* next(
+      token._tag === "Some"
+        ? { ...request, headers: Headers.set(request.headers, "x-caller-token", token.value) }
+        : request,
+    );
+  }),
+);
+```
+
+## Attach it to RPCs
+
+`.middleware(Auth)` applies it to one RPC:
+
+```typescript title="src/Room.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import { Rpc } from "effect/rpc";
+import * as Schema from "effect/Schema";
+import { Auth } from "./Auth.ts";
+
+export class Room extends Cluster.Entity<Room>()("Room", [
+  Rpc.make("Join", { success: Schema.Int }).middleware(Auth),
+  Rpc.make("Members", { success: Schema.Array(Schema.String) }),
+]) {}
+```
+
+The handler reads what the middleware provides:
+
+```typescript title="src/RoomLive.ts"
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Ref from "effect/Ref";
+import { AuthLive, CurrentUser } from "./Auth.ts";
+import { Default } from "./Cluster.ts";
+import { Room } from "./Room.ts";
+
+export default Room.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const members = yield* Ref.make(new Set<string>());
+      return Room.of({
+        Join: () =>
+          Effect.gen(function* () {
+            const user = yield* CurrentUser;
+            return yield* Ref.modify(members, (all) => {
+              const next = new Set(all).add(user.id);
+              return [next.size, next];
+            });
+          }),
+        Members: () => Effect.map(Ref.get(members), (all) => [...all]),
+      });
+    });
+  }).pipe(Effect.provide(Default.pipe(Layer.provide(AuthLive)))),
+);
+```
+
+## Provide the server side with the pool
+
+`AuthLive` goes in the same `Effect.provide` as the pool, provided to it. The pool carries it to the entity on every runner.
+
+Deploying an entity whose RPC uses middleware nobody provided fails the deploy, naming the RPC and the middleware:
+
+```text
+Cluster.EntityMiddlewareMissing: Cluster.Entity 'Room' is missing RPC middleware (Join uses Auth).
+```
+
+## Provide the client side in the caller
+
+The caller provides `AuthClient` where it makes the call, and whatever the client side reads:
+
+```typescript title="src/Api.ts"
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { AuthClient, CallerToken } from "./Auth.ts";
+import { Room } from "./Room.ts";
+
+export default class Api extends Docker.Service<Api>()(
+  "Api",
+  { main: import.meta.url, port: 3000 },
+  Effect.gen(function* () {
+    const rooms = yield* Room;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const lobby = yield* rooms.getByName("lobby");
+        const members = yield* lobby.Join().pipe(
+          Effect.provideService(CallerToken, request.headers["authorization"] ?? ""),
+          Effect.catchTag("Unauthorized", () => Effect.succeed(-1)),
+        );
+        return yield* HttpServerResponse.json({ members });
+      }).pipe(Effect.provide(AuthClient), Effect.orDie),
+    };
+  }),
+) {}
+```
+
+The headers it sets reach the entity's middleware whether the call goes through the gateway or straight from runner to runner.

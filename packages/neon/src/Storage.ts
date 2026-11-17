@@ -161,7 +161,9 @@ export const makeStorageClient = Effect.fn(function* (config: StorageConfig, buc
     ) => provide(presignS3Url({ bucket, key, method, ...options })),
     getTags: () =>
       provide(S3.getBucketTagging({ Bucket: bucket })).pipe(
-        Effect.catchTag("NoSuchTagSet", () => Effect.succeed({ TagSet: [] })),
+        Effect.catchTag("NoSuchTagSet", () =>
+          Effect.succeed<S3.GetBucketTaggingOutput>({ TagSet: [] }),
+        ),
       ),
     putTags: (tags: Record<string, string>) =>
       provide(

@@ -56,8 +56,18 @@ export interface RouteCalculator extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  RouteCalculatorLookup
 > {}
+
+/**
+ * Props for {@link RouteCalculator.lookup}: find a route calculator this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RouteCalculatorLookup {
+  /** The calculator name of the existing route calculator. */
+  calculatorName: string;
+}
 
 /**
  * An Amazon Location Service route calculator. A route calculator computes
@@ -72,6 +82,16 @@ export interface RouteCalculator extends Resource<
  * const calculator = yield* Location.RouteCalculator("Routes", {
  *   dataSource: "Esri",
  * });
+ * ```
+ *
+ * ### Looking up an existing route calculator
+ * `RouteCalculator.lookup` references a route calculator Alchemy doesn't manage (created in the
+ * console or by another stack), found by `calculatorName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing route calculator
+ * ```typescript
+ * const existing = AWS.Location.RouteCalculator.lookup({ calculatorName: "my-route-calculator" });
  * ```
  *
  * @resource
@@ -121,6 +141,11 @@ export const RouteCalculatorProvider = () =>
               (attrs): attrs is RouteCalculator["Attributes"] => attrs !== undefined,
             );
           }),
+        lookup: Effect.fn(function* ({ calculatorName }) {
+          const state = yield* readCalculator(calculatorName);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const calculatorName =
             output?.calculatorName ?? (yield* createCalculatorName(id, olds ?? {}));

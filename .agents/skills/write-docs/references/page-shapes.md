@@ -49,7 +49,10 @@ Every hub has the same five parts, in order:
 2. **The example app and the whole picture, in one paragraph**: "Take one small
    app: a Lambda Function that stores files in an S3 Bucket… Your profile signs
    you in to an account…", then a DAG of that app showing the platform's
-   boundaries (account, region, organization) as `groups`.
+   boundaries (account, region, organization) as `groups`. Never a `Sequence`:
+   the What is figure shows the pieces and where they live (`DAG`, `Tree`,
+   `Boundaries`, `Shell`), and a protocol's order belongs on the chapter that
+   teaches it.
 3. **One `##` per concept, in the order a newcomer meets them**: account or
    organization, access, regions, compute, storage, messaging, networking,
    observability, then state ("Alchemy's record in your account"). Each section

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -127,8 +128,26 @@ export type GlobalAddress = Resource<
     users: ReadonlyArray<string>;
   },
   never,
-  Providers
+  Providers,
+  GlobalAddressLookup
 >;
+
+/**
+ * Props for {@link GlobalAddress.lookup}: find a global address this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface GlobalAddressLookup {
+  /**
+   * Name of the address.
+   */
+  addressName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine address — a reserved anycast IP for global
@@ -163,6 +182,19 @@ export type GlobalAddress = Resource<
  *   purpose: "VPC_PEERING",
  *   network: "projects/my-project/global/networks/main",
  *   prefixLength: 16,
+ * });
+ * ```
+ *
+ * ### Looking up an existing global address
+ * `GlobalAddress.lookup` references a global address Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * global address.
+ *
+ * **Example:** Reference an existing global address
+ * ```typescript
+ * const globalAddress = GCP.Compute.GlobalAddress.lookup({
+ *   addressName: "my-address",
  * });
  * ```
  *
@@ -331,6 +363,13 @@ export const GlobalAddressProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ addressName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, addressName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

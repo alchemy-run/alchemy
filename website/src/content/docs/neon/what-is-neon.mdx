@@ -3,7 +3,8 @@ title: What is Neon?
 description: The concepts behind Neon — organizations, projects, branches, computes, roles, connections, migrations, and the Functions, storage, Auth, Data API and AI Gateway around them — and how @alchemy.run/neon models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
 
 Neon is serverless Postgres. It keeps your data in storage separate from the **compute** that runs queries, which lets it do two things an ordinary database can't: start and stop compute with demand, down to nothing when idle, and **branch** a whole database, data included, in a second.
 
@@ -11,22 +12,20 @@ Around the database, Neon also runs Functions, object storage, user sign-in, an 
 
 Take one small app: an upload service with a database, a bucket and a Function, branched per preview. A project holds a branch. The branch has a compute that serves Postgres, and the Function, bucket and Auth that belong to it.
 
-<DAG
+<Tree
   nodes={[
-    { id: "compute", label: "compute", type: "Postgres · autoscales", col: 0, row: 0 },
-    { id: "fn", label: "Api", type: "Function", tone: "accent", col: 1, row: 0 },
-    { id: "bucket", label: "Uploads", type: "Bucket", col: 2, row: 0 },
-    { id: "compute2", label: "compute", type: "suspends when idle", col: 0, row: 1 },
-    { id: "fn2", label: "Api", type: "Function", col: 1, row: 1 },
-    { id: "bucket2", label: "Uploads", type: "Bucket", col: 2, row: 1 },
+    { id: "org", label: "acme", type: "organization", icon: "brand:neon" },
+    { id: "project", label: "app-db", type: "project · aws-us-east-1", parent: "org", dashed: true, icon: "folder" },
+    { id: "main", label: "main", type: "branch", parent: "project", dashed: true, icon: "git-branch", areas: ["compute fn bucket"], phoneAreas: ["fn fn", "compute bucket"], colGap: 3.5 },
+    { id: "fn", label: "Api", type: "Function", parent: "main", tone: "accent", icon: "square-function" },
+    { id: "compute", label: "compute", type: "Postgres · autoscales", parent: "main", icon: "brand:postgresql" },
+    { id: "bucket", label: "Uploads", type: "Bucket", parent: "main", icon: "archive" },
+    { id: "pr", label: "pr-42", type: "branch · copy of main", parent: "project", dashed: true, icon: "git-branch", areas: ["compute2 fn2 bucket2"], phoneAreas: ["fn2 fn2", "compute2 bucket2"], colGap: 3.5 },
+    { id: "fn2", label: "Api", type: "Function", parent: "pr", icon: "square-function" },
+    { id: "compute2", label: "compute", type: "suspends when idle", parent: "pr", icon: "brand:postgresql" },
+    { id: "bucket2", label: "Uploads", type: "Bucket", parent: "pr", icon: "archive" },
   ]}
-  groups={[
-    { id: "org", label: "Organization acme", nodes: [] },
-    { id: "project", label: "Project app-db · aws-us-east-1", parent: "org", nodes: [], dashed: true },
-    { id: "main", label: "Branch main", parent: "project", nodes: ["compute", "fn", "bucket"], dashed: true },
-    { id: "pr", label: "Branch pr-42 · copy of main", parent: "project", nodes: ["compute2", "fn2", "bucket2"], dashed: true },
-  ]}
-  edges={[
+  links={[
     { from: "fn", to: "compute", label: "SQL" },
     { from: "fn", to: "bucket", label: "S3 API" },
     { from: "fn2", to: "compute2", label: "SQL" },

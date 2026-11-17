@@ -21,6 +21,7 @@ import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -255,8 +256,39 @@ export type Instance = Resource<
     migrationsHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  InstanceLookup
 >;
+
+/**
+ * Props for {@link Instance.lookup}: find an instance this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface InstanceLookup {
+  /**
+   * Instance id (the `{instance}` segment of
+   * `.../clusters/{cluster}/instances/{instance}`). Must match
+   * `[a-z]([a-z0-9-]{0,61}[a-z0-9])?`.
+   */
+  instanceId: string;
+  /**
+   * Parent cluster id or full resource name
+   * (`projects/{project}/locations/{location}/clusters/{cluster}`).
+   */
+  cluster: string;
+  /**
+   * Region of the parent cluster (`us-central1`, …). Ignored when `cluster`
+   * is a full resource name. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An AlloyDB instance (compute attached to a cluster).
@@ -324,6 +356,19 @@ export type Instance = Resource<
  * needs no route to the cluster's network. The deploying identity needs
  * `alloydb.instances.executeSql`. Set `migrationsDatabase` to target a
  * database other than `postgres`.
+ *
+ * ### Looking up an existing instance
+ * `Instance.lookup` references an instance Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared instance.
+ *
+ * **Example:** Reference an existing instance
+ * ```typescript
+ * const instance = GCP.AlloyDB.Instance.lookup({
+ *   instanceId: "my-instance",
+ *   cluster: "my-cluster",
+ * });
+ * ```
  *
  * @resource
  * @category AlloyDB
@@ -737,6 +782,17 @@ export const InstanceProvider = () =>
           nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ instanceId, cluster, location }) {
+      const env = yield* GcpEnvironment.current;
+      const ref = parseClusterRef(cluster, env.project, location ?? env.region);
+      if (ref.clusterId.length === 0) return undefined;
+      const existing = yield* getByName(
+        resourceName(ref.project, ref.location, ref.clusterId, instanceId),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

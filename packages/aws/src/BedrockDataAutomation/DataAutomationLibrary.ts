@@ -65,8 +65,18 @@ export interface DataAutomationLibrary extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  DataAutomationLibraryLookup
 > {}
+
+/**
+ * Props for {@link DataAutomationLibrary.lookup}: find a data automation library this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DataAutomationLibraryLookup {
+  /** The library arn of the existing data automation library. */
+  libraryArn: string;
+}
 
 /**
  * An Amazon Bedrock Data Automation Library — a store of reusable entities
@@ -95,6 +105,16 @@ export interface DataAutomationLibrary extends Resource<
  *     libraries: [{ libraryArn: library.libraryArn }],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing data automation library
+ * `DataAutomationLibrary.lookup` references a data automation library Alchemy doesn't manage (created in the
+ * console or by another stack), found by `libraryArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing data automation library
+ * ```typescript
+ * const existing = AWS.BedrockDataAutomation.DataAutomationLibrary.lookup({ libraryArn: "my-data-automation-library" });
  * ```
  *
  * @resource
@@ -160,6 +180,14 @@ export const DataAutomationLibraryProvider = () =>
             );
             return attrs.flat();
           }),
+
+        lookup: Effect.fn(function* ({ libraryArn }) {
+          if (libraryArn === undefined) return undefined;
+          const found = yield* observeLibrary(libraryArn);
+          if (found === undefined) return undefined;
+          const attrs = toAttributes(found);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const libraryArn =
@@ -244,9 +272,16 @@ export const DataAutomationLibraryProvider = () =>
         }),
 
         delete: Effect.fn(function* ({ output }) {
-          yield* bda
-            .deleteDataAutomationLibrary({ libraryArn: output.libraryArn })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+          yield* bda.deleteDataAutomationLibrary({ libraryArn: output.libraryArn }).pipe(
+            // A library can't be deleted while an ingestion job runs; wait
+            // for the jobs to finish (bounded: 30 × 10s ≈ 5 min).
+            Effect.retry({
+              while: (e) => e._tag === "LibraryIngestionJobsActive",
+              schedule: Schedule.spaced("10 seconds"),
+              times: 30,
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
           // Deletion settles asynchronously (status ACTIVE → DELETING → gone)
           // and library names are unique, so wait for the terminal
           // disappearance — otherwise an immediate same-name re-create

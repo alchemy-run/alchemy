@@ -53,8 +53,28 @@ export type CustomPage = Resource<
     type: CustomPageType;
   },
   never,
-  Providers
+  Providers,
+  CustomPageLookup
 >;
+
+/**
+ * Props for {@link CustomPage.lookup}: find an Access custom page this stack
+ * doesn't manage, by its id or its name.
+ */
+export type CustomPageLookup =
+  | {
+      /**
+       * The UUID of the existing custom page.
+       */
+      customPageId: string;
+    }
+  | {
+      /**
+       * The name of the existing custom page. Names are not unique; the
+       * first page with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Zero Trust Access custom page. Replaces the default Access
@@ -84,6 +104,19 @@ export type CustomPage = Resource<
  * const page = yield* Cloudflare.Access.CustomPage("Forbidden", {
  *   type: "forbidden",
  *   customHtml: "<html><body><h1>Still denied</h1></body></html>",
+ * });
+ * ```
+ *
+ * ### Looking up an existing page
+ * `CustomPage.lookup` references a page Alchemy doesn't manage (created in
+ * the dashboard or by another stack), found by `customPageId` or `name`. It
+ * is read during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Show an existing page on the organization
+ * ```typescript
+ * const forbidden = Cloudflare.Access.CustomPage.lookup({ name: "Forbidden" });
+ * yield* Cloudflare.Access.Organization("Org", {
+ *   customPages: { forbidden: forbidden.customPageId },
  * });
  * ```
  *
@@ -126,6 +159,18 @@ export const CustomPageProvider = () =>
         return { action: "replace" } as const;
       }
       // name/customHtml converge via PUT.
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const customPageId =
+        "customPageId" in props
+          ? props.customPageId
+          : (yield* findPageByName(accountId, props.name))?.uid;
+      if (!customPageId) return undefined;
+      const page = yield* zeroTrust
+        .getAccessCustomPage({ accountId, customPageId })
+        .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.undefined));
+      return page?.uid ? toAttrs(page, accountId) : undefined;
     }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;

@@ -10,7 +10,6 @@ export * from "./ConversationsAnalyses.ts";
 export * from "./ConversationsAssessment.ts";
 export * from "./ConversationsFeedbackLabel.ts";
 export * from "./Dashboard.ts";
-export * from "./DashboardsChart.ts";
 export * from "./DatasetsConversationsFeedbackLabel.ts";
 export * from "./IssueModel.ts";
 export * from "./IssueModelsIssue.ts";

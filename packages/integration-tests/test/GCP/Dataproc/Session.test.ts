@@ -6,6 +6,7 @@ import * as dataproc from "@distilled.cloud/gcp/dataproc_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -65,6 +66,10 @@ test.provider.skipIf(!runLifecycle)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Dataproc.Session.lookup({ sessionId: created.sessionId, location: created.location }),
+        created,
       );
 
       expect(created.name).toContain("/sessions/");

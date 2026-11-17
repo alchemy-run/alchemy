@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
@@ -103,8 +104,31 @@ export type Curation = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CurationLookup
 >;
+
+/**
+ * Props for {@link Curation.lookup}: find a curation this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface CurationLookup {
+  /**
+   * Curation id (the `{curation}` segment of
+   * `projects/{project}/locations/{location}/curations/{curation}`).
+   */
+  curationId: string;
+  /**
+   * Location (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A curation resource in API Hub. Plugin instances invoke the endpoint
@@ -126,6 +150,16 @@ export type Curation = Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing curation
+ * `Curation.lookup` references a curation Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared curation.
+ *
+ * **Example:** Reference an existing curation
+ * ```typescript
+ * const curation = GCP.ApiHub.Curation.lookup({ curationId: "my-curation" });
  * ```
  *
  * @resource
@@ -196,6 +230,15 @@ export const CurationProvider = () =>
         extra: !sameJson(news.endpoint ?? olds?.endpoint, olds?.endpoint ?? output?.endpoint),
       });
     }),
+
+    lookup: Effect.fn(function* ({ curationId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, curationId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

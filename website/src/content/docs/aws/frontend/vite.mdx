@@ -82,9 +82,7 @@ Deploying uploads the build output to S3, writes the file manifest to
 a CloudFront KeyValueStore, and creates the distribution that serves
 it at the edge.
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 See
 [examples/aws-website-vite](https://github.com/alchemy-run/alchemy/tree/main/examples/aws-website-vite)
@@ -226,9 +224,7 @@ it entirely.
 
 ## Local dev
 
-```sh
-bun alchemy dev
-```
+<PackageManagers run="alchemy dev" />
 
 `alchemy dev` runs Vite's own dev server (native HMR) instead of
 deploying; `site.url` is the local address and no AWS resources are

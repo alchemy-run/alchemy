@@ -7,12 +7,11 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const generatePublicKey = (comment: string) =>
   Effect.sync(() => {
@@ -40,7 +39,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create, update, and delete an ssh key",
   (stack) =>
     Effect.gen(function* () {
@@ -56,6 +55,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           });
         }),
       );
+      yield* expectFound(Hetzner.SshKey.lookup({ name: created.name }), created);
 
       expect(created.id).toEqual(expect.any(Number));
       expect(created.name).toEqual(expect.any(String));
@@ -101,7 +101,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "replace when public key changes",
   (stack) =>
     Effect.gen(function* () {
@@ -151,7 +151,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed ssh key",
   (stack) =>
     Effect.gen(function* () {

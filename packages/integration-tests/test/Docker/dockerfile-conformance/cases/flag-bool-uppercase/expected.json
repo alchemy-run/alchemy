@@ -1,0 +1,27 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "COPY",
+          "line": 2,
+          "flags": [
+            {
+              "name": "link",
+              "value": "TRUE"
+            }
+          ],
+          "sources": [
+            "x"
+          ],
+          "destination": "/y"
+        }
+      ]
+    }
+  ]
+}

@@ -91,8 +91,18 @@ export interface Monitor extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  MonitorLookup
 > {}
+
+/**
+ * Props for {@link Monitor.lookup}: find a monitor this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface MonitorLookup {
+  /** The monitor name of the existing monitor. */
+  monitorName: string;
+}
 
 /**
  * An Amazon CloudWatch Internet Monitor **monitor** — measures internet
@@ -150,6 +160,16 @@ export interface Monitor extends Resource<
  *     },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing monitor
+ * `Monitor.lookup` references a monitor Alchemy doesn't manage (created in the
+ * console or by another stack), found by `monitorName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing monitor
+ * ```typescript
+ * const existing = AWS.InternetMonitor.Monitor.lookup({ monitorName: "my-monitor" });
  * ```
  *
  * @resource
@@ -237,6 +257,13 @@ export const MonitorProvider = () =>
             ),
             Effect.map((attrs) => attrs.flatMap((a) => (a === undefined ? [] : [a]))),
           ),
+
+        lookup: Effect.fn(function* ({ monitorName: name }) {
+          const monitor = yield* readMonitor(name);
+          if (monitor === undefined) return undefined;
+          const attrs = toAttrs(monitor);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.monitorName ?? (yield* createName(id, olds ?? {}));

@@ -3,6 +3,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { pipe } from "effect/Function";
 import type { Pipeable } from "effect/Pipeable";
+import type * as Redacted from "effect/Redacted";
 import { SingleShotGen } from "effect/Utils";
 import { getRefMetadata, isRef, type Ref } from "./Ref.ts";
 import { isResource, type Resource, type ResourceLike } from "./Resource.ts";
@@ -81,8 +82,9 @@ export type ToOutput<A, Req = never> =
   // via the brand intersection, so they must short-circuit to a plain Output
   // before the object check — otherwise they explode into an ObjectExpr
   // mapped over every String/Number method. Date is opaque for the same
-  // reason (mirrors AttrOutput in Resource.ts).
-  [A] extends [Primitive | Date]
+  // reason (mirrors AttrOutput in Resource.ts). Redacted is opaque because
+  // `evaluate` returns it by identity, as a leaf.
+  [A] extends [Primitive | Date | Redacted.Redacted<any>]
     ? Output<A, Req>
     : [Extract<A, object>] extends [never]
       ? Output<A, Req>
@@ -401,7 +403,7 @@ export const all = <Outs extends (Output | Expr)[]>(...outs: Outs) =>
 
 export type All<Outs extends (Output | Expr)[]> = number extends Outs["length"]
   ? [Outs[number]] extends [Output<infer V, infer Req> | Expr<infer V, infer Req>]
-    ? Output<V, Req>
+    ? Output<V[], Req>
     : never
   : Tuple<Outs>;
 
@@ -650,11 +652,17 @@ function proxy(self: any): any {
                 self.stables &&
                 prop in self.stables
               ? self.stables[prop as keyof typeof self.stables]
-              : prop in self
-                ? typeof self[prop as keyof typeof self] === "function" && !("kind" in self)
-                  ? new PropExpr(proxy, prop as never)
-                  : self[prop as keyof typeof self]
-                : new PropExpr(proxy, prop as never),
+              : // A lookup stands in for the resource it found, so an
+                // attribute named `kind` (e.g. a Rules list's) must not
+                // resolve to the expression's own tag. The engine reads that
+                // tag through `ExprSymbol` (`exprKind`).
+                prop === "kind" && isLookupExpr(self)
+                ? new PropExpr(proxy, prop as never)
+                : prop in self
+                  ? typeof self[prop as keyof typeof self] === "function" && !("kind" in self)
+                    ? new PropExpr(proxy, prop as never)
+                    : self[prop as keyof typeof self]
+                  : new PropExpr(proxy, prop as never),
     apply: (_, thisArg, args) => {
       if (isPropExpr(self)) {
         // Method-style combinators on an Output proxy. `map`/`apply` and

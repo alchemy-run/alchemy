@@ -1,22 +1,25 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import { call, roundTrip, waitForPlatform } from "./fixtures/counter-client.ts";
 import EuWorker from "./fixtures/eu-worker.ts";
 import UnrestrictedWorker from "./fixtures/unrestricted-worker.ts";
 
 const { test } = Test.make({
-  providers: Cloudflare.providers(),
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
 });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /**
- * `layerDurableObjects({ jurisdiction: "eu" })` keeps the model's objects in the
- * EU namespace: switching the same Worker to the unrestricted platform finds
- * none of them, and switching back finds them where they were left.
+ * `DomainCloudflare.layerDurableObjects({ jurisdiction: "eu" })` keeps the
+ * model's objects in the EU namespace: switching the same Worker to the
+ * unrestricted platform finds none of them, and switching back finds them
+ * where they were left.
  */
 test.provider(
   "a Domain model's Durable Objects live in its jurisdiction",

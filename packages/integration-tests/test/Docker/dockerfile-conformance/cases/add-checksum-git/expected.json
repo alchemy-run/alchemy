@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "ADD",
+          "line": 2,
+          "flags": [
+            {
+              "name": "checksum",
+              "value": "sha256:abc"
+            }
+          ],
+          "sources": [
+            "https://example.com/f"
+          ],
+          "destination": "/f"
+        },
+        {
+          "tag": "ADD",
+          "line": 3,
+          "flags": [
+            {
+              "name": "keep-git-dir",
+              "value": "true"
+            }
+          ],
+          "sources": [
+            "https://github.com/moby/buildkit.git#v0.10.1"
+          ],
+          "destination": "/buildkit"
+        }
+      ]
+    }
+  ]
+}

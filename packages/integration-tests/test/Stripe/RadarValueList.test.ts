@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Stripe.providers() });
 
@@ -38,6 +39,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(Stripe.RadarValueList.lookup({ id: created.id }), created);
 
       expect(created.id).toMatch(/^rsl_/);
       expect(created.alias).toEqual(expect.any(String));

@@ -6,6 +6,7 @@ import * as dlp from "@distilled.cloud/gcp/dlp_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -68,6 +69,13 @@ test.provider(
             defaultAction: { returnVerdict: "ALLOW" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.DLP.ContentPolicy.lookup({
+          contentPolicyId: created.contentPolicyId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.contentPolicyId).toEqual(expect.any(String));

@@ -2,8 +2,23 @@
 title: Workspaces and tokens
 description: How a Railway workspace holds your projects and billing, which tokens Alchemy can deploy with, and how to keep production apart.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Everything you run on Railway belongs to a **workspace**: your personal account, or a team you share with others. A workspace holds your projects, their members and their bill. Inside it, each **project** groups services and databases on their own private network.
+
+<Tree
+  nodes={[
+    { id: "ws", label: "acme", type: "workspace · members, bill" },
+    { id: "prod", label: "my-app-prod", type: "project · one per stage", parent: "ws" },
+    { id: "api", label: "api", type: "Service", parent: "prod", tone: "accent" },
+    { id: "pg", label: "Postgres", type: "database", parent: "prod" },
+    { id: "pr", label: "my-app-pr-42", type: "project", parent: "ws" },
+    { id: "api2", label: "api", type: "Service", parent: "pr", tone: "accent" },
+    { id: "pg2", label: "Postgres", type: "database", parent: "pr" },
+  ]}
+  scopes={[{ on: "ws", label: "workspace or account token" }]}
+  caption="A workspace holds a project per stage, and each project its services and databases on a private network. Alchemy needs a token that reaches the workspace, because it creates the projects."
+/>
 
 ## Sign in with a profile
 

@@ -9,12 +9,11 @@ import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
+import { hetznerPrimaryIps } from "../limit.ts";
 
-const { test } = Test.make({ providers: Hetzner.providers() });
+const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const fixtureDir = pathe.resolve(import.meta.dirname, "../../AWS/Website/fixtures/nextjs-app");
 const fixtureEntries = [
@@ -37,7 +36,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "Nextjs: deploy, GET /, destroy, gone",
   (stack) =>
     Effect.gen(function* () {

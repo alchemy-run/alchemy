@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -292,8 +293,33 @@ export type Connection = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConnectionLookup
 >;
+
+/**
+ * Props for {@link Connection.lookup}: find a connection this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ConnectionLookup {
+  /**
+   * Connection id (the `{connection}` segment of
+   * `projects/{project}/locations/{location}/connections/{connection}`).
+   * Must be unique per project and location.
+   */
+  connectionId: string;
+  /**
+   * Cloud Build location (`us-central1`, `us-east1`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Build v2 connection to a source-control host (GitHub, GitHub
@@ -358,6 +384,19 @@ export type Connection = Resource<
  *         "projects/{project}/secrets/gitlab-api/versions/latest",
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing connection
+ * `Connection.lookup` references a connection Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * connection.
+ *
+ * **Example:** Reference an existing connection
+ * ```typescript
+ * const connection = GCP.CloudBuild.Connection.lookup({
+ *   connectionId: "my-connection",
  * });
  * ```
  *
@@ -943,6 +982,15 @@ export const ConnectionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ connectionId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, connectionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

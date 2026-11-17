@@ -6,6 +6,7 @@ import * as iap from "@distilled.cloud/gcp/iap_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -55,6 +56,13 @@ test.provider(
             cidrs: ["10.241.0.0/24"],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.IAP.IapDestGroup.lookup({
+          destGroupId: created.destGroupId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/destGroups/");

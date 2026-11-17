@@ -127,11 +127,11 @@ Queries run inside the request scope, rather than during infrastructure construc
 pnpm alchemy deploy
 ```
 
-For subsequent schema changes, generate, review, and commit first, then apply the committed migrations before deploying compatible application code. `alchemy deploy` does not replace `drizzle-kit migrate` in this guide.
+For subsequent schema changes, generate, review, and commit first, then apply the committed migrations before deploying compatible application code. While Drizzle owns migrations, `alchemy deploy` does not replace `drizzle-kit migrate`.
 
 ## Choose one migration owner
 
-`Fly.Postgres` also supports a `migrations` directory, but this guide deliberately leaves it unset and keeps Drizzle as the migration owner. Switching an existing database to Alchemy's migration history is a separate [migration adoption decision](/sql/drizzle/migrations#existing-migration-history), not a command substitution.
+`Fly.Postgres` also supports a `migrations` directory, but leave it unset and keep Drizzle as the migration owner. Switching an existing database to Alchemy's migration history is a separate [migration adoption decision](/sql/drizzle/migrations#existing-migration-history), not a command substitution.
 
 ## Continue
 

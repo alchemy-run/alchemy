@@ -50,8 +50,18 @@ export interface PlaybackKeyPair extends Resource<
     fingerprint: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  PlaybackKeyPairLookup
 > {}
+
+/**
+ * Props for {@link PlaybackKeyPair.lookup}: find a playback key pair this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface PlaybackKeyPairLookup {
+  /** The ARN of the existing playback key pair. */
+  playbackKeyPairArn: string;
+}
 
 /**
  * An Amazon IVS playback key pair for private channels.
@@ -71,6 +81,16 @@ export interface PlaybackKeyPair extends Resource<
  * const channel = yield* IVS.Channel("PrivateChannel", {
  *   authorized: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing playback key pair
+ * `PlaybackKeyPair.lookup` references a playback key pair Alchemy doesn't manage (created in the
+ * console or by another stack), found by `playbackKeyPairArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing playback key pair
+ * ```typescript
+ * const existing = AWS.IVS.PlaybackKeyPair.lookup({ playbackKeyPairArn: "..." });
  * ```
  *
  * @resource
@@ -144,6 +164,13 @@ export const PlaybackKeyPairProvider = () =>
 
       return {
         stables: ["playbackKeyPairName", "playbackKeyPairArn", "fingerprint"],
+
+        lookup: Effect.fn(function* ({ playbackKeyPairArn }) {
+          const keyPair = yield* getByArn(playbackKeyPairArn);
+          if (keyPair === undefined) return undefined;
+          const attrs = yield* toAttrs(keyPair);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const keyPair = output?.playbackKeyPairArn

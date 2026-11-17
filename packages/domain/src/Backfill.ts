@@ -640,6 +640,8 @@ export interface SourceHost {
   readonly ref: SourceRef;
   /** Every consumer in the model this instance's code runs: a target outside it is from newer code. */
   readonly model: () => ReadonlyArray<string>;
+  /** The consumers this instance's events reach, in the code it runs now. */
+  readonly targets: () => ReadonlyArray<string>;
   /** Whether `target`'s keys are keyed by their source: each reads its own source's log. */
   readonly singleSource?: (target: string) => boolean;
   /** Its current version: the seq of its last event or entry. */
@@ -706,21 +708,41 @@ export const makeSource = (
       return result as Handoff;
     });
 
+  const onCommit = (target: string) =>
+    Effect.gen(function* () {
+      if ((yield* storage.get(kickedKey(target))) !== undefined) return;
+      yield* storage.put({ [kickedKey(target)]: true });
+      yield* queue.stage([
+        host.singleSource?.(target) === true
+          ? { kind: "start", target, key: host.ref.id, ref: host.ref }
+          : { kind: "kick", target, ref: host.ref },
+      ]);
+    });
+
   return {
     /**
      * A commit withheld `target`'s deliveries: it is behind here. Ask for a
      * reader, once. Call inside the commit's exclusive section.
      */
-    onCommit: (target: string) =>
+    onCommit,
+
+    /**
+     * Ask for a reader for each target this instance is behind on. An instance
+     * lists itself in the directory after its first commit, so a consumer
+     * deployed in between may have listed the directory without it: the next
+     * commit would ask for a reader (see `onCommit`), and this does not wait
+     * for one. Call it once the instance is listed.
+     */
+    catchUp: storage.exclusive(
       Effect.gen(function* () {
-        if ((yield* storage.get(kickedKey(target))) !== undefined) return;
-        yield* storage.put({ [kickedKey(target)]: true });
-        yield* queue.stage([
-          host.singleSource?.(target) === true
-            ? { kind: "start", target, key: host.ref.id, ref: host.ref }
-            : { kind: "kick", target, ref: host.ref },
-        ]);
+        const routed = yield* host.routed;
+        // No cursors: it predates catch-up, and every consumer is taken as caught up.
+        if (routed === undefined) return;
+        const version = yield* host.version;
+        for (const target of host.targets())
+          if ((routed[target] ?? 0) !== version) yield* onCommit(target);
       }),
+    ),
 
     log: (after: number, limit: number) => host.log(after, limit),
 
@@ -1558,8 +1580,8 @@ export const makeNode = (
 
   /**
    * Link this node into its parent, and so on up to the root, before answering:
-   * an instance's first commit waits for it, so every instance with an event
-   * can be reached from the root. Only a node's first registration pays for it.
+   * an instance's listing waits for it, so every instance that is listed can be
+   * reached from the root. Only a node's first registration pays for it.
    */
   const ensureLinked = (path: string) =>
     Effect.gen(function* () {

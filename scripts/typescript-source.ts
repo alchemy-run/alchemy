@@ -2,8 +2,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import type { SourceFile } from "tsrs/unstable/ast";
-import { API, formatDiagnostics } from "tsrs/unstable/async";
+import type { SourceFile } from "tsrs/ast";
+import { API, formatDiagnostics } from "tsrs/async";
 
 export class SyntaxProjectError extends Data.TaggedError("SyntaxProjectError")<{
   readonly message: string;

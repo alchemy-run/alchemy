@@ -12,8 +12,6 @@ const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
-
 const OURS = "alchemy-recordlist=ours";
 const FOREIGN = "alchemy-recordlist=foreign";
 
@@ -41,7 +39,7 @@ const waitUntilZoneGone = (zoneId: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "publishes, converges, and removes only its own values",
   (stack) =>
     Effect.gen(function* () {

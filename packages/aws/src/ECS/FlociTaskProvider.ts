@@ -100,7 +100,9 @@ export const FlociTaskProvider = () =>
             ctx
               .rerunReconcileIfStale((current) =>
                 Effect.gen(function* () {
-                  const hash = yield* imageSource.hash(taskImageInput(ctx.news));
+                  const hash = yield* imageSource.hash(
+                    taskImageInput(ctx.news, yield* ctx.currentBindings),
+                  );
                   // Bundle.watch emits its initial build too. Re-registering
                   // unchanged content would delete the ARN just returned by
                   // deploy before callers can launch a task with it.

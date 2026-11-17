@@ -1,0 +1,94 @@
+---
+title: "Part 1: Build a Warm Image"
+description: Declare a Modal environment, an app, and a warm image with a repository cloned, all built at deploy time.
+sidebar:
+  order: 1
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+Build an API that gives agents sandboxes. The slow setup runs once, when you deploy: an image with a repository cloned into it. While the app runs, every sandbox starts from that image, already set up.
+
+The finished code is in [`examples/cloudflare-modal-sandbox`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-modal-sandbox).
+
+## Prerequisites
+
+Finish [Modal setup](/modal/setup) and [Cloudflare setup](/cloudflare/setup).
+
+## Create an environment
+
+```typescript title="src/Sandbox.ts"
+import * as Modal from "@alchemy.run/modal";
+
+export const MyEnv = Modal.Environment("MyEnv", {});
+```
+
+Everything the app creates goes in this environment.
+
+## Create an app
+
+```diff lang="typescript"
+// src/Sandbox.ts
+export const MyEnv = Modal.Environment("MyEnv", {});
++
++export const Coder = Modal.App("Coder", { environment: MyEnv });
+```
+
+Sandboxes run in an app. Passing `MyEnv` puts the app in that environment and deploys the environment first.
+
+## Build an image
+
+```diff lang="typescript"
+// src/Sandbox.ts
++export const Node = Modal.Image("Node", {
++  app: Coder,
++  image: "node:22-bookworm",
++  commands: ["RUN apt-get update && apt-get install -y git"],
++});
+```
+
+Modal builds it on its own builders, so you don't need Docker.
+
+## Bake the repository into a warm image
+
+```diff lang="typescript"
+// src/Sandbox.ts
++export const Warm = Modal.Image("Warm", {
++  app: Coder,
++  from: Node,
++  run: ["git clone --depth 1 https://github.com/sindresorhus/is /work"],
++});
+```
+
+`run` executes in a sandbox once, at deploy, then saves the sandbox's files as an image. Every sandbox the app starts boots from it, with the repository already in `/work`.
+
+## Deploy
+
+```typescript title="alchemy.run.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Modal from "@alchemy.run/modal";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Warm } from "./src/Sandbox.ts";
+
+export default Alchemy.Stack(
+  "CloudflareModalSandboxExample",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Modal.providers()),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const warm = yield* Warm;
+    return { image: warm.imageId };
+  }),
+);
+```
+
+<PackageManagers run="alchemy deploy" />
+
+`Warm` starts from `Node`, which lives in `Coder`, in `MyEnv`, so deploying it creates all four. The output shows the image id (`im-…`). A deploy that changes nothing leaves them alone.
+
+## Next
+
+[Part 2](/modal/tutorial/part-2) starts sandboxes from it while the app runs.

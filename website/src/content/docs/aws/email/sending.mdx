@@ -9,7 +9,7 @@ SES sends email for you. Before it sends from an address, you prove you own it: 
 
 An identity is a domain like `mail.example.com` or a single address. A domain identity is verified with **DKIM**: SES gives you three keys to publish as DNS records, and signs every message with them, so receiving servers can check the mail really came from your domain.
 
-Every message you send builds or spends your **reputation**: how often your mail bounces, is marked as spam, or is opened. Receiving servers use it to decide whether your mail reaches the inbox. Everything after the first send in this chapter, from contact lists to dedicated IPs, exists to protect it.
+Every message you send builds or spends your **reputation**: how often your mail bounces, is marked as spam, or is opened. Receiving servers use it to decide whether your mail reaches the inbox. Everything after the first send, from contact lists to dedicated IPs, exists to protect it.
 
 :::note
 New SES accounts start in the **sandbox**: you can only send to

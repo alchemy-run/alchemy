@@ -404,6 +404,88 @@ test.provider(
 );
 
 /**
+ * #3196: resource state can outlive the simulator's data (a deleted
+ * `.alchemy/local/d1`, a state store shared with another checkout). The
+ * local provider observes the simulator instead of trusting the migration
+ * and import hashes in state, so the next deploy re-applies both to the
+ * empty database.
+ */
+test.provider(
+  "D1 migrations and importFiles re-apply when the local data is lost",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const migrationsDir = yield* fs.makeTempDirectory({
+        prefix: "alchemy-d1-local-lost-",
+      });
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0001_users.sql"),
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL);",
+      );
+      const seedDir = yield* fs.makeTempDirectory({
+        prefix: "alchemy-d1-local-lost-seed-",
+      });
+      const seed = path.join(seedDir, "seed.sql");
+      yield* fs.writeFileString(seed, "INSERT INTO users (name) VALUES ('seeded');");
+
+      yield* stack.destroy();
+
+      const program = Effect.gen(function* () {
+        const db = yield* Cloudflare.D1.Database("LocalLostDataDB", {
+          migrations: migrationsDir,
+          importFiles: [seed],
+        });
+        const worker = yield* Cloudflare.Worker("d1-lost-data-worker", {
+          main: pathe.resolve(import.meta.dirname, "fixtures/d1-local-worker.ts"),
+          env: { DB: db },
+        });
+        return { db, worker };
+      });
+
+      const v1 = yield* stack.deploy(program);
+      const url = v1.worker.url!;
+      expect(((yield* getJsonReady(`${url}/users`)) as { users: string[] }).users).toEqual([
+        "seeded",
+      ]);
+
+      // Unchanged files and intact data: nothing to do.
+      const unchanged = yield* stack.plan(program);
+      expect(unchanged.resources["LocalLostDataDB"].action).toBe("noop");
+
+      // Empty the simulator out from under the state row.
+      const client = yield* HttpClient.HttpClient;
+      const wiped = yield* client.post(`${url}/wipe`).pipe(Effect.flatMap((res) => res.json));
+      expect((wiped as { dropped: string[] }).dropped.sort()).toEqual([
+        "__alchemy_migrations",
+        "users",
+      ]);
+
+      const lost = yield* stack.plan(program);
+      expect(lost.resources["LocalLostDataDB"].action).toBe("update");
+
+      const v2 = yield* stack.deploy(program);
+      expect(v2.db.databaseId).toBe(v1.db.databaseId);
+      const migrations = (yield* getJsonReady(`${v2.worker.url}/migrations`)) as {
+        migrations: Array<{ name: string }>;
+      };
+      expect(migrations.migrations.map((m) => m.name)).toEqual(["0001_users.sql"]);
+      expect(
+        ((yield* getJsonReady(`${v2.worker.url}/users`)) as { users: string[] }).users,
+      ).toEqual(["seeded"]);
+
+      const restored = yield* stack.plan(program);
+      expect(restored.resources["LocalLostDataDB"].action).toBe("noop");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:d1", "provider:cloudflare:worker", "local"],
+    timeout: 120_000,
+  },
+);
+
+/**
  * `QueryDatabaseLocal` (the stack-eval capability used in Actions) reaches
  * the LOCAL simulator when the database is a `dev:` row: queries tunnel
  * through an ephemeral workerd gateway into the same DO SQLite the worker

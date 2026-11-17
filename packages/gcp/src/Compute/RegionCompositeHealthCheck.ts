@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -84,8 +85,31 @@ export type RegionCompositeHealthCheck = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionCompositeHealthCheckLookup
 >;
+
+/**
+ * Props for {@link RegionCompositeHealthCheck.lookup}: find a region
+ * composite health check this stack doesn't manage by its identifiers, in
+ * the ambient project unless `project` names another.
+ */
+export interface RegionCompositeHealthCheckLookup {
+  /**
+   * Health check name (RFC1035, 1-63 characters).
+   */
+  healthCheckName: string;
+  /**
+   * Region the composite health check lives in. `US-CENTRAL1` is accepted
+   * and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine composite health check.
@@ -112,6 +136,19 @@ export type RegionCompositeHealthCheck = Resource<
  *   region: "us-central1",
  *   healthDestination: rule.selfLink,
  *   healthSources: [source.selfLink],
+ * });
+ * ```
+ *
+ * ### Looking up an existing region composite health check
+ * `RegionCompositeHealthCheck.lookup` references a region composite health
+ * check Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared region composite health check.
+ *
+ * **Example:** Reference an existing region composite health check
+ * ```typescript
+ * const regionCompositeHealthCheck = GCP.Compute.RegionCompositeHealthCheck.lookup({
+ *   healthCheckName: "my-health-check",
  * });
  * ```
  *
@@ -207,6 +244,14 @@ export const RegionCompositeHealthCheckProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ healthCheckName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, healthCheckName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

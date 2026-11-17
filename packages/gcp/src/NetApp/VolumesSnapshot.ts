@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -87,8 +88,38 @@ export type VolumesSnapshot = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  VolumesSnapshotLookup
 >;
+
+/**
+ * Props for {@link VolumesSnapshot.lookup}: find a volumes snapshot this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface VolumesSnapshotLookup {
+  /**
+   * Snapshot id (the `{snapshot}` segment of
+   * `.../volumes/{volume}/snapshots/{snapshot}`).
+   */
+  snapshotId: string;
+  /**
+   * Region used when `volume` is a bare id. `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Parent volume. Full name
+   * `projects/{project}/locations/{location}/volumes/{volume}` or the
+   * volume id (combined with `location`).
+   */
+  volume: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud NetApp Volumes snapshot — a point-in-time copy of a volume.
@@ -121,6 +152,20 @@ export type VolumesSnapshot = Resource<
  *   volume: volume.name,
  *   description: "nightly snapshot v2",
  *   labels: { env: "prod", team: "storage" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing volumes snapshot
+ * `VolumesSnapshot.lookup` references a volumes snapshot Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * volumes snapshot.
+ *
+ * **Example:** Reference an existing volumes snapshot
+ * ```typescript
+ * const volumesSnapshot = GCP.NetApp.VolumesSnapshot.lookup({
+ *   snapshotId: "my-snapshot",
+ *   volume: "my-volume",
  * });
  * ```
  *
@@ -199,6 +244,16 @@ export const VolumesSnapshotProvider = () =>
         nextParent: nextVolume,
       });
     }),
+
+    lookup: Effect.fn(function* ({ snapshotId, location: lookupLocation, volume: lookupVolume }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const volume = volumeOf(lookupVolume ?? "", env.project, location);
+      const name = resourceName(volume, snapshotId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -14,6 +14,7 @@ import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Self } from "alchemy/Self";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -130,7 +131,8 @@ type EksAdapterDeps =
   | Region
   | AWSEnvironment
   | FileSystem.FileSystem
-  | Path.Path;
+  | Path.Path
+  | SecureRandom.SecureRandom;
 
 /** Mint an EKS SigV4 bearer token (STS `GetCallerIdentity` presign). */
 const mintEksToken = Effect.fn(function* (clusterName: string, region: string) {

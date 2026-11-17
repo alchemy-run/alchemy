@@ -162,6 +162,46 @@ export class UnroutedCommand extends Data.TaggedError("UnroutedCommand")<{
   }
 }
 
+/** Two aggregates or decisions of one model implement the same command. */
+export class ImplementedTwice extends Data.TaggedError("ImplementedTwice")<{
+  readonly command: string;
+  readonly first: string;
+  readonly second: string;
+}> {
+  override get message() {
+    return `${this.command} is implemented by ${this.first} and by ${this.second}`;
+  }
+}
+
+/** A decision reads an aggregate its model does not host. */
+export class UnknownRead extends Data.TaggedError("UnknownRead")<{
+  readonly decision: string;
+  readonly aggregate: string;
+}> {
+  override get message() {
+    return `${this.decision} reads ${this.aggregate}, which is not in the Domain`;
+  }
+}
+
+/** A decision records an event on an instance it did not read. */
+export class UnreadRecord extends Data.TaggedError("UnreadRecord")<{
+  readonly decision: string;
+  readonly returned: string;
+}> {
+  override get message() {
+    return `${this.decision} returned ${this.returned}, which is not an event recorded with a read instance's \`record\``;
+  }
+}
+
+/** The platform a model is hosted on can't commit decisions. */
+export class DecisionsUnsupported extends Data.TaggedError("DecisionsUnsupported")<{
+  readonly decisions: ReadonlyArray<string>;
+}> {
+  override get message() {
+    return `the platform does not host decisions (${this.decisions.join(", ")})`;
+  }
+}
+
 /** `decide` returns an event or rejection its command does not declare. */
 export class UndeclaredDecision extends Data.TaggedError("UndeclaredDecision")<{
   readonly aggregate: string;
@@ -212,15 +252,6 @@ export class UnknownRequestContext extends Data.TaggedError("UnknownRequestConte
   }
 }
 
-/** An Api exposes an aggregate that declares no `read` contract. */
-export class Unreadable extends Data.TaggedError("Unreadable")<{
-  readonly aggregate: string;
-}> {
-  override get message() {
-    return `${this.aggregate} has no \`read\` contract, so an Api cannot expose it`;
-  }
-}
-
 /** An external system declares an operation named after a static of its class. */
 export class ReservedOperation extends Data.TaggedError("ReservedOperation")<{
   readonly system: string;
@@ -237,6 +268,15 @@ export class MissingWorkflowEngine extends Data.TaggedError("MissingWorkflowEngi
 }> {
   override get message() {
     return `${this.sagas.join(", ")} need a platform that runs workflows`;
+  }
+}
+
+/** A view or stream guards its reads, but no Layer provides its `validate`. */
+export class UnvalidatedRead extends Data.TaggedError("UnvalidatedRead")<{
+  readonly entity: string;
+}> {
+  override get message() {
+    return `${this.entity} declares middleware or rejects, so it needs its Layer: provide ${this.entity}.toLayer(validate) to the model`;
   }
 }
 
@@ -362,22 +402,13 @@ export class PagedWithoutSuccess extends Data.TaggedError("PagedWithoutSuccess")
   }
 }
 
-/** A query declares `visible` but is not `paged`: only the entries of a page are judged. */
-export class VisibleWithoutPaging extends Data.TaggedError("VisibleWithoutPaging")<{
-  readonly query: string;
-}> {
-  override get message() {
-    return `Query '${this.query}' declares \`visible\` but is not \`paged\`: only the entries of a page are judged`;
-  }
-}
-
-/** A query waits for a projection the Domain does not list. */
+/** A query waits for a projection, view or stream the Domain does not list. */
 export class UnknownWait extends Data.TaggedError("UnknownWait")<{
   readonly query: string;
-  readonly projection: string;
+  readonly read: string;
 }> {
   override get message() {
-    return `${this.query} waits for ${this.projection}, which is not in the Domain`;
+    return `${this.query} waits for ${this.read}, which is not in the Domain`;
   }
 }
 
@@ -398,12 +429,15 @@ export type Reason =
   | WriterKeyMismatch
   | UnhandledCommand
   | UnroutedCommand
+  | ImplementedTwice
+  | UnknownRead
+  | UnreadRecord
+  | DecisionsUnsupported
   | UndeclaredDecision
   | UndeclaredEvent
   | UndeclaredEmit
   | UnknownEvent
   | UnknownRequestContext
-  | Unreadable
   | ReservedOperation
   | MissingWorkflowEngine
   | ForeignAppend
@@ -418,8 +452,8 @@ export type Reason =
   | ModelHostedTwice
   | LazyViewNeedsOneSource
   | PagedWithoutSuccess
-  | VisibleWithoutPaging
-  | UnknownWait;
+  | UnknownWait
+  | UnvalidatedRead;
 
 /**
  * A domain definition error, found while the kernel is built or when a

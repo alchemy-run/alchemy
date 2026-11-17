@@ -47,8 +47,20 @@ export interface RuleGroupsNamespace extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  RuleGroupsNamespaceLookup
 > {}
+
+/**
+ * Props for {@link RuleGroupsNamespace.lookup}: find a rule groups namespace this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface RuleGroupsNamespaceLookup {
+  /** The workspace the namespace belongs to. */
+  workspaceId: string;
+  /** The name of the existing namespace. */
+  name: string;
+}
 
 /**
  * A rule groups namespace inside an Amazon Managed Service for Prometheus
@@ -68,6 +80,16 @@ export interface RuleGroupsNamespace extends Resource<
  *       - record: metric:requests:rate5m
  *         expr: rate(http_requests_total[5m])`,
  * });
+ * ```
+ *
+ * ### Looking up an existing rule groups namespace
+ * `RuleGroupsNamespace.lookup` references a rule groups namespace Alchemy doesn't manage (created in the
+ * console or by another stack), found by `workspaceId` and `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing rule groups namespace
+ * ```typescript
+ * const alerts = AWS.AMP.RuleGroupsNamespace.lookup({ workspaceId, name: "alerts" });
  * ```
  *
  * @resource
@@ -128,6 +150,10 @@ export const RuleGroupsNamespaceProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ workspaceId, name }) {
+          const ns = yield* describe(workspaceId, name);
+          return ns === undefined ? undefined : { ...toAttrs(ns), workspaceId };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const workspaceId = output?.workspaceId ?? olds?.workspaceId;
           const name = output?.name ?? olds?.name;

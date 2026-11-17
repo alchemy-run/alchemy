@@ -74,8 +74,18 @@ export interface VpcConnector extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  VpcConnectorLookup
 > {}
+
+/**
+ * Props for {@link VpcConnector.lookup}: find a VPC connector this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface VpcConnectorLookup {
+  /** The name of the existing connector. */
+  vpcConnectorName: string;
+}
 
 /**
  * An AWS App Runner VPC connector. Associating a connector with an App
@@ -108,6 +118,16 @@ export interface VpcConnector extends Resource<
  *     vpcConnectorArn: connector.vpcConnectorArn,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing VPC connector
+ * `VpcConnector.lookup` references a VPC connector Alchemy doesn't manage (created in the
+ * console or by another stack), found by `vpcConnectorName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Route a service through an existing connector
+ * ```typescript
+ * const connector = AWS.AppRunner.VpcConnector.lookup({ vpcConnectorName: "private" });
  * ```
  *
  * @resource
@@ -198,6 +218,11 @@ export const VpcConnectorProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ vpcConnectorName }) {
+          const connector = yield* findConnector(vpcConnectorName);
+          return connector === undefined ? undefined : yield* toAttrs(connector);
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

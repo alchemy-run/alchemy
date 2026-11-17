@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -113,8 +114,34 @@ export type AutoLabelingRule = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AutoLabelingRuleLookup
 >;
+
+/**
+ * Props for {@link AutoLabelingRule.lookup}: find an auto labeling rule
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface AutoLabelingRuleLookup {
+  /**
+   * Auto-labeling rule id (the `{auto_labeling_rule}` segment of
+   * `projects/{
+   * project}/locations/{location}/autoLabelingRules/{auto_labeling_rule}`).
+   * Also used as `labelKey` when `labelKeyType` is `LABEL_KEY_TYPE_CUSTOM`.
+   */
+  autoLabelingRuleId: string;
+  /**
+   * Location (`us-central1`, …). `US-CENTRAL1` is accepted and normalized
+   * to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Contact Center AI Insights auto-labeling rule that writes a custom
@@ -131,6 +158,19 @@ export type AutoLabelingRule = Resource<
  *   displayName: "billing-topic",
  *   active: false,
  *   conditions: [{ value: '"billing"', condition: "true" }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing auto labeling rule
+ * `AutoLabelingRule.lookup` references an auto labeling rule Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared auto labeling rule.
+ *
+ * **Example:** Reference an existing auto labeling rule
+ * ```typescript
+ * const autoLabelingRule = GCP.ContactCenterInsights.AutoLabelingRule.lookup({
+ *   autoLabelingRuleId: "my-auto-labeling-rule",
  * });
  * ```
  *
@@ -222,6 +262,15 @@ export const AutoLabelingRuleProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ autoLabelingRuleId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation ?? env.region);
+      const name = resourceName(env.project, location, autoLabelingRuleId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

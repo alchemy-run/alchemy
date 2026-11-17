@@ -70,8 +70,20 @@ export interface Authorizer extends Resource<
     type: ag.AuthorizerType;
   },
   never,
-  Providers
+  Providers,
+  AuthorizerLookup
 > {}
+
+/**
+ * Props for {@link Authorizer.lookup}: find an authorizer this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AuthorizerLookup {
+  /** The id of the existing authorizer. */
+  authorizerId: string;
+  /** The id of the rest api it belongs to. */
+  restApiId: string;
+}
 
 /**
  * REST API Lambda, Cognito, or gateway authorizer.
@@ -85,6 +97,16 @@ export interface Authorizer extends Resource<
  *   authorizerUri: authorizerInvokeArn,
  *   identitySource: "method.request.header.Authorization",
  * });
+ * ```
+ *
+ * ### Looking up an existing authorizer
+ * `Authorizer.lookup` references an authorizer Alchemy doesn't manage (created in the
+ * console or by another stack), found by `authorizerId` and `restApiId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing authorizer
+ * ```typescript
+ * const existing = AWS.ApiGateway.Authorizer.lookup({ authorizerId: "...", restApiId: "..." });
  * ```
  */
 const AuthorizerResource = Resource<Authorizer>("AWS.ApiGateway.Authorizer");
@@ -123,6 +145,21 @@ export const AuthorizerProvider = () =>
           if (news.authType !== olds.authType) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ authorizerId, restApiId }) {
+          const a = yield* ag
+            .getAuthorizer({
+              restApiId: restApiId,
+              authorizerId: authorizerId,
+            })
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
+          if (!a?.id) return undefined;
+          return {
+            authorizerId: a.id,
+            restApiId: restApiId,
+            name: a.name!,
+            type: a.type!,
+          };
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.authorizerId) return undefined;

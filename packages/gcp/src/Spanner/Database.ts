@@ -17,6 +17,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { runDatabaseMigrations } from "./Migrations.ts";
@@ -97,7 +98,8 @@ export type DatabaseProps = {
   encryptionConfig?: EncryptionConfig;
   /**
    * Drop protection. Alchemy defaults to disabled so `destroy` can drop
-   * the database. Delete disables protection first when it is on.
+   * the database. While it is on, `destroy` and replacement fail until it is
+   * turned off and deployed.
    * @default false
    */
   enableDropProtection?: boolean;
@@ -141,8 +143,43 @@ export type Database = Resource<
     migrationsHashes: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DatabaseLookup
 >;
+
+/**
+ * Props for {@link Database.lookup}: find a database this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+/**
+ * Deletion was refused because the database has drop protection on, set
+ * through `enableDropProtection` or outside the stack. Turn it off and deploy
+ * (or turn it off in the console) before deleting it.
+ */
+export class DatabaseDropProtected extends Data.TaggedError("GCP.Spanner.DatabaseDropProtected")<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
+export interface DatabaseLookup {
+  /**
+   * Database id (the `{database}` segment of
+   * `projects/{project}/instances/{instance}/databases/{database}`). Must
+   * match `^[a-z][-a-z0-9]*[a-z0-9]$` (2–30 characters).
+   */
+  databaseId: string;
+  /**
+   * Parent instance id or full name
+   * (`projects/{project}/instances/{instance}`).
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Spanner database inside an instance.
@@ -199,6 +236,19 @@ export type Database = Resource<
  * `databaseDialect: "POSTGRESQL"`) statements separated by `;`. Migrations
  * run as the deploying identity, which needs `spanner.databases.updateDdl`
  * and `spanner.databases.write`.
+ *
+ * ### Looking up an existing database
+ * `Database.lookup` references a database Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared database.
+ *
+ * **Example:** Reference an existing database
+ * ```typescript
+ * const database = GCP.Spanner.Database.lookup({
+ *   databaseId: "my-database",
+ *   instance: "my-instance",
+ * });
+ * ```
  *
  * @resource
  * @category Spanner
@@ -459,6 +509,16 @@ export const DatabaseProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ databaseId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const instanceId = instanceIdOf(instance ?? "");
+      if (instanceId.length === 0) return undefined;
+      const name = resourceName(env.project, instanceId, databaseId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, undefined);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = instanceIdOf(olds?.instance ?? output?.instanceId ?? "");
@@ -570,11 +630,19 @@ export const DatabaseProvider = () =>
       );
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getByName(output.name);
       if (current === undefined) return;
 
+      // Drop protection, set by this stack or outside it, refuses the delete.
+      // Only an account-wide nuke (`force`) lifts it.
       if (current.enableDropProtection === true) {
+        if (force !== true) {
+          return yield* new DatabaseDropProtected({
+            resourceName: output.name,
+            message: `Spanner database '${output.name}' has drop protection on. Set \`enableDropProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         const patched = yield* retryConcurrentChanges(
           spanner.patchProjectsInstancesDatabases({
             name: output.name,

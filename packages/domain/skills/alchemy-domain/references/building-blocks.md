@@ -36,19 +36,17 @@ export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
 
 /** Take money out of an account, within the balance and the daily limit. */
 export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
-  target: AccountId,                       // the id schema of its aggregate, exactly
   middleware: [Session, MfaChallenge],     // authenticate; provide context to decide
-  input: { amount: Cents },
+  input: { accountId: AccountId, amount: Cents },  // includes the id of the instance it is for
   events: [MoneyWithdrawn],                // every event it may record
   rejects: [NotOpen, DailyLimitExceeded],  // every way it can be refused
   reply: { balance: Cents },               // optional typed reply
-  attributes: (cmd) => ({ "bank.amount": cmd.amount }),  // optional: what its spans record
 }) {}
 ```
 
-A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {}` in `NotOpen.rejection.ts`. Events and rejections take `attributes` as a third argument: `Domain.Event("MoneyWithdrawn", { ... }, { attributes: (e) => ({ ... }) })`. Nothing from a payload is traced unless `attributes` returns it, and `Redacted` values record as `<redacted>`.
+A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {}` in `NotOpen.rejection.ts`. Nothing from a payload is traced unless a handler annotates it: `yield* Effect.annotateCurrentSpan("bank.amount", cmd.amount)` in `decide` lands on the engine's `Domain.decide` span.
 
-`Domain.Rejection(tag, fields, annotations)` is `Schema.TaggedError` with its type filled in: the third argument takes the same annotations (`httpApiStatus`, `description`, ...) plus `attributes`. `rejects` takes any tagged error class, `HttpApiError.Forbidden` included.
+`Domain.Rejection(tag, fields, annotations)` is `Schema.TaggedError` with its type filled in: the third argument takes the same annotations (`httpApiStatus`, `description`, ...) `rejects` takes any tagged error class, `HttpApiError.Forbidden` included.
 
 More: [Command: Annotate a rejection](https://alchemy.run/domain/command#annotate-a-rejection).
 
@@ -68,17 +66,18 @@ export class Account extends Domain.Aggregate("Account", {
   state: AccountState,                    // a Schema, usually a TaggedStruct union
   initial: { _tag: "Unopened" },
   commands: [OpenAccount, DepositMoney, WithdrawMoney],  // events derive from the commands
+  keyOf: (cmd) => cmd.accountId,
   decide: {
-    OpenAccount: (s, cmd) =>
-      s._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
-    DepositMoney: (s, cmd) => {
-      const o = openFor(s);
+    OpenAccount: (account, cmd) =>
+      account._tag !== "Unopened" ? new AlreadyOpen() : [new AccountOpened({ owner: cmd.owner })],
+    DepositMoney: (account, cmd) => {
+      const o = openFor(account);
       if (o._tag !== "Open") return o;
       return [new MoneyDeposited({ amount: cmd.amount, balanceAfter: o.balance + cmd.amount })];
     },
     // Effect.fn when decide reads middleware context; fail with `return yield* rejection`
-    WithdrawMoney: Effect.fn(function* (s, cmd, { now }) {
-      const o = openFor(s);
+    WithdrawMoney: Effect.fn(function* (account, cmd) {
+      const o = openFor(account);
       if (o._tag !== "Open") return yield* o;
       if (o.owner !== (yield* CurrentActor).customerId) return yield* new NotOwner();
       if (cmd.amount > o.balance) return yield* new InsufficientFunds({ balance: o.balance });
@@ -92,10 +91,10 @@ export class Account extends Domain.Aggregate("Account", {
     MoneyWithdrawn: (s, e) => (s._tag === "Open" ? { ...s, balance: e.balanceAfter } : s),
   },
   reply: { WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }) },
-  // optional: let clients read/watch the aggregate through an Api
-  read: { middleware: [Session], rejects: [NotOwner], validate: Effect.fn(function* (_req, s) { /* authorize */ }) },
 }) {}
 ```
+
+An aggregate's state is never read by clients directly: a view projects what they may see of it.
 
 `Aggregate.ref(id)` builds a reference for stories and views.
 
@@ -112,6 +111,59 @@ More: [Aggregate](https://alchemy.run/domain/aggregate).
 - **A compensation never refuses.** A command that undoes another process's step (`RefundTransfer`) records a fact for every state (`TransferRefunded`, or `RefundStranded` when the account closed), so the saga that sent it has no refusal to handle.
 
 More: [Aggregate: Focus on a state with optics](https://alchemy.run/domain/aggregate#focus-on-a-state-with-optics), [Aggregate: Never refuse a compensation](https://alchemy.run/domain/aggregate#never-refuse-a-compensation).
+
+## Decision
+
+A command that involves several aggregate instances names each in its input. A decision implements it. It reads the instances, decides against all their states, and records events on them; all commit, or none.
+
+```ts
+// Customer/RegisterCustomer.command.ts
+export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
+  input: { customerId: CustomerId, name: Schema.String, username: Username },
+  events: [CustomerRegistered, UsernameClaimed],
+  rejects: [AlreadyRegistered, UsernameTaken],
+}) {}
+
+// Customer/UsernameClaim.aggregate.ts: only folds what decisions record on it
+export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
+  id: Username,
+  state: Schema.Union([
+    Schema.TaggedStruct("Free", {}),
+    Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
+  ]),
+  initial: { _tag: "Free" },
+  events: [UsernameClaimed],              // no `commands`, no `decide`
+  evolve: { UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }) },
+}) {}
+
+// Customer/Registration.decision.ts
+export class Registration extends Domain.Decision(RegisterCustomer, {
+  reads: { customer: Customer, claim: UsernameClaim },
+  keyOf: (cmd) => ({ customer: cmd.customerId, claim: cmd.username }),
+  decide: ({ customer, claim }, cmd) =>
+    customer.state._tag === "Registered"
+      ? new AlreadyRegistered()
+      : claim.state._tag === "Claimed"
+        ? new UsernameTaken()
+        : [
+            customer.record(new CustomerRegistered({ name: cmd.name, username: cmd.username })),
+            claim.record(new UsernameClaimed({ customerId: customer.id })),
+          ],
+}) {}
+
+const registration = yield* Registration;
+yield* registration.send(new RegisterCustomer({ customerId, name: "Sam", username }));
+```
+
+- **`reads` is static, `keyOf` depends only on the command.** `reads` maps a key to an aggregate; `keyOf` gives each key an id, or an array of ids for several instances. Each instance arrives in `decide` under its key, with `id`, `state`, `version` and `record`. Reading an aggregate the model leaves out is a type error.
+- **`record` puts an event on one instance**, which folds it with its own `evolve`. An aggregate lists such events in `events`. Views and policies see them like any other.
+- **`decide` follows an aggregate's rules:** events, `[]`, or a declared rejection; pure, or an `Effect.fn` that reads only middleware context. A command with a `reply` needs the decision's `reply`, from each instance's state after the events.
+- **List it in the model's `decisions`.** Every command has one implementation, an aggregate or a decision; a second is a type error.
+- **The receipt has `commits`**, one `{ stream, version }` per instance read: pass one as a view's `atLeast`.
+- **Send it like any command:** `bank.RegisterCustomer({ customerId, name, username })` from an Api client, `Story.when(command)` in a story.
+- **Use a saga instead** when the process waits, takes time, or calls an external system.
+
+More: [Decision](https://alchemy.run/domain/decision), [Decision: How it commits](https://alchemy.run/domain/decision#how-it-commits), [Unique values](https://alchemy.run/domain/unique-values).
 
 ## Request context and middleware
 
@@ -156,12 +208,19 @@ export class AccountSummary extends Domain.View("AccountSummary", {
     AccountOpened: (v, e) => ({ ...v, customerId: e.customerId }),
     MoneyWithdrawn: (v, e) => ({ ...v, balance: e.balanceAfter }),
   },
-  // judged on every get, list, and every change while watched
-  validate: Effect.fn(function* (_request, summary) {
-    yield* mustOwn(summary?.customerId ?? null);
-  }),
 }) {}
+
+// judged on every get, list, and every change while watched; required when the view declares middleware or rejects
+export const AccountSummaryLive = AccountSummary.toLayer(
+  Effect.succeed(
+    Effect.fn(function* (_request, summary) {
+      yield* mustOwn(summary?.customerId ?? null);
+    }),
+  ),
+);
 ```
+
+Merge `AccountSummaryLive` into the model's handlers: `Bank.layer(handlers)` is a type error until every guarded view and stream has its Layer. The Layer's construction may resolve services; `validate` itself may only read what the middleware provides.
 
 Emit derived events with `events: [StatementLine]` and `emit: { MoneyDeposited: (e) => new StatementLine({...}) }`. Each emitted event carries the view's state after it. Route one event to several keys with named routes:
 
@@ -195,14 +254,14 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
     const accounts = yield* Account;   // resolve clients once
     return Effect.fn(function* ({ source, event }) {
       yield* accounts
-        .send(mainAccountId(source.id), new OpenAccount({ customerId: source.id, owner: event.name }))
+        .send(new OpenAccount({ accountId: mainAccountId(source.id), customerId: source.id, owner: event.name }))
         .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));   // handle every rejection
     });
   }),
 );
 ```
 
-The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(ref, new ExpireTransfer(), { after: "24 hours" })`. Only commands that never reject can be scheduled. `schedule` returns a `ScheduleReceipt` (`{ commandId, at }`). To cancel one that no longer applies, call `transfers.unschedule(ref, commandId)` with a known `commandId` or the receipt's. Scheduling again under the same `commandId` replaces that command, pending or already run, so a deadline can be armed again; a policy that runs again for the same event arms nothing new. `unschedule` fails with `AlreadyExecuted` (it ran), `AlreadyCancelled` (cancelled before) or `NotScheduled` (never scheduled). A policy catches the ones it expects with `Effect.catchTag([...], ...)`, since a redelivery finds its expiry already cancelled. A policy cancels after the event is recorded, so the command can still fire first: keep the guard in `decide`.
+The handler receives `{ key, source, event, envelope, state }` (`state` for a view source). It must handle every rejection. A policy has no session, so it provides context itself: `.pipe(Effect.provideService(CurrentActor, system("FraudReview")))`. To send a command later, durably, use `transfers.schedule(new ExpireTransfer({ transferId: ref.id }), { after: "24 hours" })`. Only commands that never reject can be scheduled. `schedule` returns a `ScheduleReceipt` (`{ commandId, at }`). To cancel one that no longer applies, call `transfers.unschedule(ref, commandId)` with a known `commandId` or the receipt's. Scheduling again under the same `commandId` replaces that command, pending or already run, so a deadline can be armed again; a policy that runs again for the same event arms nothing new. `unschedule` fails with `AlreadyExecuted` (it ran), `AlreadyCancelled` (cancelled before) or `NotScheduled` (never scheduled). A policy catches the ones it expects with `Effect.catchTag([...], ...)`, since a redelivery finds its expiry already cancelled. A policy cancels after the event is recorded, so the command can still fire first: keep the guard in `decide`.
 
 More: [Policy](https://alchemy.run/domain/policy).
 
@@ -210,7 +269,7 @@ More: [Policy](https://alchemy.run/domain/policy).
 
 ```ts
 // Transfer/ExecuteTransfer.saga.ts
-export const Decision = DurableDeferred.make("decision", { success: Schema.Literals(["approved", "expired"]) });
+export const Approval = DurableDeferred.make("approval", { success: Schema.Literals(["approved", "expired"]) });
 
 export class ExecuteTransfer extends Domain.Saga("ExecuteTransfer", {
   key: TransferId,
@@ -223,18 +282,18 @@ export const ExecuteTransferLive = ExecuteTransfer.toLayer(
     const accounts = yield* Account;
     const transfers = yield* Transfer;
     return Effect.fn(function* ({ key, from, to, amount, requestedBy, needsApproval }) {
-      if (needsApproval && (yield* DurableDeferred.await(Decision)) === "expired") return;
+      if (needsApproval && (yield* DurableDeferred.await(Approval)) === "expired") return;
       yield* Activity.make({
         name: "debit",
         error: Schema.Union([NotOpen, InsufficientFunds]),
-        execute: accounts.send(from, new DebitTransfer({ transferId: key, amount, requestedBy })),
+        execute: accounts.send(new DebitTransfer({ accountId: from, transferId: key, amount, requestedBy })),
       }).pipe(
         ExecuteTransfer.withCompensation(() =>
-          Activity.make({ name: "refund", execute: accounts.send(from, new RefundTransfer({ transferId: key, amount })) }),
+          Activity.make({ name: "refund", execute: accounts.send(new RefundTransfer({ accountId: from, transferId: key, amount })) }),
         ),
       );
       yield* Activity.make({ name: "credit", error: DestinationClosed, execute: /* ... */ });
-      yield* Activity.make({ name: "complete", execute: transfers.send(key, new CompleteTransfer()) });
+      yield* Activity.make({ name: "complete", execute: transfers.send(new CompleteTransfer({ transferId: key })) });
     });
   }),
 );
@@ -245,7 +304,7 @@ Start and signal it from a policy, keyed by the aggregate:
 ```ts
 const executions = yield* ExecuteTransfer;
 yield* executions.start(source, { from, to, amount, requestedBy, needsApproval });  // returns a run handle at once
-yield* executions.get(source).signal(Decision, "approved");
+yield* executions.get(source).signal(Approval, "approved");
 // run handle: executionId, status, result, signal(deferred, value), interrupt
 ```
 
@@ -318,8 +377,11 @@ export class AccountCard extends Domain.Stream("AccountCard", {
   entries: [CardChanged],
   middleware: [Session],
   rejects: [NotOwner],
-  validate: Effect.fn(function* (_request, latest) { /* authorize on the latest entry */ }),
 }) {}
+
+export const AccountCardLive = AccountCard.toLayer(
+  Effect.succeed(Effect.fn(function* (_request, latest) { /* authorize on the latest entry */ })),
+);
 ```
 
 A projection with `writes: [AccountCard]` appends entries with `yield* cards.append(input, new CardChanged({...}))`. Clients `peek`, `watch`, `list` and read `events`.
@@ -339,25 +401,24 @@ export class AccountLedger extends Domain.Query("AccountLedger", {
   waitsFor: [Ledger],              // `atLeast` waits on these; reads outside their stores aren't covered
   middleware: [Session],
   rejects: [NotOwner],
-  // per request, before the store is read; may read middleware context and the model's views
-  validate: Effect.fn(function* ({ account }) {
-    const summary = yield* (yield* AccountSummary).query(Account.ref(account)).pipe(Effect.orDie);
-    yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);
-  }),
-  // optional, per row: rows it refuses are dropped, never rejected. Keep it cheap.
-  // visible: Effect.fn(function* (row) { return row.branchId === (yield* CurrentActor).branchId; }),
 }) {}
 
+// One handler: it checks the caller, then reads the store scoped to what the caller may see.
 export const AccountLedgerLive = AccountLedger.toLayer(
   Effect.gen(function* () {
-    const store = yield* LedgerStore;                                  // resolved once
-    return ({ account }, page) => store.forAccount(account, page);    // page: { after, take }
+    const store = yield* LedgerStore;           // resolved once
+    const summaries = yield* AccountSummary;    // model members too
+    return Effect.fn(function* ({ account }, page) {   // page: { after, take }
+      const summary = yield* summaries.get(Account.ref(account)).pipe(Effect.orDie);
+      yield* mustOwn(Option.getOrNull(summary)?.customerId ?? null);   // fail with a declared rejection
+      return yield* store.forAccount(account, page);
+    });
   }),
-  { take: { default: 50, max: 200 } },   // tuning lives on the Layer: page limits, span `attributes`
+  { take: { default: 50, max: 200 } },   // tuning lives on the Layer: page limits
 );
 ```
 
-List it in the model's `queries` and its Live Layer in the handlers. The port returns `{ entries, cursor }`, with `cursor: null` on the last page; page by keyset on the store's sort key (`"<at>:<id>"`), never by offset. Scope the store query by the caller in the handler, so pages are full; `visible` is the guarantee. Clients call it as a method: `bank.AccountLedger({ account }, { atLeast: receipt, take, after })`.
+List it in the model's `queries` and its Live Layer in the handlers. The port returns `{ entries, cursor }`, with `cursor: null` on the last page; page by keyset on the store's sort key (`"<at>:<id>"`), never by offset. Scope the store query by the caller in the handler, so a page holds only rows the caller may see. Clients call it as a method: `bank.AccountLedger({ account }, { atLeast: receipt, take, after })`.
 
 More: [Query](https://alchemy.run/domain/query).
 
@@ -370,15 +431,16 @@ export class CustomerApi extends Domain.Api("CustomerApi", {
   commands: ["RegisterCustomer", "DepositMoney", "WithdrawMoney"], // client methods
   views: ["AccountSummary", "Statement"],
   streams: ["AccountCard"],
-  aggregates: ["Account"], // read directly, through their `read` contract
   queries: ["AccountLedger"], // client methods
 }) {}
-// A kind left out is served whole (aggregates: those with `read`); `[]` serves none.
+// A kind left out is served whole; `[]` serves none. An aggregate's state is never served.
 ```
 
-Clients call commands and queries as methods (`bank.WithdrawMoney(accountId, { amount }, { commandId, headers })`, `bank.AccountLedger({ account }, { take })`) and reads as namespaces. A view or aggregate has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself, through its own middleware and `validate`.
+Clients call commands and queries as methods (`bank.WithdrawMoney({ accountId, amount }, { commandId, headers })`, `bank.AccountLedger({ account }, { take })`) and reads as namespaces. A view has `get(id)` and `watch(id)` for its state, and `events(id)` and `list(id, { take, after })` for what it emitted. A view also has `snapshot(id)`: its state and the cursor to pass as `events(id, { after })`. A stream has `peek`, `watch`, `events` and `list`. What an Api serves authorizes itself: a command in `decide`, a view or stream in its Layer's `validate`, a query in its handler.
 
-More: [Api](https://alchemy.run/domain/api).
+Give every declaration a `{ description }` as its last argument, written for the person or agent who calls it; `toMcp` tools, `toCli` help and the `toHttpApi` OpenAPI document show it. Add your own keys by augmenting `Domain.Annotations` (`declare module "@alchemy.run/domain"`), and read them as `X.annotations`.
+
+More: [Api](https://alchemy.run/domain/api), [Annotations](https://alchemy.run/domain/annotations).
 
 An Api is the domain's interface for its own clients. For a public or partner API, write a separate `HttpApi` with its own response schemas that calls the Api in process; see [hosting.md](hosting.md#public-and-partner-apis). `toHttpApi`, `toMcp` and `toCli` publish only the calls their `expose` option lists, as the domain shapes them, which is convenient for internal tools only; see [hosting.md](hosting.md#conveniences-for-internal-tools).
 
@@ -388,8 +450,9 @@ An Api is the domain's interface for its own clients. For a public or partner AP
 // Bank.model.ts
 export class Bank extends Domain.Model("Bank", {
   aggregates: [Customer, UsernameClaim, Account, Transfer],
+  decisions: [Registration],
   views: [AccountSummary, Statement, CustomerDashboard],
-  policies: [UsernameReservation, MainAccountProvisioning, TransferExecution],
+  policies: [MainAccountProvisioning, TransferExecution],
   projections: [Ledger, AccountCards],
   streams: [AccountCard],
   sagas: [ExecuteTransfer],
@@ -398,7 +461,7 @@ export class Bank extends Domain.Model("Bank", {
 
 /** Every policy, saga, projection and query implementation, as one Layer. */
 export const BankHandlers = Layer.mergeAll(
-  UsernameReservationLive, MainAccountProvisioningLive, TransferExecutionLive,
+  MainAccountProvisioningLive, TransferExecutionLive,
   ExecuteTransferLive, LedgerLive, AccountCardsLive, AccountLedgerLive,
 );
 ```

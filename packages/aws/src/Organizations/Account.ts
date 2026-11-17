@@ -107,8 +107,23 @@ export interface Account extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AccountLookup
 > {}
+
+/**
+ * Props for {@link Account.lookup}: find a member account this stack doesn't
+ * manage, in the ambient organization.
+ */
+export type AccountLookup =
+  | {
+      /** The id of the existing account. */
+      accountId: string;
+    }
+  | {
+      /** The account's root email address. */
+      email: string;
+    };
 
 /**
  * A member account created and managed by AWS Organizations.
@@ -145,6 +160,17 @@ export interface Account extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing member account
+ * `Account.lookup` references a member account Alchemy doesn't manage (created in the
+ * console or by another stack), found by `accountId` or `email`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing member account
+ * ```typescript
+ * const prod = AWS.Organizations.Account.lookup({ email: "aws-prod@example.com" });
+ * const accountId = prod.accountId;
+ * ```
+ *
  * @resource
  */
 export const Account = Resource<Account>("AWS.Organizations.Account");
@@ -163,6 +189,14 @@ export const AccountProvider = () =>
           if (olds?.name !== news.name) {
             return { action: "update" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          // An account outside any organization has no member accounts to find.
+          return yield* (
+            "accountId" in props
+              ? readAccountById(props.accountId)
+              : readAccountByNameOrEmail({ name: "", email: props.email })
+          ).pipe(Effect.catchTag("AWSOrganizationsNotInUseException", () => Effect.undefined));
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.accountId
@@ -339,12 +373,10 @@ const readAccountById = Effect.fn(function* (accountId: string) {
     return undefined;
   }
 
-  const [parentId, tags] = yield* Effect.all([
-    readParentId(described.Id),
-    readResourceTags(described.Id).pipe(
-      Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),
-    ),
-  ]);
+  const readTags = readResourceTags(described.Id).pipe(
+    Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),
+  );
+  const [parentId, tags] = yield* Effect.all([readParentId(described.Id), readTags]);
 
   return {
     accountId: described.Id,

@@ -12,8 +12,7 @@ const CounterId = Schema.String.pipe(Schema.brand("CounterId"));
 class Incremented extends Domain.Event("Incremented", { by: Schema.Int }) {}
 
 class Increment extends Domain.Command("Increment", {
-  target: CounterId,
-  input: { by: Schema.Int },
+  input: { counterId: CounterId, by: Schema.Int },
   events: [Incremented],
 }) {}
 
@@ -22,6 +21,7 @@ class Counter extends Domain.Aggregate("Counter", {
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
   commands: [Increment],
+  keyOf: (command) => command.counterId,
   decide: {
     Increment: (_, command) => [new Incremented({ by: command.by })],
   },
@@ -33,8 +33,7 @@ class Counter extends Domain.Aggregate("Counter", {
 class Mirrored extends Domain.Event("Mirrored", { by: Schema.Int }) {}
 
 class Mirror extends Domain.Command("Mirror", {
-  target: CounterId,
-  input: { by: Schema.Int },
+  input: { counterId: CounterId, by: Schema.Int },
   events: [Mirrored],
 }) {}
 
@@ -44,6 +43,7 @@ class Echo extends Domain.Aggregate("Echo", {
   state: Schema.Struct({ total: Schema.Int }),
   initial: { total: 0 },
   commands: [Mirror],
+  keyOf: (command) => command.counterId,
   decide: {
     Mirror: (_, command) => [new Mirrored({ by: command.by })],
   },
@@ -74,7 +74,7 @@ const MirrorFirstLive = MirrorFirst.toLayer(
     return Effect.fn(function* ({ key, by }) {
       yield* Activity.make({
         name: "mirror",
-        execute: echoes.send(key, new Mirror({ by })).pipe(Effect.orDie),
+        execute: echoes.send(new Mirror({ counterId: key, by })).pipe(Effect.orDie),
       });
     });
   }),
@@ -112,7 +112,7 @@ export const CountersLive = Counters.layer(Layer.mergeAll(StartMirrorLive, Mirro
  * its view, `/echo/:id` for what the saga wrote, and `/platform` for which
  * platform the deployed version runs on.
  */
-export const serve = (platform: "eu" | "unrestricted") =>
+export const serve = (platform: "eu" | "unrestricted" | "wnam") =>
   Effect.gen(function* () {
     const counters = yield* Counter;
     const echoes = yield* Echo;
@@ -126,16 +126,16 @@ export const serve = (platform: "eu" | "unrestricted") =>
           case "platform":
             return yield* HttpServerResponse.json({ platform });
           case "increment":
-            yield* counters.send(counter, new Increment({ by: 2 })).pipe(Effect.orDie);
-            return yield* HttpServerResponse.json(yield* counters.state(counter));
+            yield* counters.send(new Increment({ counterId: counter, by: 2 })).pipe(Effect.orDie);
+            return yield* HttpServerResponse.json(yield* counters.get(counter));
           case "total": {
-            const total = yield* totals.query(Counter.ref(counter)).pipe(Effect.orDie);
+            const total = yield* totals.get(Counter.ref(counter)).pipe(Effect.orDie);
             return yield* HttpServerResponse.json(Option.getOrElse(total, () => ({ total: 0 })));
           }
           case "echo":
-            return yield* HttpServerResponse.json(yield* echoes.state(counter));
+            return yield* HttpServerResponse.json(yield* echoes.get(counter));
           default:
-            return yield* HttpServerResponse.json(yield* counters.state(counter));
+            return yield* HttpServerResponse.json(yield* counters.get(counter));
         }
       }),
     };

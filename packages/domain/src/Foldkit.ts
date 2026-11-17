@@ -11,6 +11,7 @@ import { defineMessageUnion, type MessageUnion } from "foldkit/message";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Api from "./Api.ts";
 import type * as DomainCommand from "./Command.ts";
+import { sendPayload } from "./internal.ts";
 import * as Key from "./Key.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Query from "./Query.ts";
@@ -84,7 +85,10 @@ type Cases<A extends Api.Any> = QueryCases<A> & {
   readonly [C in Api.CommandsOf<A> as `Succeeded${C["tag"]}`]: {
     commandId: typeof Schema.String;
     reply: Schema.Schema<Reply<C>>;
-    receipt: Schema.Struct<{ stream: typeof Schema.String; version: typeof Schema.Number }>;
+    /** The first stream it committed to: what a read takes as `atLeast`. */
+    receipt: typeof Receipt;
+    /** Every stream it committed to: more than one for a command a decision implements. */
+    commits: Schema.$Array<typeof Receipt>;
   };
 } & {
   readonly [C in Api.CommandsOf<A> as `Failed${C["tag"]}`]: {
@@ -94,7 +98,6 @@ type Cases<A extends Api.Any> = QueryCases<A> & {
 };
 
 type Args<C extends DomainCommand.Any> = {
-  target: Schema.toType<C["target"]>;
   input: Schema.Schema<Input<C>>;
   commandId: typeof Schema.String;
 };
@@ -106,7 +109,7 @@ type Result<A extends Api.Any, C extends DomainCommand.Any> = Extract<
 type QueryArgs<Q extends Query.Any> = {
   input: Schema.Schema<Query.InputOf<Q>>;
   requestId: typeof Schema.String;
-  atLeast: Schema.optional<typeof Receipt>;
+  atLeast: Schema.optional<typeof Receipts>;
   after: Schema.optional<typeof Schema.String>;
   take: Schema.optional<typeof Schema.Number>;
 };
@@ -140,6 +143,8 @@ type CommandDefinitions<A extends Api.Any> = {
 } & { readonly Message: MessageUnion<Cases<A>> };
 
 const Receipt = Schema.Struct({ stream: Schema.String, version: Schema.Number });
+/** A query's `atLeast`: one receipt, or one per command. */
+const Receipts = Schema.Union([Receipt, Schema.Array(Receipt)]);
 
 /** Build one Foldkit Command per Api command. Provide the Api client at the runtime boundary. */
 function commandDefinitions<A extends Api.Any>(api: A): CommandDefinitions<A>;
@@ -152,6 +157,7 @@ function commandDefinitions(api: Api.Any): unknown {
       commandId: Schema.String,
       reply: command.reply ?? Schema.Void,
       receipt: Receipt,
+      commits: Schema.Array(Receipt),
     };
     cases[`Failed${command.tag}`] = {
       commandId: Schema.String,
@@ -192,35 +198,30 @@ function commandDefinitions(api: Api.Any): unknown {
     const { payloadSchema } = command.rpc as Rpc.AnyWithProps;
     definitions[command.tag] = Command.define(command.tag, {
       args: {
-        target: Schema.toType(command.target),
         input: Schema.toType((payloadSchema as Schema.Struct<{ input: Schema.Top }>).fields.input),
         commandId: Schema.String,
       },
       messages: [Message],
       execute: Effect.fn(
-        function* ({ target, input, commandId }) {
-          const client = (yield* Effect.service(api.Client)) as Record<
-            string,
-            (
-              target: string,
-              input: unknown,
-              options: Api.CommandOptions,
-            ) => Effect.Effect<{ reply: unknown; stream: string; version: number }, unknown>
-          >;
+        function* (args: { readonly input: unknown; readonly commandId: string }) {
+          const { input, commandId } = args;
+          const client = (yield* Effect.service(api.Client)) as Record<string, unknown>;
           const headersService = yield* Effect.serviceOption(CommandHeaders);
           const headers =
             headersService._tag === "Some"
               ? yield* headersService.value.get(command.tag)
               : undefined;
-          const { reply, stream, version } = yield* client[command.tag](target, input, {
-            commandId,
-            headers,
-          });
+          const { reply, ...receipt } = (yield* sendPayload(
+            client[command.tag],
+            { ...args, input, commandId },
+            { headers },
+          )) as { reply: unknown; stream?: string; version?: number; commits?: unknown };
           return {
             _tag: `Succeeded${command.tag}`,
             commandId,
             reply,
-            receipt: { stream, version },
+            receipt: { stream: receipt.stream, version: receipt.version },
+            commits: receipt.commits,
           };
         },
         (effect, { commandId }) =>
@@ -254,7 +255,7 @@ const queryDefinition = (api: Api.Any, query: Query.Any, Message: Schema.Top) =>
     args: {
       input: Schema.toType((payloadSchema as Schema.Struct<{ input: Schema.Top }>).fields.input),
       requestId: Schema.String,
-      atLeast: Schema.optional(Receipt),
+      atLeast: Schema.optional(Receipts),
       after: Schema.optional(Schema.String),
       take: Schema.optional(Schema.Number),
     },
@@ -321,22 +322,18 @@ const classifyFailure = (command: DomainCommand.Any, error: unknown) => {
   return { _tag: "Unknown" };
 };
 
-type ReadEntry = View.Any | Aggregate.Any | DomainStream.Any;
+type ReadEntry = View.Any | DomainStream.Any;
 type Reads<A extends Api.Any> = Extract<A["serves"][number], ReadEntry>;
 type ReadName<V extends ReadEntry> = V extends View.Any
   ? V["viewName"]
-  : V extends Aggregate.Any
-    ? V["aggregateName"]
-    : V extends DomainStream.Any
-      ? V["streamName"]
-      : never;
+  : V extends DomainStream.Any
+    ? V["streamName"]
+    : never;
 type ReadClient<V extends ReadEntry> = V extends View.Any
   ? Api.ViewClient<V>
-  : V extends Aggregate.Any
-    ? Api.AggregateClient<V>
-    : V extends DomainStream.Any
-      ? Api.StreamClient<V>
-      : never;
+  : V extends DomainStream.Any
+    ? Api.StreamClient<V>
+    : never;
 type ReadKey<V extends ReadEntry> = Parameters<ReadClient<V>["watch"]>[0];
 type StateOf<V extends ReadEntry> = Stream.Success<ReturnType<ReadClient<V>["watch"]>>["state"];
 type EntryOf<V extends ReadEntry> = Exclude<
@@ -384,7 +381,7 @@ export function make(api: Api.Any): unknown {
   const definitions = commandDefinitions(api) as Record<string, unknown>;
   const { Message } = definitions;
   for (const entry of api.serves) {
-    if (entry.kind !== "View" && entry.kind !== "Aggregate" && entry.kind !== "Stream") {
+    if (entry.kind !== "View" && entry.kind !== "Stream") {
       continue;
     }
     const name = nameOf(entry);
@@ -413,10 +410,7 @@ export function make(api: Api.Any): unknown {
   return definitions;
 }
 
-const keySchemaOf = (entry: ReadEntry) =>
-  Schema.toType(
-    entry.kind === "Aggregate" ? entry.definition.id : Key.idSchemaOf(entry.definition.key),
-  );
+const keySchemaOf = (entry: ReadEntry) => entry.definition.key.pipe(Key.idSchemaOf, Schema.toType);
 
 /** A watch Snapshot with explicit absence for Foldkit Models. */
 export type Snapshot<State> = Readonly<{

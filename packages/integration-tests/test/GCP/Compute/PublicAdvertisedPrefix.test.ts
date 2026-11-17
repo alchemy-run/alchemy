@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -42,6 +43,10 @@ test.provider.skipIf(!runLifecycle)(
             description: "lab prefix",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.PublicAdvertisedPrefix.lookup({ prefixName: created.prefixName }),
+        created,
       );
 
       expect(created.prefixName).toEqual(expect.any(String));

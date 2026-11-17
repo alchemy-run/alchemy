@@ -92,8 +92,18 @@ export interface EndpointConfig extends Resource<
     endpointConfigArn: string;
   },
   never,
-  Providers
+  Providers,
+  EndpointConfigLookup
 > {}
+
+/**
+ * Props for {@link EndpointConfig.lookup}: find an endpoint config this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface EndpointConfigLookup {
+  /** The endpoint config name of the existing endpoint config. */
+  endpointConfigName: string;
+}
 
 /**
  * An Amazon SageMaker EndpointConfig — the deployment recipe that maps one
@@ -129,6 +139,16 @@ export interface EndpointConfig extends Resource<
  *     InitialInstanceCount: 1,
  *   }],
  * });
+ * ```
+ *
+ * ### Looking up an existing endpoint config
+ * `EndpointConfig.lookup` references an endpoint config Alchemy doesn't manage (created in the
+ * console or by another stack), found by `endpointConfigName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing endpoint config
+ * ```typescript
+ * const existing = AWS.SageMaker.EndpointConfig.lookup({ endpointConfigName: "my-endpoint-config" });
  * ```
  *
  * @resource
@@ -187,6 +207,11 @@ export const EndpointConfigProvider = () =>
                 : [],
             );
           }),
+        lookup: Effect.fn(function* ({ endpointConfigName: name }) {
+          const attrs = yield* readEndpointConfig(name);
+          if (!attrs) return undefined;
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.endpointConfigName ?? (yield* createConfigName(id, olds ?? {}));
           const attrs = yield* readEndpointConfig(name);

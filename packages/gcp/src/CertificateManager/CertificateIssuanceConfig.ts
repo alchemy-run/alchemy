@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -126,8 +127,37 @@ export type CertificateIssuanceConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CertificateIssuanceConfigLookup
 >;
+
+/**
+ * Props for {@link CertificateIssuanceConfig.lookup}: find a certificate
+ * issuance config this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface CertificateIssuanceConfigLookup {
+  /**
+   * CertificateIssuanceConfig id (the `{certificateIssuanceConfig}` segment
+   * of
+   * `projects/{project}/locations/{location}/certificateIssuanceConfigs/{
+   * certificateIssuanceConfig}`). Must be 1-63 characters, start with a
+   * letter, and match `[a-z]([-a-z0-9]*[a-z0-9])?`. Ids are unique across
+   * all locations.
+   */
+  certificateIssuanceConfigId: string;
+  /**
+   * Certificate Manager location (`global`, `us-central1`, …).
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`. A regional
+   * CA pool may be referenced from a `global` issuance config.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Certificate Manager issuance config — how Google-managed certificates
@@ -195,6 +225,19 @@ export type CertificateIssuanceConfig = Resource<
  *     domains: ["www.example.com"],
  *     issuanceConfig: issuance.name,
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing certificate issuance config
+ * `CertificateIssuanceConfig.lookup` references a certificate issuance
+ * config Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared certificate issuance config.
+ *
+ * **Example:** Reference an existing certificate issuance config
+ * ```typescript
+ * const certificateIssuanceConfig = GCP.CertificateManager.CertificateIssuanceConfig.lookup({
+ *   certificateIssuanceConfigId: "my-certificate-issuance-config",
  * });
  * ```
  *
@@ -476,6 +519,15 @@ export const CertificateIssuanceConfigProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ certificateIssuanceConfigId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, certificateIssuanceConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

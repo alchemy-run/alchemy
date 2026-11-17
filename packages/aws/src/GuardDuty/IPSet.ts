@@ -79,8 +79,27 @@ export interface IPSet extends Resource<
     status: string;
   },
   never,
-  Providers
+  Providers,
+  IPSetLookup
 > {}
+
+/**
+ * Props for {@link IPSet.lookup}: find an IP set this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type IPSetLookup =
+  | {
+      /** The detector it belongs to. */
+      detectorId: string;
+      /** The id of the existing IP set. */
+      ipSetId: string;
+    }
+  | {
+      /** The detector it belongs to. */
+      detectorId: string;
+      /** The name of the existing IP set. */
+      name: string;
+    };
 
 /**
  * A GuardDuty trusted IP set — an S3-hosted list of IP addresses GuardDuty
@@ -107,6 +126,16 @@ export interface IPSet extends Resource<
  *   location: "https://s3.amazonaws.com/my-security-bucket/staged.txt",
  *   activate: false,
  * });
+ * ```
+ *
+ * ### Looking up an existing IP set
+ * `IPSet.lookup` references an IP set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `detectorId` with `ipSetId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing IP set
+ * ```typescript
+ * const trusted = AWS.GuardDuty.IPSet.lookup({ detectorId, name: "trusted" });
  * ```
  */
 const IPSetResource = Resource<IPSet>("AWS.GuardDuty.IPSet");
@@ -171,6 +200,14 @@ export const IPSetProvider = () =>
           if (olds.detectorId !== news.detectorId || olds.format !== news.format) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          if ("ipSetId" in props) {
+            const set = yield* getIPSet(props.detectorId, props.ipSetId);
+            return set ? yield* buildAttrs(props.detectorId, props.ipSetId, set) : undefined;
+          }
+          const found = yield* findByName(props.detectorId, props.name);
+          return found ? yield* buildAttrs(props.detectorId, found.ipSetId, found.set) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const detectorId = output?.detectorId ?? olds?.detectorId;

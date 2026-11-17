@@ -6,7 +6,7 @@ import * as Stream from "effect/Stream";
 import type { IdentityProviderAttributes, IdentityProviderType } from "./IdentityProvider.ts";
 
 // Shared observation scaffolding for the IdentityProvider resource provider
-// and the GetIdentityProvider data source. NOT exported from `index.ts`.
+// (its read, reconcile and lookup). NOT exported from `index.ts`.
 
 export interface ObservedIdp {
   readonly id?: string | null;

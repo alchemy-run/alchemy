@@ -24,17 +24,22 @@ const target = CounterId.make("one");
 describe("Domain Foldkit", { tags: ["unit", "local"] }, () => {
   it.live("keeps reply, receipt and the caller's id on success", () =>
     Effect.gen(function* () {
-      const result = yield* Counter.Increment({ target, input: { amount: 2 }, commandId: "page:0" })
-        .effect;
+      const result = yield* Counter.Increment({
+        input: { counterId: target, amount: 2 },
+        commandId: "page:0",
+      }).effect;
       expect(result).toEqual({
         _tag: "SucceededIncrement",
         commandId: "page:0",
         reply: { total: 2 },
         receipt: { stream: "Counter/one", version: 1 },
+        commits: [{ stream: "Counter/one", version: 1 }],
       });
       expect(Schema.is(Counter.Message)(result)).toBe(true);
-      const replay = yield* Counter.Increment({ target, input: { amount: 2 }, commandId: "page:0" })
-        .effect;
+      const replay = yield* Counter.Increment({
+        input: { counterId: target, amount: 2 },
+        commandId: "page:0",
+      }).effect;
       expect(replay).toEqual(result);
     }).pipe(Effect.provide(Client)),
   );
@@ -42,8 +47,7 @@ describe("Domain Foldkit", { tags: ["unit", "local"] }, () => {
   it.live("keeps declared rejection fields", () =>
     Effect.gen(function* () {
       const result = yield* Counter.Increment({
-        target,
-        input: { amount: 11 },
+        input: { counterId: target, amount: 11 },
         commandId: "page:1",
       }).effect;
       expect(result).toMatchObject({
@@ -56,7 +60,8 @@ describe("Domain Foldkit", { tags: ["unit", "local"] }, () => {
 
   it.live("classifies a middleware refusal as Denied", () =>
     Effect.gen(function* () {
-      const result = yield* Counter.Reset({ target, input: {}, commandId: "page:2" }).effect;
+      const result = yield* Counter.Reset({ input: { counterId: target }, commandId: "page:2" })
+        .effect;
       expect(result).toMatchObject({
         _tag: "FailedReset",
         failure: { _tag: "Denied", error: { _tag: "Unauthenticated" } },
@@ -85,7 +90,10 @@ describe("Domain Foldkit", { tags: ["unit", "local"] }, () => {
             ),
           ),
       });
-      const command = Counter.Increment({ target, input: { amount: 1 }, commandId: "page:3" });
+      const command = Counter.Increment({
+        input: { counterId: target, amount: 1 },
+        commandId: "page:3",
+      });
       expect(calls).toBe(0);
       const result = yield* command.effect.pipe(
         Effect.provide(uncertain),
@@ -99,15 +107,17 @@ describe("Domain Foldkit", { tags: ["unit", "local"] }, () => {
       );
       expect(calls).toBe(1);
       expect(result).toMatchObject({ _tag: "FailedIncrement", failure: { _tag: "Unknown" } });
-      expect(command.args).toEqual({ target, input: { amount: 1 }, commandId: "page:3" });
+      expect(command.args).toEqual({
+        input: { counterId: target, amount: 1 },
+        commandId: "page:3",
+      });
     }).pipe(Effect.provide(Client)),
   );
 
   it.live("turns a defect while reading headers into Unknown", () =>
     Effect.gen(function* () {
       const result = yield* Counter.Increment({
-        target,
-        input: { amount: 1 },
+        input: { counterId: target, amount: 1 },
         commandId: "page:4",
       }).effect.pipe(
         Effect.provideService(Foldkit.CommandHeaders, {
@@ -153,8 +163,10 @@ describe("Domain Foldkit", { tags: ["unit", "local"] }, () => {
 
   it.live("watches a fresh state and cursor after a write", () =>
     Effect.gen(function* () {
-      const reply = yield* Counter.Increment({ target, input: { amount: 2 }, commandId: "page:0" })
-        .effect;
+      const reply = yield* Counter.Increment({
+        input: { counterId: target, amount: 2 },
+        commandId: "page:0",
+      }).effect;
       if (reply._tag === "SucceededIncrement") {
         const client = yield* CounterApi.Client;
         yield* client.Total.snapshot(target, { atLeast: reply.receipt });
@@ -202,8 +214,11 @@ describe("Domain Foldkit", { tags: ["unit", "local"] }, () => {
   it.live("resumes from the latest Model cursor and preserves source command ids", () =>
     Effect.gen(function* () {
       const client = yield* CounterApi.Client;
-      const receipt = yield* client.Increment(target, { amount: 2 }, { commandId: "page:0" });
-      yield* client.Increment(target, { amount: 3 }, { commandId: "page:1" });
+      const receipt = yield* client.Increment(
+        { counterId: target, amount: 2 },
+        { commandId: "page:0" },
+      );
+      yield* client.Increment({ counterId: target, amount: 3 }, { commandId: "page:1" });
       yield* client.Total.snapshot(target, { atLeast: { stream: receipt.stream, version: 2 } });
       const messages = yield* feed
         .dependenciesToStream(dependencies, () => ({ ...dependencies, cursor: Option.some(1) }))
@@ -215,7 +230,10 @@ describe("Domain Foldkit", { tags: ["unit", "local"] }, () => {
   it.live("drops duplicate entries while allowing gaps in filtered feeds", () =>
     Effect.gen(function* () {
       const client = yield* CounterApi.Client;
-      const receipt = yield* client.Increment(target, { amount: 2 }, { commandId: "page:0" });
+      const receipt = yield* client.Increment(
+        { counterId: target, amount: 2 },
+        { commandId: "page:0" },
+      );
       yield* client.Total.snapshot(target, { atLeast: receipt });
       const frames = yield* client.Total.events(target).pipe(Stream.take(2), Stream.runCollect);
       const entries = frames.filter(Domain.Read.isEvent);
@@ -285,7 +303,8 @@ describe("Domain Foldkit", { tags: ["unit", "local"] }, () => {
         Effect.forkChild,
       );
       yield* Deferred.await(started);
-      yield* Counter.Increment({ target, input: { amount: 6 }, commandId: "page:0" }).effect;
+      yield* Counter.Increment({ input: { counterId: target, amount: 6 }, commandId: "page:0" })
+        .effect;
       expect(yield* Fiber.join(watch)).toEqual(["snapshot:0", "failed:Limit"]);
       const messages = yield* feed
         .dependenciesToStream(dependencies, () => dependencies)
@@ -297,7 +316,10 @@ describe("Domain Foldkit", { tags: ["unit", "local"] }, () => {
   it.live("maps command defects to Unknown and preserves interruption", () =>
     Effect.gen(function* () {
       const client = yield* CounterApi.Client;
-      const command = Counter.Increment({ target, input: { amount: 1 }, commandId: "page:die" });
+      const command = Counter.Increment({
+        input: { counterId: target, amount: 1 },
+        commandId: "page:die",
+      });
       const source = Layer.succeed(CounterApi.Client, {
         ...client,
         Increment: (...args: Parameters<typeof client.Increment>) =>
@@ -386,36 +408,6 @@ describe("Domain Foldkit", { tags: ["unit", "local"] }, () => {
           expect(Cause.hasInterrupts(exit.cause)).toBe(true);
         }
       }
-    }).pipe(Effect.provide(Client)),
-  );
-
-  it.live("watches Aggregate state and follows committed events", () =>
-    Effect.gen(function* () {
-      yield* Counter.Increment({ target, input: { amount: 3 }, commandId: "page:aggregate" })
-        .effect;
-      const watch = Counter.Counter.watch({
-        key: () => target,
-        toMessage: (snapshot) => snapshot,
-        onFailure: () => ({ state: Option.none(), cursor: -1 }),
-        onDefect: () => ({ state: Option.none(), cursor: -1 }),
-      });
-      const snapshots = yield* watch
-        .dependenciesToStream({ key: target, isEnabled: true })
-        .pipe(Stream.take(1), Stream.runCollect);
-      expect(snapshots).toEqual([{ state: Option.some({ total: 3 }), cursor: 1 }]);
-      const feed = Counter.Counter.events({
-        key: () => target,
-        cursor: () => Option.none(),
-        onEntry: (entry) => entry.event.amount,
-        onCaughtUp: (cursor) => cursor,
-        onFailure: () => -1,
-        onDefect: () => -1,
-      });
-      const dependencies = feed.modelToDependencies(undefined);
-      const events = yield* feed
-        .dependenciesToStream(dependencies, () => dependencies)
-        .pipe(Stream.take(2), Stream.runCollect);
-      expect(events).toEqual([3, 1]);
     }).pipe(Effect.provide(Client)),
   );
 

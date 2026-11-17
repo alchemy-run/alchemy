@@ -11,21 +11,30 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import * as CatchUp from "./CatchUp.ts";
 import type * as Command from "./Command.ts";
+import type * as Decision from "./Decision.ts";
 import {
+  DecisionsUnsupported,
   DefinitionError,
+  UnhandledCommand,
   ForeignAppend,
   LazyViewNeedsOneSource,
   MissingWorkflowEngine,
+  UnvalidatedRead,
 } from "./DefinitionError.ts";
-import { matches } from "./Filter.ts";
+import { type Filter, matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
-import type * as Key from "./Key.ts";
+import * as Key from "./Key.ts";
 import {
   type Accepted,
   type AggregateStore,
+  type DecisionStore,
   type Delivery,
+  type EmittedRange,
+  type Json,
+  type ListRange,
   type ModelHost,
   Platform,
   type PolicyStore,
@@ -34,12 +43,15 @@ import {
   type StreamEntry,
   type StreamMeta,
   type StreamStore,
+  type ViewEntry,
   type ViewSnapshot,
   type ViewStore,
+  RunWait,
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
 import * as Projection from "./Projection.ts";
 import * as Query from "./Query.ts";
+import * as Read from "./Read.ts";
 import * as RequestContext from "./RequestContext.ts";
 import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -62,7 +74,10 @@ export class Internals extends Context.Service<
     readonly aggregates: ReadonlyMap<string, AggregateStore>;
     readonly views: ReadonlyMap<string, ViewStore>;
     readonly streams: ReadonlyMap<string, StreamStore>;
-    /** The client of the aggregate that handles each command, by command tag. */
+    /**
+     * The client of what implements each command, by command tag: its
+     * aggregate, or its decision as an aggregate client that takes no target.
+     */
     readonly commands: ReadonlyMap<string, Aggregate.ClientImpl>;
     /** Each view's read API, by view name. */
     readonly viewHosts: ReadonlyMap<string, View.Host<unknown, Key.Any, unknown>>;
@@ -70,6 +85,8 @@ export class Internals extends Context.Service<
     readonly streamHosts: ReadonlyMap<string, DomainStream.Host<Key.Any, unknown>>;
     /** Each query, hosted, by query name. */
     readonly queries: ReadonlyMap<string, Query.Host>;
+    /** Each guarded view's and stream's `validate`, from its Layer, by name. */
+    readonly validators: ReadonlyMap<string, Read.AnyValidate>;
   }
 >()("alchemy/Domain/ModelInternals") {}
 
@@ -84,8 +101,15 @@ export interface Members<
   S extends ReadonlyArray<DomainStream.Any>,
   G extends ReadonlyArray<Saga.Any> = readonly [],
   Q extends ReadonlyArray<Query.Any> = readonly [],
+  D extends ReadonlyArray<Decision.Any> = readonly [],
 > {
   readonly aggregates: A;
+  /**
+   * The decisions that implement commands across several aggregates. Each
+   * command has one implementation: listing a decision for a command an
+   * aggregate or another decision implements is a type error on its entry.
+   */
+  readonly decisions?: ImplementedOnce<A, D>;
   readonly views?: V;
   readonly policies?: P;
   readonly projections?: J;
@@ -100,22 +124,23 @@ export interface Members<
  *
  * `Provided` is every aggregate, view, stream and projection-progress service
  * the Model provides; `Policies` is every policy, projection and query whose
- * implementation `layer` requires; `Missing` is any member a query reads that
- * the Model does not host.
+ * implementation `layer` requires.
  */
 export interface ModelClass<
   Name extends string,
   Provided,
   Policies,
   Parts extends Servable = Servable,
-  Missing = never,
 > {
   new (_: never): {};
   readonly kind: "Model";
+  readonly annotations: Annotations;
   readonly modelName: Name;
   /** The model's aggregates, in order. */
   readonly aggregates: Parts["aggregates"];
-  /** Every command of the model's aggregates, each once. */
+  /** The model's decisions, in order. */
+  readonly decisions: Parts["decisions"];
+  /** Every command of the model's aggregates and decisions, each once. */
   readonly commands: Parts["commands"];
   /** The model's views, in order. */
   readonly views: Parts["views"];
@@ -136,7 +161,7 @@ export interface ModelClass<
   ): Layer.Layer<
     Provided | Internals,
     E,
-    Platform | SecureRandom.SecureRandom | Exclude<R, Provided> | Missing
+    Platform | SecureRandom.SecureRandom | Exclude<R, Provided>
   >;
 }
 
@@ -145,6 +170,7 @@ export interface ModelClass<
  */
 export interface Any extends Servable {
   readonly kind: "Model";
+  readonly annotations: Annotations;
   readonly modelName: string;
   readonly definitions: Kernel.Definitions;
 }
@@ -156,12 +182,58 @@ export interface Any extends Servable {
  */
 export interface Servable {
   readonly aggregates: ReadonlyArray<Aggregate.Any>;
-  /** Every command of the model's aggregates, each once. */
+  readonly decisions: ReadonlyArray<Decision.Any>;
+  /** Every command of the model's aggregates and decisions, each once. */
   readonly commands: ReadonlyArray<Command.Any>;
   readonly views: ReadonlyArray<View.Any>;
   readonly streams: ReadonlyArray<DomainStream.Any>;
   readonly queries: ReadonlyArray<Query.Any>;
 }
+
+/** The name of the aggregate, among `A`, that implements the command tagged `Tag`. */
+type ImplementerOf<A extends ReadonlyArray<Aggregate.Any>, Tag> = A[number] extends infer Agg
+  ? Agg extends Aggregate.Any
+    ? // A widened aggregate (another model's `aggregates`) names no command: checked when the model is built.
+      string extends Agg["definition"]["commands"][number]["tag"]
+      ? never
+      : Tag extends Agg["definition"]["commands"][number]["tag"]
+        ? Agg["aggregateName"]
+        : never
+    : never
+  : never;
+
+/** Every decision of `D` but the one at index `K`. */
+type OtherDecisions<D extends ReadonlyArray<Decision.Any>, K> = {
+  [J in keyof D]: J extends K ? never : D[J];
+}[number];
+
+/**
+ * A model's decisions, each implementing a command nothing else in the
+ * model implements, and reading only the model's aggregates. An entry whose
+ * command an aggregate or another decision implements, or that reads an
+ * aggregate the model leaves out, becomes a message naming it.
+ */
+export type ImplementedOnce<
+  A extends ReadonlyArray<Aggregate.Any>,
+  D extends ReadonlyArray<Decision.Any>,
+> = {
+  readonly [K in keyof D]: string extends D[K]["decisionName"]
+    ? // A widened list (another model's `decisions`) names no command: checked when the model is built.
+      D[K]
+    : [ImplementerOf<A, D[K]["decisionName"]>] extends [never]
+      ? D[K]["decisionName"] extends OtherDecisions<D, K>["decisionName"]
+        ? `${D[K]["decisionName"]} is already implemented by another decision`
+        : [UnhostedRead<A, D[K]>] extends [never]
+          ? D[K]
+          : `${D[K]["decisionName"]} reads ${UnhostedRead<A, D[K]>}, which is not in the model's aggregates`
+      : `${D[K]["decisionName"]} is already implemented by ${ImplementerOf<A, D[K]["decisionName"]>}`;
+};
+
+/** The names of the aggregates `D` reads that are not among `A`. */
+type UnhostedRead<A extends ReadonlyArray<Aggregate.Any>, D extends Decision.Any> = Exclude<
+  D["reads"][keyof D["reads"]]["aggregateName"],
+  A[number]["aggregateName"]
+>;
 
 /** What a model's members serve. */
 export interface ServableBy<
@@ -169,9 +241,13 @@ export interface ServableBy<
   V extends ReadonlyArray<View.Any>,
   S extends ReadonlyArray<DomainStream.Any>,
   Q extends ReadonlyArray<Query.Any> = readonly [],
+  D extends ReadonlyArray<Decision.Any> = readonly [],
 > {
   readonly aggregates: A;
-  readonly commands: ReadonlyArray<A[number]["definition"]["commands"][number]>;
+  readonly decisions: D;
+  readonly commands: ReadonlyArray<
+    A[number]["definition"]["commands"][number] | D[number]["command"]
+  >;
   readonly views: V;
   readonly streams: S;
   readonly queries: Q;
@@ -183,8 +259,10 @@ type ProvidedBy<
   J extends ReadonlyArray<Projection.Any>,
   S extends ReadonlyArray<DomainStream.Any>,
   G extends ReadonlyArray<Saga.Any>,
+  D extends ReadonlyArray<Decision.Any> = readonly [],
 > =
   | Identifier<A[number]>
+  | Identifier<D[number]>
   | Identifier<V[number]>
   | Identifier<S[number]>
   | Saga.Identifier<G[number]>
@@ -197,11 +275,12 @@ export interface LayerOptions<Views extends string = string> {
   /**
    * Before Domain version 0, models in one Worker that listed the same
    * aggregate, view or saga shared its Durable Object class, and so its data.
-   * Each model now has classes of its own, and the first deploy moves the
-   * shared class to one of them. Set this on the model that keeps that data;
-   * the others start empty. The deploy fails until exactly one model sets it.
+   * Each model now has classes of its own, and the first deploy renames the
+   * shared class to the model's, keeping its data. When two models shared a
+   * class, only one can keep it: set `false` on the others, which start
+   * empty. The deploy fails while more than one would take it over.
    *
-   * @default false
+   * @default true
    */
   readonly legacyData?: boolean;
   /**
@@ -215,16 +294,33 @@ export interface LayerOptions<Views extends string = string> {
 }
 
 /** Every implementation a model's `layer` requires: its policies, projections, sagas and queries. */
+/** A guarded view's or stream's Layer, which provides its `validate`. */
+type ValidatorOf<X> = X extends {
+  readonly Validator: Context.Key<infer I, unknown>;
+  readonly definition: infer D;
+}
+  ? // A widened view (`View.Any`) names no Layer: serving it checks at run time.
+    unknown extends I
+    ? never
+    : Read.Guarded<D> extends true
+      ? I
+      : never
+  : never;
+
 type HandledBy<
   P extends ReadonlyArray<Policy.Any>,
   J extends ReadonlyArray<Projection.Any>,
   G extends ReadonlyArray<Saga.Any>,
   Q extends ReadonlyArray<Query.Any> = readonly [],
+  V extends ReadonlyArray<View.Any> = readonly [],
+  S extends ReadonlyArray<DomainStream.Any> = readonly [],
 > =
   | Identifier<P[number]>
   | Identifier<J[number]>
   | Saga.ImplementationIdentifier<G[number]>
-  | Query.Identifier<Q[number]>;
+  | Query.Identifier<Q[number]>
+  | ValidatorOf<V[number]>
+  | ValidatorOf<S[number]>;
 
 /**
  * The aggregates, views and policies you host together. `layer(policies)`
@@ -252,6 +348,38 @@ type HandledBy<
  * );
  * ```
  *
+ * ### Deciding across aggregates
+ * List each `Domain.Decision` in `decisions`. Every command has one
+ * implementation, an aggregate or a decision: a second is a type error on
+ * its entry.
+ *
+ * **Example:** A model with a decision
+ * ```typescript
+ * export class Bank extends Domain.Model("Bank", {
+ *   aggregates: [Account],
+ *   decisions: [Transfer],
+ * }) {}
+ * ```
+ *
+ * ### Annotating models
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * A model lists its declarations, so tooling can walk them and read each
+ * one's annotations.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class Bank extends Domain.Model(
+ *   "Bank",
+ *   { aggregates: [Account], views: [AccountSummary] },
+ *   { description: "Accounts and their balances." },
+ * ) {}
+ *
+ * const glossary = Bank.commands.map((command) => `${command.tag}: ${command.annotations.description}`);
+ * ```
+ *
  * @primitive
  */
 export const make = <
@@ -263,18 +391,21 @@ export const make = <
   const S extends ReadonlyArray<DomainStream.Any> = readonly [],
   const G extends ReadonlyArray<Saga.Any> = readonly [],
   const Q extends ReadonlyArray<Query.Any> = readonly [],
+  const D extends ReadonlyArray<Decision.Any> = readonly [],
 >(
   name: Name,
-  members: Members<A, V, P, J, S, G, Q>,
+  members: Members<A, V, P, J, S, G, Q, D>,
+  annotations: Annotations = {},
 ): ModelClass<
   Name,
-  ProvidedBy<A, V, J, S, G>,
-  HandledBy<P, J, G, Q>,
-  ServableBy<A, V, S, Q>,
-  Exclude<Query.NeedsOf<Q[number]>, ProvidedBy<A, V, J, S, G>>
+  ProvidedBy<A, V, J, S, G, D>,
+  HandledBy<P, J, G, Q, V, S>,
+  ServableBy<A, V, S, Q, D>
 > => {
+  const decisions = (members.decisions ?? []) as ReadonlyArray<Decision.Any>;
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
+    decisions,
     views: members.views ?? [],
     policies: members.policies ?? [],
     projections: members.projections ?? [],
@@ -283,17 +414,25 @@ export const make = <
   };
   return class {
     static readonly kind = "Model" as const;
+    static readonly annotations: Annotations = annotations;
     static readonly modelName: Name = name;
     static readonly definitions: Kernel.Definitions = definitions;
     static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];
     static readonly aggregates = definitions.aggregates;
+    static readonly decisions = decisions;
     static readonly commands = [
-      ...new Set(definitions.aggregates.flatMap((aggregate) => aggregate.definition.commands)),
+      ...new Set([
+        ...definitions.aggregates.flatMap((aggregate) => aggregate.definition.commands),
+        ...decisions.map((decision) => decision.command),
+      ]),
     ];
     static readonly views = definitions.views;
     static readonly streams = definitions.streams;
     static readonly queries: ReadonlyArray<Query.Any> = members.queries ?? [];
-    static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G, Q>, E, R>, options?: LayerOptions) {
+    static layer<E, R>(
+      handlers: Layer.Layer<HandledBy<P, J, G, Q, V, S>, E, R>,
+      options?: LayerOptions,
+    ) {
       return Layer.effectContext(
         build(
           name,
@@ -302,17 +441,16 @@ export const make = <
           members.sagas ?? [],
           members.queries ?? [],
           Telemetry.resolve(options?.telemetry),
-          options?.legacyData ?? false,
+          options?.legacyData ?? true,
           options?.lazy ?? [],
         ),
       );
     }
   } as unknown as ModelClass<
     Name,
-    ProvidedBy<A, V, J, S, G>,
-    HandledBy<P, J, G, Q>,
-    ServableBy<A, V, S, Q>,
-    Exclude<Query.NeedsOf<Q[number]>, ProvidedBy<A, V, J, S, G>>
+    ProvidedBy<A, V, J, S, G, D>,
+    HandledBy<P, J, G, Q, V, S>,
+    ServableBy<A, V, S, Q, D>
   >;
 };
 
@@ -412,6 +550,9 @@ const build = <A, E, R>(
     const policyStores = new Map<string, PolicyStore>();
     const projectionStores = new Map<string, ProjectionStore>();
     const streamStores = new Map<string, StreamStore>();
+    // Filled once the handlers' Layer is built; pushes read it when they run.
+    const validators = new Map<string, Read.AnyValidate>();
+    const validatorOf = (name: string) => validators.get(name);
 
     const deliver = (delivery: Delivery): Effect.Effect<void> =>
       Effect.suspend(() => {
@@ -427,13 +568,29 @@ const build = <A, E, R>(
       aggregateStores.set(
         aggregate.aggregateName,
         // Assigned, not spread: a kit's `targets` is read when used, once versions are set.
-        yield* platform.aggregate(
-          aggregate,
-          Object.assign(kernel.aggregateKit(aggregate, deliver), {
-            push: Watch.aggregatePush(kernel, aggregate),
-          }),
-        ),
+        yield* platform.aggregate(aggregate, kernel.aggregateKit(aggregate, deliver)),
       );
+    }
+    // Decisions commit across the aggregates' stores, so they are hosted after them.
+    const decisions = definitions.decisions ?? [];
+    const decisionStores = new Map<string, DecisionStore>();
+    if (decisions.length > 0) {
+      const host = platform.decision;
+      if (host === undefined) {
+        return yield* Effect.die(
+          new DefinitionError({
+            reason: new DecisionsUnsupported({
+              decisions: decisions.map((decision) => decision.decisionName),
+            }),
+          }),
+        );
+      }
+      for (const decision of decisions) {
+        decisionStores.set(
+          decision.decisionName,
+          yield* host(decision, kernel.decisionKit(decision)),
+        );
+      }
     }
     const viewTarget = (name: string) => kernel.targetIdOf("view", name);
     for (const name of lazy) {
@@ -465,7 +622,7 @@ const build = <A, E, R>(
         yield* platform.view(
           view,
           Object.assign(kernel.viewKit(view, deliver), {
-            push: Watch.viewPush(kernel, view),
+            push: Watch.viewPush(kernel, view, validatorOf),
             ...(source === undefined ? {} : { catchUp: { source } }),
           }),
         ),
@@ -477,7 +634,7 @@ const build = <A, E, R>(
         stream.streamName,
         yield* platform.stream(stream, {
           name: stream.streamName,
-          push: Watch.streamPush(kernel, stream),
+          push: Watch.streamPush(kernel, stream, validatorOf),
         }),
       );
     }
@@ -493,6 +650,30 @@ const build = <A, E, R>(
       );
       hosts = Context.add(hosts, aggregate, client);
       for (const command of aggregate.definition.commands) commands.set(command.tag, client);
+    }
+    for (const decision of decisions) {
+      const client = decisionClient(
+        kernel,
+        decision,
+        decisionStores.get(decision.decisionName)!,
+        random,
+      );
+      hosts = Context.add(hosts, decision, client);
+      // An Api and a story send every command the same way.
+      commands.set(decision.command.tag, {
+        send: (command, options) =>
+          Effect.map(client.send(command, options), (receipt) => ({
+            // The first stream it committed to: what a read takes as `atLeast`.
+            stream: receipt.commits[0]?.stream ?? "",
+            version: receipt.commits[0]?.version ?? 0,
+            events: receipt.events,
+            reply: receipt.reply,
+            commits: receipt.commits,
+          })),
+        schedule: () => Effect.die(new Error(`${decision.decisionName} cannot be scheduled`)),
+        unschedule: () => Effect.die(new Error(`${decision.decisionName} cannot be scheduled`)),
+        get: () => Effect.die(new Error(`${decision.decisionName} has no state`)),
+      });
     }
     const viewHosts = new Map<string, View.Host<unknown, Key.Any, unknown>>();
     for (const view of definitions.views) {
@@ -514,12 +695,13 @@ const build = <A, E, R>(
       streamHosts.set(stream.streamName, host);
       hosts = Context.add(hosts, stream, host);
     }
+    const route: Route = { kernel, aggregates: aggregateStores, views: viewStores };
     for (const projection of definitions.projections) {
       hosts = Context.add(
         hosts,
         projection.Progress,
         projectionProgress(
-          kernel,
+          route,
           projection,
           () => projectionStores.get(projection.projectionName)!,
           history(platform, () =>
@@ -529,7 +711,6 @@ const build = <A, E, R>(
               generation: kernel.generationOf("projection", projection.projectionName),
             }),
           ),
-          aggregateStores,
         ),
       );
     }
@@ -552,6 +733,32 @@ const build = <A, E, R>(
 
     // Policies, projections and sagas are built with the clients available, then hosted.
     const implementations = yield* Layer.build(policies).pipe(Effect.provide(hosts));
+    // Each guarded view's and stream's `validate`, traced as `Domain.validate <Name>`.
+    for (const [name, entry] of [
+      ...definitions.views.map((view) => [view.viewName, view] as const),
+      ...definitions.streams.map((stream) => [stream.streamName, stream] as const),
+    ]) {
+      const implementation = Context.getOption(
+        implementations as Context.Context<unknown>,
+        entry.Validator as Context.Key<unknown, Read.Implementation>,
+      );
+      if (Option.isNone(implementation)) {
+        if (Read.isGuarded(entry.definition)) {
+          return yield* Effect.die(
+            new DefinitionError({ reason: new UnvalidatedRead({ entity: name }) }),
+          );
+        }
+        continue;
+      }
+      const validate = implementation.value.validate as Read.AnyValidate;
+      validators.set(name, (request, state) =>
+        validate(request, state).pipe(
+          Effect.withSpan(`Domain.validate ${name}`, {
+            attributes: { "domain.read": name, "domain.mode": request.mode },
+          }),
+        ),
+      );
+    }
     const implementationOf = (projection: Projection.Any) =>
       Context.getUnsafe(
         implementations as Context.Context<unknown>,
@@ -620,6 +827,8 @@ const build = <A, E, R>(
 
     // Queries run where the Api runs, reading your store and the model's members.
     const queryHosts = new Map<string, Query.Host>();
+    const progressOf = (projection: Projection.Any) =>
+      Context.getUnsafe(hosts, projection.Progress as Context.Key<unknown, Projection.Progress>);
     // The kernel has refused duplicate names and unknown projections.
     for (const query of queries) {
       const implementation = Context.getUnsafe(
@@ -628,12 +837,18 @@ const build = <A, E, R>(
       );
       queryHosts.set(
         query.queryName,
-        Query.host(query, implementation, hosts, (projection) =>
-          Context.getUnsafe(
-            hosts,
-            projection.Progress as Context.Key<unknown, Projection.Progress>,
-          ),
-        ),
+        Query.host(query, implementation, hosts, (read) => {
+          if (read.kind === "Projection") return progressOf(read).caughtUp;
+          if (read.kind === "View") return viewCaughtUp(route, read);
+          // A stream is caught up once every projection that writes it is.
+          const writers = definitions.projections.filter((projection) =>
+            (projection.definition.writes ?? []).includes(read),
+          );
+          return (receipt, options) =>
+            Effect.forEach(writers, (writer) => progressOf(writer).caughtUp(receipt, options), {
+              discard: true,
+            });
+        }),
       );
     }
 
@@ -646,6 +861,7 @@ const build = <A, E, R>(
       viewHosts,
       streamHosts,
       queries: queryHosts,
+      validators,
     });
   });
 
@@ -669,7 +885,6 @@ const aggregateClient = (
       yield* Effect.annotateCurrentSpan({
         "domain.command_id": commandId,
         "domain.correlation_id": correlationId,
-        ...Telemetry.attributesOf(command.constructor, command),
       });
       const trace = yield* Telemetry.currentTrace;
       return {
@@ -690,9 +905,25 @@ const aggregateClient = (
       "domain.id": Aggregate.targetId(target),
     },
   });
+  /** The instance a command is for, from the aggregate's `keyOf`. */
+  const targetFor = (command: { readonly _tag: string }): Effect.Effect<string> =>
+    Effect.suspend(() => {
+      const target = Aggregate.targetOf(aggregate, command);
+      return target === undefined
+        ? Effect.die(
+            new DefinitionError({
+              reason: new UnhandledCommand({
+                aggregate: aggregate.aggregateName,
+                command: command._tag,
+              }),
+            }),
+          )
+        : Effect.succeed(target);
+    });
   return {
-    send: (target, command, options) =>
+    send: (command, options) =>
       Effect.gen(function* () {
+        const target = yield* targetFor(command);
         // The span records a rejection as an outcome; the caller still fails with it.
         const result = yield* Effect.gen(function* () {
           const { id, meta } = yield* metaFor(target, command, options, false);
@@ -715,8 +946,9 @@ const aggregateClient = (
           ? yield* Effect.fail(kernel.decodeRejection(aggregate, result.rejection))
           : yield* kernel.decodeReceipt(aggregate, command._tag, result.receipt);
       }),
-    schedule: (target, command, options) =>
+    schedule: (command, options) =>
       Effect.gen(function* () {
+        const target = yield* targetFor(command);
         // The command runs later, so its span links back here rather than continuing this trace.
         // `commandId` names the scheduled command; the arming gets its own id, derived like a
         // send's, so a policy or step that runs again arms nothing new, and a later trigger
@@ -734,10 +966,10 @@ const aggregateClient = (
         );
         return { commandId: name, at: DateTime.makeUnsafe(at) };
       }).pipe(
-        Effect.withSpan(
-          `Domain.schedule ${aggregate.aggregateName}.${command._tag}`,
-          spanOptions(target),
-        ),
+        Effect.withSpan(`Domain.schedule ${aggregate.aggregateName}.${command._tag}`, {
+          kind: "client",
+          attributes: { "domain.aggregate": aggregate.aggregateName },
+        }),
       ),
     unschedule: (target, commandId) =>
       store.unschedule(Aggregate.targetId(target), commandId).pipe(
@@ -746,12 +978,55 @@ const aggregateClient = (
           attributes: { ...spanOptions(target).attributes, "domain.command_id": commandId },
         }),
       ),
-    state: (target) =>
+    get: (target) =>
       store
         .state(Aggregate.targetId(target))
         .pipe(Effect.map(({ state }) => kernel.decodeState(aggregate, state))),
   };
 };
+
+const decisionClient = (
+  kernel: Kernel.Kernel,
+  decision: Decision.Any,
+  store: DecisionStore,
+  random: SecureRandom.SecureRandom["Service"],
+): Decision.ClientImpl => ({
+  send: (command, options) =>
+    Effect.gen(function* () {
+      // The span records a rejection as an outcome; the caller still fails with it.
+      const result = yield* Effect.gen(function* () {
+        const commandId = yield* Aggregate.commandIdFor(options, random);
+        const context = yield* RequestContext.capture;
+        const correlationId = yield* Telemetry.correlationFor(commandId);
+        yield* Effect.annotateCurrentSpan({
+          "domain.command_id": commandId,
+          "domain.correlation_id": correlationId,
+        });
+        const trace = yield* Telemetry.currentTrace;
+        const result = yield* store.send(yield* kernel.encodeDecisionCommand(decision, command), {
+          commandId,
+          context,
+          correlationId,
+          ...(trace ? { trace } : {}),
+        });
+        yield* Effect.annotateCurrentSpan(
+          "domain.outcome",
+          result._tag === "Accepted"
+            ? "accepted"
+            : ((result.rejection as { readonly _tag?: string })._tag ?? "rejected"),
+        );
+        return result;
+      }).pipe(
+        Effect.withSpan(`Domain.send ${decision.decisionName}`, {
+          kind: "client",
+          attributes: { "domain.decision": decision.decisionName },
+        }),
+      );
+      return result._tag === "Rejected"
+        ? yield* Effect.fail(kernel.decodeDecisionRejection(decision, result.rejection))
+        : yield* kernel.decodeDecisionReceipt(decision, result.receipt);
+    }),
+});
 
 const decodeSnapshot = (
   kernel: Kernel.Kernel,
@@ -818,7 +1093,7 @@ const viewHost = (
     const read = store.read(id);
     const atLeast = options?.atLeast;
     if (!atLeast) return read;
-    return read.pipe(
+    const poll = read.pipe(
       Effect.flatMap((snapshot) =>
         (snapshot.checkpoints[atLeast.stream] ?? 0) >= atLeast.version
           ? Effect.succeed(snapshot)
@@ -830,6 +1105,11 @@ const viewHost = (
           Duration.toMillis(Duration.fromInputUnsafe(options?.timeout ?? "10 seconds")) / 25,
         ),
       }),
+    );
+    return Effect.gen(function* () {
+      const wait = yield* RunWait;
+      return yield* wait(poll);
+    }).pipe(
       Effect.mapError(() =>
         View.ConsistencyTimeout.make({
           view: view.viewName,
@@ -842,7 +1122,7 @@ const viewHost = (
   };
   return {
     history,
-    query: (key, options) =>
+    get: (key, options) =>
       readAtLeast(Aggregate.targetId(key), options).pipe(
         Effect.map((snapshot) => decodeSnapshot(kernel, view, snapshot)),
       ),
@@ -876,30 +1156,64 @@ const viewHost = (
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
-      store.list(Aggregate.targetId(key)).pipe(
-        Effect.flatMap((stored) => {
-          const desc = options?.order === "desc";
-          const after = options?.after;
-          return Effect.forEach(
-            (desc ? [...stored].reverse() : stored).filter(
-              (row) => after === undefined || (desc ? row.seq < after : row.seq > after),
-            ),
-            (row) =>
-              Effect.map(kernel.decodeViewEntry(view, row), (entry) => ({ seq: row.seq, entry })),
-          );
-        }),
-        Effect.map((decoded) => {
-          const rows = decoded.filter((row) => matches(options?.where, row.entry.event));
-          const take = options?.take ?? rows.length;
-          const page = rows.slice(0, take);
-          return {
-            entries: page.map((row) => row.entry),
-            cursor: rows.length > take && page.length > 0 ? page[page.length - 1]!.seq : null,
-          };
-        }),
+      listPage(
+        (range) => store.list(Aggregate.targetId(key), range),
+        (row) => kernel.decodeViewEntry(view, row),
+        options,
       ),
   };
 };
+
+/** How many entries a filtered `list` reads at a time, at least. */
+const LIST_BATCH = 128;
+
+/**
+ * A page of a key's entries. Order, cursor and size go to the store, so it
+ * reads the page and one entry more (to know there is a next page), not the
+ * whole key. A filter reads in batches until it has them.
+ */
+const listPage = <Row extends { readonly seq: number }, E, A extends { readonly event: E }>(
+  read: (range: ListRange) => Effect.Effect<ReadonlyArray<Row>>,
+  decode: (row: Row) => Effect.Effect<A>,
+  options:
+    | {
+        readonly where?: Filter<E>;
+        readonly order?: "asc" | "desc";
+        readonly take?: number;
+        readonly after?: number;
+      }
+    | undefined,
+): Effect.Effect<View.Page<A>> =>
+  Effect.gen(function* () {
+    const take = options?.take === undefined ? undefined : Math.max(0, options.take);
+    const where = options?.where;
+    const limit =
+      take === undefined
+        ? undefined
+        : where === undefined
+          ? take + 1
+          : Math.max(take + 1, LIST_BATCH);
+    const page: Array<A> = [];
+    let last: number | null = null;
+    let after = options?.after;
+    for (;;) {
+      const rows = yield* read({
+        ...(options?.order === undefined ? {} : { order: options.order }),
+        ...(after === undefined ? {} : { after }),
+        ...(limit === undefined ? {} : { limit }),
+      });
+      for (const row of rows) {
+        const entry = yield* decode(row);
+        if (!matches(where, entry.event)) continue;
+        // One more match than the page: there is a next page, after the page's last entry.
+        if (page.length === take) return { entries: page, cursor: page.length > 0 ? last : null };
+        page.push(entry);
+        last = row.seq;
+      }
+      if (limit === undefined || rows.length < limit) return { entries: page, cursor: null };
+      after = rows[rows.length - 1]!.seq;
+    }
+  });
 
 /** Wait until a progress check passes, retrying every 25ms up to `timeout`. */
 const waitUntil = <A>(
@@ -907,13 +1221,19 @@ const waitUntil = <A>(
   timeout: Duration.Input | undefined,
   onTimeout: () => View.ConsistencyTimeout,
 ) =>
-  check.pipe(
-    Effect.retry({
-      schedule: Schedule.spaced("25 millis"),
-      times: Math.ceil(Duration.toMillis(Duration.fromInputUnsafe(timeout ?? "10 seconds")) / 25),
-    }),
-    Effect.mapError(onTimeout),
-  );
+  Effect.gen(function* () {
+    const wait = yield* RunWait;
+    return yield* wait(
+      check.pipe(
+        Effect.retry({
+          schedule: Schedule.spaced("25 millis"),
+          times: Math.ceil(
+            Duration.toMillis(Duration.fromInputUnsafe(timeout ?? "10 seconds")) / 25,
+          ),
+        }),
+      ),
+    );
+  }).pipe(Effect.mapError(onTimeout));
 
 const streamHost = (
   kernel: Kernel.Kernel,
@@ -971,27 +1291,7 @@ const streamHost = (
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
-      store.list(Aggregate.targetId(key)).pipe(
-        Effect.flatMap((stored) => {
-          const desc = options?.order === "desc";
-          const after = options?.after;
-          return Effect.forEach(
-            (desc ? [...stored].reverse() : stored).filter(
-              (row) => after === undefined || (desc ? row.seq < after : row.seq > after),
-            ),
-            (row) => Effect.map(decode(row), (entry) => ({ seq: row.seq, entry })),
-          );
-        }),
-        Effect.map((decoded) => {
-          const rows = decoded.filter((row) => matches(options?.where, row.entry.event));
-          const take = options?.take ?? rows.length;
-          const page = rows.slice(0, take);
-          return {
-            entries: page.map((row) => row.entry),
-            cursor: rows.length > take && page.length > 0 ? page[page.length - 1]!.seq : null,
-          };
-        }),
-      ),
+      listPage((range) => store.list(Aggregate.targetId(key), range), decode, options),
     append: (origin, ...events) =>
       Effect.suspend(() => {
         const meta = (origin as unknown as Record<symbol, Kernel.InputMetaValue | undefined>)[
@@ -1057,72 +1357,306 @@ const commandEvents = (
     }
   });
 
+/** The stores a command's events pass through on their way to a view or projection. */
+interface Route {
+  readonly kernel: Kernel.Kernel;
+  readonly aggregates: ReadonlyMap<string, AggregateStore>;
+  readonly views: ReadonlyMap<string, ViewStore>;
+}
+
+/** What `caughtUp` is handed: a command's receipt, with or without its events. */
+interface CaughtUpReceipt {
+  readonly stream: string;
+  readonly version: number;
+  readonly events?: ReadonlyArray<unknown>;
+}
+
+/**
+ * One event on a command's way to a consumer: one the command committed to
+ * its aggregate instance, or one a view key emitted for it. A consumer of
+ * `source` hears it at `stream`/`seq`.
+ */
+interface Reached {
+  readonly source: string;
+  readonly id: string;
+  readonly stream: string;
+  readonly seq: number;
+  readonly event: { readonly _tag: string };
+  /** A view's encoded state after it emitted the event. */
+  readonly state?: Json;
+}
+
+/** A view key once it has applied a command's events: see `applied` in {@link follow}. */
+interface AppliedKey {
+  readonly key: string;
+  /** The position it had to reach on each source stream. */
+  readonly streams: ReadonlyMap<string, number>;
+  readonly snapshot: ViewSnapshot;
+  /** Its cursor before it applied them; `undefined` if it had when first read. */
+  readonly before: number | undefined;
+}
+
+/**
+ * Follow a command's events from its aggregate through every view between it
+ * and a consumer, waiting for each view to apply them on the way. Every wait
+ * shares one `timeout`.
+ */
+const follow = (route: Route, receipt: CaughtUpReceipt, timeout: Duration.Input | undefined) =>
+  Effect.gen(function* () {
+    const { kernel } = route;
+    const [aggregate = "", ...rest] = receipt.stream.split("/");
+    const id = rest.join("/");
+    const store = route.aggregates.get(aggregate);
+    const deadline =
+      (yield* Clock.currentTimeMillis) +
+      Duration.toMillis(Duration.fromInputUnsafe(timeout ?? "10 seconds"));
+    /** Retry `check` until it holds or the deadline passes. */
+    const until = <A>(check: Effect.Effect<A, "stale">, onTimeout: () => View.ConsistencyTimeout) =>
+      Effect.flatMap(Clock.currentTimeMillis, (now) =>
+        waitUntil(check, Duration.millis(Math.max(0, deadline - now)), onTimeout),
+      );
+
+    let stored: ReadonlyArray<StoredEvent> | undefined;
+    /** The command's committed events, read once from its aggregate. */
+    const read: Effect.Effect<ReadonlyArray<StoredEvent>> = store
+      ? commandEvents(store, id, receipt.version)
+      : Effect.succeed([]);
+    const committed = Effect.suspend(() =>
+      stored !== undefined
+        ? Effect.succeed(stored)
+        : Effect.tap(read, (events) =>
+            Effect.sync(() => {
+              stored = events;
+            }),
+          ),
+    );
+    // A receipt from a client carries no events: read them from the aggregate.
+    const fromAggregate: Effect.Effect<ReadonlyArray<Reached>> =
+      receipt.events !== undefined
+        ? Effect.succeed(
+            receipt.events.map((event, index) => ({
+              source: aggregate,
+              id,
+              stream: receipt.stream,
+              seq: receipt.version - receipt.events!.length + 1 + index,
+              event: event as { readonly _tag: string },
+            })),
+          )
+        : Effect.flatMap(committed, (events) =>
+            Effect.forEach(events, (event) =>
+              Effect.map(kernel.decodeEvent(event.event), (decoded) => ({
+                source: aggregate,
+                id,
+                stream: receipt.stream,
+                seq: event.envelope.seq,
+                event: decoded as { readonly _tag: string },
+              })),
+            ),
+          );
+
+    /** The positions, per key, a consumer must reach on each stream. */
+    const positions = (
+      reached: ReadonlyArray<Reached>,
+      keysOf: (reached: Reached) => ReadonlyArray<string>,
+    ) => {
+      const waits = new Map<string, Map<string, number>>();
+      for (const r of reached) {
+        for (const key of keysOf(r)) {
+          const streams = waits.get(key) ?? new Map<string, number>();
+          waits.set(key, streams);
+          streams.set(r.stream, Math.max(streams.get(r.stream) ?? 0, r.seq));
+        }
+      }
+      return waits;
+    };
+
+    /**
+     * Wait until a view has applied every event in `reached` it consumes, and
+     * return, per key it reaches: the positions it had to reach on each
+     * source, its snapshot once it had, and its cursor before them
+     * (`undefined` when it had applied them before we looked).
+     */
+    const applied = (view: View.Any, reached: ReadonlyArray<Reached>) =>
+      Effect.gen(function* () {
+        const viewStore = route.views.get(view.viewName)!;
+        const waits = positions(reached, (r) =>
+          kernel.viewKeys(view, r.source, r.id, r.event, r.seq, r.state),
+        );
+        return yield* Effect.forEach(
+          waits,
+          ([key, streams]) =>
+            Effect.gen(function* () {
+              const missing = (snapshot: ViewSnapshot) =>
+                [...streams].find(([stream, seq]) => (snapshot.checkpoints[stream] ?? 0) < seq);
+              const first = yield* viewStore.read(key);
+              const unapplied = missing(first);
+              if (unapplied === undefined) {
+                return { key, streams, snapshot: first, before: undefined } satisfies AppliedKey;
+              }
+              const [stream, version] = unapplied;
+              const snapshot = yield* until(
+                viewStore
+                  .read(key)
+                  .pipe(
+                    Effect.flatMap((snapshot) =>
+                      missing(snapshot) === undefined
+                        ? Effect.succeed(snapshot)
+                        : Effect.fail("stale" as const),
+                    ),
+                  ),
+                () => View.ConsistencyTimeout.make({ view: view.viewName, key, stream, version }),
+              );
+              return { key, streams, snapshot, before: first.seq } satisfies AppliedKey;
+            }),
+          { concurrency: "unbounded" },
+        );
+      });
+
+    /** A view key's entry, as an event that reaches the view's consumers. */
+    const reachedFrom = (view: View.Any, key: string, entry: ViewEntry) =>
+      Effect.map(kernel.decodeEvent(entry.event), (event): Reached => ({
+        source: view.viewName,
+        id: key,
+        stream: `${view.viewName}/${key}`,
+        seq: entry.seq,
+        event: event as { readonly _tag: string },
+        state: entry.state,
+      }));
+
+    /**
+     * What a view key emitted for the command. When the key's snapshot records
+     * the command as the last to reach it from each source, its entries are
+     * read by range. Otherwise (a later command reached it first, or the
+     * snapshot predates the record) they are found by the command's id,
+     * newest first, back to the key's cursor before the command (`before`)
+     * or, without it, to the first entry before the command's.
+     */
+    const emitted = (view: View.Any, { key, streams, snapshot, before }: AppliedKey) =>
+      Effect.gen(function* () {
+        const viewStore = route.views.get(view.viewName)!;
+        const ranges = [...streams].map(([stream, seq]) => {
+          const range = snapshot.emitted?.[stream];
+          return range?.sourceSeq === seq ? range : undefined;
+        });
+        if (ranges.every((range) => range !== undefined)) {
+          const bySeq = new Map<number, ViewEntry>();
+          for (const range of ranges as ReadonlyArray<EmittedRange>) {
+            if (range.through <= range.after) continue;
+            const entries = yield* viewStore.list(key, {
+              after: range.after,
+              limit: range.through - range.after,
+            });
+            for (const entry of entries) {
+              if (entry.envelope.commandId === range.commandId) bySeq.set(entry.seq, entry);
+            }
+          }
+          return yield* Effect.forEach(bySeq.values(), (entry) => reachedFrom(view, key, entry));
+        }
+        const commandId = (yield* committed).at(-1)?.envelope.commandId;
+        if (commandId === undefined) return [];
+        const out: Array<Reached> = [];
+        let after = snapshot.seq + 1;
+        for (let limit = 8; ; limit *= 4) {
+          const page = yield* viewStore.list(key, { order: "desc", after, limit });
+          for (const entry of page) {
+            if (before !== undefined && entry.seq <= before) return out;
+            if (entry.envelope.commandId === commandId) {
+              out.push(yield* reachedFrom(view, key, entry));
+            } else if (before === undefined && out.length > 0) return out;
+          }
+          if (page.length < limit) return out;
+          after = page[page.length - 1]!.seq;
+        }
+      });
+
+    const reachedOf = new Map<string, ReadonlyArray<Reached>>();
+    /** Every event of the command that reaches a consumer of `source`. */
+    const reach = (
+      source: View.Source,
+    ): Effect.Effect<ReadonlyArray<Reached>, View.ConsistencyTimeout> =>
+      Effect.gen(function* () {
+        if (source.kind === "Aggregate") {
+          return (source as Aggregate.Any).aggregateName === aggregate ? yield* fromAggregate : [];
+        }
+        const view = source as View.Any;
+        const known = reachedOf.get(view.viewName);
+        if (known) return known;
+        const keys = yield* applied(view, yield* upstream(view));
+        const out = (yield* Effect.forEach(keys, (key) => emitted(view, key), {
+          concurrency: "unbounded",
+        })).flat();
+        reachedOf.set(view.viewName, out);
+        return out;
+      });
+    /** Every event of the command that reaches a consumer of all of `sources`. */
+    const upstream = (consumer: View.Any | Projection.Any) =>
+      Effect.map(
+        Effect.forEach(consumer.definition.from as ReadonlyArray<View.Source>, reach),
+        (all) => all.flat(),
+      );
+
+    return { until, positions, applied, upstream };
+  });
+
+/**
+ * Wait until a view has applied a command's events on every key they reach,
+ * through any views between it and the command's aggregate, so a query that
+ * reads it sees the caller's write.
+ */
+const viewCaughtUp =
+  (route: Route, view: View.Any): Query.CaughtUp =>
+  (receipt, options) =>
+    Effect.gen(function* () {
+      const chain = yield* follow(route, receipt, options?.timeout);
+      yield* chain.applied(view, yield* chain.upstream(view));
+    });
+
+/**
+ * A projection's progress. `caughtUp` follows a command's events from its
+ * aggregate through every view between it and the projection, then waits
+ * until the projection has handled what reaches it.
+ */
 const projectionProgress = (
-  kernel: Kernel.Kernel,
+  route: Route,
   projection: Projection.Any,
   store: () => ProjectionStore,
   history: Effect.Effect<View.History>,
-  aggregates: ReadonlyMap<string, AggregateStore>,
 ): Projection.Progress => ({
   history,
   caughtUp: (receipt, options) =>
     Effect.gen(function* () {
-      const [aggregate, ...rest] = receipt.stream.split("/");
-      const id = rest.join("/");
-      // A receipt from a client carries no events: read them from the aggregate.
-      const consumes = projection.definition.from.some(
-        (source) => source.kind === "Aggregate" && source.aggregateName === aggregate,
+      const chain = yield* follow(route, receipt, options?.timeout);
+      const waits = chain.positions(yield* chain.upstream(projection), (r) =>
+        route.kernel.projectionKeys(projection, r.source, r.id, r.event, r.seq, r.state),
       );
-      const source = aggregates.get(aggregate!);
-      const events: ReadonlyArray<{ readonly event: unknown; readonly seq: number }> =
-        receipt.events !== undefined
-          ? receipt.events.map((event, index) => ({
-              event,
-              seq: receipt.version - receipt.events!.length + 1 + index,
-            }))
-          : consumes && source
-            ? yield* Effect.forEach(yield* commandEvents(source, id, receipt.version), (stored) =>
-                Effect.map(kernel.decodeEvent(stored.event), (event) => ({
-                  event,
-                  seq: stored.envelope.seq,
-                })),
-              )
-            : [];
-      const waits = new Map<string, number>();
-      for (const { event, seq } of events) {
-        for (const key of kernel.projectionKeys(
-          projection,
-          aggregate!,
-          id,
-          event as { readonly _tag: string },
-          seq,
-        )) {
-          waits.set(key, Math.max(waits.get(key) ?? 0, seq));
-        }
-      }
+      // One read of a key's checkpoints covers every stream it waits on.
       yield* Effect.forEach(
         waits,
-        ([key, seq]) =>
-          waitUntil(
+        ([key, streams]) => {
+          let missing: readonly [string, number] = [...streams][0]!;
+          return chain.until(
             store()
               .checkpoints(key)
               .pipe(
-                Effect.flatMap((checkpoints) =>
-                  (checkpoints[receipt.stream] ?? 0) >= seq
-                    ? Effect.void
-                    : Effect.fail("stale" as const),
-                ),
+                Effect.flatMap((checkpoints) => {
+                  const behind = [...streams].find(
+                    ([stream, seq]) => (checkpoints[stream] ?? 0) < seq,
+                  );
+                  if (behind === undefined) return Effect.void;
+                  missing = behind;
+                  return Effect.fail("stale" as const);
+                }),
               ),
-            options?.timeout,
             () =>
               View.ConsistencyTimeout.make({
                 view: projection.projectionName,
                 key,
-                stream: receipt.stream,
-                version: seq,
+                stream: missing[0],
+                version: missing[1],
               }),
-          ),
-        { discard: true },
+          );
+        },
+        { concurrency: "unbounded", discard: true },
       );
     }),
 });

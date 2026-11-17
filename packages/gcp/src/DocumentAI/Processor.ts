@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -113,8 +114,33 @@ export type Processor = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ProcessorLookup
 >;
+
+/**
+ * Props for {@link Processor.lookup}: find a processor this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ProcessorLookup {
+  /**
+   * Processor id (the `{processor}` segment of
+   * `projects/{project}/locations/{location}/processors/{processor}`).
+   * Supply it to adopt an existing processor.
+   */
+  processorId: string;
+  /**
+   * Multi-region location (`us` or `eu`). Some processor types are also
+   * available in regional locations.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Document AI processor that extracts structure from documents.
@@ -150,6 +176,18 @@ export type Processor = Resource<
  *   location: "us",
  *   type: "OCR_PROCESSOR",
  *   enabled: false,
+ * });
+ * ```
+ *
+ * ### Looking up an existing processor
+ * `Processor.lookup` references a processor Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared processor.
+ *
+ * **Example:** Reference an existing processor
+ * ```typescript
+ * const processor = GCP.DocumentAI.Processor.lookup({
+ *   processorId: "my-processor",
  * });
  * ```
  *
@@ -287,6 +325,15 @@ export const ProcessorProvider = () =>
         extra,
       });
     }),
+
+    lookup: Effect.fn(function* ({ processorId, location }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(
+        resourceName(env.project, normalizeLocation(location), processorId),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -119,8 +119,23 @@ export interface Role extends Resource<
      */
     assumeRolePolicyStatements?: PolicyStatement[];
   },
-  Providers
+  Providers,
+  RoleLookup
 > {}
+
+/**
+ * Props for {@link Role.lookup}: find a role this stack doesn't manage, in
+ * the ambient account, by its name or ARN.
+ */
+export type RoleLookup =
+  | {
+      /** The name of the existing role. */
+      roleName: string;
+    }
+  | {
+      /** The ARN of the existing role. */
+      roleArn: string;
+    };
 
 /**
  * Name of the inline policy the role provider synthesizes from binding-supplied
@@ -219,6 +234,21 @@ const mergeBoundAssumeRolePolicy = (
  *       }],
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing role
+ * `Role.lookup` references a role Alchemy doesn't manage (created in the
+ * console or by another stack), found by `roleName` or `roleArn`. It is read
+ * during plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Pass an existing role to another resource
+ * ```typescript
+ * const deployer = AWS.IAM.Role.lookup({ roleName: "ci-deployer" });
+ *
+ * const schedule = yield* AWS.Scheduler.Schedule("Nightly", {
+ *   scheduleExpression: "cron(0 3 * * ? *)",
+ *   target: { Arn: fn.functionArn, RoleArn: deployer.roleArn },
  * });
  * ```
  *
@@ -428,6 +458,35 @@ export const RoleProvider = () =>
           if ((olds?.path ?? "/") !== (news?.path ?? "/")) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          // A role ARN ends in `role/<path>/<name>`; the name is its last segment.
+          const roleName = "roleArn" in props ? props.roleArn.split("/").at(-1)! : props.roleName;
+          const role = yield* iam
+            .getRole({ RoleName: roleName })
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
+          if (!role?.Role) return undefined;
+          const [managedPolicyArns, inlinePolicies, tags] = yield* Effect.all([
+            readManagedPolicies(roleName),
+            readInlinePolicies(roleName),
+            readTags(roleName),
+          ]);
+          return {
+            roleArn: role.Role.Arn as RoleArn,
+            roleName: role.Role.RoleName,
+            roleId: role.Role.RoleId,
+            path: role.Role.Path,
+            assumeRolePolicyDocument: parsePolicyDocument(role.Role.AssumeRolePolicyDocument) ?? {
+              Version: "2012-10-17",
+              Statement: [],
+            },
+            managedPolicyArns,
+            inlinePolicies,
+            description: role.Role.Description,
+            maxSessionDuration: role.Role.MaxSessionDuration,
+            permissionsBoundary: role.Role.PermissionsBoundary?.PermissionsBoundaryArn,
+            tags,
+          };
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const roleName = output?.roleName ?? (yield* toRoleName(id, olds ?? {}));

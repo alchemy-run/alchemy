@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -93,6 +94,13 @@ test.provider.skipIf(!runLifecycle)(
             description: "regional network armor",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.NetworkEdgeSecurityService.lookup({
+          networkEdgeSecurityServiceName: created.networkEdgeSecurityServiceName,
+          region: created.region,
+        }),
+        created,
       );
 
       expect(created.networkEdgeSecurityServiceName).toEqual(expect.any(String));
