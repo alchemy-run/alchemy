@@ -1,5 +1,5 @@
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { PropsInput } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -318,6 +318,15 @@ const constructStream = (id: string, props: unknown) =>
  * });
  * ```
  *
+ * **Example:** Fixed physical name
+ * ```typescript
+ * const events = yield* Cloudflare.Basin.Stream("Events", {
+ *   name: "events",
+ *   schema: { fields: [{ type: "string", name: "url", required: true }] },
+ * });
+ * // Changing the schema on a later deploy deletes the old stream first.
+ * ```
+ *
  * ### HTTP ingestion
  * **Example:** Authenticated endpoint
  * ```typescript
@@ -443,22 +452,27 @@ export const StreamProvider = () =>
           : yield* findStreamByName(accountId, props.name);
       return observed ? toAttributes(observed, accountId) : undefined;
     }),
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       if (output?.streamId) {
         const observed = yield* getStream(acct, output.streamId);
         if (observed) return toAttributes(observed, acct);
       }
-      // Cold read — stream names are unique per account, so an exact name
-      // match identifies the resource. A generated name embeds the
-      // instance id (proof of ownership); a user-provided name does not,
-      // so gate takeover behind the adopt policy.
+      // A generated name embeds the instance id (proof of ownership);
+      // an explicit name does not. During replacement, the previous
+      // generation's physical id is also proof of ownership.
       const name = yield* streamName(id, olds?.name);
       const match = yield* findStreamByName(acct, name);
       if (match) {
         const attrs = toAttributes(match, acct);
-        return olds?.name !== undefined ? Unowned(attrs) : attrs;
+        return olds?.name !== undefined
+          ? unownedUnlessPrevious(
+              attrs,
+              previous?.accountId === acct ? previous : undefined,
+              "streamId",
+            )
+          : attrs;
       }
       return undefined;
     }),

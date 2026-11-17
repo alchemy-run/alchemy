@@ -1,5 +1,5 @@
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -114,6 +114,15 @@ export type Pipeline = Resource<TypeId, PipelineProps, PipelineAttributes, never
  * });
  * ```
  *
+ * **Example:** Fixed physical name
+ * ```typescript
+ * const pipeline = yield* Cloudflare.Basin.Pipeline("FilteredEvents", {
+ *   name: "filtered_events",
+ *   sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name}`,
+ * });
+ * // Editing the SQL on a later deploy deletes the old pipeline first.
+ * ```
+ *
  * @see https://developers.cloudflare.com/pipelines/
  *
  * @resource
@@ -173,21 +182,26 @@ export const PipelineProvider = () =>
         : ({ action: "replace" } as const);
     }),
 
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       if (output?.pipelineId) {
         const observed = yield* getPipeline(acct, output.pipelineId);
         if (observed) return toAttributes(observed, acct);
       }
-      // Cold read — pipeline names are unique per account; a
-      // generated-name match is proof of ownership, an explicit name is
-      // not.
+      // A generated name proves ownership; a user-provided name requires
+      // adoption unless the observed resource is our previous generation.
       const name = yield* pipelineName(id, olds?.name);
       const match = yield* findPipelineByName(acct, name);
       if (match) {
         const attrs = toAttributes(match, acct);
-        return olds?.name !== undefined ? Unowned(attrs) : attrs;
+        return olds?.name !== undefined
+          ? unownedUnlessPrevious(
+              attrs,
+              previous?.accountId === acct ? previous : undefined,
+              "pipelineId",
+            )
+          : attrs;
       }
       return undefined;
     }),

@@ -67,6 +67,10 @@ test.provider(
         lakehouse((stream, sink) => `  INSERT INTO ${sink}\n    SELECT *\n    FROM ${stream};  `),
       );
       expect(reformatted.resources.Etl!.action).toEqual("noop");
+      const equivalentSink = yield* stack.plan(
+        lakehouse(passthrough, { sinkRollingInterval: 300 }),
+      );
+      expect(equivalentSink.resources.PageViewTable!.action).toEqual("noop");
 
       // Invalid SQL fails the plan — before the running pipeline is deleted.
       const invalid = yield* stack
@@ -86,7 +90,7 @@ test.provider(
       // An immutable change must fail in plan rather than deleting the
       // working sink and then discovering that create cannot succeed.
       const rejectedSink = yield* stack
-        .plan(lakehouse(passthrough, { sinkRollingInterval: 20 }))
+        .plan(lakehouse(passthrough, { sinkRollingInterval: 600 }))
         .pipe(Effect.exit);
       expect(Exit.isFailure(rejectedSink)).toBe(true);
       expect(String(Exit.isFailure(rejectedSink) ? rejectedSink.cause : "")).toContain(

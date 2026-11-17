@@ -1,5 +1,5 @@
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
@@ -333,7 +333,7 @@ export class CatalogSinkRecreationUnsupported extends Data.TaggedError(
  * Equivalent spellings never replace — `basin_catalog` ⇄
  * `r2_data_catalog`, the `config` form ⇄ the `catalog` / `table` form,
  * omitted ⇄ explicit defaults. With engine-generated names a replacement
- * is seamless (the new sink gets a fresh name before the old one is
+ * is create-before-delete (the new sink gets a fresh name before the old one is
  * deleted); an unchanged explicit `name` requires Alchemy to delete the
  * old sink first, temporarily interrupting ingestion. Prefer generated
  * names for create-before-delete.
@@ -381,6 +381,16 @@ export class CatalogSinkRecreationUnsupported extends Data.TaggedError(
  *   config: { bucket, credentials },
  *   format: { type: "parquet", compression: "zstd" },
  * });
+ * ```
+ *
+ * **Example:** R2 sink with a fixed physical name
+ * ```typescript
+ * const sink = yield* Cloudflare.Basin.Sink("Archive", {
+ *   name: "events_archive",
+ *   type: "r2",
+ *   config: { bucket, credentials, path: "archive" },
+ * });
+ * // Later changes to path, format or rolling policy delete this sink first.
  * ```
  *
  * ### Basin Catalog
@@ -504,20 +514,26 @@ export const SinkProvider = () =>
           : yield* findSinkByName(accountId, props.name);
       return observed ? toAttributes(observed, accountId) : undefined;
     }),
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       if (output?.sinkId) {
         const observed = yield* getSink(acct, output.sinkId);
         if (observed) return toAttributes(observed, acct);
       }
-      // Cold read — sink names are unique per account; a generated-name
-      // match is proof of ownership, an explicit name is not.
+      // A generated name is proof of ownership; an explicit name requires
+      // adoption unless it identifies this replacement's old generation.
       const name = yield* sinkName(id, olds?.name);
       const match = yield* findSinkByName(acct, name);
       if (match) {
         const attrs = toAttributes(match, acct);
-        return olds?.name !== undefined ? Unowned(attrs) : attrs;
+        return olds?.name !== undefined
+          ? unownedUnlessPrevious(
+              attrs,
+              previous?.accountId === acct ? previous : undefined,
+              "sinkId",
+            )
+          : attrs;
       }
       return undefined;
     }),

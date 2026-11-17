@@ -63,6 +63,21 @@ const r2Credentials = Effect.gen(function* () {
   };
 });
 
+// Physical names are account-wide. Include the file-scoped scratch stack
+// identity so different tests sharing one stage never claim each other's
+// streams, sinks or pipelines.
+const namedTestResource = (prefix: string, stack: Test.ScratchStack) =>
+  Effect.sync(
+    () =>
+      `${prefix}_${crypto
+        .createHash("sha256")
+        .update(stack.name)
+        .update("\0")
+        .update(stack.stage)
+        .digest("hex")
+        .slice(0, 16)}`,
+  );
+
 const getStream = (accountId: string, streamId: string) =>
   pipelines.getStream({ accountId, streamId }).pipe(Effect.retry(forbiddenBlips));
 
@@ -148,18 +163,17 @@ test.provider(
       expect(liveUpdated.http.cors?.origins).toEqual(["https://example.com"]);
 
       // The schema is immutable — declaring one triggers a replacement.
-      const replaced = yield* retryAuthBlip(
-        stack.deploy(
-          Cloudflare.Pipelines.Stream("Stream", {
-            schema: {
-              fields: [
-                { type: "string", name: "url", required: true },
-                { type: "timestamp", name: "ts", unit: "millisecond" },
-              ],
-            },
-          }),
-        ),
-      );
+      const nextStream = Cloudflare.Pipelines.Stream("Stream", {
+        schema: {
+          fields: [
+            { type: "string", name: "url", required: true },
+            { type: "timestamp", name: "ts", unit: "millisecond" },
+          ],
+        },
+      });
+      const planned = yield* retryAuthBlip(stack.plan(nextStream));
+      expect(planned.resources.Stream).toMatchObject({ action: "replace", deleteFirst: false });
+      const replaced = yield* retryAuthBlip(stack.deploy(nextStream));
 
       expect(replaced.streamId).not.toEqual(initial.streamId);
       yield* expectStreamGone(accountId, initial.streamId);
@@ -181,7 +195,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const name = `named_stream_${stack.stage.replaceAll(/[^a-zA-Z0-9_]/g, "_")}`;
+      const name = yield* namedTestResource("named_stream", stack);
 
       yield* stack.destroy();
 
@@ -235,7 +249,7 @@ test.provider(
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const creds = yield* r2Credentials;
-      const name = `named_sink_${stack.stage.replaceAll(/[^a-zA-Z0-9_]/g, "_")}`;
+      const name = yield* namedTestResource("named_sink", stack);
 
       const desired = (intervalSeconds: number) =>
         Effect.gen(function* () {
@@ -333,7 +347,7 @@ test.provider(
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const creds = yield* r2Credentials;
-      const name = `named_pipeline_${stack.stage.replaceAll(/[^a-zA-Z0-9_]/g, "_")}`;
+      const name = yield* namedTestResource("named_pipeline", stack);
 
       yield* stack.destroy();
 
