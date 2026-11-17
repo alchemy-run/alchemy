@@ -25,6 +25,9 @@ export const app = Effect.gen(function* () {
         return yield* HttpServerResponse.json({
           apiKey: env.E2B_API_KEY ?? null,
           gateway: env.ALCHEMY_GATEWAY_URL ?? null,
+          // The sandbox's own token for its gateway, so a test can make the
+          // call the sandbox's network refuses.
+          token: env.ALCHEMY_GATEWAY_SANDBOX_TOKEN ?? null,
         });
       }
       const now = Math.floor(Date.now() / 1000);
