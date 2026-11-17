@@ -175,8 +175,12 @@ describe.each([
 
 describe("keeps Vite's output directories", () => {
   it.each([
-    { outDir: undefined, ssr: "dist/ssr", client: "dist/client" },
-    { outDir: "out", ssr: "out/ssr", client: "out/client" },
+    {
+      outDir: undefined,
+      ssr: NodePath.join("dist", "ssr"),
+      client: NodePath.join("dist", "client"),
+    },
+    { outDir: "out", ssr: NodePath.join("out", "ssr"), client: NodePath.join("out", "client") },
   ])("with build.outDir $outDir", async ({ outDir, ssr, client }) => {
     const config = await resolve(
       alchemy(["nodejs_compat"]),

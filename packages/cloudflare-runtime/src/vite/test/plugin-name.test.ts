@@ -144,7 +144,7 @@ describe("alchemy Cloudflare Vite plugin name", () => {
       );
       expect(customizer).toHaveBeenCalledTimes(1);
       expect(customizer.mock.calls[0]![0]).toMatchObject({ worker: expect.any(Object) });
-      expect(resolved.environments.ssr!.build.outDir).toBe("dist/ssr");
+      expect(resolved.environments.ssr!.build.outDir).toBe(path.join("dist", "ssr"));
     },
   );
 
@@ -182,7 +182,7 @@ describe("alchemy Cloudflare Vite plugin name", () => {
           },
           command,
         );
-        expect(resolved.environments.ssr!.build.outDir).toBe("dist/ssr");
+        expect(resolved.environments.ssr!.build.outDir).toBe(path.join("dist", "ssr"));
         // PARITY.md documents this; a release that stops rejecting the file
         // fails here so the row gets updated.
         expect(customizer).not.toHaveBeenCalled();
