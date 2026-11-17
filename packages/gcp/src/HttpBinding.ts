@@ -171,6 +171,7 @@ export const makeGcpBinding = <Shape>(options: {
   Effect.gen(function* () {
     const bind = yield* GCPBindings.Bind;
     const runs = yield* Effect.forEach(options.variants, (variant) =>
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the variants are any distilled operation; the generated contract declares each binding's precise types
       GCPBindings.withCredentials(variant.operation as Effect.Effect<any, never, any>),
     );
     const bindResource = Effect.fn(function* (resource: { Type: string; LogicalId: string }) {
@@ -214,6 +215,7 @@ export const makeGcpBinding = <Shape>(options: {
         }
         if (variant.param !== undefined) input[variant.param] = target;
         for (const [field, value] of filled) input[field] = yield* value;
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- run is the variant's operation with its types erased; the generated contract declares the binding's error union
         return yield* run(input);
       });
     });
@@ -277,6 +279,7 @@ export const makeGcpProjectBinding = <Shape>(options: {
     const bind = yield* GCPBindings.Bind;
     const ctx = yield* CurrentRuntimeContext;
     const runs = yield* Effect.forEach(options.variants, (variant) =>
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- the variants are any distilled operation; the generated contract declares each binding's precise types
       GCPBindings.withCredentials(variant.operation as Effect.Effect<any, never, any>),
     );
     const bindProject = Effect.fn(function* () {
@@ -323,6 +326,7 @@ export const makeGcpProjectBinding = <Shape>(options: {
           input[variant.param] = target;
         }
         if (variant.projectField !== undefined) input[variant.projectField] = project;
+        // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- run is the variant's operation with its types erased; the generated contract declares the binding's error union
         return yield* run(input);
       });
     });
