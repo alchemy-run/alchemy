@@ -30,6 +30,16 @@ export class NetworkNotCreated extends Data.TaggedError("Hetzner.NetworkNotCreat
 
 export type NetworkSubnetType = "cloud" | "server" | "vswitch";
 
+/**
+ * Deletion was refused because the network has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class NetworkDeleteProtected extends Data.TaggedError("Hetzner.NetworkDeleteProtected")<{
+  readonly id: number;
+  readonly message: string;
+}> {}
+
 export interface NetworkSubnet {
   /**
    * Subnet type. `cloud` is the usual choice for Cloud Servers and Load
@@ -94,8 +104,9 @@ export interface NetworkProps {
    */
   exposeRoutesToVswitch?: boolean;
   /**
-   * Prevent the Network from being deleted in the Cloud Console / API
-   * until this is cleared. The provider disables protection before delete.
+   * Prevent the Network from being deleted in the Cloud Console / API.
+   * While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   deleteProtection?: boolean;
@@ -660,8 +671,18 @@ export const NetworkProvider = () =>
       return toAttrs(fresh ?? afterRoutes);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
-      if (output.deleteProtection) {
+    delete: Effect.fn(function* ({ output, force }) {
+      const current = yield* getById(output.networkId);
+      if (current === undefined) return;
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
+      if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new NetworkDeleteProtected({
+            id: output.networkId,
+            message: `Hetzner network '${output.networkId}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* runAction(
           Hetzner.networkActions.changeNetworkProtection({
             id: output.networkId,

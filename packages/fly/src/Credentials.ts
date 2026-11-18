@@ -36,7 +36,7 @@ export const bindFlyApiToken = (): Effect.Effect<void, never, Credentials> =>
           // defect as `CredentialsRequired`.
           orDieCredentialsUnavailable("Fly"),
         );
-    yield* Output.named(Output.asOutput(token), "FLY_API_TOKEN").asEffect().pipe(Effect.asVoid);
+    yield* Output.named(Output.literal(token), "FLY_API_TOKEN").asEffect().pipe(Effect.asVoid);
   });
 
 /**

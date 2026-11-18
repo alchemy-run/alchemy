@@ -234,6 +234,18 @@ export type Instance = Resource<
  * manage by its identifiers, in the ambient project unless `project` names
  * another.
  */
+/**
+ * Deletion was refused because the instance has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy
+ * (or turn it off in the console) before deleting it.
+ */
+export class InstanceDeletionProtected extends Data.TaggedError(
+  "GCP.Compute.InstanceDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
 export interface InstanceLookup {
   /**
    * Instance name.
@@ -1002,7 +1014,17 @@ export const InstanceProvider = () =>
       const env = yield* GcpEnvironment.current;
       const zone = lastSegment(output.zone);
       const instance = output.instanceName;
-      if (output.deletionProtection === true || force === true) {
+      const current = yield* getByName(env.project, zone, instance);
+      if (current === undefined) return;
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
+      if (current.deletionProtection === true) {
+        if (force !== true) {
+          return yield* new InstanceDeletionProtected({
+            resourceName: instance,
+            message: `Compute Engine instance '${instance}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* applyZoneOp(
           env.project,
           zone,

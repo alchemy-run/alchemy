@@ -37,6 +37,8 @@ export default defineConfig([
       "foldkit/index": "src/foldkit/index.ts",
       "foldkit/aws": "src/foldkit/aws.ts",
       "foldkit/node": "src/foldkit/node.ts",
+      "foldkit/cloudflare": "src/foldkit/cloudflare.ts",
+      "foldkit/source": "src/foldkit/source.ts",
       "nextjs/index": "src/nextjs/index.ts",
       "nextjs/aws": "src/nextjs/aws.ts",
       "nextjs/node": "src/nextjs/node.ts",

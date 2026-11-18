@@ -3,6 +3,7 @@ import { AuthProvidersLive } from "alchemy/Auth/AuthProvider";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import { Server, ServerProvider } from "alchemy/Website/Server";
@@ -45,7 +46,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 const standaloneManagementApiLayer = () =>
   PrismaClientLive.pipe(
     Layer.provideMerge(
-      Layer.mergeAll(Credentials.fromEnvironment(), Layer.succeed(Retry.Retry, Retry.makeDefault)),
+      Layer.mergeAll(Credentials.fromEnvironment(), Layer.succeed(Retry.Retry, DeployRetry.policy)),
     ),
     Layer.provideMerge(fromProfile()),
     Layer.provideMerge(PrismaAuth),
@@ -79,7 +80,10 @@ const stackManagementApiLayer = () =>
     Layer.provide(Credentials.environmentFromAuthProvider()),
     Layer.provide(PrismaHttpClientLive),
     Layer.provideMerge(
-      Layer.mergeAll(Credentials.fromAuthProvider(), Layer.succeed(Retry.Retry, Retry.makeDefault)),
+      Layer.mergeAll(
+        Credentials.fromAuthProvider(),
+        Layer.succeed(Retry.Retry, DeployRetry.policy),
+      ),
     ),
     Layer.provideMerge(PrismaAuth),
     Layer.provideMerge(

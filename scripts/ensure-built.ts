@@ -17,11 +17,15 @@
 // turns from `tsc -b` output into the chunked layout npm ships, with the
 // `distilled-lazy` stubs in `lib/services.lazy/` (only bundle-lib writes
 // those). After the builds above, every distilled package that has a `lib/`
-// but no bundle stamp newer than its source and its `lib/` is bundled. Stamps live in `node_modules/.cache/distilled-bundle/<package>`
-// (bundle-lib prunes unknown files from `lib/`).
+// but no bundle stamp newer than its source and its `lib/` is bundled (again,
+// only SDKs the workspace uses). Stamps live in
+// `node_modules/.cache/distilled-bundle/<package>` (bundle-lib prunes unknown
+// files from `lib/`).
 //
 // Before any of that, distilled packages without a `lib/` (a fresh checkout)
-// are emitted with their own `tsrs -b`. TypeScript 7.1's build mode caches a
+// are emitted with their own `tsrs -b`. Only the SDKs the workspace depends on
+// (and their distilled dependencies) are emitted; the rest of distilled's
+// ~100 SDKs are never imported here. TypeScript 7.1's build mode caches a
 // failed module lookup across projects, so in one workspace-wide `tsrs -b` a
 // project that resolves `@distilled.cloud/*` before it is emitted, without a
 // reference to it, fails every later project that imports it too.
@@ -125,7 +129,47 @@ const isStale = Effect.fn(function* (root: string, name: PackageName) {
 });
 
 /**
- * Emit distilled packages that have no `lib/` yet. Only packages whose exports
+ * Names (directory names under distilled's `packages/`) of the distilled SDKs
+ * non-distilled workspace projects depend on, plus their distilled dependencies.
+ */
+const usedDistilled = Effect.fn(function* (root: string) {
+  const spawner = yield* ChildProcessSpawner;
+  const output = yield* spawner.string(
+    yield* platformCommand("pnpm", ["ls", "-r", "--depth", "0", "--json", "--loglevel", "error"], {
+      cwd: root,
+    }),
+  );
+  type Project = {
+    path: string;
+    dependencies?: Record<string, { path?: string }>;
+    devDependencies?: Record<string, { path?: string }>;
+    optionalDependencies?: Record<string, { path?: string }>;
+  };
+  const projects = JSON.parse(output) as Array<Project>;
+  const marker = "/submodules/distilled/packages/";
+  const isDistilled = (path: string) => path.replaceAll("\\", "/").includes(marker);
+  const nameOf = (path: string) => path.replaceAll("\\", "/").split(marker)[1]!.split("/")[0]!;
+  const distilledDeps = (project: Project) =>
+    [project.dependencies, project.devDependencies, project.optionalDependencies]
+      .flatMap((deps) => Object.values(deps ?? {}))
+      .flatMap((dep) => (dep.path && isDistilled(dep.path) ? [nameOf(dep.path)] : []));
+  const byName = new Map(
+    projects.filter((p) => isDistilled(p.path)).map((p) => [nameOf(p.path), p] as const),
+  );
+  const used = new Set<string>();
+  const queue = projects.filter((p) => !isDistilled(p.path)).flatMap(distilledDeps);
+  while (queue.length > 0) {
+    const name = queue.pop()!;
+    if (used.has(name)) continue;
+    used.add(name);
+    const project = byName.get(name);
+    if (project) queue.push(...distilledDeps(project));
+  }
+  return used;
+});
+
+/**
+ * Emit used distilled packages that have no `lib/` yet. Only packages whose exports
  * point into `lib/` are emitted; `tsrs -b` builds their references (core) too.
  */
 const emitDistilled = Effect.fn(function* (root: string) {
@@ -134,9 +178,10 @@ const emitDistilled = Effect.fn(function* (root: string) {
   const spawner = yield* ChildProcessSpawner;
   const packagesDir = path.join(root, "submodules", "distilled", "packages");
   if (!(yield* fs.exists(packagesDir))) return;
+  const used = yield* usedDistilled(root);
   const names = yield* fs.readDirectory(packagesDir);
   const missing = yield* Effect.filter(
-    names,
+    names.filter((name) => used.has(name)),
     Effect.fnUntraced(function* (name) {
       const directory = path.join(packagesDir, name);
       if (!(yield* fs.exists(path.join(directory, "tsconfig.json")))) return false;
@@ -182,9 +227,10 @@ const staleDistilled = Effect.fn(function* (root: string) {
   const path = yield* Path.Path;
   const distilled = path.join(root, "submodules", "distilled");
   if (!(yield* fs.exists(path.join(distilled, "scripts", "bundle-lib.ts")))) return [];
+  const used = yield* usedDistilled(root);
   const names = yield* fs.readDirectory(path.join(distilled, "packages"));
   return yield* Effect.filter(
-    names.filter((name) => name !== "core"),
+    names.filter((name) => name !== "core" && used.has(name)),
     Effect.fnUntraced(function* (name) {
       const directory = path.join(distilled, "packages", name);
       if (!(yield* fs.exists(path.join(directory, "lib")))) return false;
