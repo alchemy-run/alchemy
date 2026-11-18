@@ -71,11 +71,14 @@ export class ComputeVersionNotRemoved extends Data.TaggedError("ComputeVersionNo
 }> {}
 
 /**
- * How long a failed version's removal waits for the version to stop: 30
- * seconds, or `timeoutSeconds` when that is shorter.
+ * The longest a failed version's removal waits for the version to stop. A
+ * failed deploy should not hang, and a healthy version stops in seconds.
  */
+const CLEANUP_STOP_WAIT_SECONDS = 30;
+
+/** The cleanup wait: {@link CLEANUP_STOP_WAIT_SECONDS}, or `timeoutSeconds` when shorter. */
 const cleanupStopWaitSeconds = (props: { readonly timeoutSeconds?: number }) =>
-  Math.min(30, props.timeoutSeconds ?? 30);
+  Math.min(CLEANUP_STOP_WAIT_SECONDS, props.timeoutSeconds ?? CLEANUP_STOP_WAIT_SECONDS);
 
 const messageOf = (error: unknown) =>
   error instanceof Error || (typeof error === "object" && error !== null && "message" in error)
@@ -92,7 +95,7 @@ const versionNotRemovedMessage = (
     cleanupError instanceof PrismaComputeVersionWaitTimeout
       ? `the platform was still stopping it after ${waitedSeconds} s, and only a stopped version can be deleted`
       : `deleting it failed: ${messageOf(cleanupError).replace(" Run the command again, or delete the version in the Prisma Console.", "").replace(/\.$/, "")}`;
-  return `${messageOf(failure).replace(/\.$/, "")}. Alchemy then stopped Prisma Compute version '${versionId}', which this deploy created, to remove it, but ${reason}. The version is not served, and Alchemy no longer tracks it: delete it in the Prisma Console once it has stopped.`;
+  return `${messageOf(failure).replace(/\.$/, "")}. Alchemy then stopped Prisma Compute version '${versionId}', which this deploy created, to remove it, but ${reason}. The version is not served, and Alchemy no longer tracks it: delete it in the Prisma Console once it has stopped. The platform can keep a version stopping for hours; deleting the service's project removes it with everything else.`;
 };
 
 export class ComputeVersionOperationFailed extends Data.TaggedError(
@@ -877,9 +880,6 @@ const ProviderLive = () =>
                   artifactPath: news.artifactPath,
                   output: "file",
                 });
-          if (artifact !== undefined) {
-            yield* requireComputeManifest(news.artifactPath!, artifact, news.artifactContentType);
-          }
           const artifactHash =
             artifact === undefined
               ? output?.artifactHash
@@ -943,6 +943,9 @@ const ProviderLive = () =>
             }
           }
           if (!deployment) {
+            if (artifact !== undefined) {
+              yield* requireComputeManifest(news.artifactPath!, artifact, news.artifactContentType);
+            }
             const created = yield* createServiceDeployment({
               serviceId,
               ...(news.portMapping === undefined ? {} : { portMapping: news.portMapping }),

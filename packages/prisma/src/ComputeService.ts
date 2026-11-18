@@ -1121,12 +1121,12 @@ const ProviderLive = () =>
           const stopping = yield* stillStopping(others);
           if (stopping.length > 0) {
             return yield* new Provider.DeleteInProgress({
-              message: `${notDeleted(app.id, stopping)} Only the versions it does not serve were deleted, and the service still serves ${served ? `'${served}'` : "no version"}. Run the command again once the version has stopped.`,
+              message: `${notDeleted(app.id, stopping)} Only the versions it does not serve were deleted, and the service still serves ${served ? `'${served}'` : "no version"}. ${wayOut}`,
             });
           }
           if (served && (yield* stillStopping([served])).length > 0) {
             return yield* new Provider.DeleteInProgress({
-              message: `${notDeleted(app.id, [served])} Run the command again once the version has stopped.`,
+              message: `${notDeleted(app.id, [served])} That is the version the service served, so the service no longer serves a version. ${wayOut}`,
             });
           }
           yield* destroyComputeService(output.serviceId);
@@ -1134,6 +1134,9 @@ const ProviderLive = () =>
       };
     }),
   );
+
+const wayOut =
+  "Run the command again once the platform has finished stopping it. The platform can keep a version stopping for hours; when the service's project can go too, deleting the project in the Prisma Console or through the Management API removes the service and all its versions at once.";
 
 const notDeleted = (serviceId: string, stopping: readonly string[]) =>
   `Prisma Compute service '${serviceId}' was not deleted: its version${stopping.length === 1 ? "" : "s"} ${stopping.map((id) => `'${id}'`).join(", ")} ${stopping.length === 1 ? "is" : "are"} still stopping on the platform, and only a stopped version can be deleted.`;
