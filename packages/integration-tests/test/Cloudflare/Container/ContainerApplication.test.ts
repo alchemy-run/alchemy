@@ -15,6 +15,7 @@ import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -23,6 +24,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Ref from "effect/Ref";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
@@ -145,6 +147,67 @@ const plantForeignApplication = Effect.fn(function* (stack: Scratch) {
     yield* state.set({ ...key, value: row });
   }).pipe(Effect.provide(stack.state));
   return { original, restore };
+});
+
+/** One `POST …/containers/applications` the provider sent to Cloudflare. */
+interface ApplicationCreate {
+  readonly name: string | undefined;
+  readonly namespaceId: string | undefined;
+}
+
+class ApplicationCreates extends Context.Service<
+  ApplicationCreates,
+  { creates: Ref.Ref<ReadonlyArray<ApplicationCreate>> }
+>()("test/Container/ApplicationCreates") {}
+
+// Forward every request to Cloudflare unchanged, recording each application
+// create: an account that lets a default application exist without its
+// Durable Object binding accepts a create that a stricter account rejects
+// (#3264), so only the request itself shows whether one was sent.
+const RecordApplicationCreates = Layer.effect(
+  HttpClient.HttpClient,
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const { creates } = yield* ApplicationCreates;
+    return HttpClient.transform(client, (response, request) =>
+      Effect.gen(function* () {
+        if (
+          request.method === "POST" &&
+          request.url.endsWith("/containers/applications") &&
+          request.body._tag === "Uint8Array"
+        ) {
+          const text = new TextDecoder().decode(request.body.body);
+          const body = yield* Schema.decodeUnknownEffect(
+            Schema.fromJsonString(
+              Schema.Struct({
+                name: Schema.optional(Schema.String),
+                durable_objects: Schema.optional(
+                  Schema.Struct({ namespace_id: Schema.optional(Schema.String) }),
+                ),
+              }),
+            ),
+          )(text).pipe(Effect.orDie);
+          yield* Ref.update(creates, (sent) => [
+            ...sent,
+            { name: body.name, namespaceId: body.durable_objects?.namespace_id },
+          ]);
+        }
+        return yield* response;
+      }),
+    );
+  }),
+);
+
+const { test: cycleTest } = Test.make({
+  providers: Cloudflare.providers().pipe(
+    Layer.provide(RecordApplicationCreates),
+    Layer.provideMerge(
+      Layer.effect(
+        ApplicationCreates,
+        Effect.map(Ref.make<ReadonlyArray<ApplicationCreate>>([]), (creates) => ({ creates })),
+      ),
+    ),
+  ),
 });
 
 const waitForApplicationDeleted = (accountId: string, applicationId: string) =>
@@ -1520,12 +1583,13 @@ describe.concurrent(
     // creating a default application."), and a cycle precreates before the
     // Worker has a namespace. Precreate publishes the image and creates no
     // application; reconcile creates it once, attached (#3264).
-    test.provider(
+    cycleTest.provider(
       "a fresh Worker and Container cycle creates one attached application",
       (scratch) =>
         Effect.gen(function* () {
           yield* scratch.destroy();
           const { accountId } = yield* yield* CloudflareEnvironment;
+          const { creates } = yield* ApplicationCreates;
           const program = Effect.gen(function* () {
             yield* EnvBucket;
             const worker = yield* RemoteContainerWorker;
@@ -1533,10 +1597,18 @@ describe.concurrent(
             return { url: worker.url.as<string>(), app };
           });
 
+          // A retried attempt deploys the same name again.
+          const before = (yield* Ref.get(creates)).length;
           const { app } = yield* scratch.deploy(program);
           expect(isLiveId(app.applicationId)).toBe(true);
           const namespaceId = app.durableObjects?.namespaceId;
           expect(namespaceId).toBeDefined();
+          // The only create Cloudflare received carried the namespace.
+          expect(
+            (yield* Ref.get(creates))
+              .slice(before)
+              .filter((create) => create.name === app.applicationName),
+          ).toEqual([{ name: app.applicationName, namespaceId }]);
           // `list` is eventually consistent: wait for it to show only this id.
           const named = yield* Containers.listContainerApplications({ accountId }).pipe(
             Effect.map((apps) =>
@@ -1571,7 +1643,7 @@ describe.concurrent(
     // for the new class. The Container keeps precreate's placeholder until
     // the convergence pass hands it the namespace, then creates the
     // application once, attached.
-    test.provider(
+    cycleTest.provider(
       "a deployed Worker gains a fleet Container in one deploy",
       (scratch) =>
         Effect.gen(function* () {
@@ -1589,12 +1661,21 @@ describe.concurrent(
             const app = yield* RemoteContainer.Application;
             return { worker, app };
           });
+          const { creates } = yield* ApplicationCreates;
+          // A retried attempt deploys the same name again.
+          const before = (yield* Ref.get(creates)).length;
           const { worker, app } = yield* scratch.deploy(program);
 
           expect(isLiveId(app.applicationId)).toBe(true);
           const namespaceId = worker.durableObjectNamespaces.RemoteContainerObject;
           expect(namespaceId).toBeDefined();
           expect(app.durableObjects).toEqual({ namespaceId });
+          // The only create Cloudflare received carried the namespace.
+          expect(
+            (yield* Ref.get(creates))
+              .slice(before)
+              .filter((create) => create.name === app.applicationName),
+          ).toEqual([{ name: app.applicationName, namespaceId }]);
           const named = yield* Containers.listContainerApplications({ accountId }).pipe(
             Effect.map((apps) =>
               apps.filter((item) => item.name === app.applicationName).map((item) => item.id),
