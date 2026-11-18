@@ -79,6 +79,16 @@ export type ServerStatus =
   | "rebuilding"
   | "unknown";
 
+/**
+ * Deletion was refused because the server has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class ServerDeleteProtected extends Data.TaggedError("Hetzner.ServerDeleteProtected")<{
+  readonly id: number;
+  readonly message: string;
+}> {}
+
 export interface ServerProps {
   /**
    * Server name. Must be unique per project and a valid RFC 1123
@@ -168,8 +178,9 @@ export interface ServerProps {
    */
   startAfterCreate?: boolean;
   /**
-   * Prevent the Server from being deleted or rebuilt via the API until
-   * this is cleared. The provider disables protection before delete.
+   * Prevent the Server from being deleted or rebuilt via the API.
+   * While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    *
    * @default false
    */
@@ -1101,7 +1112,16 @@ export const ServerProvider = () =>
         deploySshKeyId: deployKey.deploySshKeyId,
       };
     }),
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
+      const protectedServer = yield* getById(output.id);
+      if (protectedServer?.protection.delete === true && force !== true) {
+        return yield* new ServerDeleteProtected({
+          id: output.id,
+          message: `Hetzner server '${output.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+        });
+      }
       // Keep the server discoverable if key deletion fails. Removing the project
       // key does not revoke the public key already injected into the server.
       yield* deleteDeployKey(output.deploySshKeyId);

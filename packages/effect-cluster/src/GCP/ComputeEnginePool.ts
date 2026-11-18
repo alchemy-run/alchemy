@@ -3,6 +3,7 @@ import * as IAM from "@alchemy.run/gcp/IAM";
 import * as Storage from "@alchemy.run/gcp/Storage";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import type { ClusterNetwork } from "../Database.ts";
 import { GATEWAY_PORT, RUNNER_PORT } from "../internal/Gateway.ts";
 import { makePoolLayer, type PoolSettings } from "../internal/PoolHost.ts";
 import { COS_IMAGE } from "./Database.ts";
@@ -28,6 +29,13 @@ export interface ComputeEnginePoolOptions extends PoolSettings {
    * @default the region's `-a`, `-b` and `-c` zones
    */
   zones?: string[];
+  /**
+   * The VPC runners join when the database is on none, such as
+   * `Cluster.Database.fromUrl`. `tag` is the network tag every runner
+   * carries; a firewall must let it reach the other runners on port 34431
+   * and the database. Ignored when the database is on a GCP network.
+   */
+  network?: Omit<Extract<ClusterNetwork, { kind: "gcp" }>, "kind">;
 }
 
 /**
@@ -82,7 +90,8 @@ pgrep -f "docker logs -f cluster-runner" >/dev/null || setsid sh -c 'while true;
  * runners from a Cloud Storage bucket, behind a regional load balancer on a
  * static address that serves their gateway to callers anywhere. Runners
  * reach each other and the database through the cluster's network tag.
- * Requires a database on a GCP network — `ClusterGCP.Database`.
+ * With a database on no GCP network (`Cluster.Database.fromUrl`), give the
+ * pool its `network`.
  *
  * Cloud Run can't host runners: runners take connections from each other.
  *
@@ -104,6 +113,9 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
     settings: options,
     expected: "a GCP network (ClusterGCP.Database)",
     network: (database) => (database.network?.kind === "gcp" ? database.network : undefined),
+    ownNetwork: Effect.succeed(
+      options.network === undefined ? undefined : { kind: "gcp" as const, ...options.network },
+    ),
     // A static address, before the instances, so the URL never depends on it.
     gateway: (_name, network) =>
       Effect.gen(function* () {

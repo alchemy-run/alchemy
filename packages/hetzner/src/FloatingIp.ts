@@ -28,6 +28,18 @@ import type { Providers } from "./Providers.ts";
 
 export type FloatingIpType = "ipv4" | "ipv6";
 
+/**
+ * Deletion was refused because the Floating IP has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class FloatingIpDeleteProtected extends Data.TaggedError(
+  "Hetzner.FloatingIpDeleteProtected",
+)<{
+  readonly id: number;
+  readonly message: string;
+}> {}
+
 export interface FloatingIpProps {
   /**
    * Address family of the Floating IP. Cannot be changed after creation —
@@ -420,10 +432,18 @@ export const FloatingIpProvider = () =>
 
       return toAttrs(yield* refresh(current.id));
     }),
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getById(output.id);
       if (current === undefined) return;
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new FloatingIpDeleteProtected({
+            id: current.id,
+            message: `Hetzner Floating IP '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* disableProtection(current.id);
       }
       if (current.server !== null) {
