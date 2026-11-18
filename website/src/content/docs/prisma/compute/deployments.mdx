@@ -107,11 +107,12 @@ failed and names the version left behind. That version is not served, and
 Alchemy no longer tracks it, so a later deploy does not remove it. Delete it
 in the Prisma Console once it has stopped.
 
-While a version of the service is stopping, `alchemy destroy` deletes
-nothing from the service. It waits up to the service's `timeoutSeconds`
-(60 by default), then fails with `DeleteInProgress`, and the service keeps
-serving its version. Run `alchemy destroy` again once the version has
-stopped.
+Deleting a service stops and deletes its versions first, waiting up to the
+service's `timeoutSeconds` (60 by default) for each to stop: the versions it
+does not serve, then the one it serves, then the service. When a version is
+still stopping, `alchemy destroy` fails with `DeleteInProgress`. If that
+version is not the served one, the service keeps serving. Run
+`alchemy destroy` again once the version has stopped.
 
 After promoting, the service checks its stable URL:
 

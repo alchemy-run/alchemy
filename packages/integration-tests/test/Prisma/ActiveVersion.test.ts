@@ -173,8 +173,16 @@ newArtifact.test.provider(
       const state = yield* rows(stack);
       expect(state.Version?.attr.versionId).toBe("dep-2");
 
+      yield* clearCalls(cloud);
       yield* stack.destroy();
-      expect(cloud.writes()).not.toContain("DELETE /v1/deployments/dep-1");
+      // The kept version is forgotten, and the service's delete removes it.
+      expect(cloud.writes()).toEqual([
+        "POST /v1/deployments/dep-1/stop",
+        "DELETE /v1/deployments/dep-1",
+        "POST /v1/deployments/dep-2/stop",
+        "DELETE /v1/deployments/dep-2",
+        "DELETE /v1/services/svc-1",
+      ]);
       expect(cloud.services.size).toBe(0);
       expect(cloud.deployments.size).toBe(0);
     }),

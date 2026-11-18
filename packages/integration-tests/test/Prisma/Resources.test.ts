@@ -4536,9 +4536,10 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           ["getDeployment", "version-1"],
           ["deleteDeployment", "version-1"],
           ["getApp", "service-1"],
-          // The service is deleted only once none of its versions is stopping.
+          // The service's delete stops and deletes its versions first.
           ["listAppDeployments", { appId: "service-1", query: {} }],
           ["getDeployment", "version-1"],
+          ["deleteDeployment", "version-1"],
           ["deleteApp", "service-1"],
           ["getSourceRepository", "repo-1"],
           ["deleteSourceRepository", "repo-1"],

@@ -495,15 +495,19 @@ for (const kept of [true, false]) {
         yield* clearCalls(cloud);
 
         yield* stack.destroy();
-        expect(cloud.writes()).not.toContain(`DELETE /v1/deployments/${deployed.versionId}`);
         if (kept) {
+          expect(cloud.writes()).not.toContain(`DELETE /v1/deployments/${deployed.versionId}`);
           // Everything kept, and the service still serves its version.
           expect(cloud.services.get(deployed.serviceId)?.latestDeploymentId).toBe(
             deployed.versionId,
           );
           expect(cloud.deployments.has(deployed.versionId!)).toBe(true);
         } else {
-          expect(cloud.writes()).toContain(`DELETE /v1/services/${deployed.serviceId}`);
+          // The service's delete removes it, right before the service.
+          expect(cloud.writes().slice(-2)).toEqual([
+            `DELETE /v1/deployments/${deployed.versionId}`,
+            `DELETE /v1/services/${deployed.serviceId}`,
+          ]);
           expect(cloud.deployments.size).toBe(0);
         }
       }),

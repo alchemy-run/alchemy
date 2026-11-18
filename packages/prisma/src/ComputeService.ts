@@ -14,12 +14,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
-import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import { destroyComputeService, toComputeUrl } from "./ComputeLifecycle.ts";
+import * as Predicate from "effect/Predicate";
+import {
+  destroyComputeService,
+  destroyComputeVersion,
+  PrismaComputeVersionDeleteFailed,
+  PrismaComputeVersionWaitTimeout,
+  toComputeUrl,
+} from "./ComputeLifecycle.ts";
 import type { ComputeVersion } from "./ComputeVersion.ts";
 import { desiredBranchId } from "./internal/Branches.ts";
 import { observeDeployment } from "./internal/DeploymentObserve.ts";
@@ -183,7 +188,7 @@ export interface ComputeServiceProps {
   /**
    * Maximum seconds to wait for the service to report the promoted version,
    * or the restored version after a rollback, as live. Deleting the service
-   * also waits up to this long for its stopping versions to stop.
+   * also waits up to this long for each of its versions to stop.
    *
    * @default 60
    */
@@ -1096,14 +1101,32 @@ const ProviderLive = () =>
               message: `Prisma Compute service '${app.id}' no longer matches its persisted immutable project and region identity. Refusing to delete a mismatched service.`,
             });
           }
-          // The platform's service delete stops and deletes each version, and
-          // fails on one that is still stopping after deleting the others,
-          // which leaves the service serving nothing. Wait for such versions
-          // first, and delete nothing while one is still stopping.
-          const stopping = yield* waitForStoppingVersions(output.serviceId, olds);
+          // The platform's service delete does not wait for a version to
+          // stop, and stops at the first one it cannot delete, after deleting
+          // the others. So stop and delete the versions first: the ones not
+          // served, then the served one, and the service last.
+          const timing = {
+            timeoutSeconds: olds?.timeoutSeconds ?? 60,
+            ...(olds?.pollIntervalMs === undefined ? {} : { pollIntervalMs: olds.pollIntervalMs }),
+          };
+          const versions = yield* listServiceVersions(app.id);
+          const served = app.latestDeploymentId;
+          const others = versions.map((version) => version.id).filter((id) => id !== served);
+          const stillStopping = (ids: readonly string[]) =>
+            Effect.forEach(ids, (id) => deleteVersionUnlessStopping(id, timing), {
+              concurrency: 4,
+            }).pipe(
+              Effect.map((results) => ids.filter((_, index) => results[index] === "stopping")),
+            );
+          const stopping = yield* stillStopping(others);
           if (stopping.length > 0) {
             return yield* new Provider.DeleteInProgress({
-              message: `Prisma Compute service '${app.id}' was not deleted: its version${stopping.length === 1 ? "" : "s"} ${stopping.map((id) => `'${id}'`).join(", ")} ${stopping.length === 1 ? "is" : "are"} still stopping on the platform, and the platform cannot delete a service while a version is stopping. Nothing was deleted, and the service still serves ${app.latestDeploymentId ? `'${app.latestDeploymentId}'` : "no version"}. Run the command again once the version has stopped.`,
+              message: `${notDeleted(app.id, stopping)} Only the versions it does not serve were deleted, and the service still serves ${served ? `'${served}'` : "no version"}. Run the command again once the version has stopped.`,
+            });
+          }
+          if (served && (yield* stillStopping([served])).length > 0) {
+            return yield* new Provider.DeleteInProgress({
+              message: `${notDeleted(app.id, [served])} Run the command again once the version has stopped.`,
             });
           }
           yield* destroyComputeService(output.serviceId);
@@ -1112,34 +1135,24 @@ const ProviderLive = () =>
     }),
   );
 
-/**
- * Wait, up to the service's `timeoutSeconds`, for its versions that are
- * stopping to stop, and return the IDs of those still stopping.
- */
-const waitForStoppingVersions = Effect.fn(function* (
-  serviceId: string,
-  props: Pick<ComputeServiceProps, "timeoutSeconds" | "pollIntervalMs"> | undefined,
-) {
-  const timeoutMs = (props?.timeoutSeconds ?? 60) * 1_000;
-  const intervalMs = Math.max(props?.pollIntervalMs ?? 1_000, 1);
-  const stoppingNow = Effect.gen(function* () {
-    const versions = yield* listServiceVersions(serviceId);
-    const statuses = yield* Effect.forEach(versions, (version) =>
-      observeDeployment(version.id).pipe(
-        Effect.map((observed) => ({ id: version.id, status: observed.status })),
-        Effect.catchTag("NotFound", () => Effect.succeed({ id: version.id, status: "gone" })),
-      ),
-    );
-    return statuses.filter((version) => version.status === "stopping").map((version) => version.id);
-  });
-  const startedAt = yield* Clock.currentTimeMillis;
-  while (true) {
-    const stopping = yield* stoppingNow;
-    const elapsed = (yield* Clock.currentTimeMillis) - startedAt;
-    if (stopping.length === 0 || elapsed >= timeoutMs) return stopping;
-    yield* Effect.sleep(Duration.millis(Math.min(intervalMs, timeoutMs - elapsed)));
-  }
-});
+const notDeleted = (serviceId: string, stopping: readonly string[]) =>
+  `Prisma Compute service '${serviceId}' was not deleted: its version${stopping.length === 1 ? "" : "s"} ${stopping.map((id) => `'${id}'`).join(", ")} ${stopping.length === 1 ? "is" : "are"} still stopping on the platform, and only a stopped version can be deleted.`;
+
+/** Stop and delete a version, or report that the platform is still stopping it. */
+const deleteVersionUnlessStopping = (
+  versionId: string,
+  timing: { timeoutSeconds: number; pollIntervalMs?: number },
+) =>
+  destroyComputeVersion(versionId, timing).pipe(
+    Effect.as("deleted" as const),
+    Effect.catchIf(
+      (error) =>
+        error instanceof PrismaComputeVersionWaitTimeout ||
+        (error instanceof PrismaComputeVersionDeleteFailed &&
+          Predicate.isTagged(error.cause, "Conflict")),
+      () => Effect.succeed("stopping" as const),
+    ),
+  );
 
 const ProviderLocal = () =>
   devProvider(
