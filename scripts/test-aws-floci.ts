@@ -206,7 +206,6 @@ const flociFixedValues: Record<string, string> = {
   AWS_TEST_MAILMANAGER_ADDONS: "1",
   AWS_TEST_MEDIACONNECT: "1",
   AWS_TEST_MEDIALIVE: "1",
-  MPV2_SWEEP: "1",
   AWS_TEST_MEDICAL_IMAGING: "1",
   AWS_TEST_OMICS: "1",
   AWS_TEST_PINPOINT_SMS: "1",
