@@ -220,8 +220,8 @@ export class Echo extends Cloudflare.Container<Echo>()("Echo", {
 ```
 
 `context` builds `<context>/Dockerfile` unless you set `dockerfile`. A
-relative `dockerfile` path is resolved against `context`, like `docker
-build`. A relative `context` is resolved against the working directory of
+relative `dockerfile` path is resolved against `context`, like Docker
+Compose. A relative `context` is resolved against the working directory of
 the process that runs the stack, so build it from `import.meta.dirname` to
 keep it independent of where you run `alchemy`.
 

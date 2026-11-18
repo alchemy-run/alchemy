@@ -35,40 +35,6 @@ const readinessSchedule = Schedule.min([
  * `main` entrypoint" because it only handled the Effect-native variant).
  * The DO proxies a request to the echo server running inside the container.
  */
-/**
- * #3320: a relative `dockerfile` resolves against `context` (it used to
- * resolve against the working directory and failed with `NotFound`), and an
- * absolute `dockerfile` is used as-is.
- */
-describe(
-  "local container dockerfile path",
-  {
-    tags: [
-      "provider:cloudflare",
-      "provider:cloudflare:container",
-      "provider:cloudflare:worker",
-      "local",
-    ],
-  },
-  () => {
-    test.provider(
-      "resolves a relative dockerfile against context",
-      (stack) =>
-        Effect.gen(function* () {
-          yield* stack.destroy();
-          const { worker } = yield* stack.deploy(
-            Effect.gen(function* () {
-              return { worker: yield* DockerfilePathWorker };
-            }),
-          );
-          expect(worker.url).toMatch(/^http:\/\/localhost:/);
-          yield* stack.destroy();
-        }).pipe(logLevel),
-      { timeout: TEST_TIMEOUT },
-    );
-  },
-);
-
 describe(
   "local remote container (image)",
   {
@@ -109,6 +75,41 @@ describe(
         expect(body).toContain("method");
       }).pipe(logLevel),
       { tags: ["local"], timeout: TEST_TIMEOUT },
+    );
+  },
+);
+
+/**
+ * #3320: a relative `dockerfile` resolves against `context` (it used to
+ * resolve against the working directory and failed with `NotFound`), and an
+ * absolute `dockerfile` is used as-is.
+ */
+describe(
+  "local container dockerfile path",
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:container",
+      "provider:cloudflare:worker",
+      "local",
+    ],
+  },
+  () => {
+    test.provider(
+      "resolves a relative dockerfile against context",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          // The deploy is the assertion: before #3320 it failed resolving the Dockerfile.
+          const { worker } = yield* stack.deploy(
+            Effect.gen(function* () {
+              return { worker: yield* DockerfilePathWorker };
+            }),
+          );
+          expect(worker.url).toMatch(/^http:\/\/localhost:/);
+          yield* stack.destroy();
+        }).pipe(logLevel),
+      { timeout: 120_000 },
     );
   },
 );

@@ -63,7 +63,7 @@ export const waitForContainerImage = <E, R>(options: {
 
 /**
  * Real-path a user-supplied build `context` and `dockerfile`. A relative
- * `dockerfile` resolves against `context`, like `docker build` and Compose.
+ * `dockerfile` resolves against `context`, like Docker Compose.
  * Defaults to `<context>/Dockerfile`.
  */
 export const resolveContainerBuildPaths = Effect.fn(function* (props: {
@@ -73,9 +73,8 @@ export const resolveContainerBuildPaths = Effect.fn(function* (props: {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const context = yield* fs.realPath(props.context ?? ".");
-  const dockerfile =
-    props.dockerfile === undefined
-      ? path.join(context, "Dockerfile")
-      : yield* fs.realPath(path.resolve(context, props.dockerfile));
+  const dockerfile = props.dockerfile
+    ? yield* fs.realPath(path.resolve(context, props.dockerfile))
+    : path.join(context, "Dockerfile");
   return { context, dockerfile };
 });
