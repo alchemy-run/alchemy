@@ -1,14 +1,18 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Fly from "@alchemy.run/fly";
 import { resolveOrgSlug } from "@alchemy.run/fly/Environment";
+import { ACTION_ALL, attenuate } from "@alchemy.run/fly/Macaroon";
 import { expect, describe } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import { scratchStack } from "@alchemy.run/test/Core";
+import { Credentials } from "@distilled.cloud/fly-io";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Provider from "alchemy/Provider";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
@@ -450,6 +454,61 @@ describe.concurrent("Service", () => {
 
         yield* stack.destroy();
         expect(yield* appGone(moved.appName)).toBe(true);
+      }).pipe(logLevel),
+    { tags: ownedTags, timeout: 300_000 },
+  );
+
+  test.provider(
+    "a token restricted to its App deploys a Service into it",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const site = Effect.gen(function* () {
+          const app = yield* Fly.App("RestrictedSite");
+          yield* Fly.IpAssignment("RestrictedShared", { app, type: "shared_v4" });
+          return app;
+        });
+        const app = yield* stack.deploy(site);
+
+        // The org token, narrowed offline to this App as `fly tokens attenuate` would.
+        const { apiKey, apiBaseUrl } = yield* yield* Credentials;
+        const { internal_numeric_id } = yield* machines.getApp({ app_name: app.appName });
+        const restricted = Option.getOrThrow(
+          yield* attenuate(apiKey, [
+            { type: "Apps", apps: new Map([[internal_numeric_id!, ACTION_ALL]]) },
+          ]),
+        );
+        const restrictedCredentials = Effect.succeed({ apiKey: restricted, apiBaseUrl });
+
+        // Fly refuses such a token an App deploy token, so the image push can't need one.
+        const minted = yield* machines
+          .createAppDeployToken({ app_name: app.appName })
+          .pipe(Effect.provideService(Credentials, restrictedCredentials), Effect.flip);
+        expect(minted._tag).toEqual("Unauthorized");
+
+        // Fly won't let a token restricted to Apps manage the org's remote
+        // builders, so the image builds locally.
+        const deployer = scratchStack(
+          {
+            providers: Layer.succeed(Credentials, restrictedCredentials).pipe(
+              Layer.provideMerge(Fly.providers()),
+            ),
+            stage: stack.stage,
+          },
+          "a token restricted to its App deploys a Service into it",
+          "test/Fly/Service.test.ts",
+        );
+        expect(deployer.name).toEqual(stack.name);
+        const echo = yield* deployer.deploy(
+          Effect.gen(function* () {
+            return yield* Echo({ app: yield* site, build: { remote: false } }, "RestrictedEcho");
+          }),
+        );
+        expect(echo.appName).toEqual(app.appName);
+        expect(yield* getText(echo.url!)).toEqual(ECHO_BODY);
+
+        yield* stack.destroy();
+        expect(yield* appGone(app.appName)).toBe(true);
       }).pipe(logLevel),
     { tags: ownedTags, timeout: 300_000 },
   );
