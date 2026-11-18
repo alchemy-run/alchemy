@@ -765,7 +765,7 @@ export const isCompute = (value: unknown): value is Compute =>
  *   entrypoint: "server.ts",
  *   env: {
  *     LOG_LEVEL: "info",
- *     API_TOKEN: Redacted.make(process.env.API_TOKEN!),
+ *     API_TOKEN: yield* Config.redacted("API_TOKEN"),
  *     // `null` declares no variable; one declared before is deleted.
  *     LEGACY_FLAG: null,
  *   },

@@ -39,6 +39,14 @@ export class PrismaComputeVersionFailed extends Data.TaggedError("PrismaComputeV
   message: string;
 }> {}
 
+/** The platform refused to delete a version because it has not finished stopping. */
+export class PrismaComputeVersionStillStopping extends Data.TaggedError(
+  "PrismaComputeVersionStillStopping",
+)<{
+  message: string;
+  cause?: unknown;
+}> {}
+
 /** Deleting a deployment failed; the message names the manual cleanup routes. */
 export class PrismaComputeVersionDeleteFailed extends Data.TaggedError(
   "PrismaComputeVersionDeleteFailed",
@@ -244,7 +252,14 @@ export const destroyComputeVersion = Effect.fn(function* (
 
   yield* deleteDeployment({ deploymentId: versionId }).pipe(
     Effect.catchTag("NotFound", () => Effect.void),
-    Effect.mapError((error) => deploymentDeleteFailed(versionId, statusAtDelete, error)),
+    Effect.mapError((error) =>
+      error._tag === "Conflict"
+        ? new PrismaComputeVersionStillStopping({
+            message: `Prisma Compute version '${versionId}' is still stopping on the platform, and only a stopped version can be deleted.`,
+            cause: error,
+          })
+        : deploymentDeleteFailed(versionId, statusAtDelete, error),
+    ),
   );
 
   return {

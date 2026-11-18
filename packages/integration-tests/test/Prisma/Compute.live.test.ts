@@ -435,7 +435,7 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:prisma", "provider:prisma:compute", "provider:prisma:project", "live"],
-    timeout: 900_000,
+    timeout: 240_000,
   },
 );
 

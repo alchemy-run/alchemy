@@ -146,7 +146,7 @@ const app = yield* Prisma.Compute("api", {
   path: "./app",
   env: {
     LOG_LEVEL: "info",
-    API_TOKEN: Redacted.make(process.env.API_TOKEN!),
+    API_TOKEN: yield* Config.redacted("API_TOKEN"),
     LEGACY_FLAG: null,
   },
 });
@@ -248,9 +248,20 @@ export default Api.make(
 
 ```typescript
 // alchemy.run.ts
+import * as Prisma from "@alchemy.run/prisma";
+import * as Alchemy from "alchemy";
+import * as RemovalPolicy from "alchemy/RemovalPolicy";
+import * as Effect from "effect/Effect";
 import ApiLive, { Api } from "./src/Api.ts";
 
-const api = yield* Api.pipe(Effect.provide(ApiLive), RemovalPolicy.retain());
+export default Alchemy.Stack(
+  "App",
+  { providers: Prisma.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* Api.pipe(Effect.provide(ApiLive), RemovalPolicy.retain());
+    return { url: api.url };
+  }),
+);
 ```
 
 ## Custom domains

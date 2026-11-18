@@ -143,7 +143,7 @@ test.provider(
       }
       yield* expectProjectGone(first.project.projectId);
     }).pipe(Effect.scoped),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 240_000 },
 );
 
 test.provider(
@@ -183,5 +183,5 @@ test.provider(
       yield* stack.destroy();
       yield* expectProjectGone(deployed.project.projectId);
     }).pipe(Effect.scoped),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 240_000 },
 );

@@ -19,14 +19,7 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
-import {
-  destroyComputeService,
-  destroyComputeVersion,
-  PrismaComputeVersionDeleteFailed,
-  PrismaComputeVersionWaitTimeout,
-  toComputeUrl,
-} from "./ComputeLifecycle.ts";
+import { destroyComputeService, destroyComputeVersion, toComputeUrl } from "./ComputeLifecycle.ts";
 import type { ComputeVersion } from "./ComputeVersion.ts";
 import { desiredBranchId } from "./internal/Branches.ts";
 import { observeDeployment } from "./internal/DeploymentObserve.ts";
@@ -1197,12 +1190,8 @@ const deleteVersionUnlessStopping = (
 ) =>
   destroyComputeVersion(versionId, timing).pipe(
     Effect.as("deleted" as const),
-    Effect.catchIf(
-      (error) =>
-        error instanceof PrismaComputeVersionWaitTimeout ||
-        (error instanceof PrismaComputeVersionDeleteFailed &&
-          Predicate.isTagged(error.cause, "Conflict")),
-      () => Effect.succeed("stopping" as const),
+    Effect.catchTag(["PrismaComputeVersionWaitTimeout", "PrismaComputeVersionStillStopping"], () =>
+      Effect.succeed("stopping" as const),
     ),
   );
 

@@ -31,9 +31,7 @@ platform's rollback can serve it again in seconds.
   caption="Version A serves until version B passes its own check and is promoted. A is kept, so a rollback returns to it."
 />
 
-`Prisma.Compute` declares the service and its versions for you. The
-sections below use the resources it is made of: `Prisma.ComputeService`,
-`Prisma.ComputeVersion` and `Prisma.ComputeArtifact`.
+`Prisma.Compute` declares the service and its versions for you, from `Prisma.ComputeService`, `Prisma.ComputeVersion` and `Prisma.ComputeArtifact`. You can also declare them yourself.
 
 ## Build an archive
 
@@ -45,17 +43,22 @@ next to the files it names. The platform runs `entrypoint` with Bun and sets
 { "manifestVersion": "1", "entrypoint": "server.js" }
 ```
 
-An archive without the manifest fails before a version is created. Build one
-with `createComputeArchive`, or let `Prisma.ComputeArtifact` build it, as
-shown below:
+An archive without the manifest fails before a version is created. Let `Prisma.ComputeArtifact` build it, or build one with `createComputeArchive`:
 
 ```typescript
+// scripts/archive.ts
 import { createComputeArchive } from "@alchemy.run/prisma/ComputeArchive";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 
-const fs = yield* FileSystem.FileSystem;
-const archive = yield* createComputeArchive({ directory: "./build", entrypoint: "server.js" });
-yield* fs.writeFile("./dist/app.tar.gz", archive);
+const writeArchive = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const archive = yield* createComputeArchive({ directory: "./build", entrypoint: "server.js" });
+  yield* fs.writeFile("./dist/app.tar.gz", archive);
+});
+
+Effect.runPromise(writeArchive.pipe(Effect.provide(NodeServices.layer)));
 ```
 
 ## Serve a version

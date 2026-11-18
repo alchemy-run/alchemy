@@ -19,7 +19,6 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import {
   destroyComputeVersion,
-  PrismaComputeVersionWaitTimeout,
   toComputeUrl,
   waitForComputeVersionStatus,
 } from "./ComputeLifecycle.ts";
@@ -80,22 +79,18 @@ const CLEANUP_STOP_WAIT_SECONDS = 30;
 const cleanupStopWaitSeconds = (props: { readonly timeoutSeconds?: number }) =>
   Math.min(CLEANUP_STOP_WAIT_SECONDS, props.timeoutSeconds ?? CLEANUP_STOP_WAIT_SECONDS);
 
-const messageOf = (error: unknown) =>
-  error instanceof Error || (typeof error === "object" && error !== null && "message" in error)
-    ? String((error as { message: unknown }).message)
-    : String(error);
-
 const versionNotRemovedMessage = (
   versionId: string,
   waitedSeconds: number,
-  failure: unknown,
-  cleanupError: unknown,
+  failure: { readonly message: string },
+  cleanupError: { readonly _tag: string; readonly message: string },
 ) => {
   const reason =
-    cleanupError instanceof PrismaComputeVersionWaitTimeout
+    cleanupError._tag === "PrismaComputeVersionWaitTimeout" ||
+    cleanupError._tag === "PrismaComputeVersionStillStopping"
       ? `the platform was still stopping it after ${waitedSeconds} s, and only a stopped version can be deleted`
-      : `deleting it failed: ${messageOf(cleanupError).replace(" Run the command again, or delete the version in the Prisma Console.", "").replace(/\.$/, "")}`;
-  return `${messageOf(failure).replace(/\.$/, "")}. Alchemy then stopped Prisma Compute version '${versionId}', which this deploy created, to remove it, but ${reason}. The version is not served, and Alchemy no longer tracks it: delete it in the Prisma Console once it has stopped. The platform can keep a version stopping for hours; deleting the service's project removes it with everything else.`;
+      : `deleting it failed: ${cleanupError.message.replace(" Run the command again, or delete the version in the Prisma Console.", "").replace(/\.$/, "")}`;
+  return `${failure.message.replace(/\.$/, "")}. Alchemy then stopped Prisma Compute version '${versionId}', which this deploy created, to remove it, but ${reason}. The version is not served, and Alchemy no longer tracks it: delete it in the Prisma Console once it has stopped. The platform can keep a version stopping for hours; deleting the service's project removes it with everything else.`;
 };
 
 export class ComputeVersionOperationFailed extends Data.TaggedError(
@@ -907,7 +902,10 @@ const ProviderLive = () =>
           let createdDeploymentId: string | undefined;
           // A version created by this reconcile that then fails is not in
           // state, so it is removed here or not at all.
-          const cleanupCreatedDeploymentOnFailure = <E>(failedDeploymentId: string, error: E) =>
+          const cleanupCreatedDeploymentOnFailure = <E extends { readonly message: string }>(
+            failedDeploymentId: string,
+            error: E,
+          ) =>
             createdDeploymentId === failedDeploymentId
               ? note(
                   `Version '${failedDeploymentId}' failed; stopping and deleting it, waiting up to ${cleanupStopWaitSeconds(news)} s for it to stop.`,
@@ -1063,12 +1061,12 @@ const ProviderLive = () =>
           }
           yield* destroyComputeVersion(output.versionId).pipe(
             // The stop was requested; it finishes once open connections close.
-            Effect.catchIf(
-              (error) => error instanceof PrismaComputeVersionWaitTimeout,
+            Effect.catchTag(
+              ["PrismaComputeVersionWaitTimeout", "PrismaComputeVersionStillStopping"],
               (error) =>
                 Effect.fail(
                   new Provider.DeleteInProgress({
-                    message: `${error.message}. Prisma Compute drains open connections before it stops a deployment, and only a stopped deployment can be deleted.`,
+                    message: `${error.message.replace(/\.$/, "")}. Prisma Compute drains open connections before it stops a deployment, and only a stopped deployment can be deleted.`,
                   }),
                 ),
             ),

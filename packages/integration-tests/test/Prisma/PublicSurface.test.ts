@@ -144,6 +144,7 @@ const publicExports = [
   "PrismaClientLive",
   "PrismaComputeVersionFailed",
   "PrismaComputeVersionWaitInvalidOptions",
+  "PrismaComputeVersionStillStopping",
   "PrismaComputeVersionWaitTimeout",
   "PrismaLogStreamError",
   "listWorkspaces",

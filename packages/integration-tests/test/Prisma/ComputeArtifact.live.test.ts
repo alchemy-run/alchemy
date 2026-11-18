@@ -120,5 +120,5 @@ test.provider(
       yield* expectProjectGone(first.project.projectId);
       expect(yield* fs.exists(first.artifact.artifactPath)).toBe(false);
     }).pipe(Effect.scoped),
-  { tags, timeout: 900_000 },
+  { tags, timeout: 240_000 },
 );
