@@ -30,10 +30,10 @@
   flex: 1;
   min-width: 0;
 }
-/* "Your machine" over the first two tabs, "CI/CD" over the rest. */
+/* "Your machine" over the first three tabs, "CI/CD" over the rest. */
 .prf-groups {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
   padding: 0 5px 6px;
 }
@@ -138,7 +138,7 @@
 .prf-tabs {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
   border: 1px solid var(--alc-hairline-2);

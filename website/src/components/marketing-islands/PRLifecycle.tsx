@@ -9,7 +9,7 @@ import {
 } from "react";
 import { yantraSvg } from "../../brand/yantra";
 import { prefersReducedMotion, useSpinner } from "./_terminal";
-import { AgentPane, EDIT_MS, EditorPane, LIVE_SPEED, LOCAL_MS } from "./LocalLoop";
+import { AgentPane, EditorPane, LIVE_SPEED, LOCAL_MS, PROVE_MS, SPECIFY_MS } from "./LocalLoop";
 import "./PRLifecycle.css";
 
 /*
@@ -28,11 +28,12 @@ import "./PRLifecycle.css";
  * can be jumped to directly from the tab bar.
  */
 
-type StepId = "edit" | "local" | "open" | "deploy" | "test" | "merge";
+type StepId = "specify" | "prove" | "local" | "open" | "deploy" | "test" | "merge";
 type Status = "queued" | "running" | "success";
 
 const STEPS: { id: StepId; label: string; ms: number }[] = [
-  { id: "edit", label: "Model", ms: EDIT_MS },
+  { id: "specify", label: "Specify", ms: SPECIFY_MS },
+  { id: "prove", label: "Prove", ms: PROVE_MS },
   { id: "local", label: "Iterate locally", ms: LOCAL_MS },
   { id: "open", label: "PR opened", ms: 2600 },
   { id: "deploy", label: "Deploy", ms: 14550 },
@@ -42,7 +43,7 @@ const STEPS: { id: StepId; label: string; ms: number }[] = [
 
 // The tab bar's headers. Each fills as the animation moves through its steps.
 const GROUPS = [
-  { label: "Your machine", steps: 2 },
+  { label: "Your machine", steps: 3 },
   { label: "CI/CD", steps: 4 },
 ];
 
@@ -180,10 +181,15 @@ const secs = (t: number, from: number) => `${Math.max(0, (t - from) / 1000).toFi
  */
 const TIMING: Record<StepId, { badge: string; tone: "real" | "scaled" | "staged"; note: string }> =
   {
-    edit: {
+    specify: {
       badge: "Staged",
       tone: "staged",
-      note: "The agent's typing is staged. Stories and proofs run in memory, with nothing deployed.",
+      note: "The agent's typing is staged. A story runs in memory, with nothing deployed.",
+    },
+    prove: {
+      badge: "Staged",
+      tone: "staged",
+      note: "The agent's typing is staged. The proof covers every state and input, not only the cases with a story.",
     },
     local: {
       badge: `Measured · ${LIVE_SPEED}× speed`,
@@ -439,7 +445,7 @@ export default function PRLifecycle() {
         </div>
 
         <div className="prf-stage" id="prf-panel" role="tabpanel" aria-labelledby={`prf-tab-${id}`}>
-          {id === "edit" || id === "local" ? (
+          {id === "specify" || id === "prove" || id === "local" ? (
             <>
               <div className="prf-side">
                 <EditorPane id={id} t={t} />
@@ -921,7 +927,7 @@ function TestLog({ t }: { t: number }) {
   const checkSpin = useSpin(t < T_TESTS[0]![0]);
   const lines: ReactNode[] = [
     <>
-      <span className="prf-muted">$ </span>alchemy test test/preview.test.ts
+      <span className="prf-muted">$ </span>alchemy test
     </>,
     <span className="prf-muted">
       PREVIEW_URL=<span className="prf-hl">https://{HOST}</span>
@@ -936,6 +942,15 @@ function TestLog({ t }: { t: number }) {
       </span>
     </>,
   ];
+  if (t >= T_TESTS[0]![0])
+    lines.push(
+      <>
+        <span className="prf-log__icon" style={{ color: GREEN }}>
+          ✓
+        </span>
+        14 stories · 6 rules proved<span className="prf-muted"> · in memory</span>
+      </>,
+    );
   TESTS.forEach((x, i) => {
     const [a, b] = T_TESTS[i]!;
     if (t < a) return;
@@ -959,13 +974,13 @@ function TestLog({ t }: { t: number }) {
   if (t >= T_TESTS_DONE) {
     lines.push(
       <>
-        <span style={{ color: GREEN }}>3 pass</span>
+        <span style={{ color: GREEN }}>17 pass</span>
         <span className="prf-muted"> · </span>0 fail
         <span className="prf-muted"> · 4.8s</span>
       </>,
     );
   }
-  return <Log lines={lines} rows={7} />;
+  return <Log lines={lines} rows={8} />;
 }
 
 function DestroyLog({ t }: { t: number }) {
