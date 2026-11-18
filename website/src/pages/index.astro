@@ -906,24 +906,17 @@ const PROVIDERS = [
   .v2-hero__copy {
     position: relative;
   }
-  /* Fades the rings behind the headline and subtitle so they stay
-     readable; the mark sits near the edge so the rings still read as
-     emanating from it. */
+  /* A solid veil with soft edges hides the rings behind the headline,
+     subtitle and buttons. It starts below the mark, so the rings still read
+     as emanating from it. */
   .v2-hero__copy::before {
     content: "";
     position: absolute;
-    inset: -60px -160px -90px -160px;
+    inset: 76px 0 0 0;
     z-index: -1;
     pointer-events: none;
-    /* Same stops as the original centered hero's halo (.alc-hero::after),
-       centered on the headline + subtitle. */
-    background: radial-gradient(
-      closest-side at 50% 62%,
-      color-mix(in srgb, var(--alc-bg) 98%, transparent) 0%,
-      color-mix(in srgb, var(--alc-bg) 94%, transparent) 50%,
-      color-mix(in srgb, var(--alc-bg) 68%, transparent) 78%,
-      transparent 100%
-    );
+    background: var(--alc-bg);
+    box-shadow: 0 0 44px 40px var(--alc-bg);
   }
   /* Below this the right column is too narrow for the terminal to overlap
      the code, so the hero stacks. */
@@ -952,24 +945,9 @@ const PROVIDERS = [
     .v2-hero__visual :global(.v2-hero__term) {
       display: none;
     }
-    /* The copy fills the screen width here, so the desktop halo can't fade
-       the rings at its edges. A blurred veil covering the whole copy block
-       keeps the white text readable over the animation. */
+    /* Less room around the copy here, so the veil's soft edge is tighter. */
     .v2-hero__copy::before {
-      inset: -28px -32px;
-      background: color-mix(in srgb, var(--alc-bg) 68%, transparent);
-      -webkit-backdrop-filter: blur(4px);
-      backdrop-filter: blur(4px);
-      -webkit-mask-image: radial-gradient(
-        farthest-side at 50% 50%,
-        #000 72%,
-        transparent 100%
-      );
-      mask-image: radial-gradient(
-        farthest-side at 50% 50%,
-        #000 72%,
-        transparent 100%
-      );
+      box-shadow: 0 0 28px 24px var(--alc-bg);
     }
     /* Equal-width, stacked CTAs. */
     .v2-hero__copy :global(.alc-hero__cta) {
