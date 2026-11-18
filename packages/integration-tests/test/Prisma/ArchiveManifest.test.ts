@@ -93,6 +93,31 @@ describe(
       }).pipe(Effect.provide(PlatformServices)),
     );
 
+    it.live("reports gzip data damaged mid-stream as corrupt, promptly, and closes the file", () =>
+      Effect.gen(function* () {
+        const archive = gzip(tarArchive([server, big, manifest]));
+        const damaged = new Uint8Array(archive);
+        const middleByte = Math.floor(damaged.length / 2);
+        for (let index = middleByte; index < middleByte + 4096; index++) damaged[index] ^= 0xff;
+        const { result } = yield* check(damaged);
+        expect(result._tag).toBe("Corrupt");
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+
+    it.live("reports an uncompressed archive as not gzip, promptly, and closes the file", () =>
+      Effect.gen(function* () {
+        const { result } = yield* check(tarArchive([manifest, server, big]));
+        expect(result._tag).toBe("NotGzip");
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+
+    it.live("reads old-GNU headers, whose name-prefix bytes hold timestamps", () =>
+      Effect.gen(function* () {
+        const { result } = yield* check(gzip(tarArchive([server, big, manifest], "gnu")));
+        expect(result).toEqual({ _tag: "Found", entrypoint: "server.js" });
+      }).pipe(Effect.provide(PlatformServices)),
+    );
+
     // Live clock: the test sleeps while the read runs.
     it.live("closes the file when the read is interrupted", () =>
       Effect.gen(function* () {

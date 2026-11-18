@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { constants, type BigIntStats } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
-import { createGunzip } from "node:zlib";
+import { createGunzip, type Gunzip } from "node:zlib";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -232,7 +232,9 @@ const tarString = (block: Uint8Array, start: number, length: number) => {
 
 const tarEntryName = (header: Uint8Array) => {
   const name = tarString(header, 0, 100);
-  const prefix = tarString(header, 345, 155);
+  // Only a POSIX ustar header ("ustar\0") has a name prefix there; old GNU
+  // headers ("ustar  ") keep timestamps in those bytes.
+  const prefix = tarString(header, 257, 6) === "ustar" ? tarString(header, 345, 155) : "";
   const full = prefix.length > 0 ? `${prefix}/${name}` : name;
   return full.replace(/^\.\//, "");
 };
@@ -322,9 +324,30 @@ const readError = toArtifactFileError(
  * and the decompressor destroyed before this returns.
  *
  * Each file chunk is handed to the decompressor and its output consumed as it
- * is produced, so the decompressor never applies backpressure, and a write's
- * callback runs even after it is destroyed. No wait here can outlive its stream.
+ * is produced, so the decompressor never applies backpressure. Every wait ends
+ * when the decompressor fails or closes, so none can outlive its stream.
  */
+/**
+ * Run `start` and wait until it calls `done`, or the stream fails or closes.
+ * Bun does not call a write's callback after a decompression error, so the
+ * stream's own events end the wait too.
+ */
+const settle = (stream: Gunzip, start: (done: () => void) => void) =>
+  Effect.callback<void>((resume) => {
+    let finished = false;
+    const done = () => {
+      if (finished) return;
+      finished = true;
+      stream.off("error", done);
+      stream.off("close", done);
+      resume(Effect.void);
+    };
+    stream.once("error", done);
+    stream.once("close", done);
+    if (stream.destroyed) done();
+    else start(done);
+  });
+
 export const findArchiveManifest = (artifact: VerifiedFile) =>
   Effect.gen(function* () {
     const reader = manifestReader();
@@ -357,18 +380,14 @@ export const findArchiveManifest = (artifact: VerifiedFile) =>
               return false;
             }
           }
-          yield* Effect.callback<void>((resume) => {
-            gunzip.write(chunk, () => resume(Effect.void));
-          });
+          yield* settle(gunzip, (done) => gunzip.write(chunk, done));
           return !settled();
         }),
     );
     if (notGzip || first) return { _tag: "NotGzip" } as const;
     if (!settled()) {
-      yield* Effect.callback<void>((resume) => {
-        const done = () => resume(Effect.void);
+      yield* settle(gunzip, (done) => {
         gunzip.once("end", done);
-        gunzip.once("error", done);
         gunzip.end();
       });
     }
