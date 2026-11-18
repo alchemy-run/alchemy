@@ -1052,6 +1052,59 @@
   font-size: 9px;
 }
 
+.prf-bank {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  overflow: hidden;
+}
+.prf-bank__balance {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.prf-bank__label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b5c45;
+}
+.prf-bank__amount {
+  font-family: var(--alc-font-serif);
+  font-size: 30px;
+  font-weight: 600;
+  animation: prf-fade 240ms ease both;
+}
+.prf-bank__reject {
+  padding: 6px 10px;
+  border-left: 2px solid #b4452c;
+  border-radius: 4px;
+  background: rgba(180, 69, 44, 0.12);
+  color: #7a2a17;
+  font-size: 12px;
+}
+.prf-bank__rows {
+  display: flex;
+  flex-direction: column;
+}
+.prf-bank__row {
+  display: flex;
+  justify-content: space-between;
+  padding: 7px 0;
+  border-top: 1px solid rgba(42, 38, 32, 0.1);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.prf-bank__new {
+  position: static;
+  margin-left: 6px;
+  background: #3f5a2a;
+  color: #fbf6ea;
+}
+
 /* ---------- editor (edit, iterate locally) ---------- */
 .prf-edtabs {
   flex: none;
@@ -1174,6 +1227,9 @@
   padding-left: 1.4em;
   color: var(--alc-fg-invert);
   line-height: 1.5;
+}
+.prf-act__story {
+  white-space: pre;
 }
 
 /* ---------- responsive ---------- */

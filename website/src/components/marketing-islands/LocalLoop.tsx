@@ -4,9 +4,9 @@ import { useSpinner } from "./_terminal";
 
 /*
  * The two steps of the full-picture animation that run on your machine,
- * before the pull request: an agent edits the Worker and the type checker
- * catches the missing Layer, then the same test runs on emulated services
- * and against the real cloud.
+ * before the pull request: an agent adds a command to the bank's model and
+ * the proof finds the sequence that breaks a rule, then the same test runs
+ * on emulated services and against the real cloud.
  *
  * Left: the editor. Right: the agent's transcript. Like the CI steps,
  * every frame is derived from ms elapsed in the step.
@@ -14,15 +14,16 @@ import { useSpinner } from "./_terminal";
 
 export type LocalStepId = "edit" | "local";
 
-// ---------- Edit: add an upload route, hit the type error, fix it ----------
+// ---------- Model: add a command, break a rule, fix it ----------
 const T_PROMPT_DONE = 900;
 const T_EDIT1 = 1100;
-const T_A = [1250, 2050] as const; // typing `const photos = yield* Photos;`
-const T_B = [2150, 3250] as const; // typing the upload call
+const T_A = [1250, 2150] as const; // typing the command's signature
+const T_B = [2200, 3250] as const; // typing the event it records
 const T_CHECK1 = 3400;
 const T_ERROR = 3650;
 const T_EDIT2 = 5400;
-const T_C = [5550, 6550] as const; // typing `.pipe(Effect.provide([PhotosR2]))`
+const T_C1 = [5550, 6050] as const; // typing the balance check
+const T_C2 = [6100, 6550] as const; // typing the rejection
 const T_CHECK2 = 6700;
 const T_OK = 6950;
 export const EDIT_MS = 8800;
@@ -46,11 +47,19 @@ export const LOCAL_MS = T_PUSH + 1500;
 const GREEN = "var(--alc-accent-bright)";
 const RED = "var(--alc-danger)";
 
-const PROMPT = "add photo uploads to the API";
-const LINE_A = "    const photos = yield* Photos;";
-const LINE_B = "        yield* photos.upload(request.url, yield* request.text);";
-const PROVIDE = ".pipe(Effect.provide([PhotosR2]))";
-const ERROR = "Type 'Photos' is not assignable to type 'PlatformServices | WorkerServices'.";
+const PROMPT = "let customers withdraw money";
+const LINE_A = "    WithdrawMoney: (account, { amount }) =>";
+const LINE_B = "[new MoneyWithdrawn({ amount })],";
+const LINE_C1 = "      amount > account.balance";
+const LINE_C2 = "        ? new InsufficientFunds()";
+const RULE = "Account.NeverOverdrawn";
+// The shortest sequence that breaks the rule, written as a story.
+const COUNTEREXAMPLE = [
+  "given  AccountOpened, MoneyDeposited 50",
+  "when   WithdrawMoney 80",
+  "then   balance is -30",
+];
+const LIVE_TEST = "an overdraft is rejected over HTTP";
 
 const TEST_FILE = [
   "const { test, beforeAll, afterAll, deploy, destroy } = Test.make({",
@@ -61,10 +70,10 @@ const TEST_FILE = [
   "const stack = beforeAll(deploy(Stack));",
   "afterAll(destroy(Stack));",
   "",
-  'test("PUT + GET round-trips through R2", Effect.gen(function* () {',
+  `test("${LIVE_TEST}", Effect.gen(function* () {`,
   "  const { url } = yield* stack;",
-  "  const res = yield* HttpClient.get(`${url}/object/hello.txt`);",
-  '  expect(yield* res.text).toBe("hi!");',
+  '  const res = yield* withdraw(url, { account: "sam", amount: 80 });',
+  "  expect(res.status).toBe(409);",
   "}));",
 ];
 
@@ -110,41 +119,42 @@ function Chrome({
 /* Left: the editor                                                    */
 /* ------------------------------------------------------------------ */
 
-function apiLines(t: number): CodeLine[] {
+function modelLines(t: number): CodeLine[] {
   const error = t >= T_ERROR && t < T_OK;
+  const fixing = t >= T_C1[0];
   const lines: CodeLine[] = [
-    { text: "export default Cloudflare.Worker(" },
-    { text: '  "Api",' },
-    { text: "  { main: import.meta.url }," },
-    { text: "  Effect.gen(function* () {", error },
-  ];
-  if (t >= T_A[0])
-    lines.push({
+    { text: 'export class Account extends Domain.Aggregate("Account", {' },
+    { text: "  decide: {" },
+    {
       text: typed(LINE_A, T_A, t),
       added: true,
-      caret: typing(T_A, t),
+      caret: t < T_A[0] || typing(T_A, t),
+    },
+  ];
+  if (fixing)
+    lines.push({
+      text: typed(LINE_C1, T_C1, t),
+      added: true,
+      caret: typing(T_C1, t),
     });
-  lines.push(
-    { text: "    return {" },
-    { text: "      fetch: Effect.gen(function* () {" },
-    { text: "        const request = yield* HttpServerRequest;" },
-  );
+  if (t >= T_C2[0])
+    lines.push({
+      text: typed(LINE_C2, T_C2, t),
+      added: true,
+      caret: typing(T_C2, t),
+    });
   if (t >= T_B[0])
     lines.push({
-      text: typed(LINE_B, T_B, t),
+      text: (fixing ? "        : " : "      ") + typed(LINE_B, T_B, t),
       added: true,
       caret: typing(T_B, t),
     });
   lines.push(
-    { text: "        return HttpServerResponse.empty({ status: 201 });" },
-    { text: "      })," },
-    { text: "    };" },
-    {
-      text: `  })${typed(PROVIDE, T_C, t)},`,
-      added: t >= T_C[0],
-      caret: typing(T_C, t),
-    },
-    { text: ");" },
+    { text: "  }," },
+    { text: "  invariants: {" },
+    { text: "    NeverOverdrawn: ({ balance }) => balance >= 0,", error },
+    { text: "  }," },
+    { text: "}) {}" },
   );
   return lines;
 }
@@ -161,14 +171,16 @@ function testLines(t: number): CodeLine[] {
 }
 
 export function EditorPane({ id, t }: { id: LocalStepId; t: number }) {
-  const file = id === "edit" ? "src/api.ts" : "test/api.test.ts";
-  const lines = id === "edit" ? apiLines(t) : testLines(t);
+  const file = id === "edit" ? "src/Account.aggregate.ts" : "test/Bank.test.ts";
+  const lines = id === "edit" ? modelLines(t) : testLines(t);
   const errorAt = lines.findIndex((l) => l.error);
   return (
-    <Chrome title={<>my-app — {file}</>}>
+    <Chrome title={<>bank — {file}</>}>
       <div className="prf-edtabs" aria-hidden>
-        <span className={`prf-edtab ${id === "edit" ? "is-active" : ""}`}>api.ts</span>
-        <span className={`prf-edtab ${id === "local" ? "is-active" : ""}`}>api.test.ts</span>
+        <span className={`prf-edtab ${id === "edit" ? "is-active" : ""}`}>
+          Account.aggregate.ts
+        </span>
+        <span className={`prf-edtab ${id === "local" ? "is-active" : ""}`}>Bank.test.ts</span>
       </div>
       <div className="prf-code">
         {lines.map((l, i) => (
@@ -185,7 +197,8 @@ export function EditorPane({ id, t }: { id: LocalStepId; t: number }) {
             </div>
             {i === errorAt && (
               <div className="prf-diag prf-enter">
-                <span style={{ color: RED }}>✗</span> {ERROR}
+                <span style={{ color: RED }}>✗</span> a customer can overdraw: deposit 50, withdraw
+                80
               </div>
             )}
           </div>
@@ -266,13 +279,14 @@ export function AgentPane({ id, t, paused }: { id: LocalStepId; t: number; pause
   ];
 
   if (id === "edit") {
-    if (t >= T_EDIT1) items.push(<Action key="e1" title="Edit" detail="src/api.ts · +2 lines" />);
+    if (t >= T_EDIT1)
+      items.push(<Action key="e1" title="Edit" detail="src/Account.aggregate.ts · +2 lines" />);
     if (t >= T_CHECK1)
       items.push(
-        <Action key="c1" title="Type-check">
+        <Action key="c1" title="Run" detail="pnpm test">
           {t < T_ERROR ? (
             <Row done={false} spin={spin}>
-              checking
+              proving 6 rules
             </Row>
           ) : (
             <>
@@ -280,26 +294,39 @@ export function AgentPane({ id, t, paused }: { id: LocalStepId; t: number; pause
                 <span className="prf-log__icon" style={{ color: RED }}>
                   ✗
                 </span>
-                <span style={{ color: RED }}>1 error</span>
-                <span className="prf-muted"> · src/api.ts:4</span>
+                <span style={{ color: RED }}>1 rule broken</span>
+                <span className="prf-muted"> · {RULE}</span>
               </div>
-              <div className="prf-act__msg">{ERROR}</div>
+              <div className="prf-act__msg prf-act__story">
+                {COUNTEREXAMPLE.map((l) => (
+                  <div key={l}>{l}</div>
+                ))}
+              </div>
             </>
           )}
         </Action>,
       );
     if (t >= T_EDIT2)
-      items.push(<Action key="e2" title="Edit" detail="src/api.ts · provide PhotosR2" />);
+      items.push(
+        <Action key="e2" title="Edit" detail="src/Account.aggregate.ts · reject an overdraft" />,
+      );
     if (t >= T_CHECK2)
       items.push(
-        <Action key="c2" title="Type-check">
+        <Action key="c2" title="Run" detail="pnpm test">
           <Row done={t >= T_OK} spin={spin}>
-            {t >= T_OK ? "no errors" : "checking"}
+            {t >= T_OK ? "14 stories pass" : "proving 6 rules"}
           </Row>
+          {t >= T_OK && (
+            <Row done spin={spin}>
+              6 rules proved and checked
+            </Row>
+          )}
         </Action>,
       );
   } else {
-    items.push(<Action key="done-edit" title="Edit" detail="src/api.ts · type-checks" />);
+    items.push(
+      <Action key="done-edit" title="Edit" detail="src/Account.aggregate.ts · rules proved" />,
+    );
     if (t >= T_RUN1)
       items.push(
         <Action key="r1" title="Run" detail="LOCAL=1 pnpm test">
@@ -308,7 +335,7 @@ export function AgentPane({ id, t, paused }: { id: LocalStepId; t: number; pause
           </Row>
           {t >= T_EMU_TEST[0] && (
             <Row done={t >= T_EMU_TEST[1]} spin={spin}>
-              PUT + GET round-trips through R2
+              {LIVE_TEST}
             </Row>
           )}
           {t >= T_EMU_TEST[1] && (
@@ -333,7 +360,7 @@ export function AgentPane({ id, t, paused }: { id: LocalStepId; t: number; pause
           )}
           {t >= T_LIVE_TEST[0] && (
             <Row done={t >= T_LIVE_TEST[1]} spin={spin}>
-              PUT + GET round-trips through R2
+              {LIVE_TEST}
             </Row>
           )}
           {t >= T_DESTROY[0] && (
@@ -359,14 +386,14 @@ export function AgentPane({ id, t, paused }: { id: LocalStepId; t: number; pause
       );
     if (t >= T_PUSH)
       items.push(
-        <Action key="push" title="Push" detail="feature/photo-upload · open a pull request" />,
+        <Action key="push" title="Push" detail="feature/withdrawals · open a pull request" />,
       );
   }
 
   return (
     <Chrome
-      title="agent · my-app"
-      badge={id === "edit" ? { text: "TYPE-CHECK", tone: "sky" } : { text: "TEST", tone: "green" }}
+      title="agent · bank"
+      badge={id === "edit" ? { text: "PROVE", tone: "sky" } : { text: "TEST", tone: "green" }}
     >
       <div className="prf-agent" ref={listRef}>
         {items}
