@@ -277,8 +277,49 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(ToolsLive)),
   );
 
-  it.live("a write tool answers once the views have the command, so a read tool sees it", () => {
-    // Nothing reaches the view until the platform drains.
+  it.live(
+    "a write tool asked for strong answers once the views have the command, so a read tool sees it",
+    () => {
+      // Nothing reaches the view until the platform drains.
+      const hosted = InMemoryPlatform.make({ manual: true });
+      const settle: Effect.Effect<void> = Effect.gen(function* () {
+        while (true) {
+          yield* hosted.control.drain;
+          if (yield* hosted.control.idle) return;
+          yield* Effect.sleep("1 millis");
+        }
+      });
+      const deposit = (extra: object) =>
+        call(
+          "WalletApi_Deposit_send",
+          { input: { walletId: "sam-wallet", amount: 30 }, ...extra },
+          "sam",
+        );
+      const balance = call("WalletApi_Balance_get", { key: "sam-wallet" }, "sam");
+      return Effect.gen(function* () {
+        // The deploy is done: the view has its (empty) history.
+        yield* settle;
+        const sent = yield* deposit({ consistency: "strong" }).pipe(Effect.forkChild);
+        yield* Effect.sleep("100 millis");
+        expect(sent.pollUnsafe()).toBeUndefined();
+        // One drain is not enough: on a busy machine the command may not have committed yet.
+        while (sent.pollUnsafe() === undefined) {
+          yield* settle;
+          yield* Effect.sleep("5 millis");
+        }
+        expect((yield* Fiber.join(sent)).isFailure).toBe(false);
+        // The agent passes no receipt: the read has the deposit.
+        expect(yield* balance).toEqual({ isFailure: false, encoded: { value: { balance: 30 } } });
+        // Unless a tool call asks to wait, the view is a moment behind.
+        expect((yield* deposit({})).isFailure).toBe(false);
+        expect(yield* balance).toEqual({ isFailure: false, encoded: { value: { balance: 30 } } });
+        yield* settle;
+        expect(yield* balance).toEqual({ isFailure: false, encoded: { value: { balance: 60 } } });
+      }).pipe(Effect.provide(walletTools.layer.pipe(Layer.provideMerge(walletsOn(hosted.layer)))));
+    },
+  );
+
+  it.live("tools built with a strong default wait on every command", () => {
     const hosted = InMemoryPlatform.make({ manual: true });
     const settle: Effect.Effect<void> = Effect.gen(function* () {
       while (true) {
@@ -287,33 +328,32 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
         yield* Effect.sleep("1 millis");
       }
     });
-    const deposit = (extra: object) =>
-      call(
-        "WalletApi_Deposit_send",
-        { input: { walletId: "sam-wallet", amount: 30 }, ...extra },
-        "sam",
-      );
-    const balance = call("WalletApi_Balance_get", { key: "sam-wallet" }, "sam");
     return Effect.gen(function* () {
-      // The deploy is done: the view has its (empty) history.
       yield* settle;
-      const sent = yield* deposit({}).pipe(Effect.forkChild);
+      const sent = yield* call(
+        "WalletApi_Deposit_send",
+        { input: { walletId: "sam-wallet", amount: 30 } },
+        "sam",
+      ).pipe(Effect.forkChild);
       yield* Effect.sleep("100 millis");
       expect(sent.pollUnsafe()).toBeUndefined();
-      // One drain is not enough: on a busy machine the command may not have committed yet.
       while (sent.pollUnsafe() === undefined) {
         yield* settle;
         yield* Effect.sleep("5 millis");
       }
       expect((yield* Fiber.join(sent)).isFailure).toBe(false);
-      // The agent passes no receipt: the read has the deposit.
-      expect(yield* balance).toEqual({ isFailure: false, encoded: { value: { balance: 30 } } });
-      // A tool call can ask not to wait: the view is then a moment behind.
-      expect((yield* deposit({ consistency: "eventual" })).isFailure).toBe(false);
-      expect(yield* balance).toEqual({ isFailure: false, encoded: { value: { balance: 30 } } });
-      yield* settle;
-      expect(yield* balance).toEqual({ isFailure: false, encoded: { value: { balance: 60 } } });
-    }).pipe(Effect.provide(walletTools.layer.pipe(Layer.provideMerge(walletsOn(hosted.layer)))));
+      expect(yield* call("WalletApi_Balance_get", { key: "sam-wallet" }, "sam")).toEqual({
+        isFailure: false,
+        encoded: { value: { balance: 30 } },
+      });
+    }).pipe(
+      Effect.provide(
+        walletTools.layer.pipe(
+          Layer.provide(Layer.succeed(Domain.DefaultConsistency, "strong")),
+          Layer.provideMerge(walletsOn(hosted.layer)),
+        ),
+      ),
+    );
   });
 
   it.live("a rejection comes back as the tool's typed failure", () =>

@@ -1,3 +1,4 @@
+import * as Context from "effect/Context";
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import type { Annotations } from "./Annotations.ts";
@@ -42,13 +43,30 @@ export type ReplySchema<Reply extends Fields | undefined> = Reply extends Fields
   : undefined;
 
 /**
- * When a command answers. `"strong"`, the default, answers once every view
- * its events reach has applied them, so any read of a view after the answer
- * includes the command. `"eventual"` answers as soon as the events are
- * committed: the views apply them a moment later.
+ * When a command answers. `"eventual"`, the default, answers as soon as the
+ * events are committed: the views apply them a moment later. `"strong"`
+ * answers once every view its events reach has applied them, so any read of
+ * a view after the answer includes the command.
  */
 export const Consistency = Schema.Literals(["strong", "eventual"]);
 export type Consistency = typeof Consistency.Type;
+
+/**
+ * The `consistency` of every command a client sends without one. A client
+ * reads it once, when it is built, so provide it to the client or to its
+ * Layer.
+ *
+ * **Example:** A client whose commands wait for their views
+ * ```typescript
+ * const bank = yield* CustomerApi.clientHttp("https://bank.example.com/api").pipe(
+ *   Effect.provideService(Domain.DefaultConsistency, "strong"),
+ * );
+ * ```
+ */
+export const DefaultConsistency = Context.Reference<Consistency>(
+  "alchemy/Domain/DefaultConsistency",
+  { defaultValue: () => "eventual" },
+);
 
 /** What a client sends: an optional idempotency key, the input, and when to answer. */
 export type PayloadFields<F extends Fields> = {
@@ -218,18 +236,20 @@ const build = (tag: string, options: Options, rpc: Rpc.Any, annotations: Annotat
  * ```
  *
  * ### Choosing when it answers
- * Through an Api, a command answers once every view its events reach has
- * applied them, so a read of a view after the answer includes it. Pass
- * `consistency: "eventual"` to answer as soon as the events are committed.
- * A view that takes longer than 10 seconds fails the call with
- * `ConsistencyTimeout`; the command is committed all the same.
+ * A command answers as soon as its events are committed; the views apply
+ * them a moment later. Through an Api, pass `consistency: "strong"` to
+ * answer once every view the events reach has applied them, so a read of a
+ * view after the answer includes the command. A view that takes longer than
+ * 10 seconds fails the call with `ConsistencyTimeout`; the command is
+ * committed all the same. `Domain.DefaultConsistency` sets it for every
+ * command of a client.
  *
  * **Example:** Reading right after a command
  * ```typescript
- * yield* bank.DepositMoney({ accountId, amount: 500 });
+ * yield* bank.DepositMoney({ accountId, amount: 500 }, { consistency: "strong" });
  * const summary = yield* bank.AccountSummary.get(accountId); // includes the deposit
  *
- * const receipt = yield* bank.DepositMoney({ accountId, amount: 500 }, { consistency: "eventual" });
+ * const receipt = yield* bank.DepositMoney({ accountId, amount: 500 });
  * const later = yield* bank.AccountSummary.get(accountId, { atLeast: receipt });
  * ```
  *
@@ -304,7 +324,7 @@ export const make = <
       version: Schema.Number,
       commits: Schema.Array(Commit),
     }),
-    // A command that committed can still time out waiting for a view (`consistency`).
+    // A command that committed can still time out waiting for a view (`consistency: "strong"`).
     error: Schema.Union([...rejects, View.ConsistencyTimeout]),
   });
   return build(

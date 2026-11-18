@@ -271,12 +271,12 @@ export interface CommandOptions extends CallOptions {
   /** A resend with the same id returns the first receipt instead of deciding again. */
   readonly commandId?: string;
   /**
-   * When the command answers. `"strong"` answers once every view its events
-   * reach has applied them: any read of a view after the answer includes the
-   * command. If a view takes longer than 10 seconds the call fails with
-   * `ConsistencyTimeout`, though the command is committed. `"eventual"`
-   * answers as soon as the events are committed.
-   * @default "strong"
+   * When the command answers. `"eventual"` answers as soon as the events are
+   * committed. `"strong"` answers once every view its events reach has
+   * applied them: any read of a view after the answer includes the command.
+   * If a view takes longer than 10 seconds the call fails with
+   * `ConsistencyTimeout`, though the command is committed.
+   * @default the client's `Domain.DefaultConsistency`, which is `"eventual"`
    */
   readonly consistency?: Command.Consistency;
 }
@@ -731,10 +731,10 @@ const handlersOf = (
           declared.effect(
             // oxlint-disable-next-line effecttsgo/new-schema-class -- `make` on a generic command class loses its instance type
             aggregate.send(new entry(input), { commandId }).pipe(
-              // The events are committed. Unless told not to, answer once the
-              // views have them, so a read after the answer includes the command.
+              // The events are committed. When asked to, answer once the views
+              // have them, so a read after the answer includes the command.
               Effect.tap((receipt) =>
-                consistency === "eventual" ? Effect.void : internals.applied(receipt),
+                consistency === "strong" ? internals.applied(receipt) : Effect.void,
               ),
               Effect.map((receipt) => ({
                 reply: receipt.reply,
@@ -1081,16 +1081,19 @@ const liveReads = (
 type Flat = Record<string, (payload: unknown, options?: CallOptions) => unknown>;
 
 /** Shape the flat Effect RPC client into commands and queries, plus view and stream namespaces. */
-const nest = (entries: ReadonlyArray<Servable>, flat: Flat): unknown => {
+const nest = (
+  entries: ReadonlyArray<Servable>,
+  flat: Flat,
+  defaultConsistency: Command.Consistency,
+): unknown => {
   const client: Record<string, unknown> = {};
   for (const entry of entries) {
     if (entry.kind === "Command") {
       const send = flat[entry.tag]!;
       client[entry.tag] = (
         input: object = {},
-        { commandId, consistency, ...options }: CommandOptions = {},
-      ) =>
-        send({ commandId, input, ...(consistency === undefined ? {} : { consistency }) }, options);
+        { commandId, consistency = defaultConsistency, ...options }: CommandOptions = {},
+      ) => send({ commandId, input, consistency }, options);
       continue;
     }
     if (entry.kind === "Query") {
@@ -1236,9 +1239,11 @@ const build = (
   group: RpcGroup.RpcGroup<Rpc.Any>,
   annotations: Annotations,
 ): unknown => {
-  const client = RpcClient.make(group).pipe(
-    Effect.map((flat) => nest(entries, flat as unknown as Flat)),
-  );
+  const client = Effect.gen(function* () {
+    // Read once, here: the consistency of every command sent without one.
+    const consistency = yield* Command.DefaultConsistency;
+    return nest(entries, (yield* RpcClient.make(group)) as unknown as Flat, consistency);
+  });
   const Client = Context.Service<ClientKey<string>, unknown>()(`alchemy/Domain/Api/${name}/Client`);
   const commands = entries.filter((entry): entry is Command.Any => entry.kind === "Command");
   const rejectionClasses = [...new Set(commands.flatMap((command) => command.rejects))];

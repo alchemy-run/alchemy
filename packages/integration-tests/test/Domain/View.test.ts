@@ -89,9 +89,10 @@ const joinSettling = <A, E>(settle: Effect.Effect<void>, fiber: Fiber.Fiber<A, E
   });
 
 /**
- * A command answers once the view has applied it, so a read by any client
- * after the answer includes it. `consistency: "eventual"` answers at the
- * commit, before the view has it.
+ * A command answers at the commit, before the view has it. With
+ * `consistency: "strong"` it answers once the view has applied it, so a
+ * read by any client after the answer includes it. A client built with
+ * `Domain.DefaultConsistency` set to `"strong"` waits on every command.
  */
 const answersOnceApplied = (
   settle: Effect.Effect<void>,
@@ -100,22 +101,35 @@ const answersOnceApplied = (
   Effect.gen(function* () {
     const api = yield* CounterApi.Client;
     const other = yield* another;
+    const strong = yield* another.pipe(Effect.provideService(Domain.DefaultConsistency, "strong"));
     // The deploy is done: the view has its (empty) history.
     yield* settle;
-    const sent = yield* api.Increment({ id: "c-1", by: 1 }).pipe(Effect.forkChild);
+    // Unless asked to wait, the command answers before the view has it.
+    const eventual = yield* api.Increment({ id: "c-1", by: 2 });
+    expect(eventual.version).toBe(1);
+    expect(yield* other.Totals.get("c-1")).toBeNull();
+    // A read can still wait for that write by its receipt.
+    const read = yield* other.Totals.get("c-1", { atLeast: eventual }).pipe(Effect.forkChild);
+    expect(yield* joinSettling(settle, read)).toEqual({ total: 2 });
+    const sent = yield* api
+      .Increment({ id: "c-1", by: 1 }, { consistency: "strong" })
+      .pipe(Effect.forkChild);
     yield* Effect.sleep("100 millis");
     // Nothing is delivered until the platform drains: the command is still waiting.
     expect(sent.pollUnsafe()).toBeUndefined();
-    expect((yield* joinSettling(settle, sent)).version).toBe(1);
+    expect((yield* joinSettling(settle, sent)).version).toBe(2);
     // Another client, with no receipt, reads it.
-    expect(yield* other.Totals.get("c-1")).toEqual({ total: 1 });
-    // Asked not to wait, the command answers before the view has it.
-    const eventual = yield* api.Increment({ id: "c-1", by: 2 }, { consistency: "eventual" });
-    expect(eventual.version).toBe(2);
-    expect(yield* other.Totals.get("c-1")).toEqual({ total: 1 });
-    // A read can still wait for that write by its receipt.
-    const read = yield* other.Totals.get("c-1", { atLeast: eventual }).pipe(Effect.forkChild);
-    expect(yield* joinSettling(settle, read)).toEqual({ total: 3 });
+    expect(yield* other.Totals.get("c-1")).toEqual({ total: 3 });
+    // A client that is strong by default waits with nothing passed.
+    const byDefault = yield* strong.Increment({ id: "c-1", by: 4 }).pipe(Effect.forkChild);
+    yield* Effect.sleep("100 millis");
+    expect(byDefault.pollUnsafe()).toBeUndefined();
+    expect((yield* joinSettling(settle, byDefault)).version).toBe(3);
+    expect(yield* other.Totals.get("c-1")).toEqual({ total: 7 });
+    // A call on it can still answer at the commit.
+    const fast = yield* strong.Increment({ id: "c-1", by: 8 }, { consistency: "eventual" });
+    expect(fast.version).toBe(4);
+    expect(yield* other.Totals.get("c-1")).toEqual({ total: 7 });
   });
 
 /** A command, and each read that waits for it, on a view that never applies it. */
@@ -125,12 +139,11 @@ const neverCaughtUp = (settle: Effect.Effect<void>) =>
     // The deploy is done: the view has its (empty) history.
     yield* settle;
     // The command is committed, and says the view is behind.
-    const command = yield* Effect.flip(api.Increment({ id: "c-3", by: 1 }, { commandId: "i-1" }));
-    // Sent again under its id, without waiting, it answers with its receipt.
-    const receipt = yield* api.Increment(
-      { id: "c-3", by: 1 },
-      { commandId: "i-1", consistency: "eventual" },
+    const command = yield* Effect.flip(
+      api.Increment({ id: "c-3", by: 1 }, { commandId: "i-1", consistency: "strong" }),
     );
+    // Sent again under its id, without waiting, it answers with its receipt.
+    const receipt = yield* api.Increment({ id: "c-3", by: 1 }, { commandId: "i-1" });
     expect(receipt.version).toBe(1);
     const atLeast = { stream: receipt.stream, version: receipt.version };
     const reads = yield* Effect.all(
@@ -213,7 +226,7 @@ describe("Domain View reads", { tags: ["unit", "local"] }, () => {
   );
 
   it.live(
-    "a command and a read whose write is never applied fail with ConsistencyTimeout",
+    "a strong command and a read whose write is never applied fail with ConsistencyTimeout",
     () =>
       Effect.gen(function* () {
         const [inProcess, wire] = yield* Effect.all(
@@ -239,12 +252,12 @@ describe("Domain View reads", { tags: ["unit", "local"] }, () => {
     { timeout: 60_000 },
   );
 
-  it.live("a command does not wait for a view still receiving its history", () => {
+  it.live("a strong command does not wait for a view still receiving its history", () => {
     // Never drained: the deploy's backfill of the view has not finished.
     const platform = held();
     return Effect.gen(function* () {
       const api = yield* CounterApi.Client;
-      const receipt = yield* api.Increment({ id: "c-9", by: 1 }).pipe(
+      const receipt = yield* api.Increment({ id: "c-9", by: 1 }, { consistency: "strong" }).pipe(
         Effect.timeoutOrElse({
           duration: "2 seconds",
           orElse: () => Effect.die(new Error("the command waited for a view being filled")),
@@ -254,7 +267,7 @@ describe("Domain View reads", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.scoped, Effect.provide(inProcessOver(platform.layer)));
   });
 
-  it.live("a command answers once its views have applied it, in process", () => {
+  it.live("a strong command answers once its views have applied it, in process", () => {
     const platform = held();
     return answersOnceApplied(platform.settle, CounterApi.clientInProcess).pipe(
       Effect.scoped,
@@ -262,7 +275,7 @@ describe("Domain View reads", { tags: ["unit", "local"] }, () => {
     );
   });
 
-  it.live("a command answers once its views have applied it, over the wire", () => {
+  it.live("a strong command answers once its views have applied it, over the wire", () => {
     const platform = held();
     return answersOnceApplied(platform.settle, overTheWire).pipe(
       Effect.scoped,

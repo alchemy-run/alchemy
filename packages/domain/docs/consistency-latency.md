@@ -2,6 +2,8 @@
 
 Status: measured on 2026-11-17 at `consistency: "strong"` as first built (the Api's command handler polls each view). Nothing here is optimised yet. The options at the end are proposals.
 
+Because of these numbers a command is `"eventual"` unless it asks for `"strong"`, or its client was built with `Domain.DefaultConsistency` set to `"strong"`. The default can be reconsidered once a strong command costs about what an eventual one does.
+
 ## What a command does
 
 A command sent through an Api takes these steps:
@@ -134,7 +136,7 @@ On Cloudflare, with the model near its callers:
 
 - An eventual command answers in 30 to 100ms.
 - A strong command usually answers in 100 to 400ms, and within a second 99 times in 100, on instances in use. It grows with each view its events reach.
-- The first command to a new instance takes about half a second eventual, and 1 to 2 seconds strong.
+- The first command to a new instance takes about half a second eventual, and 1 to 2.5 seconds strong.
 - A model whose objects are far from the front adds 100 to 300ms to each.
 
 Rivet and Effect Cluster have only been measured locally, where an eventual command is 2 to 7ms and a strong one 5 to 40ms. A deployment adds its network to each call.

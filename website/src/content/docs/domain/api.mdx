@@ -68,7 +68,7 @@ A command becomes a method that takes its input, and returns the receipt with th
 
 The receipt has the `stream` and `version` the command committed at. `commits` lists every stream it committed to: more than one for a command a decision implements.
 
-The method answers once the model's views have applied the command, so a read of a view after it includes the command. Pass `consistency: "eventual"` to answer at the commit. See [Choose when it answers](/domain/command#choose-when-it-answers).
+The method answers at the commit, a moment before the model's views have the command. Pass `consistency: "strong"` to answer once they have applied it, so a read of a view after it includes the command. See [Choose when it answers](/domain/command#choose-when-it-answers).
 
 ```typescript title="packages/server/test/apiEntries.ts"
 const { reply } = yield* bank.DepositMoney({ accountId, amount: 500 });
