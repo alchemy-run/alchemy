@@ -920,18 +920,6 @@ const PROVIDERS = [
   .v2-hero__copy {
     position: relative;
   }
-  /* A solid veil with soft edges hides the rings behind the headline,
-     subtitle and buttons. It starts below the mark, so the rings still read
-     as emanating from it. */
-  .v2-hero__copy::before {
-    content: "";
-    position: absolute;
-    inset: 76px 0 0 0;
-    z-index: -1;
-    pointer-events: none;
-    background: var(--alc-bg);
-    box-shadow: 0 0 44px 40px var(--alc-bg);
-  }
   /* Below this the right column is too narrow for the terminal to overlap
      the code, so the hero stacks. */
   @media (max-width: 1260px) {
@@ -958,10 +946,6 @@ const PROVIDERS = [
     }
     .v2-hero__visual :global(.v2-hero__term) {
       display: none;
-    }
-    /* Less room around the copy here, so the veil's soft edge is tighter. */
-    .v2-hero__copy::before {
-      box-shadow: 0 0 28px 24px var(--alc-bg);
     }
     /* Equal-width, stacked CTAs. */
     .v2-hero__copy :global(.alc-hero__cta) {
