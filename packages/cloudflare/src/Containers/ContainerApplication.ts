@@ -378,8 +378,9 @@ export interface ExternalContainerProps
    */
   context?: string;
   /**
-   * The Dockerfile to build. A string is a **path** resolved relative to
-   * {@link context} (default `<context>/Dockerfile`); an
+   * The Dockerfile to build. A string is a **path** (default
+   * `<context>/Dockerfile`). A relative path is resolved against
+   * {@link context}. An
    * {@link InlineDockerfile} (typically `Dockerfile.inline`) is the whole
    * Dockerfile's content, built in an empty generated context (exclusive
    * with {@link context}).
@@ -592,13 +593,13 @@ export type ContainerShape = Main<ContainerServices>;
  * ```typescript
  * export class Web extends Cloudflare.Container<Web>()("Web", {
  *   context: `${import.meta.dirname}/context`,
- *   dockerfile: "Dockerfile",
+ *   dockerfile: "Dockerfile.web",
  * }) {}
  * ```
  *
  * Alchemy builds `dockerfile` against the `context` directory with no `main`
- * bundling. `dockerfile` is resolved relative to `context` and defaults to
- * `<context>/Dockerfile`.
+ * bundling. `dockerfile` defaults to `<context>/Dockerfile`; a relative
+ * path is resolved against `context`.
  *
  * **Example:** Remote image (`image`)
  * ```typescript
