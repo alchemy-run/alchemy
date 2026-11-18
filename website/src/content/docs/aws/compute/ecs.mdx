@@ -88,7 +88,7 @@ const api = yield* AWS.ECS.Service("Api", {
 });
 ```
 
-Builds then import and export every stage's layers at the repository's `:buildcache` tag. The cache is off by default and never changes the image, so turning it on doesn't start a deployment. Other backends take BuildKit's cache backends, as in [Docker builds](/docker/build-and-push#cache-layers-in-a-registry).
+Builds then import and export every stage's layers at the repository's `:buildcache` tag. The cache is off by default and never changes the image, so turning it on doesn't start a deployment. Other backends take BuildKit's cache backends, as in [Docker builds](/docker/build-caches).
 
 ## Run a job to completion
 
@@ -178,73 +178,37 @@ A Spot task gets two minutes' notice before it's stopped, so keep its work resum
 
 Tasks that share an instance share its kernel. To run code you don't trust, like a tenant's container or an agent's generated code, give each task its own [Nitro Sandbox](/aws/compute/nitro-sandboxes): a lightweight VM that the Nitro hypervisor isolates from the instance and from every other task on it.
 
-Sandboxes don't run on Fargate. They run on **Managed Instances**, EC2 instances that ECS launches, patches and replaces for you. ECS needs two roles for them. The **infrastructure role** is the one ECS assumes to launch instances, and the **instance role** is the one the instances run as:
+Sandboxes don't run on Fargate. They run on **Managed Instances**, EC2 instances that ECS launches, patches and replaces for you. Give the cluster a capacity provider whose instances can run sandboxes:
 
 ```typescript title="alchemy.run.ts"
-const instanceRole = yield* AWS.IAM.Role("SandboxInstanceRole", {
-  assumeRolePolicyDocument: {
-    Version: "2012-10-17",
-    Statement: [{ Effect: "Allow", Principal: { Service: "ec2.amazonaws.com" }, Action: ["sts:AssumeRole"] }],
-  },
-  managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonECSInstanceRolePolicyForManagedInstances"],
-});
-const instanceProfile = yield* AWS.IAM.InstanceProfile("SandboxInstanceProfile", {
-  roleName: instanceRole.roleName,
-});
-
-const infrastructureRole = yield* AWS.IAM.Role("SandboxInfrastructureRole", {
-  assumeRolePolicyDocument: {
-    Version: "2012-10-17",
-    Statement: [{ Effect: "Allow", Principal: { Service: "ecs.amazonaws.com" }, Action: ["sts:AssumeRole"] }],
-  },
-  managedPolicyArns: ["arn:aws:iam::aws:policy/AmazonECSInfrastructureRolePolicyForManagedInstances"],
-  inlinePolicies: {
-    PassInstanceRole: {
-      Version: "2012-10-17",
-      Statement: [{ Effect: "Allow", Action: ["iam:PassRole"], Resource: [instanceRole.roleArn] }],
-    },
-  },
-});
-```
-
-The managed policy only lets ECS pass roles named `ecsInstanceRole*`, so the inline statement lets it pass this one.
-
-Next, a capacity provider for the cluster. `nitroEnclavesEnabled` launches instances that can run sandboxes, and `instanceRequirements` limits ECS to instance types that support them:
-
-```typescript title="alchemy.run.ts"
-const capacity = yield* AWS.ECS.CapacityProvider("Sandboxes", {
+const capacity = yield* AWS.ECS.CapacityProvider("Capacity", {
   cluster: cluster.clusterName,
   managedInstancesProvider: {
-    infrastructureRoleArn: infrastructureRole.roleArn,
     instanceLaunchTemplate: {
-      ec2InstanceProfileArn: instanceProfile.instanceProfileArn,
       networkConfiguration: { subnets: network.privateSubnetIds },
       nitroEnclavesEnabled: true,
-      instanceRequirements: {
-        vCpuCount: { min: 4 },
-        memoryMiB: { min: 8192 },
-        allowedInstanceTypes: ["m6i.xlarge", "m7i.xlarge", "c6i.xlarge", "c7i.xlarge"],
-      },
     },
   },
 });
 ```
+
+The capacity provider creates the role ECS assumes to launch instances, the role and instance profile the instances run as, and their security group. Pass `infrastructureRoleArn` and `ec2InstanceProfileArn` to use your own. It picks instance types that support sandboxes unless you set `instanceRequirements`.
 
 Deploy waits until the capacity provider is `ACTIVE`. ECS launches instances only once tasks need them, and terminates them when you destroy the provider.
 
 Then set the isolation mode on the task definition, and run it on that capacity:
 
 ```typescript title="alchemy.run.ts"
-const task = yield* AWS.ECS.TaskDefinition("Agent", {
+const task = yield* AWS.ECS.TaskDefinition("MyTask", {
   requiresCompatibilities: ["MANAGED_INSTANCES"],
   networkMode: "awsvpc",
   cpu: 1024,
   memory: 2048,
   trustedExecutionConfiguration: { isolationMode: "ISOLATED_SANDBOX" },
-  containerDefinitions: [{ name: "agent", image: "ghcr.io/acme/agent:1", essential: true }],
+  containerDefinitions: [{ name: "app", image: "ghcr.io/acme/app:1", essential: true }],
 });
 
-yield* AWS.ECS.Service("Agent", {
+yield* AWS.ECS.Service("MyService", {
   cluster,
   task,
   desiredCount: 2,
@@ -254,6 +218,22 @@ yield* AWS.ECS.Service("Agent", {
 });
 ```
 
+An `AWS.ECS.Task`, built from an image or from your own program, takes `isolation: "isolated"` instead, which sets both:
+
+```typescript title="alchemy.run.ts"
+const job = yield* AWS.ECS.Task("MyJob", {
+  image: "python:3.12-slim",
+  command: ["python3", "-c", "print('hello from a sandbox')"],
+  cpu: 1024,
+  memory: 2048,
+  isolation: "isolated",
+});
+```
+
+To start one on demand with `AWS.ECS.RunTask` rather than keep a Service running, see [Run a task with ECS alone](/aws/compute/ecs-sandboxes#run-a-task-with-ecs-alone).
+
 Each running task reports `trustedExecutionSummary.isolationMode` as `ISOLATED_SANDBOX`. For `CONFIDENTIAL_SANDBOX`, where the instance can't read the task's memory either, add an `attestationPolicy` that names the containers allowed to run. See [Isolated or confidential](/aws/compute/nitro-sandboxes#isolated-or-confidential).
 
 Each task boots its own VM, so it starts slower than a shared one. An instance can hold many sandboxes: their vCPUs can add up to five times its own, and their memory must fit in its memory.
+
+This is ECS as AWS provides it: a task in its own VM that you start, stop and describe. `AWS.ECS.CreateSandbox` is Alchemy's construct on top. It starts a sandbox per user or session while your app runs, and hands back a typed handle that runs commands, uses files and calls ports inside. See [ECS Sandboxes](/aws/compute/ecs-sandboxes).

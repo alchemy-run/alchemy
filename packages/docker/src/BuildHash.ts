@@ -20,7 +20,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Result from "effect/Result";
 import * as Stream from "effect/Stream";
 
 export class BuildHashInvalidProps extends Data.TaggedError("BuildHashInvalidProps")<{
@@ -167,6 +166,9 @@ const containedRuntimeDirectory = Effect.fn(function* (context: string) {
     : relative;
 });
 
+/** Files below this size are read in one call instead of streamed. */
+const SMALL_FILE_BYTES = 1024 * 1024;
+
 /**
  * Hash a Docker build context together with the Dockerfile, platform, and
  * build arguments. In `effective` mode, the selected `.dockerignore` is
@@ -176,6 +178,15 @@ const containedRuntimeDirectory = Effect.fn(function* (context: string) {
 export const hashDockerBuildInputs = Effect.fn(function* (
   source: DockerBuildSource,
   mode: DockerBuildHashMode,
+  options: {
+    /**
+     * Directory names left out of the hash at any depth, on top of
+     * `.dockerignore` and `.alchemy` — e.g. `.git` and `node_modules` for a
+     * dev watcher that must not restart on git's index writes or re-hash
+     * installed dependencies on every edit.
+     */
+    readonly excludeNames?: ReadonlyArray<string>;
+  } = {},
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -220,20 +231,22 @@ export const hashDockerBuildInputs = Effect.fn(function* (
   // would give the image a new tag on every deploy. A context inside
   // `.alchemy` (a generated one) is still hashed in full.
   const runtimeDirectory = yield* containedRuntimeDirectory(context);
+  const excludedNames = new Set(options.excludeNames ?? []);
   const listDirectory = yield* listFileSystemDirectory(context);
   // Walk one level at a time so an excluded directory is discarded before
   // its contents are read; entries come back sorted, preserving hash order.
   const entries = yield* walkIgnoring({
     list:
-      runtimeDirectory === undefined
+      runtimeDirectory === undefined && excludedNames.size === 0
         ? listDirectory
         : (directory: string) =>
             listDirectory(directory).pipe(
               Effect.map((children) =>
                 children.filter(
                   (child) =>
+                    !(child.type === "Directory" && excludedNames.has(child.name)) &&
                     (directory.length === 0 ? child.name : `${directory}/${child.name}`) !==
-                    runtimeDirectory,
+                      runtimeDirectory,
                 ),
               ),
             ),
@@ -241,7 +254,7 @@ export const hashDockerBuildInputs = Effect.fn(function* (
     force: forcedPaths,
   });
 
-  for (const { path: entry } of entries) {
+  for (const { path: entry, type } of entries) {
     // The ignore file and Dockerfile contents are hashed above; excluded
     // entries were only walked so re-included descendants could be found.
     if (
@@ -252,20 +265,14 @@ export const hashDockerBuildInputs = Effect.fn(function* (
     }
 
     const fullPath = path.join(context, entry);
-    const hashedEntry = entry;
-    // FileSystem.stat follows symbolic links, so probe the link itself first.
-    // Docker preserves the link in the build context; hashing the target file
-    // would miss retargets between files with identical contents and metadata.
-    const link = yield* Effect.result(fs.readLink(fullPath));
-    if (Result.isSuccess(link)) {
+    // Docker preserves a symbolic link in the build context; hashing the
+    // target file would miss retargets between files with identical
+    // contents and metadata. The walk reports the entry's own type, so only
+    // links are read as links.
+    if (type === "SymbolicLink") {
+      const target = yield* fs.readLink(fullPath);
       yield* Effect.sync(() =>
-        hasher.update(
-          `${JSON.stringify({
-            path: hashedEntry,
-            type: "SymbolicLink",
-            target: link.success,
-          })}\0`,
-        ),
+        hasher.update(`${JSON.stringify({ path: entry, type: "SymbolicLink", target })}\0`),
       );
       continue;
     }
@@ -278,7 +285,7 @@ export const hashDockerBuildInputs = Effect.fn(function* (
     yield* Effect.sync(() =>
       hasher.update(
         `${JSON.stringify({
-          path: hashedEntry,
+          path: entry,
           type: info.type,
           mode: info.mode & 0o7777,
           size: info.type === "File" ? String(info.size) : undefined,
@@ -287,13 +294,19 @@ export const hashDockerBuildInputs = Effect.fn(function* (
     );
 
     if (info.type === "File") {
-      yield* fs.stream(fullPath).pipe(
-        Stream.runForEach((chunk) =>
-          Effect.sync(() => {
-            hasher.update(chunk);
-          }),
-        ),
-      );
+      // Read small files whole (one call); stream large ones so memory stays flat.
+      if (info.size < SMALL_FILE_BYTES) {
+        const bytes = yield* fs.readFile(fullPath);
+        yield* Effect.sync(() => hasher.update(bytes));
+      } else {
+        yield* fs.stream(fullPath).pipe(
+          Stream.runForEach((chunk) =>
+            Effect.sync(() => {
+              hasher.update(chunk);
+            }),
+          ),
+        );
+      }
     }
   }
 

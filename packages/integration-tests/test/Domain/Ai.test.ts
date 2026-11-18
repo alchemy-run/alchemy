@@ -38,8 +38,7 @@ class OverLimit extends Domain.Rejection("OverLimit", { limit: Schema.Int }) {}
 class NotOwner extends Domain.Rejection("NotOwner") {}
 
 class Deposit extends Domain.Command("Deposit", {
-  target: WalletId,
-  input: { amount: Schema.Int },
+  input: { walletId: WalletId, amount: Schema.Int },
   middleware: [Session],
   events: [Deposited],
   rejects: [OverLimit],
@@ -51,6 +50,7 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Int }),
   initial: { balance: 0 },
   commands: [Deposit],
+  keyOf: (command) => command.walletId,
   decide: {
     Deposit: (wallet, cmd) =>
       cmd.amount > 100
@@ -183,7 +183,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
     // The tool's parameters are the call's own wire payload.
     expect(Tool.getJsonSchema(send)).toEqual(wire(depositRpc.payloadSchema));
     expect(Tool.getJsonSchema(send)).toMatchObject({
-      properties: { target: {}, commandId: {}, input: { properties: { amount: {} } } },
+      properties: { commandId: {}, input: { properties: { walletId: {}, amount: {} } } },
     });
     expect(Tool.getJsonSchemaFromSchema(send.successSchema)).toEqual(
       wire(depositRpc.successSchema),
@@ -212,8 +212,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
     class Withdraw extends Domain.Command(
       "Withdraw",
       {
-        target: WalletId,
-        input: { amount: Schema.Int },
+        input: { walletId: WalletId, amount: Schema.Int },
         events: [Deposited],
       },
       { description: "Take money out of a wallet. The amount is in cents." },
@@ -223,6 +222,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
       state: Schema.Struct({ balance: Schema.Int }),
       initial: { balance: 0 },
       commands: [Withdraw],
+      keyOf: (command) => command.walletId,
       decide: { Withdraw: () => [] },
       evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
     }) {}
@@ -259,12 +259,17 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const result = yield* call(
         "WalletApi_Deposit_send",
-        { target: "sam-wallet", input: { amount: 30 } },
+        { input: { walletId: "sam-wallet", amount: 30 } },
         "sam",
       );
       expect(result).toEqual({
         isFailure: false,
-        encoded: { reply: { balance: 30 }, stream: "Wallet/sam-wallet", version: 1 },
+        encoded: {
+          reply: { balance: 30 },
+          stream: "Wallet/sam-wallet",
+          version: 1,
+          commits: [{ stream: "Wallet/sam-wallet", version: 1 }],
+        },
       });
     }).pipe(Effect.provide(ToolsLive)),
   );
@@ -273,7 +278,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const result = yield* call(
         "WalletApi_Deposit_send",
-        { target: "sam-wallet", input: { amount: 500 } },
+        { input: { walletId: "sam-wallet", amount: 500 } },
         "sam",
       );
       expect(result).toEqual({ isFailure: true, encoded: { _tag: "OverLimit", limit: 100 } });
@@ -283,8 +288,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
   it.live("the call runs the Api's middleware: no session, no command", () =>
     Effect.gen(function* () {
       const result = yield* call("WalletApi_Deposit_send", {
-        target: "sam-wallet",
-        input: { amount: 5 },
+        input: { walletId: "sam-wallet", amount: 5 },
       });
       expect(result).toEqual({ isFailure: true, encoded: { _tag: "Unauthenticated" } });
       // Nothing was recorded.
@@ -296,8 +300,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
   it.live("a middleware's client half never signs the agent in as the server", () =>
     Effect.gen(function* () {
       const result = yield* call("WalletApi_Deposit_send", {
-        target: "server-wallet",
-        input: { amount: 5 },
+        input: { walletId: "server-wallet", amount: 5 },
       });
       expect(result).toEqual({ isFailure: true, encoded: { _tag: "Unauthenticated" } });
     }).pipe(Effect.provide(ToolsLive.pipe(Layer.provide(ServerCredential)))),
@@ -307,7 +310,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const receipt = yield* call(
         "WalletApi_Deposit_send",
-        { target: "sam-wallet", input: { amount: 7 } },
+        { input: { walletId: "sam-wallet", amount: 7 } },
         "sam",
       );
       const atLeast = { stream: "Wallet/sam-wallet", version: 1 };
@@ -337,6 +340,40 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
     expect(Context.get(ask.annotations, Tool.Destructive)).toBe(false);
     const failure = JSON.stringify(Tool.getJsonSchemaFromSchema(ask.failureSchema));
     for (const tag of ["UnknownBase", "Unauthenticated"]) expect(failure).toContain(tag);
+  });
+
+  it("a query with no input takes an empty JSON object", () => {
+    class Reset extends Domain.Command("Reset", {
+      input: { walletId: WalletId },
+      events: [Deposited],
+    }) {}
+    class Till extends Domain.Aggregate("Till", {
+      id: WalletId,
+      state: Schema.Struct({ balance: Schema.Int }),
+      initial: { balance: 0 },
+      commands: [Reset],
+      keyOf: (command) => command.walletId,
+      decide: { Reset: () => [] },
+      evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
+    }) {}
+    class Currencies extends Domain.Query("Currencies", { success: Schema.Array(Schema.String) }) {}
+    class Tills extends Domain.Model("Tills", { aggregates: [Till], queries: [Currencies] }) {}
+    class TillApi extends Domain.Api("TillApi", { model: Tills }) {}
+    const { toolkit } = DomainAi.toToolkit(TillApi, { expose: ["Reset", "Currencies"] });
+    // A command always names its instance, so only a query can have no input.
+    for (const [name, payload] of [["TillApi_Currencies_ask", {}]] as const) {
+      const tool = toolkit.tools[name]!;
+      // An object with no properties, so an agent sends `{}`, not the string `"{}"`.
+      expect(Tool.getJsonSchema(tool)).toMatchObject({
+        properties: { input: { type: "object", additionalProperties: false } },
+      });
+      const parameters = tool.parametersSchema as Schema.Codec<unknown, unknown>;
+      const decodes = (input: unknown) =>
+        Exit.isSuccess(Schema.decodeUnknownExit(parameters)({ ...payload, input }));
+      expect(decodes({})).toBe(true);
+      expect(decodes("{}")).toBe(false);
+      expect(decodes(42)).toBe(false);
+    }
   });
 
   it.live("a query tool answers with a page, and its rejection as the typed failure", () =>
@@ -461,7 +498,7 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
 
       const deposit = {
         name: "WalletApi_Deposit_send",
-        arguments: { target: "sam-wallet", input: { amount: 30 } },
+        arguments: { input: { walletId: "sam-wallet", amount: 30 } },
       };
       const sent = yield* mcp.request("tools/call", deposit, { "x-owner": "sam" });
       expect(sent!.result.isError).toBe(false);
@@ -469,6 +506,7 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
         reply: { balance: 30 },
         stream: "Wallet/sam-wallet",
         version: 1,
+        commits: [{ stream: "Wallet/sam-wallet", version: 1 }],
       });
 
       const anonymous = yield* mcp.request("tools/call", deposit);
@@ -521,7 +559,7 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
                     "io.modelcontextprotocol/clientCapabilities": {},
                   },
                   name: "WalletApi_Deposit_send",
-                  arguments: { target: "sam-wallet", input: { amount: 3 } },
+                  arguments: { input: { walletId: "sam-wallet", amount: 3 } },
                 },
               }),
             }),
@@ -535,6 +573,7 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
         reply: { balance: 3 },
         stream: "Wallet/sam-wallet",
         version: 1,
+        commits: [{ stream: "Wallet/sam-wallet", version: 1 }],
       });
       const anonymous = yield* deposit({});
       expect(anonymous.isError).toBe(true);

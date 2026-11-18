@@ -539,5 +539,6 @@ const stringifyResolvedString = (
   typeof value === "string"
     ? build(value)
     : Effect.isEffect(value)
-      ? value.pipe(Effect.map((resolved) => build(resolved)))
+      ? // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- TODO: Input<string> carries Effect<string, any, any> until Resource carries its requirements (see Input.ts)
+        value.pipe(Effect.map((resolved) => build(resolved)))
       : value.pipe(Output.map((resolved) => build(resolved)));

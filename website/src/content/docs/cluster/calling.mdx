@@ -126,7 +126,7 @@ The handler still runs; only the reply is skipped. Errors before the message is 
 
 ## Gateway errors
 
-Besides the RPC's own errors, a call can fail with Effect Cluster's: `MailboxFull` when an instance has too many messages waiting, `AlreadyProcessingMessage` when a persisted message with the same key is still running, `PersistenceError` when the database can't be reached, and `EntityNotAssignedToRunner` while a shard moves. Each is a tagged error you can retry.
+Besides the RPC's own errors, a call can fail with Effect Cluster's: `MailboxFull` when an instance has too many messages waiting and the message isn't persisted, `AlreadyProcessingMessage` when a persisted message with the same key is still running, `PersistenceError` when the message can't be stored, and `EntityNotAssignedToRunner` while a shard moves. Each is a tagged error you can retry.
 
 ## Headers
 

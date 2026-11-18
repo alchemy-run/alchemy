@@ -1,4 +1,5 @@
 import type { Storage as PiStorage } from "@earendil-works/pi-durable";
+import type { Callbacks } from "alchemy/Callback";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -20,6 +21,11 @@ export interface InstanceStorage {
    * it; a long-lived process resumes once, when it opens.
    */
   readonly evictable: boolean;
+  /**
+   * The durable callbacks of an evictable instance: what the harness
+   * registers its wake-up with.
+   */
+  readonly callbacks?: Layer.Layer<Callbacks>;
 }
 
 /**

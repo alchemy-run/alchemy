@@ -3,6 +3,7 @@
  *
  * @module
  */
+import { DurableObjectCallbacks } from "@alchemy.run/cloudflare/Workers/AlarmCallback";
 import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -31,6 +32,13 @@ export const DurableObjectStorage: Layer.Layer<Storage> = Layer.succeed(Storage,
     // At plan time the state is a stand-in with no id, and nothing opens the storage.
     id: Option.match(state, { onNone: () => "", onSome: (state) => state.id?.toString() ?? "" }),
     evictable: true,
+    ...(Option.isSome(state)
+      ? {
+          callbacks: DurableObjectCallbacks.pipe(
+            Layer.provide(Layer.succeed(DurableObjectState, state.value)),
+          ),
+        }
+      : {}),
     open: (prefix: string) =>
       Option.isNone(state)
         ? Effect.fail(

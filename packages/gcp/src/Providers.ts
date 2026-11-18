@@ -1,7 +1,9 @@
 import { DockerLive } from "@alchemy.run/docker/Docker";
+import { Retry as GcpRetry } from "@distilled.cloud/gcp/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import {
   Server as WebsiteServer,
@@ -2619,6 +2621,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  */
 /** Auth + env + HTTP client for resource providers, HTTP bindings, and GKE. */
 const gcpLive = fromCredentials().pipe(
+  Layer.provideMerge(Layer.succeed(GcpRetry, DeployRetry.policy)),
   Layer.provideMerge(Credentials.fromAuthProvider()),
   Layer.provideMerge(GcpAuth),
   Layer.provideMerge(ProfileStoreLive),

@@ -1,0 +1,132 @@
+---
+title: Registries & credentials
+description: Give an image its registry credentials as a Redacted Config value, push without docker login, pull private base images, and read the password from a secrets manager per stage.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+A **registry** stores images under repositories, like `ghcr.io/acme/api`, and serves them to any engine that pulls. Docker Hub, GitHub's `ghcr.io`, GitLab and every cloud run one. Public images pull without credentials. Pushing, and pulling a private image, needs a username and a password or token.
+
+Registry credentials are the only credentials Docker resources take. You give them to one resource, and only that resource's build and push see them. Nothing runs `docker login`, so your own logins on the machine stay as they are.
+
+<Tree
+  areas={["machine registry"]}
+  phoneAreas={["machine", "registry"]}
+  colGap={4}
+  nodes={[
+    { id: "machine", label: "your machine", type: "alchemy deploy", icon: "laptop", areas: ["push", "config"] },
+    { id: "push", label: "Docker.Image api", type: "build + push", parent: "machine", tone: "accent", icon: "package", specs: [["registry", "ghcr.io · GITHUB_TOKEN"]] },
+    { id: "config", label: "~/.docker", type: "your logins · untouched", parent: "machine", tone: "muted", icon: "folder" },
+    { id: "registry", label: "ghcr.io", type: "registry", icon: "warehouse", areas: ["repo"] },
+    { id: "repo", label: "acme/api", type: "repository", parent: "registry", icon: "package" },
+  ]}
+  links={[{ from: "push", to: "repo", label: "pushes" }]}
+  caption="The token goes to that one Image's build and push, through a config that exists only for the command. Your ~/.docker logins and contexts are never read or changed."
+/>
+
+## Push an image
+
+Set `registry` on a `Docker.Image`, and every build is pushed there:
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Docker from "@alchemy.run/docker";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Docker.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const image = yield* Docker.Image("api", {
+      name: "acme/api",
+      build: { context: "./api" },
+      registry: {
+        server: "ghcr.io",
+        username: "acme",
+        password: yield* Config.Redacted("GITHUB_TOKEN"),
+      },
+    });
+
+    return { ref: image.imageRef, digest: image.repoDigest };
+  }),
+);
+```
+
+`password` is `Redacted`, so it never prints in logs or plans. After the push, `imageRef` is `ghcr.io/acme/api:latest` and `repoDigest` is `ghcr.io/acme/api@sha256:…`. `skipPush: true` keeps the build local while leaving `registry` in place.
+
+For `ghcr.io`, the password is a GitHub token with the `write:packages` scope. Docker Hub takes a personal access token rather than your account password.
+
+## Pull a private base image
+
+The same credentials authenticate the build, so a Dockerfile can start `FROM` a private image in that registry:
+
+```typescript
+// Dockerfile: FROM registry.example.com/base:v1
+const image = yield* Docker.Image("api", {
+  name: "registry.example.com/acme/api",
+  build: { context: "./api" },
+  registry: {
+    server: "registry.example.com",
+    username: "deploy",
+    password: yield* Config.Redacted("REGISTRY_PASSWORD"),
+  },
+});
+```
+
+Logging in during a build needs Buildx 0.26+ (Docker Desktop 4.44+). With an older Buildx, the push still works, but a private base image needs a `docker login` on the machine first.
+
+Logins you already pass through `DOCKER_AUTH_CONFIG`, for other registries, are kept alongside these.
+
+## Mirror an image into your registry
+
+`Docker.RemoteImage` takes the same `registry` to push a pulled image under your own name. See [Pull & mirror images](/docker/remote-images).
+
+## Values from a secrets manager
+
+`.env` is only the default. A Stack's `secrets` option reads the same `Config` values from a secrets manager instead, like Doppler or Infisical, so a registry token never sits in a file on anyone's machine. Pick the source per stage:
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Docker from "@alchemy.run/docker";
+import * as Doppler from "@alchemy.run/doppler";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Docker.providers(),
+    state: Alchemy.localState(),
+    secrets: ({ stage }) =>
+      stage === "prod"
+        ? Doppler.Secrets({ project: "my-app", config: "prd" })
+        : Alchemy.Secrets.DotEnv(),
+  },
+  Effect.gen(function* () {
+    const image = yield* Docker.Image("api", {
+      name: "acme/api",
+      build: { context: "./api" },
+      registry: {
+        server: "ghcr.io",
+        username: "acme",
+        password: yield* Config.Redacted("GITHUB_TOKEN"),
+      },
+    });
+    return { ref: image.imageRef };
+  }),
+);
+```
+
+Your code doesn't change: `Config.Redacted("GITHUB_TOKEN")` reads from whichever source the stage uses. See [Secret providers](/environments/secret-providers).
+
+## Secrets inside images and containers
+
+A registry token gets an image to the registry. Secrets the build or the app needs are separate:
+
+- A token a `RUN` step needs, like a private npm token, is a build secret. It never lands in the image. See [Build images](/docker/build-images#use-a-secret-in-a-build).
+- A password the app reads while it runs goes in the container's `environment` as a `Redacted` value. See [Containers](/docker/containers#pass-secrets-in-the-environment).
+- A Swarm service can mount Swarm secrets as files. See [Services](/docker/services#mount-secrets-and-configs).

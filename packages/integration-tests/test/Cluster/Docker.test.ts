@@ -5,8 +5,11 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { conformanceTests, get, waitForReady } from "./conformance.ts";
+import { FRONT_PORT as URL_FRONT_PORT, Postgres } from "./fixtures/docker-url/cluster.ts";
+import UrlFront from "./fixtures/docker-url/front.ts";
 import { FRONT_PORT } from "./fixtures/docker/cluster.ts";
 import Front from "./fixtures/docker/front.ts";
 import { Lives } from "./fixtures/docker/index.ts";
@@ -16,6 +19,7 @@ import { workflowConformanceTests } from "./workflow-conformance.ts";
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "ClusterDocker", import.meta.url);
+const urlStack = Core.scratchStack(testOptions, "ClusterDockerUrl", import.meta.url);
 
 const baseUrl = `http://localhost:${FRONT_PORT}`;
 
@@ -62,6 +66,35 @@ describe.skipIf(!!process.env.FAST)(
         expect((yield* get(`${baseUrl}/shout/hey`)).value).toBe("HEY");
       }),
       { timeout: 120_000 },
+    );
+  },
+);
+
+// A pool given a database by URL (`Cluster.Database.fromUrl`), which is on no
+// Docker network: the runners join the network Postgres is on (#3437).
+describe.skipIf(!!process.env.FAST)(
+  "Effect Cluster on Docker with a database by URL",
+  { tags: ["provider:cluster", "provider:docker", "local"] },
+  () => {
+    test(
+      "a pool runs entities on a database given by URL",
+      Effect.gen(function* () {
+        yield* ensureDockerSwarm;
+        yield* urlStack.destroy();
+        yield* urlStack.deploy(
+          Effect.gen(function* () {
+            yield* Postgres;
+            const front = yield* UrlFront;
+            return { front: front.name };
+          }),
+        );
+        const response = yield* get(`http://localhost:${URL_FRONT_PORT}/echo/hi`).pipe(
+          Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 24 }),
+        );
+        expect(response.value).toBe("echo hi");
+        yield* urlStack.destroy();
+      }),
+      { timeout: 600_000 },
     );
   },
 );

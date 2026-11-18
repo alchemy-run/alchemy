@@ -11,11 +11,12 @@ import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import VolumeApi, { Data, MARKER, MARKER_FILE, VOLUME_PATH } from "./fixtures/volume-api.ts";
+import { railwayApi } from "./limit.ts";
 import { expectFound } from "./lookup.ts";
 import { suitePartition } from "./suiteProject.ts";
 import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 
-const { test } = Test.make({ providers: Railway.providers() });
+const { test } = Test.make({ limit: railwayApi, providers: Railway.providers() });
 
 const readVolumeInstance = Query.fn((id: string) => {
   const instance = RailwayApi.volumeInstance({ id });

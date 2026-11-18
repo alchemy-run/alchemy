@@ -338,8 +338,6 @@ const loadSkill = (skills: ReadonlyMap<string, SkillExtension>): ToolRegistratio
 
 /** How long one alarm keeps working before it hands off to the next. */
 const ALARM_SLICE = "10 minutes";
-/** How soon a pending wake is due while work is active. */
-const HEARTBEAT = "30 seconds";
 
 /**
  * A Pi Durable harness. Yield it where the runtime's dependencies are
@@ -702,7 +700,8 @@ export const Harness = <
             }
           }).pipe(Effect.ignore);
 
-    if (storage.evictable) {
+    const callbacks = storage.callbacks;
+    if (storage.evictable && callbacks !== undefined) {
       const setup = yield* Effect.serviceOption(InstanceSetup);
       if (Option.isSome(setup)) {
         setup.value.add(
@@ -716,9 +715,9 @@ export const Harness = <
                 // a time), or for one slice; then arm the next alarm.
                 yield* untilSettled(harness).pipe(Effect.timeoutOption(ALARM_SLICE));
                 yield* arm(harness);
-              }),
-              { retry: { delay: HEARTBEAT } },
-            ).pipe(Effect.orDie);
+                // A failed wake is a defect, which the callbacks redeliver.
+              }, Effect.orDie),
+            ).pipe(Effect.provide(callbacks));
           }),
         );
       }

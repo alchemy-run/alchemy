@@ -292,23 +292,23 @@ export interface ClusterAdapterService {
   readonly identity?: {
     readonly reconcile: (
       options: WorkloadIdentityReconcileOptions,
-    ) => Effect.Effect<WorkloadIdentityResult, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<WorkloadIdentityResult, ProviderError, AdapterLifecycleServices>;
     readonly delete: (
       options: WorkloadIdentityDeleteOptions,
-    ) => Effect.Effect<void, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<void, ProviderError, AdapterLifecycleServices>;
   };
   /** Managed container-image registry (ECR on EKS, Artifact Registry on GKE). */
   readonly registry?: {
     readonly resolve: (
       options: ImageRegistryResolveOptions,
-    ) => Effect.Effect<ImageRegistryResult, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<ImageRegistryResult, ProviderError, AdapterLifecycleServices>;
     /** Plan-time content hash used by `diff` to surface source drift. */
     readonly hash: (
       options: ImageRegistryHashOptions,
-    ) => Effect.Effect<string | undefined, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<string | undefined, ProviderError, AdapterLifecycleServices>;
     readonly delete: (
       options: ImageRegistryDeleteOptions,
-    ) => Effect.Effect<void, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<void, ProviderError, AdapterLifecycleServices>;
   };
   /**
    * Platform-specific generated container entries for Effect-native
@@ -328,7 +328,7 @@ export interface ClusterAdapterService {
       loadBalancerClass?: string | undefined;
       annotations?: Record<string, string>;
     },
-    any,
+    ProviderError,
     AdapterLifecycleServices
   >;
 }

@@ -254,8 +254,8 @@ const resolvePythonModulesDir = Effect.fn(function* (
   return vendorDir;
 });
 
-const orDefault = <A, B, R>(
-  effect: Effect.Effect<A, unknown, R>,
+const orDefault = <A, B, E, R>(
+  effect: Effect.Effect<A, E, R>,
   fallback: B,
 ): Effect.Effect<A | B, never, R> => Effect.catchCause(effect, () => Effect.succeed(fallback));
 
