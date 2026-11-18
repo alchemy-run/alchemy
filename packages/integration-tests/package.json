@@ -35,6 +35,7 @@
     "@alchemy.run/neon": "workspace:*",
     "@alchemy.run/planetscale": "workspace:*",
     "@alchemy.run/prisma": "workspace:*",
+    "@alchemy.run/proton-pass": "workspace:*",
     "@alchemy.run/railway": "workspace:*",
     "@alchemy.run/redis": "workspace:*",
     "@alchemy.run/rivet": "workspace:*",

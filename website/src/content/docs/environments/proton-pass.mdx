@@ -1,0 +1,186 @@
+---
+title: Proton Pass
+description: Read Proton Pass items and pass:// references into Effect Config through the Proton Pass CLI, with its own login locally and a personal access token in CI.
+---
+
+`@alchemy.run/proton-pass` adds Proton Pass to your stack's
+[secret providers](/environments/secret-providers) through the
+[Proton Pass CLI](https://protonpass.github.io/pass-cli/) (`pass-cli`). It
+offers two entries, which you can combine:
+
+- `ProtonPass.Item` loads every text and hidden field of one item, each under its own field name.
+- `ProtonPass.SecretReferences` loads chosen fields from `pass://` references.
+
+The provider does not modify `process.env` or write downloaded values to disk.
+
+```sh
+pnpm add @alchemy.run/proton-pass
+```
+
+Install `pass-cli` and make sure it is on `PATH`. Alchemy runs it when the
+stack loads. Proton Pass has no JavaScript SDK.
+
+## Load an item
+
+Keep one custom item per environment, with one field per variable. Field names
+become config keys.
+
+```typescript
+import * as Alchemy from "alchemy";
+import * as ProtonPass from "@alchemy.run/proton-pass";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.empty,
+    state: Alchemy.localState(),
+    secrets: [
+      ProtonPass.Item(({ stage }) => ({
+        vault: "Alchemy",
+        item: stage === "prod" ? "app-production" : "app-development",
+      })),
+    ],
+  },
+  Effect.gen(function* () {
+    const databaseUrl = yield* Config.Redacted("DATABASE_URL");
+    // Use databaseUrl to configure your resources.
+    return {};
+  }),
+);
+```
+
+`vault` is the vault's name or share ID, and `item` is the item's title or ID.
+Fields inside custom sections are included without their section prefix. If
+two fields share a name, the load fails with `ProtonPassDuplicateFieldError`.
+Empty values are kept. TOTP and timestamp fields are skipped.
+
+## Resolve references
+
+`ProtonPass.SecretReferences` maps config keys to individual fields.
+Stage-dependent callbacks work here too.
+
+```typescript
+ProtonPass.SecretReferences(({ stage }) => ({
+  references: {
+    DATABASE_URL: `pass://${stage === "prod" ? "Production" : "Development"}/Database/password`,
+    API_KEY: "pass://Shared/API/Staging.key",
+  },
+}));
+```
+
+Read these with `Config.Redacted("DATABASE_URL")` or `Config.Redacted("API_KEY")`.
+
+## Use both
+
+Put an `Item` and `SecretReferences` side by side. Later entries win over
+earlier ones for the same key:
+
+```typescript
+secrets: [
+  ProtonPass.Item({ vault: "Alchemy", item: "app-production" }),
+  ProtonPass.SecretReferences({
+    references: { STRIPE_KEY: "pass://Billing/Stripe/password" },
+  }),
+],
+```
+
+## Reference syntax
+
+References use `pass://vault/item/field`:
+
+- vault and item are names or IDs; use IDs when names are duplicated
+- field is a built-in field (`username`, `password`, `email`, `url`, `note`, `totp`) or a custom field name
+- a field inside a custom section is `Section.field`
+
+Alchemy doesn't check references itself: `pass-cli` parses and resolves them
+when the stack loads. See
+[Proton's reference syntax](https://protonpass.github.io/pass-cli/commands/contents/secret-references).
+
+Each distinct reference is read once, four at a time. If a reference is
+malformed, missing or unreadable, the whole load fails with
+`ProtonPassReferenceError` and no partial config is installed. The error names
+the config key and the kind of failure (`parsing`, `vaultNotFound`,
+`itemNotFound` or `fieldNotFound`). It never includes the reference or the
+CLI's output.
+
+## Authorize locally
+
+Log in to the CLI once:
+
+```sh
+pass-cli login
+```
+
+With no token and no profile entry, Alchemy reads through that session.
+To make the choice explicit in a profile:
+
+```sh
+alchemy profile edit --add ProtonPass --method cli-session
+```
+
+## Store a personal access token
+
+A profile can hold a personal access token instead. Use this on a machine
+where you don't want to log in to the CLI, or for a shared testing profile:
+
+```sh
+pass-cli personal-access-token create --name alchemy --expiration 3m
+pass-cli personal-access-token access grant --personal-access-token-name alchemy --vault-name Production --role viewer
+alchemy profile edit --add ProtonPass --method personal-access-token --set token=-
+```
+
+A token can read only the vaults it has been granted. `--set token=-` reads the
+token from stdin, so it never lands in your shell history.
+
+When Alchemy uses a token, it logs in to a temporary session directory. It
+passes the token in the environment, never on the command line. It logs the
+session out and deletes the directory once the stack has loaded. Your own
+`pass-cli` session is never replaced.
+
+## In CI
+
+Profiles are never consulted in CI. Set the token in
+`PROTON_PASS_PERSONAL_ACCESS_TOKEN`:
+
+```yaml
+- run: bun alchemy deploy --stage prod --yes
+  env:
+    PROTON_PASS_PERSONAL_ACCESS_TOKEN: ${{ secrets.PROTON_PASS_PERSONAL_ACCESS_TOKEN }}
+```
+
+`PROTON_PASS_PERSONAL_ACCESS_TOKEN` wins over the profile and the CLI's own
+session. If a previous step already ran `pass-cli login`, leave the variable
+unset and Alchemy uses that session. `alchemy provider check-env` lists the
+authentication variables.
+
+Authentication variables are read from the process environment, independently
+of the stack's secret-provider ordering. A preceding dotenv or remote secrets
+provider cannot supply or override the Proton Pass token.
+
+## Troubleshoot
+
+Each failure has its own error, so you can catch the one you care about:
+
+| Error | When |
+| --- | --- |
+| `ProtonPassReferenceError` | A reference is malformed, missing or unreadable; names the config key and the kind of failure |
+| `ProtonPassItemError` | The item or vault passed to `Item` doesn't exist or isn't readable |
+| `ProtonPassDuplicateFieldError` | Two fields of an item share a name |
+| `ProtonPassNotLoggedInError` | The CLI has no session; run `pass-cli login` or set a token |
+| `ProtonPassAuthError` | Proton Pass rejected the personal access token |
+| `ProtonPassCliNotFoundError` | `pass-cli` isn't installed or isn't on `PATH` |
+| `ProtonPassTimeoutError` | A CLI call didn't finish within 30 seconds |
+| `ProtonPassCliError` | Anything else the CLI reports |
+
+None of them include the CLI's output, references or values.
+
+`pass-cli` is a deployment-time dependency. It isn't meant to run in a
+Cloudflare Worker or in your deployed application's config-loading path.
+
+## Learn more
+
+- [Proton Pass CLI](https://protonpass.github.io/pass-cli/)
+- [Secret-provider ordering](/environments/secret-providers)

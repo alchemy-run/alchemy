@@ -454,6 +454,7 @@ export default defineConfig({
                 { label: "Doppler", link: "/environments/doppler" },
                 { label: "Infisical", link: "/environments/infisical" },
                 { label: "1Password", link: "/environments/1password" },
+                { label: "Proton Pass", link: "/environments/proton-pass" },
                 {
                   label: "Local development",
                   link: "/environments/local-development",
