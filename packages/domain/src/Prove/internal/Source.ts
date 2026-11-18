@@ -111,7 +111,7 @@ export const loader: Effect.Effect<Loader, LoadError, FileSystem.FileSystem | Pa
       catch: (cause) =>
         new LoadError({
           file: "oxc-parser",
-          message: `oxc-parser is not installed (it is an optional peer of @alchemy.run/domain): ${String(cause)}`,
+          message: `oxc-parser, a dependency of @alchemy.run/domain, did not load: ${String(cause)}`,
         }),
     });
     const loaded = new Map<string, Module>();

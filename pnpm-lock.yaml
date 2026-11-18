@@ -2355,15 +2355,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.1.4(effect@4.1.4)(vitest@5.0.4(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
-      oxc-parser:
-        specifier: 'catalog:'
-        version: 0.141.0
       vitest:
         specifier: 'catalog:'
         version: 5.0.4(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
-      z3-solver:
-        specifier: 'catalog:'
-        version: 5.3.3
 
   examples/cloudflare-domain/packages/server:
     dependencies:
@@ -9604,6 +9598,13 @@ importers:
         version: 7.1.0-dev.20261105.1
 
   packages/domain:
+    dependencies:
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.141.0
+      z3-solver:
+        specifier: 'catalog:'
+        version: 5.3.3
     devDependencies:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
@@ -9635,15 +9636,9 @@ importers:
       foldkit:
         specifier: 'catalog:'
         version: 0.170.0(@effect/platform-browser@4.1.4(effect@4.1.4))(effect@4.1.4)
-      oxc-parser:
-        specifier: 'catalog:'
-        version: 0.141.0
       typescript:
         specifier: 'catalog:'
         version: 7.1.0-dev.20261105.1
-      z3-solver:
-        specifier: 'catalog:'
-        version: 5.3.3
 
   packages/doppler:
     dependencies:

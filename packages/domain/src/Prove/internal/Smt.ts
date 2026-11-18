@@ -214,7 +214,7 @@ export const solver: Effect.Effect<Solver, SolverError, Scope.Scope> = Effect.ge
     new SolverError({ message: `${step}: ${String(cause)}` });
   const z3 = yield* Effect.tryPromise({
     try: () => import("z3-solver"),
-    catch: failed("z3-solver is not installed (it is an optional peer of @alchemy.run/domain)"),
+    catch: failed("z3-solver, a dependency of @alchemy.run/domain, did not load"),
   });
   const { Z3, context } = yield* Effect.acquireRelease(
     Effect.tryPromise({

@@ -9,7 +9,7 @@
  * a solver for values that take the sequence down each path. Every story it
  * reports ran on the real code.
  *
- * It needs `z3-solver` and `oxc-parser`, both optional peers, and runs under
+ * It uses `z3-solver` and `oxc-parser`, which are loaded only when it runs, and runs under
  * Node.
  */
 import * as Data from "effect/Data";

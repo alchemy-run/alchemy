@@ -24,8 +24,6 @@
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
-    "oxc-parser": "catalog:",
-    "vitest": "catalog:",
-    "z3-solver": "catalog:"
+    "vitest": "catalog:"
   }
 }

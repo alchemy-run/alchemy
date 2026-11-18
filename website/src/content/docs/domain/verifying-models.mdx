@@ -224,11 +224,7 @@ it.effect(
 
 It reads the TypeScript of your model, so it has to find the file. It looks through what the test imports for the file that declares the model. Pass `source` when the model is declared somewhere the test doesn't import.
 
-It needs two optional peers, and runs under Node:
-
-```sh
-pnpm add -D z3-solver oxc-parser
-```
+It runs under Node. The solver and the TypeScript parser come with `@alchemy.run/domain` and are loaded only when a verification runs, so a deployed model never loads them.
 
 ## Read the report
 

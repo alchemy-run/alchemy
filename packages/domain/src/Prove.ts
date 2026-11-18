@@ -4,7 +4,7 @@
  * too. The prover reads the TypeScript of `decide`, `evolve` and the
  * invariants, and asks a solver whether any input breaks one.
  *
- * It needs `z3-solver` and `oxc-parser`, both optional peers, and runs under
+ * It uses `z3-solver` and `oxc-parser`, which are loaded only when it runs, and runs under
  * Node.
  */
 import * as Data from "effect/Data";

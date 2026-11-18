@@ -72,6 +72,10 @@
     "build": "pnpm -r --filter \"{.}...\" run build:package",
     "build:package": "node scripts/build.ts"
   },
+  "dependencies": {
+    "oxc-parser": "catalog:",
+    "z3-solver": "catalog:"
+  },
   "devDependencies": {
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/effect-cluster": "workspace:*",
@@ -83,9 +87,7 @@
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "foldkit": "catalog:",
-    "oxc-parser": "catalog:",
-    "typescript": "catalog:",
-    "z3-solver": "catalog:"
+    "typescript": "catalog:"
   },
   "peerDependencies": {
     "@alchemy.run/cloudflare": "workspace:*",
@@ -95,9 +97,7 @@
     "@effect/sql-pg": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "foldkit": "catalog:",
-    "oxc-parser": "catalog:",
-    "z3-solver": "catalog:"
+    "foldkit": "catalog:"
   },
   "peerDependenciesMeta": {
     "@alchemy.run/cloudflare": {
@@ -116,12 +116,6 @@
       "optional": true
     },
     "foldkit": {
-      "optional": true
-    },
-    "oxc-parser": {
-      "optional": true
-    },
-    "z3-solver": {
       "optional": true
     }
   }

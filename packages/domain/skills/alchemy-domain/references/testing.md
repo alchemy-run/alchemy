@@ -200,7 +200,7 @@ export class Bank extends Domain.Model("Bank", {
 }) {}
 ```
 
-One test per model verifies them, and one per aggregate is the fast check to write first. Pass the story runner so every sequence found is also run on the real model. They need `z3-solver` and `oxc-parser` as dev dependencies, and run under Node (vitest), not Bun.
+One test per model verifies them, and one per aggregate is the fast check to write first. Pass the story runner so every sequence found is also run on the real model. They run under Node (vitest), not Bun; the solver and parser come with `@alchemy.run/domain`.
 
 ```ts
 import * as Verify from "@alchemy.run/domain/Verify";

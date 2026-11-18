@@ -14,7 +14,7 @@
  *   model: the policies, sagas and views the explorer read then do what it
  *   read, or the report says where they do not.
  *
- * It needs `z3-solver` and `oxc-parser`, both optional peers, and runs under
+ * It uses `z3-solver` and `oxc-parser`, which are loaded only when it runs, and runs under
  * Node.
  */
 import * as Data from "effect/Data";
