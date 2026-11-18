@@ -1101,10 +1101,11 @@ const ProviderLive = () =>
               message: `Prisma Compute service '${app.id}' no longer matches its persisted immutable project and region identity. Refusing to delete a mismatched service.`,
             });
           }
-          // The platform's service delete does not wait for a version to
-          // stop, and stops at the first one it cannot delete, after deleting
-          // the others. So stop and delete the versions first: the ones not
-          // served, then the served one, and the service last.
+          // The platform's service delete stops the served version first and
+          // refuses at the first version whose stop does not finish, so a
+          // stuck version can leave the service serving nothing. Stop and
+          // delete the versions first: the ones not served, then the served
+          // one, and the service last.
           const timing = {
             timeoutSeconds: olds?.timeoutSeconds ?? 60,
             ...(olds?.pollIntervalMs === undefined ? {} : { pollIntervalMs: olds.pollIntervalMs }),

@@ -259,15 +259,23 @@ export const makeComputeCloud = () => {
         return data(service);
       }
       if (tail === undefined && request.method === "DELETE") {
-        // The platform deletes a service's stopped versions with it, and
-        // stops at the first one that has not stopped, leaving the service
-        // in place.
-        for (const deployment of [...deployments.values()]) {
-          if (deployment.serviceId !== id) continue;
-          if (deployment.status === "running" || deployment.status === "stopping") {
+        // As measured: the platform stops and deletes a service's versions,
+        // the served one first, and refuses at the first one whose stop does
+        // not finish, leaving the service with the rest.
+        const own = [...deployments.values()]
+          .filter((deployment) => deployment.serviceId === id)
+          .sort(
+            (a, b) =>
+              Number(b.id === service.latestDeploymentId) -
+              Number(a.id === service.latestDeploymentId),
+          );
+        for (const deployment of own) {
+          if (knobs.stuckStopping.has(deployment.id)) {
+            deployment.status = "stopping";
             return stopRefused();
           }
           deployments.delete(deployment.id);
+          if (service.latestDeploymentId === deployment.id) service.latestDeploymentId = null;
         }
         services.delete(id);
         return noContent();
