@@ -59,6 +59,8 @@ export declare namespace Command {
 }
 /** A request to change one aggregate. See {@link CommandModule.make}. */
 export const Command = CommandModule.make;
+/** When the commands of a client answer, unless a call says otherwise. See {@link CommandModule.DefaultConsistency}. */
+export const DefaultConsistency = CommandModule.DefaultConsistency;
 
 export declare namespace Rejection {
   /** Any Rejection class. */

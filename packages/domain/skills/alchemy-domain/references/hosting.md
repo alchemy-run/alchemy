@@ -86,10 +86,11 @@ const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem)); 
 yield* bank.DepositMoney({ accountId, amount });
 ```
 
+- A command answers at the commit; a view read that must include it passes the receipt as `atLeast`. `{ consistency: "strong" }` answers once the model's views have applied it, and `Effect.provideService(Domain.DefaultConsistency, "strong")` on a client sets that for all its commands. Projection stores are never waited for: a query takes `atLeast`.
 - Build `clientInProcess` per request in a Worker. `layerClientInProcess` provides `CustomerApi.Client` in process, for long-lived processes and scripts.
 - Do not send a request to the Worker's own URL, and do not pass a verified secret through a header to `clientInProcess` to be checked again.
 
-More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-process), [In memory](https://alchemy.run/domain/in-memory).
+More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-process), [Command: Choose when it answers](https://alchemy.run/domain/command#choose-when-it-answers), [In memory](https://alchemy.run/domain/in-memory).
 
 ## Queries
 
