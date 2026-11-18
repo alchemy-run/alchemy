@@ -618,9 +618,87 @@ notStarted.test.provider(
       expect(Result.isFailure(result)).toBe(true);
       if (Result.isFailure(result)) {
         expect(String(result.failure)).toContain("ComputeServiceVersionNotRunning");
-        expect(String(result.failure)).toContain("not running");
+        expect(String(result.failure)).toContain("the platform reports it as 'new', not running");
+        expect(String(result.failure)).toContain(
+          "It was never started, because its Prisma.ComputeVersion sets start: false",
+        );
       }
       expect(cloud.writes()).not.toContain("POST /v1/services/svc-1/promote");
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const reportedOtherwise = [
+  {
+    status: "stopping",
+    says: "The version was started, and the platform still reports it as 'stopping'.",
+    next: "Deploying again promotes the version if it is running by then, or starts it again once the platform has stopped it.",
+  },
+  {
+    status: "stopped",
+    says: "If its Prisma.ComputeVersion sets start: false, set it to true.",
+    next: "Otherwise the version was stopped after it started, and deploying again starts it and promotes it.",
+  },
+  {
+    status: "failed",
+    says: "The version was started and failed on the platform, and a failed version is not restarted.",
+    next: "so the next deploy creates a new version",
+  },
+] as const;
+for (const { status, says, next } of reportedOtherwise) {
+  const reported = harness();
+  reported.test.provider(
+    `says what to do when a started version is reported as '${status}' when the service promotes it`,
+    (stack) =>
+      Effect.gen(function* () {
+        const { cloud } = reported;
+        yield* stack.destroy();
+        yield* stack.deploy(app());
+        cloud.knobs.reportedAfterCheck.set("dep-2", { status, reads: 10_000 });
+
+        const failure = yield* stack
+          .deploy(app({ artifactPath: artifactV2 }))
+          .pipe(Effect.flip, Effect.map(String));
+        expect(failure).toContain("ComputeServiceVersionNotRunning");
+        expect(failure).toContain(`the platform reports it as '${status}', not running`);
+        expect(failure).toContain(says);
+        expect(failure).toContain(next);
+        expect(failure).toContain("The service still serves 'dep-1'.");
+        expect(failure).not.toContain("start: false. Remove start");
+        expect(cloud.services.get("svc-1")?.latestDeploymentId).toBe("dep-1");
+
+        cloud.knobs.reportedAfterCheck.clear();
+        if (status !== "failed") {
+          // The deploy run again, as the message says, serves the same version:
+          // a stopped one is started again; one that has since run is promoted.
+          if (status === "stopped") cloud.deployments.get("dep-2")!.status = "stopped";
+          yield* clearCalls(cloud);
+          const again = yield* stack.deploy(app({ artifactPath: artifactV2 }));
+          expect(again.service.activeVersionId).toBe("dep-2");
+          expect(cloud.writes().includes("POST /v1/deployments/dep-2/start")).toBe(
+            status === "stopped",
+          );
+        }
+        yield* stack.destroy();
+      }),
+    { tags },
+  );
+}
+
+const passingStatus = harness();
+passingStatus.test.provider(
+  "waits out a started version reported briefly as 'stopping', then promotes it",
+  (stack) =>
+    Effect.gen(function* () {
+      const { cloud } = passingStatus;
+      yield* stack.destroy();
+      cloud.knobs.reportedAfterCheck.set("dep-1", { status: "stopping", reads: 3 });
+
+      const deployed = yield* stack.deploy(app());
+      expect(deployed.service.activeVersionId).toBe("dep-1");
+      expect(cloud.knobs.reportedAfterCheck.get("dep-1")?.reads).toBe(0);
 
       yield* stack.destroy();
     }),

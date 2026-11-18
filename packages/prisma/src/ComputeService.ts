@@ -14,7 +14,9 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import { Stack } from "alchemy/Stack";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
@@ -325,8 +327,10 @@ export interface ComputeServiceLookup {
  * the service promotes the attached version, waits until the platform reports
  * it as live, and checks the stable URL. When the check fails, the service is
  * restored to the version it served before and the deploy fails with
- * `ComputeServiceEndpointCheckFailed`. A version that is not running fails
- * with `ComputeServiceVersionNotRunning` before promotion. A service with no
+ * `ComputeServiceEndpointCheckFailed`. A version the platform reports as
+ * `provisioning`, `stopping` or `stopped` is waited for, up to `timeoutSeconds`;
+ * one that is still not running fails with `ComputeServiceVersionNotRunning`
+ * before promotion, saying what the platform reports and what to do. A service with no
  * attached version keeps serving whatever it serves. The service never stops
  * or deletes a version.
  *
@@ -781,16 +785,60 @@ const activeVersionOf = (bindings: ReadonlyArray<ResourceBinding<ComputeServiceA
  * and check the stable endpoint. When the check fails, roll the service back
  * to the version that was active before and fail.
  */
+/**
+ * The version's status once it is no longer in passing, waiting up to the
+ * service's `timeoutSeconds`. The platform can report a started version as
+ * `provisioning`, or briefly as `stopping`, before `running`. A `stopped`
+ * version may be starting: on a deploy that does not change the version, the
+ * service can reach this point while the version's own reconcile starts it.
+ */
+const settledVersionStatus = Effect.fn(function* (
+  versionId: string,
+  props: Pick<ComputeServiceProps, "timeoutSeconds" | "pollIntervalMs">,
+) {
+  const timeoutMs = (props.timeoutSeconds ?? 60) * 1_000;
+  const intervalMs = Math.max(props.pollIntervalMs ?? 1_000, 1);
+  const startedAt = yield* Clock.currentTimeMillis;
+  while (true) {
+    const { status } = yield* observeDeployment(versionId);
+    const elapsed = (yield* Clock.currentTimeMillis) - startedAt;
+    if (!["provisioning", "stopping", "stopped"].includes(status) || elapsed >= timeoutMs) {
+      return status;
+    }
+    yield* Effect.sleep(Duration.millis(Math.min(intervalMs, timeoutMs - elapsed)));
+  }
+});
+
+/**
+ * Why the attached version cannot be served. A `new` version was never
+ * started, which only `start: false` does; any other status means it was
+ * started and the platform reports it otherwise.
+ */
+const versionNotRunningMessage = (app: ObservedApp, versionId: string, status: string) => {
+  const head = `Prisma Compute service '${app.id}' cannot serve version '${versionId}': the platform reports it as '${status}', not running.`;
+  const serving = `The service still serves ${app.latestDeploymentId ? `'${app.latestDeploymentId}'` : "no version"}.`;
+  if (status === "new") {
+    return `${head} It was never started, because its Prisma.ComputeVersion sets start: false. Remove start, or set it to true, so the version is started before it becomes the active version. ${serving}`;
+  }
+  if (status === "failed") {
+    return `${head} The version was started and failed on the platform, and a failed version is not restarted. ${serving} Change the Prisma.ComputeVersion, for example its triggers, so the next deploy creates a new version.`;
+  }
+  if (status === "stopped") {
+    return `${head} ${serving} If its Prisma.ComputeVersion sets start: false, set it to true. Otherwise the version was stopped after it started, and deploying again starts it and promotes it.`;
+  }
+  return `${head} The version was started, and the platform still reports it as '${status}'. ${serving} Deploying again promotes the version if it is running by then, or starts it again once the platform has stopped it.`;
+};
+
 const serveActiveVersion = Effect.fn(function* (
   app: ObservedApp,
   versionId: string,
   recordedVersionId: string | null | undefined,
   news: ComputeServiceProps,
 ) {
-  const version = yield* observeDeployment(versionId);
-  if (version.status !== "running") {
+  const status = yield* settledVersionStatus(versionId, news);
+  if (status !== "running") {
     return yield* new ComputeServiceVersionNotRunning({
-      message: `Prisma Compute service '${app.id}' cannot serve version '${versionId}': the version is '${version.status}', not running. Leave start at its default, true, on the Prisma.ComputeVersion so it is started before it becomes the active version.`,
+      message: versionNotRunningMessage(app, versionId, status),
     });
   }
   // The version to restore is the one the platform served just before this

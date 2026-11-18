@@ -95,7 +95,14 @@ export const makeComputeCloud = () => {
      * version stays `stopping`, and deleting it or its service is refused.
      */
     stuckStopping: new Set<string>(),
+    /**
+     * Once a version's preview URL has been checked, the platform reports it
+     * with this status for this many reads, then as it is: a version that
+     * passed its own check and is then reported otherwise.
+     */
+    reportedAfterCheck: new Map<string, { status: string; reads: number }>(),
   };
+  const checkedPreviews = new Set<string>();
   const stopRefused = () =>
     failure(409, "conflict", "The deployment did not reach a delete-safe state after stop");
 
@@ -105,6 +112,7 @@ export const makeComputeCloud = () => {
   const respond = (request: Captured) => {
     const host = new URL(request.url).host;
     if (host.endsWith(".preview.prisma.test")) {
+      checkedPreviews.add(host.split(".")[0]!);
       return knobs.failingPreviews.has(host) ? edgeServiceNotFound() : json({ ok: true });
     }
     if (host.endsWith(".stable.prisma.test")) {
@@ -325,7 +333,14 @@ export const makeComputeCloud = () => {
         deployment.status = knobs.stuckStopping.has(id) ? "stopping" : "stopped";
         return noContent();
       }
-      if (tail === undefined && request.method === "GET") return data(deployment);
+      if (tail === undefined && request.method === "GET") {
+        const reported = knobs.reportedAfterCheck.get(id);
+        if (reported && checkedPreviews.has(id) && reported.reads > 0) {
+          reported.reads -= 1;
+          return data({ ...deployment, status: reported.status });
+        }
+        return data(deployment);
+      }
       if (tail === undefined && request.method === "DELETE") {
         if (knobs.stuckStopping.has(id)) return stopRefused();
         deployments.delete(id);
