@@ -216,6 +216,7 @@ export const readArtifactFile = (artifact: ArtifactFile) =>
 /** What `findArchiveManifest` found at the root of a `tar.gz` artifact. */
 export type ArchiveManifestCheck =
   | { readonly _tag: "NotGzip" }
+  | { readonly _tag: "Corrupt" }
   | { readonly _tag: "Missing" }
   | { readonly _tag: "Invalid"; readonly reason: string }
   | { readonly _tag: "Found"; readonly entrypoint: string };
@@ -252,94 +253,125 @@ const manifestCheck = (text: string): ArchiveManifestCheck => {
 };
 
 /**
- * Read a `tar.gz` artifact's entries until `compute.manifest.json` at its root,
- * without unpacking it.
+ * A tar reader fed decompressed bytes in order. `push` returns whether it
+ * needs more; `result` is what it found.
  */
-const findArchiveManifestPromise = async (
-  artifact: VerifiedFile,
-): Promise<ArchiveManifestCheck> => {
-  const chunks = readVerifiedChunks(artifact);
-  const first = await chunks.next();
-  if (first.done || first.value[0] !== 0x1f || first.value[1] !== 0x8b) {
-    await chunks.return(undefined);
-    return { _tag: "NotGzip" };
-  }
-  const gunzip = createGunzip();
-  const feed = (async () => {
-    try {
-      gunzip.write(first.value);
-      for await (const chunk of chunks) {
-        if (gunzip.destroyed) break;
-        if (!gunzip.write(chunk)) await new Promise((resolve) => gunzip.once("drain", resolve));
-      }
-      gunzip.end();
-    } catch (error) {
-      gunzip.destroy(error as Error);
-    }
-  })();
+const manifestReader = () => {
   let buffered = new Uint8Array(0);
   let skip = 0;
   let manifestRemaining = -1;
   let manifest: Uint8Array[] = [];
   let result: ArchiveManifestCheck = { _tag: "Missing" };
-  try {
-    for await (const raw of gunzip) {
-      const chunk = raw as Uint8Array;
-      const next = new Uint8Array(buffered.length + chunk.length);
-      next.set(buffered);
-      next.set(chunk, buffered.length);
-      buffered = next;
-      while (true) {
-        if (manifestRemaining >= 0) {
-          const take = Math.min(manifestRemaining, buffered.length);
-          manifest.push(buffered.slice(0, take));
-          buffered = buffered.subarray(take);
-          manifestRemaining -= take;
-          if (manifestRemaining > 0) break;
-          result = manifestCheck(Buffer.concat(manifest).toString("utf8"));
-          gunzip.destroy();
-          return result;
-        }
-        if (skip > 0) {
-          const take = Math.min(skip, buffered.length);
-          buffered = buffered.subarray(take);
-          skip -= take;
-          if (skip > 0) break;
-        }
-        if (buffered.length < 512) break;
-        const header = buffered.subarray(0, 512);
-        buffered = buffered.subarray(512);
-        if (header.every((byte) => byte === 0)) {
-          gunzip.destroy();
-          return result;
-        }
-        const size = Number.parseInt(tarString(header, 124, 12).trim() || "0", 8);
-        const padded = Math.ceil(size / 512) * 512;
-        if (tarEntryName(header) === MANIFEST_NAME && header[156] !== 0x35) {
-          if (size > MAX_MANIFEST_BYTES) {
-            gunzip.destroy();
-            return { _tag: "Invalid", reason: "it is larger than 64 KiB" };
-          }
-          manifestRemaining = size;
-          manifest = [];
-          skip = 0;
-          // The data that follows the manifest's padding is not read.
-          continue;
-        }
-        skip = padded;
+  let done = false;
+  const push = (chunk: Uint8Array): boolean => {
+    const next = new Uint8Array(buffered.length + chunk.length);
+    next.set(buffered);
+    next.set(chunk, buffered.length);
+    buffered = next;
+    while (!done) {
+      if (manifestRemaining >= 0) {
+        const take = Math.min(manifestRemaining, buffered.length);
+        manifest.push(buffered.slice(0, take));
+        buffered = buffered.subarray(take);
+        manifestRemaining -= take;
+        if (manifestRemaining > 0) return true;
+        result = manifestCheck(Buffer.concat(manifest).toString("utf8"));
+        done = true;
+        break;
       }
+      if (skip > 0) {
+        const take = Math.min(skip, buffered.length);
+        buffered = buffered.subarray(take);
+        skip -= take;
+        if (skip > 0) return true;
+      }
+      if (buffered.length < 512) return true;
+      const header = buffered.subarray(0, 512);
+      buffered = buffered.subarray(512);
+      if (header.every((byte) => byte === 0)) {
+        done = true;
+        break;
+      }
+      const size = Number.parseInt(tarString(header, 124, 12).trim() || "0", 8);
+      if (tarEntryName(header) === MANIFEST_NAME && header[156] !== 0x35) {
+        if (size > MAX_MANIFEST_BYTES) {
+          result = { _tag: "Invalid", reason: "it is larger than 64 KiB" };
+          done = true;
+          break;
+        }
+        manifestRemaining = size;
+        manifest = [];
+        continue;
+      }
+      skip = Math.ceil(size / 512) * 512;
     }
-    return result;
-  } finally {
-    gunzip.destroy();
-    await feed.catch(() => undefined);
-  }
+    return false;
+  };
+  return { push, result: () => result };
 };
 
+const isGzip = (chunk: Uint8Array) => chunk[0] === 0x1f && chunk[1] === 0x8b;
+
+const readError = toArtifactFileError(
+  "Failed to read the Prisma deployment artifact as a tar.gz archive.",
+);
+
+/**
+ * Read a `tar.gz` artifact's entries until `compute.manifest.json` at its root,
+ * without unpacking it. The read stops at the manifest, and the file is closed
+ * and the decompressor destroyed before this returns.
+ *
+ * Each file chunk is handed to the decompressor and its output consumed as it
+ * is produced, so the decompressor never applies backpressure, and a write's
+ * callback runs even after it is destroyed. No wait here can outlive its stream.
+ */
 export const findArchiveManifest = (artifact: VerifiedFile) =>
-  Effect.tryPromise({
-    try: () => findArchiveManifestPromise(artifact),
-    catch: toArtifactFileError(
-      "Failed to read the Prisma deployment artifact as a tar.gz archive.",
-    ),
-  });
+  Effect.gen(function* () {
+    const reader = manifestReader();
+    let needsMore = true;
+    let notGzip = false;
+    let corrupt: unknown;
+    const gunzip = yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        const stream = createGunzip();
+        stream.on("data", (chunk: Uint8Array) => {
+          if (needsMore) needsMore = reader.push(chunk);
+        });
+        stream.on("error", (error) => {
+          corrupt ??= error;
+        });
+        return stream;
+      }),
+      (stream) => Effect.sync(() => stream.destroy()),
+    );
+    const settled = () => !needsMore || corrupt !== undefined;
+    let first = true;
+    yield* Stream.runForEachWhile(
+      Stream.fromAsyncIterable(readVerifiedChunks(artifact), readError),
+      (chunk) =>
+        Effect.gen(function* () {
+          if (first) {
+            first = false;
+            if (!isGzip(chunk)) {
+              notGzip = true;
+              return false;
+            }
+          }
+          yield* Effect.callback<void>((resume) => {
+            gunzip.write(chunk, () => resume(Effect.void));
+          });
+          return !settled();
+        }),
+    );
+    if (notGzip || first) return { _tag: "NotGzip" } as const;
+    if (!settled()) {
+      yield* Effect.callback<void>((resume) => {
+        const done = () => resume(Effect.void);
+        gunzip.once("end", done);
+        gunzip.once("error", done);
+        gunzip.end();
+      });
+    }
+    if (!needsMore || corrupt === undefined) return reader.result();
+    return { _tag: "Corrupt" } as const;
+  }).pipe(Effect.scoped);

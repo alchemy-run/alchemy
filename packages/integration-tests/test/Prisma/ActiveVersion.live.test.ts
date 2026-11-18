@@ -1,3 +1,5 @@
+import { randomBytes } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import * as Prisma from "@alchemy.run/prisma";
 import { createComputeArchive } from "@alchemy.run/prisma/ComputeArchive";
 import { expect } from "@alchemy.run/test";
@@ -15,6 +17,7 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import { expectGone, expectProjectGone } from "./fixtures/Live.ts";
+import { tarArchive } from "./fixtures/TarArchive.ts";
 
 const { test } = Test.make({ providers: Prisma.providers() });
 
@@ -139,6 +142,46 @@ test.provider(
         );
       }
       yield* expectProjectGone(first.project.projectId);
+    }).pipe(Effect.scoped),
+  { tags, timeout: 900_000 },
+);
+
+test.provider(
+  "deploys a version from a multi-megabyte archive whose manifest comes first",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The Prisma CLI writes compute.manifest.json near the start of the
+      // archive, and real archives span many reads. A check that stops at the
+      // manifest must still end the read and close the file.
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-prisma-big-archive-" });
+      const encode = (text: string) => new TextEncoder().encode(text);
+      const archive = gzipSync(
+        tarArchive([
+          {
+            name: "compute.manifest.json",
+            data: encode('{"manifestVersion":"1","entrypoint":"server.ts"}'),
+          },
+          {
+            name: "server.ts",
+            data: encode(
+              'Bun.serve({ port: Number(process.env["PORT"] ?? "8080"), fetch: () => new Response("big") });\nexport {};\n',
+            ),
+          },
+          { name: "assets/blob.bin", data: new Uint8Array(randomBytes(3 * 1024 * 1024)) },
+        ]),
+      );
+      const artifactPath = path.join(root, "big.tar.gz");
+      yield* fs.writeFile(artifactPath, archive);
+
+      const deployed = yield* stack.deploy(app(artifactPath));
+      yield* expectServes(deployed.service.url, "big");
+
+      yield* stack.destroy();
+      yield* expectProjectGone(deployed.project.projectId);
     }).pipe(Effect.scoped),
   { tags, timeout: 900_000 },
 );

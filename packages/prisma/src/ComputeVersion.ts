@@ -606,6 +606,11 @@ const requireComputeManifest = Effect.fn(function* (
       message: `artifactPath '${artifactPath}' is not gzip-compressed. ${format}`,
     });
   }
+  if (check._tag === "Corrupt") {
+    return yield* new ComputeVersionInvalidProps({
+      message: `artifactPath '${artifactPath}' starts like a gzip file but cannot be decompressed; it may be truncated or damaged. ${format}`,
+    });
+  }
   if (check._tag === "Missing") {
     return yield* new ComputeVersionInvalidProps({
       message: `artifactPath '${artifactPath}' has no compute.manifest.json at its root. ${format}`,
