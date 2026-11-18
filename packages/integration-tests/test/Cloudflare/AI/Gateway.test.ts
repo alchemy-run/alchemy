@@ -193,29 +193,33 @@ test.provider(
 
       yield* stack.destroy();
 
-      const deployBilling = (workersAiBillingMode?: "postpaid" | "unified") =>
-        stack.deploy(
-          Effect.gen(function* () {
-            return yield* Cloudflare.AI.Gateway("BillingGateway", {
-              id: "alchemy-test-ai-gateway-billing",
-              ...(workersAiBillingMode ? { workersAiBillingMode } : {}),
-            });
-          }),
-        );
+      const program = (props: Cloudflare.AI.GatewayProps) =>
+        Effect.gen(function* () {
+          return yield* Cloudflare.AI.Gateway("BillingGateway", props);
+        });
+      const liveMode = (gatewayId: string) =>
+        aiGateway
+          .getAiGateway({ accountId, id: gatewayId })
+          .pipe(Effect.map((live) => live.workersAiBillingMode));
 
-      const gateway = yield* deployBilling("postpaid");
+      const gateway = yield* stack.deploy(program({ workersAiBillingMode: "postpaid" }));
       expect(gateway.workersAiBillingMode).toEqual("postpaid");
-      const live = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
-      expect(live.workersAiBillingMode).toEqual("postpaid");
+      expect(yield* liveMode(gateway.gatewayId)).toEqual("postpaid");
 
-      const updated = yield* deployBilling("unified");
+      const unified = program({ workersAiBillingMode: "unified" });
+      expect((yield* stack.plan(unified)).resources.BillingGateway?.action).toBe("update");
+      const updated = yield* stack.deploy(unified);
+      expect(updated.gatewayId).toEqual(gateway.gatewayId);
       expect(updated.workersAiBillingMode).toEqual("unified");
-      const liveUpdated = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
-      expect(liveUpdated.workersAiBillingMode).toEqual("unified");
+      expect(yield* liveMode(gateway.gatewayId)).toEqual("unified");
+      expect((yield* stack.plan(unified)).resources.BillingGateway?.action).toBe("noop");
 
-      yield* deployBilling();
-      const liveUnmanaged = yield* aiGateway.getAiGateway({ accountId, id: gateway.gatewayId });
-      expect(liveUnmanaged.workersAiBillingMode).toEqual("unified");
+      // Dropping the prop updates the gateway without a billing mode, and
+      // the gateway keeps the one it has.
+      const unmanaged = yield* stack.deploy(program({}));
+      expect(unmanaged.workersAiBillingMode).toEqual("unified");
+      expect(yield* liveMode(gateway.gatewayId)).toEqual("unified");
+      expect((yield* stack.plan(program({}))).resources.BillingGateway?.action).toBe("noop");
 
       yield* stack.destroy();
       yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
