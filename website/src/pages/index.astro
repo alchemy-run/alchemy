@@ -824,6 +824,20 @@ const PROVIDERS = [
   .v2-hero__copy :global(.alc-hero__subtitle) {
     margin-inline: 0;
   }
+  /* A glow in the page color hugs each letter, so the rings fade out right
+     at the text instead of behind a block that hides the animation. */
+  .v2-hero__copy :global(.alc-hero__title),
+  .v2-hero__copy :global(.alc-hero__subtitle) {
+    --glow: var(--alc-bg);
+    text-shadow:
+      0 0 2px var(--glow),
+      0 0 4px var(--glow),
+      0 0 7px var(--glow),
+      0 0 7px var(--glow),
+      0 0 12px var(--glow),
+      0 0 12px var(--glow),
+      0 0 20px var(--glow);
+  }
   .v2-hero__copy :global(.alc-hero__cta) {
     justify-content: flex-start;
   }
