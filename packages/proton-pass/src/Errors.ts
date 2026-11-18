@@ -47,11 +47,11 @@ export class ProtonPassAuthError extends Data.TaggedError("ProtonPassAuthError")
  */
 export class ProtonPassReferenceError extends Data.TaggedError("ProtonPassReferenceError")<{
   readonly configKey: string;
-  readonly errorType?: ProtonPassReferenceErrorType;
+  readonly errorType: ProtonPassReferenceErrorType;
 }> {
   readonly [UserFacingError] = true;
   override get message() {
-    return `Proton Pass could not resolve the reference for config key '${this.configKey}'${this.errorType ? ` (${this.errorType})` : ""}. Check its pass://vault/item/field syntax and that the token or session can read the vault. No partial config was loaded.`;
+    return `Proton Pass could not resolve the reference for config key '${this.configKey}' (${this.errorType}). Check its pass://vault/item/field syntax and that the token or session can read the vault. No partial config was loaded.`;
   }
 }
 
@@ -59,11 +59,11 @@ export class ProtonPassReferenceError extends Data.TaggedError("ProtonPassRefere
 export class ProtonPassItemError extends Data.TaggedError("ProtonPassItemError")<{
   readonly vault: string;
   readonly item: string;
-  readonly errorType?: ProtonPassReferenceErrorType;
+  readonly errorType: ProtonPassReferenceErrorType;
 }> {
   readonly [UserFacingError] = true;
   override get message() {
-    return `Proton Pass could not read item '${this.item}' in vault '${this.vault}'${this.errorType ? ` (${this.errorType})` : ""}. Check the names or IDs and that the token or session can read the vault.`;
+    return `Proton Pass could not read item '${this.item}' in vault '${this.vault}' (${this.errorType}). Check the names or IDs and that the token or session can read the vault.`;
   }
 }
 

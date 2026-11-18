@@ -65,6 +65,9 @@ with these fields:
 | any | `EMPTY` | empty |
 | `Staging` | `API_KEY` | `staging-ready` |
 
+Add a login item `alchemy-login` to the same vault, with any password and a
+hidden custom field `LOGIN_EXTRA` set to `extra-ready`.
+
 Then set `PROTON_PASS_TEST_LIVE=1`. Without `PROTON_PASS_PERSONAL_ACCESS_TOKEN`
 the tests read through your `pass-cli login` session. With it set, they read
 through a token, which must have viewer access to the vault. No item is created

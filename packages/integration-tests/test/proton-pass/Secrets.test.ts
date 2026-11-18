@@ -206,6 +206,18 @@ const roundTrip = Effect.gen(function* () {
     }),
     "audit",
   );
+  // A login item: its custom fields load, its built-in fields don't.
+  yield* runStack(
+    [
+      ProtonPass.Item({ vault: name, item: "alchemy-login" }),
+      Secrets.ProcessEnv({ disabled: true }),
+    ],
+    Effect.gen(function* () {
+      yield* ready("LOGIN_EXTRA", "extra-ready");
+      const password = yield* Config.option(Config.String("password"));
+      expect(password._tag).toBe("None");
+    }),
+  );
 });
 
 const failures = Effect.gen(function* () {

@@ -8,7 +8,7 @@ description: Read Proton Pass items and pass:// references into Effect Config th
 [Proton Pass CLI](https://protonpass.github.io/pass-cli/) (`pass-cli`). It
 offers two entries, which you can combine:
 
-- `ProtonPass.Item` loads every text and hidden field of one item, each under its own field name.
+- `ProtonPass.Item` loads every custom text and hidden field of one item, each under its own field name.
 - `ProtonPass.SecretReferences` loads chosen fields from `pass://` references.
 
 The provider does not modify `process.env` or write downloaded values to disk.
@@ -53,7 +53,9 @@ export default Alchemy.Stack(
 ```
 
 `vault` is the vault's name or share ID, and `item` is the item's title or ID.
-Fields inside custom sections are included without their section prefix. If
+Fields inside custom sections are included without their section prefix.
+Built-in fields, such as a login's `password`, are not loaded; read them with
+`SecretReferences`. If
 two fields share a name, the load fails with `ProtonPassDuplicateFieldError`.
 Empty values are kept. TOTP and timestamp fields are skipped.
 
@@ -173,7 +175,7 @@ Each failure has its own error, so you can catch the one you care about:
 | `ProtonPassAuthError` | Proton Pass rejected the personal access token |
 | `ProtonPassCliNotFoundError` | `pass-cli` isn't installed or isn't on `PATH` |
 | `ProtonPassTimeoutError` | A CLI call didn't finish within 30 seconds |
-| `ProtonPassCliError` | Anything else the CLI reports |
+| `ProtonPassCliError` | Anything else the CLI reports, such as a network failure; carries the exit code |
 
 None of them include the CLI's output, references or values.
 

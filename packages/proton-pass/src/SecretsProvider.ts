@@ -21,7 +21,7 @@ export interface SecretReferencesOptions {
   references: Readonly<Record<string, string>>;
 }
 
-/** Options for {@link Item}: load every text and hidden field of one item. */
+/** Options for {@link Item}: load every custom text and hidden field of one item. */
 export interface ItemOptions {
   /** The vault's name or share ID. */
   vault: string;
@@ -119,10 +119,12 @@ export const SecretReferences = (options: SecretsOption<SecretReferencesOptions>
   );
 
 /**
- * Load every text and hidden field of one Proton Pass item into Effect Config,
- * under the field's own name, without modifying process.env. Keep a custom
- * item per environment with one field per variable. Empty values are kept;
- * TOTP and timestamp fields are skipped. Two fields with the same name, even in
+ * Load every custom text and hidden field of one Proton Pass item into Effect
+ * Config, under the field's own name, without modifying process.env. Keep a
+ * custom item per environment with one field per variable. Built-in fields
+ * (a login's `password`, a note's body) are not loaded; read them with
+ * {@link SecretReferences}. Empty values are kept; TOTP and timestamp fields
+ * are skipped. Two fields with the same name, even in
  * different sections, fail the load.
  *
  * ### Loading an item

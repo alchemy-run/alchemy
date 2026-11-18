@@ -118,12 +118,21 @@ const sessionEnv = Effect.fn("proton-pass.session")(function* (
   return env;
 });
 
-/** A failed read is a missing session, or the caller's error for the classified kind. */
+/**
+ * A failed read is a missing session, the caller's error for a missing or
+ * malformed reference, or an unclassified CLI failure (network, locked
+ * session), which says nothing about the reference itself.
+ */
 const readError = <E>(
-  stderr: string,
-  onRead: (errorType?: ProtonPassReferenceErrorType) => E,
-): ProtonPassNotLoggedInError | E =>
-  notLoggedIn(stderr) ? new ProtonPassNotLoggedInError() : onRead(referenceErrorType(stderr));
+  result: CliResult,
+  onRead: (errorType: ProtonPassReferenceErrorType) => E,
+): ProtonPassNotLoggedInError | ProtonPassCliError | E => {
+  if (notLoggedIn(result.stderr)) return new ProtonPassNotLoggedInError();
+  const errorType = referenceErrorType(result.stderr);
+  return errorType === undefined
+    ? new ProtonPassCliError({ operation: "read", exitCode: result.exitCode })
+    : onRead(errorType);
+};
 
 /**
  * Resolve `pass://vault/item/field` references keyed by their config keys.
@@ -146,7 +155,7 @@ export const resolveReferences = Effect.fn("proton-pass.resolveReferences")(func
         const result = yield* run("read", ["item", "view", reference], env);
         if (result.exitCode !== 0) {
           return yield* readError(
-            result.stderr,
+            result,
             (errorType) => new ProtonPassReferenceError({ configKey, errorType }),
           );
         }
@@ -208,7 +217,7 @@ export const readItem = Effect.fn("proton-pass.readItem")(function* (
   );
   if (result.exitCode !== 0) {
     return yield* readError(
-      result.stderr,
+      result,
       (errorType) => new ProtonPassItemError({ ...source, errorType }),
     );
   }
