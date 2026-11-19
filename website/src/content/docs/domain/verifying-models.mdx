@@ -502,7 +502,7 @@ A proof also covers two things you didn't write down. Every command leaves the s
 
 ## Write handlers the prover can read
 
-The prover reads `decide`, `evolve` and the rules as written, so they have to be plain functions of their inputs. Most ordinary TypeScript is read: conditions, `switch`, spreads, rest patterns, local variables that change, `+=` and `++`, array methods, and helpers from `effect/Option`, `effect/Array`, `effect/Record` and `effect/Struct`.
+The prover reads `decide`, `evolve` and the rules as written, so they have to be plain functions of their inputs. Most ordinary TypeScript is read: conditions, `switch`, spreads, rest patterns, local variables that change, `+=` and `++`, array methods, and helpers from `effect/Option`, `effect/Array`, `effect/Record`, `effect/Struct` and `effect/Match`.
 
 Whole numbers are exact, and so is a `bigint`. A division is read where its result is exact: through `Math.floor`, `Math.ceil` or `Math.trunc`, or compared with a whole number.
 
@@ -520,6 +520,21 @@ An `Option` field is read as either case, and so is an optional one: a proof sta
 ```typescript title="packages/domain/src/Wallet.aggregate.ts"
 invariants: {
   NeverNegative: (wallet) => !Option.exists(wallet.balance, (balance) => balance < 0),
+},
+```
+
+A state that is a union can be matched with `effect/Match` in place of `_tag` tests. Each case is read as a branch, in a handler or in a rule.
+
+```typescript title="packages/domain/src/Locker.aggregate.ts"
+decide: {
+  Take: (locker, cmd) =>
+    Match.value(locker).pipe(
+      Match.when({ _tag: "Open", held: (held) => held >= cmd.amount }, () => [
+        new Taken({ amount: cmd.amount }),
+      ]),
+      Match.tag("Open", () => new NotEnough()),
+      Match.orElse(() => new NotOpen()),
+    ),
 },
 ```
 
