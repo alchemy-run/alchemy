@@ -281,6 +281,18 @@ describe("sealing codec, JSON form", { tags: ["unit", "local"] }, () => {
     expect(decoded[1]).toBe("public");
   });
 
+  // StateEncryption.ts encodeJson spreads the header over the record's own
+  // fields, and decodeJson drops the field it reads the header from.
+  test("a record's own __alchemy_sealed__ field survives next to a secret", async () => {
+    const { keyring } = memoryKeyring();
+    const codec = makeSealingCodec(keyring);
+    const output = { [SEALED_RECORD_MARKER]: "user value", password: Redacted.make("hunter2") };
+    const json = await run(codec.encodeJson(scope, output));
+    const decoded = await run(codec.decodeJson<typeof output>(scope, json, "output"));
+    expect(Redacted.value(decoded.password)).toBe("hunter2");
+    expect(decoded[SEALED_RECORD_MARKER]).toBe("user value");
+  });
+
   test("leaves a value without secrets as encodeState writes it", async () => {
     const { keyring, calls } = memoryKeyring();
     const value = { status: "created", attr: { at: new Date(0) } };
