@@ -31,6 +31,7 @@ import * as Access from "../Access.ts";
 import * as CloudflareEnvironment from "../CloudflareEnvironment.ts";
 import { EdgeSessionError, createEdgeSession } from "../EdgeSession.ts";
 import * as Cloudflare from "../Providers.ts";
+import type { WorkerObservability } from "../Workers/Worker.ts";
 import { STATE_STORE_SCRIPT_NAME, STATE_STORE_VERSION } from "./Api.ts";
 import {
   deleteStoreCredentials,
@@ -74,6 +75,19 @@ export type CloudflareStateOptions = {
    * @default "alchemy-state-store"
    */
   readonly workerName?: string;
+  /**
+   * The store Worker's observability settings, applied whenever Alchemy
+   * deploys or upgrades the store. Pass `{ enabled: false }` to turn Workers
+   * Logs off (`alchemy state logs` and `tail` then show nothing), or
+   * `{ enabled: true, logs: { enabled: true, invocationLogs: false } }` to
+   * keep logs without one line per state request. When omitted, a redeploy
+   * keeps the Worker's current settings, including ones changed in the
+   * dashboard; a new store gets the default. A store that is already up to
+   * date isn't redeployed just for this option: it applies on the next
+   * upgrade, so change a running store in the dashboard, where it is kept.
+   * @default { enabled: true, logs: { enabled: true, invocationLogs: true } }
+   */
+  readonly observability?: WorkerObservability;
 };
 
 export const state = (options: CloudflareStateOptions = {}) =>
@@ -81,7 +95,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
     State,
     Effect.gen(function* () {
       const isCI = yield* CI;
-      const { workerName, domain } = options;
+      const { workerName, domain, observability } = options;
       const scriptName = workerName ?? STATE_STORE_SCRIPT_NAME;
       const profileName = yield* currentProfileName;
       const credStore = yield* CredentialsStore;
@@ -98,7 +112,13 @@ export const state = (options: CloudflareStateOptions = {}) =>
         const accountId = yield* resolveAccountId(options.accountId);
         const deployMissing = Provisioning.deployMissing(
           store,
-          bootstrap({ workerName: scriptName, profile: profileName, accountId, domain }),
+          bootstrap({
+            workerName: scriptName,
+            profile: profileName,
+            accountId,
+            domain,
+            observability,
+          }),
         );
 
         const ensureLatest = ({ url, authToken }: { url: string; authToken: string }) =>
@@ -123,6 +143,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
                   accountId,
                   scriptName,
                   domain,
+                  observability,
                   profileName,
                   isCI,
                   force: false,
@@ -204,6 +225,8 @@ export interface BootstrapOptions {
   accountId?: string;
   /** A hostname to serve the store on, attached as a custom domain. */
   domain?: string;
+  /** The store Worker's observability settings. See {@link CloudflareStateOptions.observability}. */
+  observability?: WorkerObservability;
   /** @default false */
   force?: boolean;
   /** @default "default" */
@@ -271,9 +294,15 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         {
           label: `${serving ? "Updating" : "Deploying"} Cloudflare State Store '${scriptName}'`,
         },
-        deployStateStore({ accountId, scriptName, domain, profileName, isCI, force }).pipe(
-          Effect.flatMap(makeCloudflareStateStore),
-        ),
+        deployStateStore({
+          accountId,
+          scriptName,
+          domain,
+          observability: options.observability,
+          profileName,
+          isCI,
+          force,
+        }).pipe(Effect.flatMap(makeCloudflareStateStore)),
       );
     }).pipe(
       Effect.withSpan("state_store.bootstrap", {
@@ -423,6 +452,7 @@ const deployStateStore = ({
   accountId,
   scriptName,
   domain,
+  observability,
   profileName,
   isCI,
   force,
@@ -430,6 +460,7 @@ const deployStateStore = ({
   accountId: string;
   scriptName: string;
   domain: string | undefined;
+  observability: WorkerObservability | undefined;
   profileName: string;
   isCI: boolean;
   /** Approves replacing a lost encryption key without asking. */
@@ -448,7 +479,12 @@ const deployStateStore = ({
           `terminal and confirm, or pass --force with --backend.`,
       });
     }
-    const { url, authToken } = yield* deployStateStoreWorker({ accountId, scriptName, domain });
+    const { url, authToken } = yield* deployStateStoreWorker({
+      accountId,
+      scriptName,
+      domain,
+      observability,
+    });
     // Cloudflare's worker upload is eventually consistent: the edge can keep
     // serving the previous version for several seconds. Wait until `/version`
     // reports the version this CLI was built against before using it.

@@ -210,6 +210,53 @@ test.provider(
   { tags, timeout: 300_000 },
 );
 
+/** The store Worker's observability as Cloudflare reports it. */
+const observability = (accountId: string, workerName: string) =>
+  workers
+    .getScriptScriptAndVersionSetting({ accountId, scriptName: workerName })
+    .pipe(Effect.map((settings) => settings.observability));
+
+test.provider(
+  "a store's observability defaults on, survives a redeploy, and follows the option when given",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workerName = storeWorker("observability");
+      yield* teardownStateStore({ workerName });
+
+      // A new store gets invocation logs.
+      yield* bootstrap({ workerName });
+      expect(yield* observability(accountId, workerName)).toMatchObject({
+        enabled: true,
+        logs: { enabled: true, invocationLogs: true },
+      });
+
+      // A setting changed out of band (e.g. in the dashboard) survives a redeploy.
+      yield* workers.patchScriptSetting({
+        accountId,
+        scriptName: workerName,
+        observability: { enabled: true, logs: { enabled: true, invocationLogs: false } },
+      });
+      yield* bootstrap({ workerName, force: true });
+      expect(yield* observability(accountId, workerName)).toMatchObject({
+        enabled: true,
+        logs: { enabled: true, invocationLogs: false },
+      });
+
+      // The option replaces it. Cloudflare omits a disabled configuration.
+      yield* bootstrap({ workerName, force: true, observability: { enabled: false } });
+      expect((yield* observability(accountId, workerName))?.enabled ?? false).toBe(false);
+
+      // And stays off through a redeploy without it.
+      yield* bootstrap({ workerName, force: true });
+      expect((yield* observability(accountId, workerName))?.enabled ?? false).toBe(false);
+
+      yield* teardownStateStore({ workerName });
+      expect(yield* scriptExists(accountId, workerName)).toBe(false);
+    }),
+  { tags, timeout: 300_000 },
+);
+
 test.provider(
   "a Worker name workers.dev can't serve fails before anything is created",
   () =>
