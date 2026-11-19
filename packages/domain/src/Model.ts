@@ -53,6 +53,7 @@ import type * as Policy from "./Policy.ts";
 import * as Projection from "./Projection.ts";
 import * as Query from "./Query.ts";
 import * as Read from "./Read.ts";
+import type * as Relation from "./Relation.ts";
 import * as RequestContext from "./RequestContext.ts";
 import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -137,7 +138,68 @@ export interface Members<
   readonly sagas?: G;
   /** The queries it answers, from the stores its projections write. */
   readonly queries?: Q;
+  /**
+   * Rules that hold across the model's aggregates whenever nothing is left to
+   * react: every policy has handled the events it reacts to and every saga
+   * has finished or waits. Each is named and given every instance, with its
+   * state and the events it recorded, every key of the model's views with
+   * its state, and what each projection was given: `true` while the rule holds. `Explore.check` looks for a
+   * sequence of commands that breaks one.
+   */
+  readonly invariants?: {
+    readonly [name: string]: (model: Instances<A> & Keys<V> & Fed<J>) => boolean;
+  };
+  /**
+   * Rules that relate a few instances at all times, each made with
+   * `Domain.Relation`. `Verify.model` proves one where every command and
+   * every decision that records on its aggregates keeps it, and looks for a
+   * sequence of commands that breaks one it cannot prove.
+   */
+  readonly relations?: { readonly [name: string]: Relation.Any };
+  /**
+   * Rules that hold once everything has run its course: nothing is left to
+   * react, and every scheduled command has come due and run. Where an
+   * invariant says what is never true along the way, one of these says where
+   * every sequence ends up. Each is named and given what an invariant is.
+   * `Explore.check` runs every sequence it finds to its end and looks for
+   * one that ends without it.
+   */
+  readonly eventually?: {
+    readonly [name: string]: (model: Instances<A> & Keys<V> & Fed<J>) => boolean;
+  };
 }
+
+/**
+ * What each of a model's projections has been given, by projection name,
+ * oldest first: what a model invariant is given. A projection writes where
+ * the model cannot see, so what it was told is what a rule can speak of.
+ */
+export type Fed<J extends ReadonlyArray<Projection.Any>> = {
+  readonly [K in J[number] as K["projectionName"]]: ReadonlyArray<{
+    /** The id of the key the event was given under. */
+    readonly id: string;
+    readonly event: Aggregate.InstanceOf<K["definition"]["on"][number]>;
+  }>;
+};
+
+/** Every key of a model's views that has a state, by view name: what a model invariant is given. */
+export type Keys<V extends ReadonlyArray<View.Any>> = {
+  readonly [K in V[number] as K["viewName"]]: ReadonlyArray<{
+    /** The id of the instance the key follows. */
+    readonly id: string;
+    readonly state: NonNullable<View.StateOf<K>>;
+  }>;
+};
+
+/** Every instance of a model's aggregates, by aggregate name: what a model invariant is given. */
+export type Instances<A extends ReadonlyArray<Aggregate.Any>> = {
+  readonly [K in A[number] as K["aggregateName"]]: ReadonlyArray<{
+    readonly id: Aggregate.IdOf<K>;
+    readonly state: Aggregate.StateOf<K>;
+    /** Every event the instance recorded, oldest first. */
+    readonly events: ReadonlyArray<Aggregate.EventOf<K>>;
+  }>;
+};
 
 /**
  * The class type returned by {@link make}.
@@ -168,6 +230,12 @@ export interface ModelClass<
   readonly streams: Parts["streams"];
   /** The model's queries, in order. */
   readonly queries: Parts["queries"];
+  /** The model's own invariants, by name. */
+  readonly invariants: { readonly [name: string]: (model: never) => boolean };
+  /** What holds once everything has run its course, by name. */
+  readonly eventually: { readonly [name: string]: (model: never) => boolean };
+  /** The model's relations, by name. */
+  readonly relations: { readonly [name: string]: Relation.Any };
   readonly definitions: Kernel.Definitions;
   /**
    * Host every entity on the ambient {@link Platform}. The policy and
@@ -438,6 +506,13 @@ export const make = <
     static readonly modelName: Name = name;
     static readonly definitions: Kernel.Definitions = definitions;
     static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];
+    static readonly invariants = (members.invariants ?? {}) as {
+      readonly [name: string]: (model: never) => boolean;
+    };
+    static readonly eventually = (members.eventually ?? {}) as {
+      readonly [name: string]: (model: never) => boolean;
+    };
+    static readonly relations = members.relations ?? {};
     static readonly aggregates = definitions.aggregates;
     static readonly decisions = decisions;
     static readonly commands = [

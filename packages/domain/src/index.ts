@@ -30,6 +30,7 @@ import * as PolicyModule from "./Policy.ts";
 import * as ProjectionModule from "./Projection.ts";
 import * as QueryModule from "./Query.ts";
 import * as RejectionModule from "./Rejection.ts";
+import * as RelationModule from "./Relation.ts";
 import * as RequestContextModule from "./RequestContext.ts";
 import * as SagaModule from "./Saga.ts";
 import * as StreamModule from "./Stream.ts";
@@ -209,6 +210,15 @@ export declare namespace Query {
   /** How a query's Layer runs it: page size limits. */
   export type LayerOptions = QueryModule.LayerOptions;
 }
+export declare namespace Relation {
+  /** Any relation. */
+  export type Any = RelationModule.Any;
+  /** One instance a relation is about: its id and its state. */
+  export type Instance<A extends AggregateModule.Any> = RelationModule.Instance<A>;
+}
+/** A rule that relates a few instances at all times. See {@link RelationModule.make}. */
+export const Relation = RelationModule.make;
+
 /** A question asked across keys, answered from a store a projection writes. See {@link QueryModule.make}. */
 export const Query = QueryModule.make;
 

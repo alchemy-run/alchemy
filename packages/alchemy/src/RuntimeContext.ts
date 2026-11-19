@@ -113,8 +113,10 @@ export interface RedactedMarker {
 export const isRedactedMarker = (value: unknown): value is RedactedMarker =>
   typeof value === "object" &&
   value !== null &&
+  !Array.isArray(value) &&
   (value as { _tag?: unknown })._tag === "Redacted" &&
-  "value" in value;
+  "value" in value &&
+  Object.keys(value).length === 2;
 
 /**
  * Returns true when {@link unpackEnvValue}'s `JSON.parse` would reinterpret
@@ -176,14 +178,11 @@ const possibleJson = /^[\x20\t\r\n]*["{[0-9tfn-]/;
  * string from `packEnvValue`, or an env var the user set directly).
  * `undefined` passes through.
  *
- * Runtime `get` accessors MUST feed this from the raw environment
- * (`process.env[key]` / the platform env object) — never through
- * `Config.String`: the ambient runtime `ConfigProvider` reifies bound
- * values (unwrapping the marker before it could be detected here), and
- * during init the ambient provider is the interceptor installed in
- * `Platform.ts`, whose runtime branch calls back into `ctx.get(key)` —
- * resolving through `Config` would re-enter it for the same key and
- * recurse forever.
+ * Only call this on a key Alchemy wrote with {@link packEnvValue}, read from
+ * the raw environment (`process.env[key]` / the platform env object): a string
+ * someone else set may parse as JSON and come back changed (`"false"` →
+ * `false`), and `Config` reads have already unwrapped the marker. `Config`
+ * reads use {@link unwrapRedactedMarker} instead.
  */
 export const unpackEnvValue = <T>(raw: string | undefined): T | undefined => {
   if (raw === undefined) {
@@ -201,6 +200,30 @@ export const unpackEnvValue = <T>(raw: string | undefined): T | undefined => {
   } catch {
     return raw as unknown as T; // assume it's just a string
   }
+};
+
+/**
+ * If `raw` is a `{"_tag":"Redacted","value":...}` marker, return its value as
+ * a string; otherwise return `raw` unchanged, even when it parses as JSON.
+ *
+ * `Config` reads use this (through `runtimeConfigProvider`): the marker is the
+ * only encoding Alchemy puts on a value a `Config` reads. Any other string was
+ * set by someone else (a Worker `env` entry, a dashboard, the host), so only
+ * they know whether `"false"` meant a string (#2269, #2847, #3497).
+ */
+export const unwrapRedactedMarker = (raw: string): string => {
+  if (!raw.startsWith("{")) {
+    return raw;
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (isRedactedMarker(parsed)) {
+      return typeof parsed.value === "string" ? parsed.value : JSON.stringify(parsed.value);
+    }
+  } catch {
+    // not JSON — a plain value
+  }
+  return raw;
 };
 
 /**

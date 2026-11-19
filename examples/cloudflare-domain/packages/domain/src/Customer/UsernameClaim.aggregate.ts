@@ -16,6 +16,12 @@ export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
     Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
   ]),
   initial: { _tag: "Free" },
+  transitions: {
+    /** Once somebody holds a name, nobody else gets it. */
+    AClaimedNameStaysWithItsHolder: ({ before, after }) =>
+      before._tag === "Free" ||
+      (after._tag === "Claimed" && after.customerId === before.customerId),
+  },
   events: [UsernameClaimed],
   evolve: {
     UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }),
