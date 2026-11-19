@@ -13,8 +13,9 @@ import * as Option from "effect/Option";
 import type * as Tracer from "effect/Tracer";
 import {
   isRpcRequest,
-  RPC_REQUEST_METHOD,
+  methodOfRpcRequestMethod,
   rpcParentOf,
+  rpcRequestMethod,
   RpcUnsupportedVersion,
   SUPPORTED_RPC_VERSIONS,
 } from "../../Rpc.ts";
@@ -92,12 +93,14 @@ export const makeDurableObjectBridge =
           gate: (run) => state.blockConcurrencyWhile(run),
         });
         void this.#core.instance.catch(() => {});
-        // The protocol's envelope method: one call carrying its method,
-        // arguments and metadata, so the caller's trace context never mixes
-        // into the arguments.
-        const request = (envelope: unknown) => {
-          if (!isRpcRequest(envelope)) {
-            return Promise.reject(new Error(`"${RPC_REQUEST_METHOD}" takes one RpcRequest`));
+        // The protocol's envelope methods: `~alchemy/rpc/<method>` carries
+        // the method's arguments and the call's metadata, so the caller's
+        // trace context never mixes into the arguments.
+        const request = (method: string) => (envelope: unknown) => {
+          if (!isRpcRequest(envelope) || envelope.method !== method) {
+            return Promise.reject(
+              new Error(`"${rpcRequestMethod(method)}" takes one RpcRequest for "${method}"`),
+            );
           }
           if (!SUPPORTED_RPC_VERSIONS.includes(envelope.v)) {
             return Promise.reject(
@@ -105,10 +108,18 @@ export const makeDurableObjectBridge =
             );
           }
           const parent = Option.getOrUndefined(rpcParentOf(envelope.meta));
-          return this.#core.dispatch(envelope.method, parent)(...envelope.args);
+          return this.#core.dispatch(method, parent)(...envelope.args);
         };
         if (dispatch === "static") {
-          Reflect.set(this, RPC_REQUEST_METHOD, request);
+          // Alongside the methods the instance materializes once built.
+          void this.#core.instance.then(
+            (built) => {
+              for (const name of Object.keys(built.instance)) {
+                Reflect.set(this, rpcRequestMethod(name), request(name));
+              }
+            },
+            () => {},
+          );
           return this;
         }
 
@@ -116,7 +127,8 @@ export const makeDurableObjectBridge =
           get: (target, prop) => {
             const bind = (member: any) =>
               typeof member === "function" ? member.bind(target) : member;
-            if (prop === RPC_REQUEST_METHOD) return request;
+            const requested = methodOfRpcRequestMethod(prop);
+            if (requested !== undefined) return request(requested);
             if (typeof prop !== "string" || prop in target) return bind((target as any)[prop]);
             if (adapter.rpcArgs === undefined) return this.#core.dispatch(prop);
             return (...callArgs: unknown[]) => {

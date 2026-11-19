@@ -5,7 +5,7 @@ import {
   decodeRpcResult,
   makeRpcErrorReviver,
   RPC_PROTOCOL_VERSION,
-  RPC_REQUEST_METHOD,
+  rpcRequestMethod,
   RpcCallError,
   type RpcErrorClass,
   type RpcRequest,
@@ -23,17 +23,17 @@ import { isPlaceholderReset } from "./Placeholder.ts";
 export * from "alchemy/Rpc";
 
 /**
- * Whether a call failed because the host doesn't serve `~alchemy/rpc` yet: an
+ * Whether a call failed because the host doesn't serve `~alchemy/rpc/*` yet: an
  * isolate still running a deploy that predates it, which treats the name as
  * an unknown user method. The message is the one every earlier bridge
  * (Durable Object and Worker entrypoint) produces.
  */
-const isRequestMethodMissing = (cause: unknown) =>
+const isRequestMethodMissing = (method: string, cause: unknown) =>
   typeof cause === "object" &&
   cause !== null &&
   "message" in cause &&
   typeof cause.message === "string" &&
-  cause.message.includes(`Method "${RPC_REQUEST_METHOD}" not found`);
+  cause.message.includes(`Method "${rpcRequestMethod(method)}" not found`);
 
 /**
  * Wrap a Cloudflare service-binding stub (or an `Effect` that resolves
@@ -59,8 +59,8 @@ export const makeRpcStub = <Shape>(
     /**
      * How calls reach the callee:
      *
-     * - `"envelope"`: one `~alchemy/rpc` call carrying the method, its
-     *   arguments untouched, and the call's metadata (the caller's trace
+     * - `"envelope"`: one `~alchemy/rpc/<method>` call carrying the
+     *   method's arguments untouched, and the call's metadata (the caller's trace
      *   context). Only for a callee known to run Alchemy's bridge of this
      *   version or later — a Durable Object or Worker built by the same
      *   deploy. A host still on older code (while a deploy or a gradual
@@ -104,7 +104,7 @@ export const makeRpcStub = <Shape>(
               Effect.tryPromise({
                 try: () =>
                   useEnvelope
-                    ? (stub as any)[RPC_REQUEST_METHOD](envelope)
+                    ? (stub as any)[rpcRequestMethod(String(prop))](envelope)
                     : (stub as any)[prop](...args),
                 catch: (cause) => new RpcCallError({ method: String(prop), cause }),
               }).pipe(
@@ -126,11 +126,11 @@ export const makeRpcStub = <Shape>(
                 ? call(false)
                 : call(true).pipe(
                     // A host on older code (mid-deploy, or the old side of a
-                    // gradual rollout) has no `~alchemy/rpc`; it rejected the
+                    // gradual rollout) has no `~alchemy/rpc/*`; it rejected the
                     // call before running anything. Call the method itself, the
                     // form that host speaks: the call succeeds, untraced.
                     Effect.catchIf(
-                      (error) => isRequestMethodMissing(error.cause),
+                      (error) => isRequestMethodMissing(String(prop), error.cause),
                       () => call(false),
                     ),
                   )

@@ -687,11 +687,23 @@ export const isRpcRequest = (value: unknown): value is RpcRequest =>
   (value as RpcRequest).meta !== null;
 
 /**
- * The reserved native-RPC method every Alchemy bridge (Durable Object, Worker
- * entrypoint) serves: it takes one {@link RpcRequest}. A bridge that predates
- * it rejects the call as an unknown method instead of running anything.
+ * The prefix of the reserved native-RPC methods every Alchemy bridge (Durable
+ * Object, Worker entrypoint) serves: `~alchemy/rpc/<method>` takes one
+ * {@link RpcRequest} for `<method>`. Naming each method keeps the platform's
+ * own records (Cloudflare's invocation logs and traces) per method. A bridge
+ * that predates it rejects the call as an unknown method instead of running
+ * anything.
  */
-export const RPC_REQUEST_METHOD = "~alchemy/rpc";
+export const RPC_REQUEST_METHOD_PREFIX = "~alchemy/rpc/";
+
+/** The reserved native-RPC method that carries an {@link RpcRequest} for `method`. */
+export const rpcRequestMethod = (method: string): string => `${RPC_REQUEST_METHOD_PREFIX}${method}`;
+
+/** The user method a reserved native-RPC method name carries, if `name` is one. */
+export const methodOfRpcRequestMethod = (name: string | symbol): string | undefined =>
+  typeof name === "string" && name.startsWith(RPC_REQUEST_METHOD_PREFIX)
+    ? name.slice(RPC_REQUEST_METHOD_PREFIX.length)
+    : undefined;
 
 // ---------------------------------------------------------------------------
 // CBOR stream codec for the `fetch` transport: a CBOR sequence (RFC 8742)

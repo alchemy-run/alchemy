@@ -705,11 +705,11 @@ describe(
       }),
     );
 
-    it.effect("sends one ~alchemy/rpc call to a host that serves it", () =>
+    it.effect("sends one ~alchemy/rpc/<method> call to a host that serves it", () =>
       Effect.gen(function* () {
         const calls: Array<string> = [];
         const host = {
-          "~alchemy/rpc": async (request: { method: string; args: unknown[] }) => {
+          "~alchemy/rpc/greet": async (request: { method: string; args: unknown[] }) => {
             calls.push(`envelope:${request.method}`);
             return `hello ${request.args[0]}`;
           },
@@ -728,15 +728,15 @@ describe(
     );
 
     // A host on an older alchemy (mid-deploy, or the old side of a gradual
-    // rollout) has no `~alchemy/rpc`; its bridge answers with this message
+    // rollout) has no `~alchemy/rpc/<method>`; its bridge answers with this message
     // before running anything.
     it.effect("calls an older host's method directly, with exactly the caller's arguments", () =>
       Effect.gen(function* () {
         const calls: Array<unknown> = [];
         const olderHost = {
-          "~alchemy/rpc": async () => {
+          "~alchemy/rpc/greet": async () => {
             calls.push("envelope");
-            throw new Error('Method "~alchemy/rpc" not found on Durable Object');
+            throw new Error('Method "~alchemy/rpc/greet" not found on Durable Object');
           },
           greet: async (...args: unknown[]) => {
             calls.push(args);
@@ -752,27 +752,29 @@ describe(
       }),
     );
 
-    it.effect("does not call the method directly when ~alchemy/rpc fails for another reason", () =>
-      Effect.gen(function* () {
-        const calls: Array<string> = [];
-        const host = {
-          "~alchemy/rpc": async () => {
-            calls.push("envelope");
-            throw new Error("kaboom");
-          },
-          greet: async () => {
-            calls.push("direct");
-            return "hello";
-          },
-        };
-        const stub = makeRpcStub<{ greet: () => Effect.Effect<string, RpcCallError> }>(host, {
-          protocol: "envelope",
-        });
+    it.effect(
+      "does not call the method directly when ~alchemy/rpc/<method> fails for another reason",
+      () =>
+        Effect.gen(function* () {
+          const calls: Array<string> = [];
+          const host = {
+            "~alchemy/rpc/greet": async () => {
+              calls.push("envelope");
+              throw new Error("kaboom");
+            },
+            greet: async () => {
+              calls.push("direct");
+              return "hello";
+            },
+          };
+          const stub = makeRpcStub<{ greet: () => Effect.Effect<string, RpcCallError> }>(host, {
+            protocol: "envelope",
+          });
 
-        const exit = yield* Effect.exit(stub.greet());
-        expect(Exit.isFailure(exit)).toBe(true);
-        expect(calls).toEqual(["envelope"]);
-      }),
+          const exit = yield* Effect.exit(stub.greet());
+          expect(Exit.isFailure(exit)).toBe(true);
+          expect(calls).toEqual(["envelope"]);
+        }),
     );
   },
 );

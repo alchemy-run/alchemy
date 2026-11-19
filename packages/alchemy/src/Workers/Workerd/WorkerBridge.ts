@@ -24,7 +24,8 @@ import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import {
   isRpcRequest,
-  RPC_REQUEST_METHOD,
+  methodOfRpcRequestMethod,
+  rpcRequestMethod,
   rpcParentOf,
   RpcUnsupportedVersion,
   SUPPORTED_RPC_VERSIONS,
@@ -105,12 +106,14 @@ export const makeWorkerBridge = <Runtime extends WorkerRuntimeContextLike>(
       public readonly env: any,
     ) {
       super(ctx, env);
-      // The protocol's envelope method: one call carrying its method,
-      // arguments and metadata, so the caller's trace context never mixes
-      // into the arguments.
-      const request = (envelope: unknown) => {
-        if (!isRpcRequest(envelope)) {
-          return Promise.reject(new Error(`"${RPC_REQUEST_METHOD}" takes one RpcRequest`));
+      // The protocol's envelope methods: `~alchemy/rpc/<method>` carries the
+      // method's arguments and the call's metadata, so the caller's trace
+      // context never mixes into the arguments.
+      const request = (method: string) => (envelope: unknown) => {
+        if (!isRpcRequest(envelope) || envelope.method !== method) {
+          return Promise.reject(
+            new Error(`"${rpcRequestMethod(method)}" takes one RpcRequest for "${method}"`),
+          );
         }
         if (!SUPPORTED_RPC_VERSIONS.includes(envelope.v)) {
           return Promise.reject(
@@ -124,10 +127,10 @@ export const makeWorkerBridge = <Runtime extends WorkerRuntimeContextLike>(
           (built) =>
             [
               Option.match(parent, {
-                onNone: () => dispatchRpcMethod(built.shape(), envelope.method, envelope.args),
+                onNone: () => dispatchRpcMethod(built.shape(), method, envelope.args),
                 onSome: (span) =>
                   Effect.withParentSpan(
-                    dispatchRpcMethod(built.shape(), envelope.method, envelope.args),
+                    dispatchRpcMethod(built.shape(), method, envelope.args),
                     span,
                   ),
               }),
@@ -138,7 +141,8 @@ export const makeWorkerBridge = <Runtime extends WorkerRuntimeContextLike>(
       };
       return new Proxy(this, {
         get: (target, prop) => {
-          if (prop === RPC_REQUEST_METHOD) return request;
+          const requested = methodOfRpcRequestMethod(prop);
+          if (requested !== undefined) return request(requested);
           if (typeof prop !== "string" || prop in target) return (target as any)[prop];
           return (...args: unknown[]) =>
             target.event(
