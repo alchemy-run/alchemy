@@ -271,17 +271,29 @@ export default Alchemy.Stack(
 
 // Marks render monochrome (inheriting the label color) and take on the
 // official brand hue only on hover. `color` values are verified against
-// svgl.app's SVGs; Prisma swaps to its multi-color mark instead.
+// svgl.app's SVGs; Prisma and Modal swap to their multi-color marks instead.
 const PROVIDERS = [
   { label: "Cloudflare", icon: "Cloudflare", href: "/cloudflare", color: "#f4811f" },
   { label: "AWS", icon: "AWS", href: "/aws", color: "#ff9900" },
+  { label: "GCP", icon: "GCP", href: "/gcp", color: "#4285f4" },
   { label: "Hetzner", icon: "Hetzner", href: "/hetzner", color: "#d50c2d" },
   { label: "Fly", icon: "Fly", href: "/fly", color: "#996bec" },
   { label: "Railway", icon: "Railway", href: "/railway" },
+  { label: "DigitalOcean", icon: "DigitalOcean", href: "/digitalocean", color: "#0080ff" },
   { label: "Neon", icon: "Neon", href: "/neon", color: "#37c38f" },
   { label: "PlanetScale", icon: "PlanetScale", href: "/planetscale" },
+  { label: "Turso", icon: "Turso", href: "/turso", color: "#4ff8d2" },
   { label: "Prisma", icon: "Prisma", iconHover: "PrismaColor", href: "/prisma" },
   { label: "Docker", icon: "Docker", href: "/docker", color: "#008fe2" },
+  { label: "Kubernetes", icon: "Kubernetes", href: "/kubernetes", color: "#326ce5" },
+  { label: "Effect Cluster", icon: "Effect Cluster", href: "/cluster" },
+  { label: "Rivet", icon: "Rivet", href: "/rivet" },
+  { label: "E2B", icon: "E2B", href: "/e2b" },
+  { label: "Daytona", icon: "Daytona", href: "/daytona" },
+  { label: "Modal", icon: "Modal", iconHover: "ModalColor", href: "/modal" },
+  { label: "Archil", icon: "Archil", href: "/archil" },
+  { label: "Boat", icon: "Boat", href: "/boat" },
+  { label: "Better Auth", icon: "Better Auth", href: "/better-auth" },
   { label: "Stripe", icon: "Stripe", href: "/stripe", color: "#533afd" },
   { label: "GitHub", icon: "GitHub", href: "/github" },
   { label: "Axiom", icon: "Axiom", href: "/axiom" },
@@ -998,7 +1010,7 @@ const PROVIDERS = [
   .v2-marquee__track {
     display: flex;
     width: max-content;
-    animation: v2-marquee-scroll 72s linear infinite;
+    animation: v2-marquee-scroll 144s linear infinite;
   }
   .v2-marquee:hover .v2-marquee__track,
   .v2-marquee:focus-within .v2-marquee__track,
@@ -1036,8 +1048,8 @@ const PROVIDERS = [
        mass sits above the flex-centered midline; drop the mark to match. */
     transform: translateY(0.5px);
   }
-  /* Monochrome at rest; brand color only under the cursor. Prisma swaps
-     between its mono and multi-color marks instead of tinting. */
+  /* Monochrome at rest; brand color only under the cursor. Prisma and Modal swap
+     between their mono and multi-color marks instead of tinting. */
   .v2-marquee__item:hover .v2-marquee__mark {
     color: var(--brand, currentColor);
   }
