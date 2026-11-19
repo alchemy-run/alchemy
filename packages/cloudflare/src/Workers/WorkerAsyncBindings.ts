@@ -62,6 +62,7 @@ import { isBinding as isWorkerOnlyBinding } from "./Binding.ts";
 import { isBrowser } from "./Browser.ts";
 import {
   type DurableObjectLike,
+  hostNamespaceOf,
   isDurableObjectLike,
   normalizeTransferredFrom,
 } from "./DurableObject.ts";
@@ -315,6 +316,30 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
   }
   if (resource.Props?.isExternal === true) {
     Object.assign(resource, { env });
+  }
+  // A `Worker.ref` in `env` is a service binding, which records the
+  // target's `workerName`. Left in props as well, the ref is a prop
+  // dependency on the target's whole output, whose `versionId` changes on
+  // every upload. A ref is the only way a Worker's props can reach a Worker
+  // that depends back on it (a direct reference needs the declaration
+  // first), so two Workers that bind each other this way form a cycle through
+  // props instead of bindings: plans deadlock and the first deploy re-uploads
+  // both until it gives up (#3112). Drop the ref from props, so the cycle
+  // runs through bindings. The upload and `alchemy dev` both skip `env` keys
+  // a binding covers. A direct reference stays: its prop dependency is what
+  // orders a deploy after the Worker it binds.
+  const refKeys = Object.keys(env).filter((key) => {
+    const value = env[key];
+    const target = isWorkerEntrypoint(value) ? value.worker : value;
+    return isWorker(target) && Output.isRefExpr(target);
+  });
+  if (refKeys.length > 0 && resource.Props?.env) {
+    const kept = Object.fromEntries(
+      Object.entries(resource.Props.env as Record<string, unknown>).filter(
+        ([key]) => !refKeys.includes(key),
+      ),
+    );
+    resource.Props = { ...resource.Props, env: kept } as typeof resource.Props;
   }
 });
 
@@ -617,7 +642,10 @@ const toBinding = (
       name: bindingName,
       className: binding.className ?? binding.name,
       scriptName: binding.scriptName,
+      hostNamespace: hostNamespaceOf(binding.scriptName, binding.className ?? binding.name),
       transferredFrom: normalizeTransferredFrom(binding.transferredFrom),
+      ...(binding.renamedFrom !== undefined &&
+        binding.scriptName === undefined && { renamedFrom: binding.renamedFrom }),
       storage: binding.storage,
     };
   } else if (isWorkflowResource(binding)) {

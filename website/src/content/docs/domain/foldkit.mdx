@@ -16,7 +16,7 @@ import { CustomerApi } from "@bank/domain/CustomerApi.api";
 export const Bank = DomainFoldkit.make(CustomerApi);
 ```
 
-`Bank` has one Command per Api command, one Command per Api query (see [Ask a query](#ask-a-query)), and a read namespace for each View, Aggregate, and Stream. Each read namespace has `watch` and `events`. View namespaces also have `SnapshotFlags` and `decodeSnapshotFlags`. The name `Message` is reserved: `make` does not compile for an Api with an entry named `Message`. Each Command takes `{ target, input, commandId }`. Its result is `Bank.Message.Succeeded<Name>` or `Bank.Message.Failed<Name>`.
+`Bank` has one Command per Api command, one Command per Api query (see [Ask a query](#ask-a-query)), and a read namespace for each View, Aggregate, and Stream. Each read namespace has `watch` and `events`. View namespaces also have `SnapshotFlags` and `decodeSnapshotFlags`. The name `Message` is reserved: `make` does not compile for an Api with an entry named `Message`. Each Command takes `{ input, commandId }`. Its result is `Bank.Message.Succeeded<Name>` or `Bank.Message.Failed<Name>`.
 
 A success carries `reply` and `receipt: { stream, version }`. Pass the receipt to a read's `atLeast` option when that read must include the write.
 
@@ -60,8 +60,7 @@ const deposit = (model: Model): Update.Return<Model, Message, typeof CustomerApi
     model: modifyFields(model, { commandIds: () => allocation.commandIds }),
     commands: [Command.mapMessage(
       Bank.DepositMoney({
-        target: model.accountId,
-        input: { amount: 1_000 },
+        input: { accountId: model.accountId, amount: 1_000 },
         commandId: allocation.commandId,
       }),
       (result) => Message.ReceivedBankResult({ result }),
@@ -195,7 +194,7 @@ const resources = Layer.merge(Connection, Headers);
 
 Provide `resources` to `Runtime.makeApplication`. The MFA value above is the bank demo's code. A real app reads the current credential at execution time. Never put credentials in Command args or Messages.
 
-Live reads authenticate by cookie. Serve the app and Api on one origin. WebSocket push requires a store with `connect`, such as Cloudflare Durable Objects. Use `protocolHttp` for polling on other platforms. The adapter does not select a protocol.
+Live reads authenticate by cookie. Serve the app and Api on one origin. Every platform pushes live reads over `protocolWebSocket`; `protocolHttp` polls instead. The adapter does not select a protocol.
 
 ## Test and host the app
 

@@ -275,6 +275,7 @@ export const EventSourceLive = Layer.effect(
           const queueName = yield* QueueName;
           if (batch.queue !== queueName) return;
 
+          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- handlers are user programs; failures retry the batch and their requirements are the Worker's
           yield* process(Stream.fromIterable(batch.messages)).pipe(
             Effect.tap(() =>
               Effect.sync(() => {

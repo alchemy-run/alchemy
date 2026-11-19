@@ -1,4 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import { expectUrlContains } from "../Utils/Http.ts";
@@ -175,3 +176,130 @@ test.provider(
     timeout: 240_000,
   },
 );
+
+const cycleApiScript = (version: string) => `import { WorkerEntrypoint } from "cloudflare:workers";
+export class Api extends WorkerEntrypoint {
+  async greet(name) {
+    return "hello " + name + " from api ${version}";
+  }
+}
+export default {
+  async fetch(request, env) {
+    const auth = await env.AUTH.fetch(request);
+    return new Response("api ${version} sees: " + (await auth.text()));
+  },
+};`;
+
+const cycleAuthScript = `export default {
+  async fetch(request, env) {
+    try {
+      return new Response(await env.API.greet("auth"));
+    } catch (err) {
+      return new Response("auth failed: " + err.message, { status: 500 });
+    }
+  },
+};`;
+
+type CycleShape = {
+  /** Declare Auth at all. */
+  auth: boolean;
+  /** Wire the cycle: Auth refs Api's entrypoint, Api binds Auth. */
+  wired: boolean;
+};
+
+const cycleProgram = (prefix: string, version: string, shape: CycleShape) =>
+  Effect.gen(function* () {
+    const auth = shape.auth
+      ? yield* Cloudflare.Worker(`${prefix}-auth`, {
+          script: cycleAuthScript,
+          workersDev: true,
+          env: shape.wired
+            ? {
+                API: Cloudflare.WorkerEntrypoint(
+                  yield* Cloudflare.Worker.ref(`${prefix}-api`),
+                  "Api",
+                ),
+              }
+            : {},
+        })
+      : undefined;
+    const api = yield* Cloudflare.Worker(`${prefix}-api`, {
+      script: cycleApiScript(version),
+      workersDev: true,
+      env: shape.wired && auth ? { AUTH: auth } : {},
+    });
+    return { auth, api };
+  });
+
+const cycle: CycleShape = { auth: true, wired: true };
+
+/**
+ * Auth binds an entrypoint on Api through `Worker.ref`, and Api binds Auth
+ * directly, so the ref closes a cycle through the Workers' props (#3112).
+ * Once both existed, every later plan deadlocked at "Computing plan", and
+ * creating the cycle uploaded both Workers hundreds of times. Each case
+ * reaches the cycle a different way, then redeploys it, calls both Workers
+ * and expects the next plan to change nothing.
+ */
+const cycleScenarios: [name: string, prefix: string, before: CycleShape | undefined][] = [
+  ["created together in the first deploy", "ref-cycle-new", undefined],
+  [
+    "closed by an update that adds Auth to a deployed Api",
+    "ref-cycle-add",
+    {
+      auth: false,
+      wired: false,
+    },
+  ],
+  [
+    "closed by an update that wires two deployed Workers",
+    "ref-cycle-wire",
+    {
+      auth: true,
+      wired: false,
+    },
+  ],
+];
+
+for (const [name, prefix, before] of cycleScenarios) {
+  test.provider(
+    `two Workers that reference each other through a Worker ref, ${name}, redeploy and plan noops`,
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        if (before) {
+          yield* stack.deploy(cycleProgram(prefix, "v0", before));
+        }
+
+        const first = yield* stack
+          .deploy(cycleProgram(prefix, "v1", cycle))
+          .pipe(Effect.timeout("60 seconds"));
+        yield* expectUrlContains(first.api.url!, "api v1 sees: hello auth from api v1", {
+          label: `${prefix} api v1`,
+        });
+
+        const second = yield* stack
+          .deploy(cycleProgram(prefix, "v2", cycle))
+          .pipe(Effect.timeout("60 seconds"));
+        yield* expectUrlContains(second.api.url!, "api v2 sees: hello auth from api v2", {
+          label: `${prefix} api v2`,
+        });
+        yield* expectUrlContains(second.auth!.url!, "hello auth from api v2", {
+          label: `${prefix} auth v2`,
+        });
+
+        const plan = yield* stack
+          .plan(cycleProgram(prefix, "v2", cycle))
+          .pipe(Effect.timeout("60 seconds"));
+        expect(plan.resources[`${prefix}-auth`]!.action).toBe("noop");
+        expect(plan.resources[`${prefix}-api`]!.action).toBe("noop");
+
+        yield* stack.destroy();
+      }),
+    {
+      tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
+      timeout: 180_000,
+    },
+  );
+}

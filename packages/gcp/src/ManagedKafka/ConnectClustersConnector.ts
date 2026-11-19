@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   collectPages,
@@ -87,8 +88,36 @@ export type ConnectClustersConnector = Resource<
     taskRestartPolicy: TaskRetryPolicy | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConnectClustersConnectorLookup
 >;
+
+/**
+ * Props for {@link ConnectClustersConnector.lookup}: find a connect
+ * clusters connector this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface ConnectClustersConnectorLookup {
+  /**
+   * Connector id.
+   */
+  connectorId: string;
+  /**
+   * Region used when `connectCluster` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent Connect cluster. Full name
+   * `projects/{project}/locations/{location}/connectClusters/{id}` or the
+   * Connect cluster id (combined with `location`).
+   */
+  connectCluster: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Kafka Connect connector on a Managed Kafka Connect cluster.
@@ -113,6 +142,20 @@ export type ConnectClustersConnector = Resource<
  *     },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing connect clusters connector
+ * `ConnectClustersConnector.lookup` references a connect clusters connector
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared connect clusters connector.
+ *
+ * **Example:** Reference an existing connect clusters connector
+ * ```typescript
+ * const connectClustersConnector = GCP.ManagedKafka.ConnectClustersConnector.lookup({
+ *   connectorId: "my-connector",
+ *   connectCluster: "my-connect-cluster",
+ * });
  * ```
  *
  * @resource
@@ -177,6 +220,23 @@ export const ConnectClustersConnectorProvider = () =>
         nextParent: connectClusterOf(news.connectCluster, env.project, location),
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      connectorId,
+      location: lookupLocation,
+      connectCluster: lookupConnectCluster,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const connectCluster =
+        lookupConnectCluster !== undefined
+          ? connectClusterOf(lookupConnectCluster, env.project, location)
+          : "";
+      const name = connectCluster.length > 0 ? resourceName(connectCluster, connectorId) : "";
+      const existing = yield* getConnector(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

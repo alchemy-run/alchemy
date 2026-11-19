@@ -1,0 +1,87 @@
+{
+  "name": "@alchemy.run/daytona",
+  "version": "2.0.0-beta.87",
+  "description": "Daytona sandboxes, snapshots, volumes, secrets and the in-sandbox toolbox for Alchemy.",
+  "keywords": [
+    "ai-agents",
+    "alchemy",
+    "daytona",
+    "effect",
+    "infrastructure-as-code",
+    "sandbox"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/daytona"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "worker": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./internal/*": null,
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "worker": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@alchemy.run/docker": "workspace:*",
+    "@distilled.cloud/aws": "workspace:*",
+    "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/daytona": "workspace:*",
+    "rolldown": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/platform-node": "catalog:",
+    "@types/bun": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@effect/platform-node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@effect/platform-node": {
+      "optional": true
+    }
+  },
+  "alchemy": {
+    "contributes": [
+      "@alchemy.run/daytona/Contributions"
+    ]
+  }
+}

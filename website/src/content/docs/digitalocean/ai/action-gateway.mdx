@@ -1,0 +1,106 @@
+---
+title: Action Gateway
+description: Give agents tools through DigitalOcean's Action Gateway, with toolbelts, MCP endpoints, approval rules, output views, your own MCP servers, provider credentials and per-actor limits.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+The **Action Gateway** is a catalog of tools agents can call: web search, Slack, Jira, GitHub and hundreds more, plus your own MCP servers. You publish a set of them as an **endpoint**, an MCP URL an agent connects to, with **approval rules** that allow, deny or ask before each call. Tools that act on someone's account use a **credential** you registered, and an **actor** is the end user a call is made for.
+
+<Tree
+  nodes={[
+    {
+      id: "team", label: "acme", type: "team", icon: "brand:digitalocean", colGap: 8,
+      areas: ["agent endpoint", ". tools"],
+      phoneAreas: ["agent", "endpoint", "tools"],
+    },
+    { id: "agent", label: "your agent", type: "MCP client", parent: "team", tone: "accent", icon: "bot" },
+    {
+      id: "endpoint", label: "Research", type: "endpoint · version 2", parent: "team", icon: "plug",
+      specs: [["default", "allow"], ["exa_web_fetch", "ask"]],
+    },
+    {
+      id: "tools", label: "catalog", type: "tools", parent: "team", icon: "wrench", dashed: true,
+      areas: ["search fetch"],
+    },
+    { id: "search", label: "exa_web_search", type: "tool · view Titles", parent: "tools" },
+    { id: "fetch", label: "exa_web_fetch", type: "tool", parent: "tools" },
+  ]}
+  links={[
+    { from: "agent", to: "endpoint", label: "connects" },
+    { from: "endpoint", to: "tools", label: "calls, after its rules" },
+  ]}
+  caption="An agent connects to the endpoint's MCP URL. The endpoint exposes two tools, allows searches, and asks before each fetch. Search results pass through an output view."
+/>
+
+## Publish an endpoint
+
+```typescript
+const endpoint = yield* DigitalOcean.ActionGateway.Endpoint("Research", {
+  tools: ["exa_web_search", "exa_web_fetch"],
+  policy: { default: "allow", rules: [{ tool: "exa_web_fetch", action: "ask" }] },
+  instructions: "Cite every source you use.",
+});
+```
+
+`endpoint.mcpUrl` is the address to give an MCP client. Every change publishes a new immutable version, and `mcpUrl` always serves the newest; `versionMcpUrl` stays pinned to the one you deployed.
+
+## Trim a tool's output
+
+An output view keeps only the fields you list, so results take less of an agent's context:
+
+```typescript
+const titles = yield* DigitalOcean.ActionGateway.OutputView("Titles", {
+  tool: "exa_web_search",
+  fields: ["results"],
+});
+```
+
+Use it on an endpoint with `outputViews: { exa_web_search: titles.name }`.
+
+## Group tools in a toolbelt
+
+```typescript
+const belt = yield* DigitalOcean.ActionGateway.Toolbelt("Slack", {
+  tools: ["slack_add_bookmark", "slack_add_reaction"],
+});
+```
+
+A toolbelt is versioned too; reference one in an endpoint's `tools` as `toolbelt:${belt.reference}`.
+
+## Add your own MCP server
+
+```typescript
+const token = yield* Config.Redacted("INTERNAL_MCP_TOKEN");
+yield* DigitalOcean.ActionGateway.McpServer("Internal", {
+  endpoint: "https://mcp.internal.example.com/mcp",
+  apiKey: token,
+});
+```
+
+Its tools join the catalog for your team.
+
+## Register a provider credential
+
+```typescript
+const apiKey = yield* Config.Redacted("ABUSEIPDB_API_KEY");
+yield* DigitalOcean.ActionGateway.ProviderCredential("AbuseIpDb", { provider: "abuseipdb", apiKey });
+```
+
+Calls to that provider's tools use it. `oauthClient` registers an OAuth client instead, and `shared: true` lets the whole team use it.
+
+## Limit an actor
+
+```typescript
+yield* DigitalOcean.ActionGateway.ActorLimit("User42", {
+  actorId: endpoint.actorId,
+  limits: { webSearch: 10, otherTools: 60 },
+});
+```
+
+Limits are calls per minute, below your team's. The actor must already exist: an endpoint or session created with `actorId`.
+
+## Limits
+
+- Credentials and keys are write-only; DigitalOcean never returns them.
+- An endpoint's actor can't change once set, so a new `actorId` creates a new endpoint.

@@ -7,7 +7,7 @@ The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.lay
 import { Bank, BankHandlers } from "@acme/domain/Bank.model";
 import { CustomerApi } from "@acme/domain/CustomerApi.api";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -49,6 +49,31 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 - Webhooks and event sources, like a Stripe webhook, are yielded in the Worker's init and send commands into the model.
 - `alchemy dev` runs everything locally in workerd: Durable Objects, sagas and the foldkit app.
 
+## Hosting on Rivet or Effect Cluster
+
+Every platform is one Layer provided to the model: `DomainCloudflare.layerDurableObjects()`, `DomainRivet.layerDurableObjects(options)`, `DomainCluster.layerEntities(options)`. On Rivet and Effect Cluster, the Layer declares one class (or entity) that holds the whole model: each object is an instance named `<Model>.<Class>/<key>`, like `Bank.AccountAggregate/a-1`. In a caller the Layer deploys that class and reaches it through the gateway; the pool's nodes load the default export of `main` and host the model.
+
+```ts
+// packages/server/src/BankLive.ts — provide BankLive wherever the Api is served
+export default Bank.layer(BankHandlers).pipe(
+  Layer.provide(
+    DomainRivet.layerDurableObjects({
+      name: "Bank",
+      main: import.meta.url,
+      pool: Default,
+    }),
+    // on Effect Cluster: DomainCluster.layerEntities, with the same options
+  ),
+);
+```
+
+- Make the model's Layer the default export of `main`; set `handler` only when another export holds it.
+- Callers build the same model Layer, so they need the handlers' services too.
+- Neither platform holds WebSockets: serve Apis with `Domain.protocolHttp`.
+- A deploy that adds a view or projection doesn't wait for its backfill; the first call starts it.
+
+More: [Rivet](https://alchemy.run/domain/rivet), [Effect Cluster](https://alchemy.run/domain/effect-cluster).
+
 ## Calling the Api in process
 
 Code in the Worker that is not a client of the Api (a webhook route, a scheduled job) calls it with `CustomerApi.clientInProcess`: the same typed client, wired to the handlers in process, with the middleware of everything it serves. When that code has already checked its caller (a webhook signature), it provides a middleware Layer that trusts the caller, to that client only:
@@ -58,13 +83,14 @@ const asSystem = Layer.succeed(Session, (effect) =>
   Effect.provideService(effect, CurrentActor, system("payments-webhook")),
 );
 const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));   // per request, in Effect.scoped
-yield* bank.DepositMoney(accountId, { amount });
+yield* bank.DepositMoney({ accountId, amount });
 ```
 
+- A command answers at the commit; a view read that must include it passes the receipt as `atLeast`. `{ consistency: "strong" }` answers once the model's views have applied it, and `Effect.provideService(Domain.DefaultConsistency, "strong")` on a client sets that for all its commands. Projection stores are never waited for: a query takes `atLeast`.
 - Build `clientInProcess` per request in a Worker. `layerClientInProcess` provides `CustomerApi.Client` in process, for long-lived processes and scripts.
 - Do not send a request to the Worker's own URL, and do not pass a verified secret through a header to `clientInProcess` to be checked again.
 
-More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-process), [In memory](https://alchemy.run/domain/in-memory).
+More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-process), [Command: Choose when it answers](https://alchemy.run/domain/command#choose-when-it-answers), [In memory](https://alchemy.run/domain/in-memory).
 
 ## Queries
 
@@ -138,7 +164,8 @@ More: [Observability](https://alchemy.run/domain/observability).
 - Never keep per-request objects (sockets, promises) across events in a Durable Object or Worker. Resolve services at init, and do I/O per request.
 - Handlers may require `RuntimeContext` (for bindings); every platform provides it when it runs them.
 - Models never share data. Two models that list the same aggregate each get their own instances: on Cloudflare, Durable Object classes named after the model (`Billing.AccountAggregate`). Two models with the same name on one platform fail.
-- Deploys keep data across Domain layout changes. Upgrading models that shared a class before Domain versions existed fails until one sets `legacyData: true` on its `layer`.
+- A Stack that deploys a model on Cloudflare registers `DomainCloudflare.providers()` next to `Cloudflare.providers()`; without it the deploy fails with no provider for `Cloudflare.Domain.Backfill`.
+- Deploys keep data from before Domain version 0 by renaming each class with `renamedFrom`. Upgrading models that shared a class fails with `DurableObjectRenameConflict` until all but one set `legacyData: false` on their `layer`.
 
 More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#know-what-runs-where), [Cloudflare: Host several models in one Worker](https://alchemy.run/domain/cloudflare#host-several-models-in-one-worker), [Cloudflare: Upgrade without losing data](https://alchemy.run/domain/cloudflare#upgrade-without-losing-data).
 
@@ -176,7 +203,7 @@ A command is a `POST` with the RPC payload as its JSON body, and answers with it
 
 ```sh
 curl -X POST /DepositMoney -H "cookie: $SESSION" \
-  -d '{ "target": "a-1", "commandId": "d-1", "input": { "amount": 1000 } }'
+  -d '{ "commandId": "d-1", "input": { "accountId": "a-1", "amount": 1000 } }'
 # { "reply": { "balance": 1000 }, "stream": "Account/a-1", "version": 3 }
 ```
 
@@ -272,7 +299,7 @@ Command.run(bank, { version: "1.0.0" }).pipe(
 Fields are flags, and the result is JSON on stdout; a rejection is its wire JSON on stderr with exit code 1:
 
 ```sh
-$ bank deposit-money --target a-1 --amount 1000
+$ bank deposit-money --account-id a-1 --amount 1000
 $ bank account-summary get --key a-1
 ```
 

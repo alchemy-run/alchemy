@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   expandParent,
@@ -66,8 +67,35 @@ export type BuyersClientsUser = Resource<
     state: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BuyersClientsUserLookup
 >;
+
+/**
+ * Props for {@link BuyersClientsUser.lookup}: find a buyers clients user
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface BuyersClientsUserLookup {
+  /**
+   * Parent client, as `buyers/{buyer}/clients/{client}` or
+   * `{buyer}/clients/{client}`.
+   */
+  parent: string;
+  /**
+   * Server-assigned user id (last path segment).
+   */
+  userId?: string;
+  /**
+   * Invitee email. Unique per client.
+   */
+  email?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An Authorized Buyers Marketplace client user
@@ -111,6 +139,19 @@ export type BuyersClientsUser = Resource<
  *     state: "INACTIVE",
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing buyers clients user
+ * `BuyersClientsUser.lookup` references a buyers clients user Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared buyers clients user.
+ *
+ * **Example:** Reference an existing buyers clients user
+ * ```typescript
+ * const buyersClientsUser = GCP.AuthorizedBuyersMarketplace.BuyersClientsUser.lookup({
+ *   parent: "my-parent",
+ * });
  * ```
  *
  * @resource
@@ -180,6 +221,20 @@ export const BuyersClientsUserProvider = () =>
         nextUserId: news.userId,
       });
     }),
+
+    lookup: Effect.fn(function* ({ parent: lookupParent, userId, email }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = expandParent(lookupParent ?? "");
+      const name = lookupName(parent, userId, undefined);
+      const existing = yield* getByName(name);
+      if (existing !== undefined) {
+        return toAttrs(existing, parentOfName(existing.name ?? "") || parent, env.project);
+      }
+      // Without a known name, a user with the same email may be someone
+      // else's invite: surface it as unowned.
+      if (!parent || !email) return undefined;
+      return undefined;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ olds, output }) {
       const env = yield* GcpEnvironment.current;

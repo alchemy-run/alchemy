@@ -3,32 +3,23 @@ title: What is GitHub?
 description: The concepts behind GitHub as infrastructure — accounts and organizations, repositories, Actions workflows, secrets, variables and environments, OIDC, webhooks and pull request comments — and how @alchemy.run/github models each of them.
 ---
 
-import DAG from "../../../components/DAG.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
 
 GitHub hosts your code, and it's also part of how your code reaches production. **Actions** builds, tests and deploys on every push. Its **secrets** hold the credentials those deploys use. **Webhooks** tell your services when something happens in a repository. All of that is configuration, and Alchemy lets you declare it in the same Stack as the infrastructure it deploys.
 
 Take one setup: a repository whose Actions workflow deploys to a cloud with a credential the Stack created, and comments each preview's URL on its pull request. The Stack stores a cloud role in the repository's Actions secrets. A workflow run uses it to deploy, a production environment keeps its own secret for production jobs, and the run comments on the pull request.
 
-<DAG
+<Tree
   nodes={[
-    { id: "stack", label: "Stack", type: "alchemy deploy", col: 0, row: 0 },
-    { id: "secret", label: "DEPLOY_ROLE", type: "Actions secret", col: 1, row: 0 },
-    { id: "run", label: "workflow run", type: "on push / PR", tone: "accent", col: 2, row: 0 },
-    { id: "pr", label: "pull request", type: "preview comment", col: 3, row: 0 },
-    { id: "envSecret", label: "PROD_ROLE", type: "environment secret", col: 1, row: 1 },
+    { id: "org", label: "my-org", type: "organization", icon: "brand:github" },
+    { id: "repo", label: "my-org/api", type: "repository", parent: "org", wide: true, dashed: true, icon: "book-marked" },
+    { id: "secret", label: "DEPLOY_ROLE", type: "Actions secret · every job", parent: "repo", icon: "key-round" },
+    { id: "run", label: "workflow run", type: "on push or pull request", parent: "repo", tone: "accent", icon: "play", specs: [["comments on", "the pull request"]] },
+    { id: "env", label: "production", type: "environment", parent: "repo", wide: true, dashed: true, icon: "shield-check" },
+    { id: "envSecret", label: "PROD_ROLE", type: "environment secret · deploy job only", parent: "env", icon: "key-round" },
   ]}
-  groups={[
-    { id: "org", label: "Organization my-org", nodes: [] },
-    { id: "repo", label: "Repository my-org/api", parent: "org", nodes: ["secret", "run", "pr"], dashed: true },
-    { id: "env", label: "Environment production", parent: "repo", nodes: ["envSecret"], dashed: true },
-  ]}
-  edges={[
-    { from: "stack", to: "repo", label: "sets" },
-    { from: "secret", to: "run", label: "every job" },
-    { from: "envSecret", to: "run", label: "deploy job only", exit: "side" },
-    { from: "run", to: "pr", label: "comments" },
-  ]}
-  caption="An organization holds repositories. A repository's secrets reach every workflow job, and an environment's secrets reach only the jobs that deploy to it."
+  caption="An organization holds repositories, and your Stack sets their secrets. A repository's secrets reach every workflow job, and an environment's secrets reach only the jobs that deploy to it."
 />
 
 ## Accounts and organizations

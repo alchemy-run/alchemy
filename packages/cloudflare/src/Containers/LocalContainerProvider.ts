@@ -1,6 +1,6 @@
+import { hashDockerBuildInputs } from "@alchemy.run/docker/BuildHash";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import * as Artifacts from "alchemy/Artifacts";
-import { hashDirectory } from "alchemy/Command/Memo";
 import { isResolved } from "alchemy/Diff";
 import * as RpcProvider from "alchemy/Local/RpcProvider";
 import type { ResourceBinding } from "alchemy/Resource";
@@ -8,7 +8,6 @@ import { sha256Object } from "alchemy/Util/sha256";
 import { normalizeNulls } from "alchemy/Util/stable";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { localAccountId } from "../LocalAccount.ts";
@@ -31,6 +30,7 @@ import {
   isDurableObjectContainer,
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
+import { resolveContainerBuildPaths } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 /**
@@ -53,7 +53,6 @@ export const LocalContainerProvider = () =>
     ContainerPlatform,
     LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
       // Resolve the `dev` image plus a content hash for change detection.
@@ -122,23 +121,22 @@ export const LocalContainerProvider = () =>
           // directory. The runtime builds the user's Dockerfile against the
           // (real-path'd) context, exactly like the live provider's
           // `external` variant.
-          const context = yield* fs.realPath(news.context ?? ".");
-          const dockerfile = news.dockerfile
-            ? yield* fs.realPath(news.dockerfile)
-            : path.join(context, "Dockerfile");
-          const contextHash = yield* hashDirectory({ cwd: context });
-          const dockerfileContent = yield* fs.readFileString(dockerfile);
+          const { context, dockerfile } = yield* resolveContainerBuildPaths({
+            context: news.context,
+            dockerfile: news.dockerfile,
+          });
+          // Hash what Docker receives, like the live provider: the context
+          // `.dockerignore` keeps (never a lockfile above it) and the Dockerfile.
           return {
             dev: {
               context: path.relative(process.cwd(), context),
               dockerfile: path.relative(context, dockerfile),
               buildArgs: news.build?.args,
             } as DevContainerImage,
-            hash: yield* sha256Object({
-              contextHash,
-              dockerfile: dockerfileContent,
-              buildArgs: news.build?.args,
-            }),
+            hash: yield* hashDockerBuildInputs(
+              { context, dockerfile, platform: "local", buildArgs: news.build?.args },
+              "effective",
+            ),
           };
         }).pipe(Artifacts.cached(`container-image:${id}`));
 

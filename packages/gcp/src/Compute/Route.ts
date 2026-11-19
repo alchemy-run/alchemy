@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitGlobalOperation } from "./operations.ts";
@@ -119,8 +120,25 @@ export type Route = Resource<
     routeStatus: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RouteLookup
 >;
+
+/**
+ * Props for {@link Route.lookup}: find a route this stack doesn't manage by
+ * its identifiers, in the ambient project unless `project` names another.
+ */
+export interface RouteLookup {
+  /**
+   * Route name (RFC1035, 1-63 chars).
+   */
+  routeName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A VPC static route.
@@ -160,6 +178,16 @@ export type Route = Resource<
  *   network: "default",
  *   nextHopIp: "10.128.0.5",
  * });
+ * ```
+ *
+ * ### Looking up an existing route
+ * `Route.lookup` references a route Alchemy doesn't manage (created in the
+ * console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared route.
+ *
+ * **Example:** Reference an existing route
+ * ```typescript
+ * const route = GCP.Compute.Route.lookup({ routeName: "my-route" });
  * ```
  *
  * @resource
@@ -440,6 +468,13 @@ export const RouteProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ routeName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, routeName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

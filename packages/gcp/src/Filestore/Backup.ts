@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -127,8 +128,45 @@ export type Backup = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BackupLookup
 >;
+
+/**
+ * Props for {@link Backup.lookup}: find a backup this stack doesn't manage
+ * by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface BackupLookup {
+  /**
+   * Backup id (the `{backup}` segment of
+   * `projects/{project}/locations/{location}/backups/{backup}`). Must start
+   * with a letter, be 1-63 characters, and end with a letter or digit.
+   */
+  backupId: string;
+  /**
+   * Source Filestore instance. Full name
+   * `projects/{project}/locations/{location}/instances/{instance}` or the
+   * instance id (combined with `instanceLocation`).
+   */
+  sourceInstance: string;
+  /**
+   * Zone of the source instance when `sourceInstance` is a bare id. Ignored
+   * when `sourceInstance` is a full resource name.
+   */
+  instanceLocation?: string;
+  /**
+   * Region that stores the backup (`us-central1`, …). Backups are regional
+   * and may live in a different region than the instance. `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Filestore backup of an instance file share.
@@ -171,6 +209,19 @@ export type Backup = Resource<
  *   sourceInstance: nfs.name,
  *   description: "nightly backup v2",
  *   labels: { env: "prod", team: "storage" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing backup
+ * `Backup.lookup` references a backup Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared backup.
+ *
+ * **Example:** Reference an existing backup
+ * ```typescript
+ * const backup = GCP.Filestore.Backup.lookup({
+ *   backupId: "my-backup",
+ *   sourceInstance: "my-source-instance",
  * });
  * ```
  *
@@ -305,6 +356,25 @@ export const BackupProvider = () =>
           previousKey !== nextKey,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      backupId,
+      sourceInstance,
+      instanceLocation,
+      location: lookupLocation,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const instance = parseInstanceRef(
+        sourceInstance ?? "",
+        env.project,
+        instanceLocation ?? DEFAULT_ZONE,
+      );
+      const location = backupLocationOf(lookupLocation, undefined, instance.location);
+      const name = resourceName(env.project, location, backupId);
+      const existing = yield* getByName(name);
+      if (existing === undefined || isPlaceholder(existing)) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

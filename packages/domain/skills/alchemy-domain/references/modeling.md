@@ -16,15 +16,16 @@ More: [Command](https://alchemy.run/domain/command).
 
 ## 3. Draw consistency boundaries
 
-Group the commands by what must be checked together in one transaction. That group is an aggregate, keyed by an id (`Account` keyed by `AccountId`). Its state holds only what its decisions need. Keep aggregates small: one instance is one writer, and there are no transactions across instances.
+Group the commands by what must be checked together in one transaction. That group is an aggregate, keyed by an id (`Account` keyed by `AccountId`). Its state holds only what its decisions need. Keep aggregates small: one instance is one writer, and it decides from its own state alone.
 
 When a rule spans instances, pick one of these:
 
-- **Invariant-shaped aggregate.** Uniqueness of a username across customers becomes `UsernameClaim`, keyed by the username. Two claims race on one instance and exactly one wins.
-- **Reserve, then commit.** A policy claims first (`ClaimUsername`) and only then confirms (`ConfirmRegistration`), or rejects (`RejectRegistration`).
+- **Decision.** A command answered at once across several instances: `RegisterCustomer` reads the customer and the username and records on both, or refuses. Use it when nothing has to wait and nothing outside the model is called.
+- **Invariant-shaped aggregate.** Uniqueness of a username across customers becomes `UsernameClaim`, keyed by the username, which every registration's decision reads. Two that ask for one name read the same instance, and exactly one wins.
+- **Saga.** A process that takes time, waits for a decision, or calls an external system runs as steps, each undone by a compensation when a later one fails.
 - **Deadline.** A process that waits for a decision schedules a command that can't be rejected (`ExpireTransfer`), on the same aggregate as the decision, so exactly one of approve and expire wins.
 
-More: [Aggregate](https://alchemy.run/domain/aggregate), [Domain Model: Each command goes to one instance](https://alchemy.run/domain/model#each-command-goes-to-one-instance).
+More: [Aggregate](https://alchemy.run/domain/aggregate), [Decision](https://alchemy.run/domain/decision), [Unique values](https://alchemy.run/domain/unique-values), [Domain Model: Each command goes to one instance](https://alchemy.run/domain/model#each-command-goes-to-one-instance).
 
 ## 4. Answer the questions
 

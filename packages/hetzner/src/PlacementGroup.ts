@@ -83,8 +83,18 @@ export type PlacementGroup = Resource<
     servers: number[];
   },
   never,
-  Providers
+  Providers,
+  PlacementGroupLookup
 >;
+
+/**
+ * Props for {@link PlacementGroup.lookup}: find a placement group this stack
+ * doesn't manage by its name.
+ */
+export interface PlacementGroupLookup {
+  /** Placement group name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud Placement Group. Spread groups keep member Servers on
@@ -110,6 +120,16 @@ export type PlacementGroup = Resource<
  *   type: "spread",
  *   labels: { role: "web" },
  * });
+ * ```
+ *
+ * ### Looking up an existing placement group
+ * `PlacementGroup.lookup` references a placement group Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing placement group
+ * ```typescript
+ * const spread = Hetzner.PlacementGroup.lookup({ name: "spread" });
  * ```
  *
  * @resource
@@ -205,6 +225,11 @@ export const PlacementGroupProvider = () =>
         return { action: "replace", deleteFirst: keepsName(news, output) } as const;
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findByName(name);
+      return found === undefined ? undefined : toAttrs(found);
     }),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {

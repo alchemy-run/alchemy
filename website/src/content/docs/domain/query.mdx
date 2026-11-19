@@ -149,6 +149,17 @@ if (first.cursor) {
 }
 ```
 
+To read past one page, stream it. `entries` follows each cursor to the last page and yields every entry in order; `pages` yields the pages themselves. Both fetch a page only when the stream needs it, so `Stream.take` stops early:
+
+```typescript
+const latest = yield* bank.AccountLedger.entries({ account: accountId }, { take: 100 }).pipe(
+  Stream.take(10),
+  Stream.runCollect,
+);
+```
+
+`after` starts the stream mid-way, and `atLeast` waits before the first page.
+
 The cursor means nothing to the framework: the store chooses it. Page on the store's sort key (keyset paging), so a row written between two pages is neither skipped nor repeated. The bank's ledger sorts by time, then id:
 
 ```typescript title="packages/server/src/Ledger/D1LedgerStore.ts"
@@ -236,10 +247,10 @@ For its history, or to follow it live, read a [view](/domain/view) of it instead
 
 ## Read your own write
 
-A projection writes its store after the command commits, so a plain read can be a moment behind. Right after its own command, a client passes the command's receipt as `atLeast`, and the query waits until that write is in the store before it reads:
+A projection writes its store after the command commits, often in batches, so a plain read can be a moment behind. Even a [strong](/domain/command#choose-when-it-answers) command doesn't wait for it. Right after its own command, a client passes the command's receipt as `atLeast`, and the query waits until that write is in the store before it reads:
 
 ```typescript
-const receipt = yield* bank.WithdrawMoney(accountId, { amount: 30 }, mfa);
+const receipt = yield* bank.WithdrawMoney({ accountId, amount: 30 }, mfa);
 // receipt: { stream: "Account/a-1", version: 7 }
 const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt });
 ```
@@ -265,11 +276,11 @@ export class BranchActivity extends Domain.Query("BranchActivity", {
   waitsFor: [Ledger, BranchTotals],
 }) {}
 
-const receipt = yield* bank.DepositMoney(accountId, { amount: 100, branchId: "b-9" });
+const receipt = yield* bank.DepositMoney({ accountId, amount: 100, branchId: "b-9" });
 const page = yield* bank.BranchActivity({ branch: "b-9" }, { atLeast: receipt });
 ```
 
-The deposit's one event, `MoneyDeposited { branchId: "b-9" }`, lands on `Ledger` key `a-1` and on `BranchTotals` key `b-9`, and the query waits for both. A projection that doesn't consume the receipt's aggregate has nothing to wait for.
+The deposit's one event, `MoneyDeposited { branchId: "b-9" }`, lands on `Ledger` key `a-1` and on `BranchTotals` key `b-9`, and the query waits for both. A projection that doesn't consume the receipt's aggregate, directly or through a view, has nothing to wait for.
 
 `waitsFor` takes views and streams too, for a handler that reads them. A view is waited on for the keys the command's events reach, and a stream through the projection that writes it:
 
@@ -283,13 +294,13 @@ export class AccountOverview extends Domain.Query("AccountOverview", {
 }) {}
 ```
 
-The handler then reads `summaries.get(ref)` and `cards.peek(ref)` plainly: the engine already waited. A view waits only for an aggregate it reads directly, and a stream only for the aggregates its writer reads.
+The handler then reads `summaries.get(ref)` and `cards.peek(ref)` plainly: the engine already waited. Each read is waited on through the views between it and the command's aggregate: a view over a view waits for the first view to apply the command, then for what it emitted.
 
 After commands to two aggregate instances, pass both receipts. The query waits for each, through every projection in `waitsFor`:
 
 ```typescript
-const out = yield* bank.WithdrawMoney(checking, { amount: 30 }, mfa);
-const into = yield* bank.DepositMoney(savings, { amount: 30 });
+const out = yield* bank.WithdrawMoney({ accountId: checking, amount: 30 }, mfa);
+const into = yield* bank.DepositMoney({ accountId: savings, amount: 30 });
 const total = yield* bank.CombinedBalance({ accounts: [checking, savings] }, { atLeast: [out, into] });
 ```
 

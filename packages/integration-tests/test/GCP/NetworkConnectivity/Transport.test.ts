@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -128,6 +129,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { network, transport };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkConnectivity.Transport.lookup({
+          transportId: created.transport.transportId,
+          location: created.transport.location,
+        }),
+        created.transport,
       );
 
       expect(created.transport.name).toContain("/transports/");

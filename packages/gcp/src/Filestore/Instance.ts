@@ -11,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -345,8 +346,53 @@ export type Instance = Resource<
     suspensionReasons: string[];
   },
   never,
-  Providers
+  Providers,
+  InstanceLookup
 >;
+
+/**
+ * Props for {@link Instance.lookup}: find an instance this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+/**
+ * Deletion was refused because the Filestore instance has deletion protection on, set
+ * through `deletionProtectionEnabled` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class InstanceDeletionProtected extends Data.TaggedError(
+  "GCP.Filestore.InstanceDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
+export interface InstanceLookup {
+  /**
+   * Instance id (the `{instance}` segment of
+   * `projects/{project}/locations/{location}/instances/{instance}`). Must
+   * be 1-63 characters, start with a letter, and end with a letter or
+   * digit.
+   */
+  instanceId: string;
+  /**
+   * Service tier. `STANDARD` is an alias for `BASIC_HDD`; `PREMIUM` for
+   * `BASIC_SSD`.
+   */
+  tier?: file.InstanceTierEnum | (string & {});
+  /**
+   * Location of the instance. Basic, Zonal, and High Scale use a zone
+   * (`us-central1-a`). Enterprise and Regional use a region
+   * (`us-central1`). `US-CENTRAL1-A` is accepted and normalized to
+   * `us-central1-a`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Filestore instance (NFS file share).
@@ -391,6 +437,18 @@ export type Instance = Resource<
  *       ipRanges: ["10.0.0.0/8"],
  *     }],
  *   }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing instance
+ * `Instance.lookup` references an instance Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared instance.
+ *
+ * **Example:** Reference an existing instance
+ * ```typescript
+ * const instance = GCP.Filestore.Instance.lookup({
+ *   instanceId: "my-instance",
  * });
  * ```
  *
@@ -1019,6 +1077,16 @@ export const InstanceProvider = () =>
       };
     }),
 
+    lookup: Effect.fn(function* ({ instanceId, tier: lookupTier, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const tier = canonicalizeTier(lookupTier);
+      const location = normalizeLocation(lookupLocation, tier, env.region);
+      const name = resourceName(env.project, location, instanceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
+
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const instanceId = yield* toId(id, olds?.instanceId, output?.instanceId);
@@ -1155,11 +1223,19 @@ export const InstanceProvider = () =>
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const existing = yield* getByName(output.name);
       if (existing === undefined) return;
 
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (existing.deletionProtectionEnabled === true) {
+        if (force !== true) {
+          return yield* new InstanceDeletionProtected({
+            resourceName: output.name,
+            message: `Filestore instance '${output.name}' has deletion protection on. Set \`deletionProtectionEnabled: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         const patched = yield* file
           .patchProjectsLocationsInstances({
             name: output.name,

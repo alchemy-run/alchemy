@@ -7,6 +7,32 @@ import { fromWebSocket, type WebSocket } from "./WebSocket.ts";
 
 export type AlarmInvocationInfo = cf.AlarmInvocationInfo;
 
+declare global {
+  /**
+   * Merges with workerd's ambient `DurableObjectState`, the one a project
+   * gets from tsconfig `"types": ["@cloudflare/workers-types"]`. Empty on
+   * its own: it adds no members, so `NativeDurableObjectState` can tell
+   * whether the ambient declaration is loaded. Declared here, not in
+   * `Phase.ts`, so it is emitted in the same `.d.ts` as the type that reads it.
+   */
+  interface DurableObjectState<Props = unknown> {}
+}
+
+/**
+ * The native workerd `DurableObjectState` that `raw` exposes: the ambient
+ * global when the project loads `@cloudflare/workers-types` through tsconfig
+ * `"types"`, otherwise that package's module export.
+ *
+ * Both declarations describe the same object, but TypeScript compares them
+ * structurally, and comparing the two copies of `facets` (a generic method
+ * returning `Fetcher<T>` over the `Rpc` types) never finishes. Typing `raw`
+ * with the declaration the project already uses keeps `state.raw` assignable
+ * to helpers written against it without that comparison.
+ */
+export type NativeDurableObjectState = [keyof DurableObjectState] extends [never]
+  ? cf.DurableObjectState
+  : DurableObjectState;
+
 /**
  * Options for {@link DurableObjectState.abort}.
  *
@@ -37,7 +63,7 @@ export interface WorkerdDurableObjectState {
   /**
    * The raw native DurableObjectState, for interop with async APIs.
    */
-  readonly raw: cf.DurableObjectState;
+  readonly raw: NativeDurableObjectState;
   /**
    * Run `callback` while the engine holds every other event on this object.
    * The callback runs with the caller's full context (services, tracing),
@@ -80,36 +106,48 @@ export interface WorkerdDurableObjectState {
   ): Effect.Effect<void, never, RuntimeContext>;
 }
 
+/**
+ * Wrap a native `DurableObjectState` in its Effect view. Takes the same
+ * declaration `raw` has, so `fromDurableObjectState(state.raw)` round-trips
+ * without TypeScript comparing the two declarations (see
+ * {@link NativeDurableObjectState}). A union of both would not help:
+ * TypeScript compares an argument against the conditional member.
+ */
 export const fromDurableObjectState = (
-  state: cf.DurableObjectState,
-): WorkerdDurableObjectState => ({
-  id: state.id,
-  container: state.container,
-  storage: fromDurableObjectStorage(state.storage),
-  raw: state,
-  waitUntil: (effect) => runInBackground(effect, (promise) => state.waitUntil(promise)),
-  blockConcurrencyWhile: <T, R = never>(callback: () => Effect.Effect<T, never, R>) =>
-    Effect.gen(function* () {
-      const context = yield* Effect.context<R>();
-      // The failure is typed away as before: a rejected gate is the
-      // platform resetting the object, not a value a caller handles.
-      return yield* Effect.promise(() =>
-        state.blockConcurrencyWhile(() => Effect.runPromiseWith(context)(callback())),
-      );
-    }),
-  acceptWebSocket: (ws: WebSocket, tags?: string[]) =>
-    Effect.sync(() => state.acceptWebSocket(ws.ws, tags)),
-  getWebSockets: (tag?: string) => Effect.sync(() => state.getWebSockets(tag).map(fromWebSocket)),
-  setWebSocketAutoResponse: (maybeReqResp?: cf.WebSocketRequestResponsePair) =>
-    Effect.sync(() => state.setWebSocketAutoResponse(maybeReqResp)),
-  getWebSocketAutoResponse: () => Effect.sync(() => state.getWebSocketAutoResponse()),
-  getWebSocketAutoResponseTimestamp: (ws: cf.WebSocket) =>
-    Effect.sync(() => state.getWebSocketAutoResponseTimestamp(ws)),
-  setHibernatableWebSocketEventTimeout: (timeoutMs?: number) =>
-    Effect.sync(() => state.setHibernatableWebSocketEventTimeout(timeoutMs)),
-  getHibernatableWebSocketEventTimeout: () =>
-    Effect.sync(() => state.getHibernatableWebSocketEventTimeout()),
-  getTags: (ws: cf.WebSocket) => Effect.sync(() => state.getTags(ws)),
-  abort: (reason?: string, options?: DurableObjectAbortOptions) =>
-    Effect.sync(() => state.abort(reason, options)),
-});
+  native: NativeDurableObjectState,
+): WorkerdDurableObjectState => {
+  // The same object either way; `unknown` skips comparing the two
+  // declarations, which is what hangs.
+  const state = native as unknown as cf.DurableObjectState;
+  return {
+    id: state.id,
+    container: state.container,
+    storage: fromDurableObjectStorage(state.storage),
+    raw: native,
+    waitUntil: (effect) => runInBackground(effect, (promise) => state.waitUntil(promise)),
+    blockConcurrencyWhile: <T, R = never>(callback: () => Effect.Effect<T, never, R>) =>
+      Effect.gen(function* () {
+        const context = yield* Effect.context<R>();
+        // The failure is typed away as before: a rejected gate is the
+        // platform resetting the object, not a value a caller handles.
+        return yield* Effect.promise(() =>
+          state.blockConcurrencyWhile(() => Effect.runPromiseWith(context)(callback())),
+        );
+      }),
+    acceptWebSocket: (ws: WebSocket, tags?: string[]) =>
+      Effect.sync(() => state.acceptWebSocket(ws.ws, tags)),
+    getWebSockets: (tag?: string) => Effect.sync(() => state.getWebSockets(tag).map(fromWebSocket)),
+    setWebSocketAutoResponse: (maybeReqResp?: cf.WebSocketRequestResponsePair) =>
+      Effect.sync(() => state.setWebSocketAutoResponse(maybeReqResp)),
+    getWebSocketAutoResponse: () => Effect.sync(() => state.getWebSocketAutoResponse()),
+    getWebSocketAutoResponseTimestamp: (ws: cf.WebSocket) =>
+      Effect.sync(() => state.getWebSocketAutoResponseTimestamp(ws)),
+    setHibernatableWebSocketEventTimeout: (timeoutMs?: number) =>
+      Effect.sync(() => state.setHibernatableWebSocketEventTimeout(timeoutMs)),
+    getHibernatableWebSocketEventTimeout: () =>
+      Effect.sync(() => state.getHibernatableWebSocketEventTimeout()),
+    getTags: (ws: cf.WebSocket) => Effect.sync(() => state.getTags(ws)),
+    abort: (reason?: string, options?: DurableObjectAbortOptions) =>
+      Effect.sync(() => state.abort(reason, options)),
+  };
+};

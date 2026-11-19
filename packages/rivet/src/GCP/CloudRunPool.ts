@@ -1,6 +1,7 @@
 import * as Run from "@alchemy.run/gcp/Run";
 import * as Effect from "effect/Effect";
 import {
+  isImageProgram,
   makePoolLayer,
   nodeEnvironment,
   NODE_DOCKERFILE,
@@ -65,10 +66,13 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
       Effect.gen(function* () {
         const location =
           options.location ?? (nodes.network?.kind === "gcp" ? nodes.network.region : undefined);
-        // Every class the pool hosts is bundled into its node image.
+        const { program } = nodes;
+        // Every class the pool hosts is bundled into its node image; a Rust
+        // program is its own image, built from its staged crate.
         yield* Run.WorkerPool(`${id}Nodes`, {
-          ...nodes.program,
-          dockerfile: { content: NODE_DOCKERFILE },
+          ...(isImageProgram(program)
+            ? program
+            : { ...program, dockerfile: { content: NODE_DOCKERFILE } }),
           ...(location === undefined ? {} : { location }),
           scaling: { manualInstanceCount: options.replicas ?? 1 },
           template: {

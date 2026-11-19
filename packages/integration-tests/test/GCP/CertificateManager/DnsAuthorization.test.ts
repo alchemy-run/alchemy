@@ -5,6 +5,7 @@ import * as certificatemanager from "@distilled.cloud/gcp/certificatemanager_v1"
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -39,6 +40,13 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.CertificateManager.DnsAuthorization.lookup({
+          dnsAuthorizationId: created.dnsAuthorizationId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/dnsAuthorizations/");

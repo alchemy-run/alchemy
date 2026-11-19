@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
@@ -61,6 +62,14 @@ test.provider(
           });
           return { zone, recordSet };
         }),
+      );
+      yield* expectFound(
+        Hetzner.RecordSet.lookup({
+          zone: created.zone.name,
+          name: created.recordSet.name,
+          type: created.recordSet.type,
+        }),
+        created.recordSet,
       );
 
       expect(created.recordSet.id).toEqual("www/A");

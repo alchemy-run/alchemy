@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as datamigration from "@distilled.cloud/gcp/datamigration_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -48,6 +49,13 @@ test.provider(
             globalSettings: { skip_triggers: "false" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.DataMigration.ConversionWorkspace.lookup({
+          conversionWorkspaceId: created.conversionWorkspaceId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.conversionWorkspaceId).toEqual(expect.any(String));

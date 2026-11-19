@@ -1,6 +1,7 @@
 import type * as cf from "@cloudflare/workers-types";
 import {
   fromDurableObjectState as fromWorkerdDurableObjectState,
+  type NativeDurableObjectState,
   type WorkerdDurableObjectState,
 } from "alchemy/Workers/Workerd/DurableObjectState";
 import * as Context from "effect/Context";
@@ -10,7 +11,10 @@ import {
   type EntrypointExports,
 } from "./WorkerRuntime.ts";
 
-export { type DurableObjectAbortOptions } from "alchemy/Workers/Workerd/DurableObjectState";
+export {
+  type DurableObjectAbortOptions,
+  type NativeDurableObjectState,
+} from "alchemy/Workers/Workerd/DurableObjectState";
 
 export class DurableObjectState extends Context.Service<
   DurableObjectState,
@@ -27,11 +31,20 @@ export class DurableObjectState extends Context.Service<
   }
 >()("Cloudflare.DurableObjectState") {}
 
+/**
+ * Wrap a native `DurableObjectState` in the Cloudflare Effect view. Takes the
+ * same declaration `raw` has, so `fromDurableObjectState(state.raw)`
+ * round-trips without TypeScript comparing the two (see
+ * `NativeDurableObjectState`).
+ */
 export const fromDurableObjectState = (
-  state: cf.DurableObjectState,
-): DurableObjectState["Service"] => ({
-  ...fromWorkerdDurableObjectState(state),
-  exports: makeEntrypointExports((name, options) =>
-    getLoopbackEntrypoint(state.exports, name, options),
-  ),
-});
+  native: NativeDurableObjectState,
+): DurableObjectState["Service"] => {
+  const state = native as unknown as cf.DurableObjectState;
+  return {
+    ...fromWorkerdDurableObjectState(native),
+    exports: makeEntrypointExports((name, options) =>
+      getLoopbackEntrypoint(state.exports, name, options),
+    ),
+  };
+};

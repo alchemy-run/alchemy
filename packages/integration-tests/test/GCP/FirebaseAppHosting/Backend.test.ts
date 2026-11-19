@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as firebaseapphosting from "@distilled.cloud/gcp/firebaseapphosting_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import {
   location,
   logLevel,
@@ -73,6 +74,13 @@ test.provider(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.FirebaseAppHosting.Backend.lookup({
+          backendId: created.backendId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/backends/");

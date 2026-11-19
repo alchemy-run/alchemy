@@ -91,8 +91,26 @@ export interface Manifest extends Resource<
     observedHash?: string;
   },
   {},
-  Providers
+  Providers,
+  ManifestLookup
 > {}
+
+/**
+ * Props for {@link Manifest.lookup}: find an object this stack
+ * doesn't manage by its cluster, kind and name.
+ */
+export interface ManifestLookup {
+  /** The cluster the object lives in. */
+  cluster: ClusterLike;
+  /** API version, e.g. `apps/v1`. */
+  apiVersion: string;
+  /** Object kind, e.g. `Deployment`. */
+  kind: string;
+  /** Object name. */
+  name: string;
+  /** Namespace, for namespaced kinds. */
+  namespace?: string;
+}
 
 /**
  * Applies a raw Kubernetes manifest onto any cluster via server-side
@@ -167,6 +185,22 @@ export interface Manifest extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing object
+ * `Manifest.lookup` references an object Alchemy doesn't manage (applied with
+ * `kubectl`, Helm or another stack). It is read during plan/deploy, never
+ * applied, updated or deleted.
+ *
+ * **Example:** Reference an existing ConfigMap
+ * ```typescript
+ * const settings = Kubernetes.Manifest.lookup({
+ *   cluster,
+ *   apiVersion: "v1",
+ *   kind: "ConfigMap",
+ *   name: "app-settings",
+ *   namespace: "default",
+ * });
+ * ```
+ *
  * @resource
  * @product Manifest
  */
@@ -176,7 +210,7 @@ export const Manifest = Resource<Manifest>("Kubernetes.Manifest", {
 
 const toObjectDefinition = (
   manifest: KubernetesManifest,
-): Effect.Effect<KubernetesObjectDefinition, Error> => {
+): Effect.Effect<KubernetesObjectDefinition, ManifestInvalidProps> => {
   const name = manifest.metadata?.name;
   if (!name) {
     return Effect.fail(
@@ -216,6 +250,18 @@ export const ManifestProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: Effect.fn(function* ({ cluster, apiVersion, kind, name, namespace }) {
+          const connection = toConnection(cluster);
+          const ref: KubernetesObjectRef = { apiVersion, kind, name, namespace };
+          const transport = yield* connectCluster(connection);
+          const observed = yield* readObject({ transport, object: ref }).pipe(
+            Effect.catchTag("KubernetesNotFound", () => Effect.undefined),
+          );
+          if (!observed) return undefined;
+          const uid = (observed as { metadata?: { uid?: string } }).metadata?.uid;
+          return { connection, apiVersion, kind, name, namespace, ref, uid };
+        }),
+
         read: Effect.fn(function* ({ output, olds }) {
           if (!output) return undefined;
           const connection = connectionOfOutput(output);

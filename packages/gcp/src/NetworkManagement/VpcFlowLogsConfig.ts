@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -173,8 +174,32 @@ export type VpcFlowLogsConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  VpcFlowLogsConfigLookup
 >;
+
+/**
+ * Props for {@link VpcFlowLogsConfig.lookup}: find a vpc flow logs config
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface VpcFlowLogsConfigLookup {
+  /**
+   * Config id (the `{vpc_flow_logs_config}` segment of
+   * `projects/{project}/l
+   * ocations/global/vpcFlowLogsConfigs/{vpc_flow_logs_config}`).
+   */
+  vpcFlowLogsConfigId: string;
+  /**
+   * Location. Must be `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A project-level VPC Flow Logs configuration.
@@ -206,6 +231,19 @@ export type VpcFlowLogsConfig = Resource<
  *   aggregationInterval: "INTERVAL_1_MIN",
  *   flowSampling: 0.5,
  *   description: "app vpc flow logs",
+ * });
+ * ```
+ *
+ * ### Looking up an existing vpc flow logs config
+ * `VpcFlowLogsConfig.lookup` references a vpc flow logs config Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared vpc flow logs config.
+ *
+ * **Example:** Reference an existing vpc flow logs config
+ * ```typescript
+ * const vpcFlowLogsConfig = GCP.NetworkManagement.VpcFlowLogsConfig.lookup({
+ *   vpcFlowLogsConfigId: "my-vpc-flow-logs-config",
  * });
  * ```
  *
@@ -346,6 +384,15 @@ export const VpcFlowLogsConfigProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ vpcFlowLogsConfigId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, vpcFlowLogsConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

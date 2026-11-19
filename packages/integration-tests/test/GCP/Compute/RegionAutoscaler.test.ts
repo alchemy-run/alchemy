@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -71,6 +72,20 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { template, mig, scaler };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.RegionAutoscaler.lookup({
+          autoscalerName: created.scaler.autoscalerName,
+          region: created.scaler.region,
+        }),
+        created.scaler,
+      );
+      yield* expectFound(
+        GCP.Compute.RegionInstanceGroupManager.lookup({
+          managerName: created.mig.managerName,
+          region: created.mig.region,
+        }),
+        created.mig,
       );
 
       expect(created.scaler.autoscalerName).toEqual(expect.any(String));

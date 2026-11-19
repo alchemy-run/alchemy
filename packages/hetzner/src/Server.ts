@@ -79,6 +79,16 @@ export type ServerStatus =
   | "rebuilding"
   | "unknown";
 
+/**
+ * Deletion was refused because the server has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class ServerDeleteProtected extends Data.TaggedError("Hetzner.ServerDeleteProtected")<{
+  readonly id: number;
+  readonly message: string;
+}> {}
+
 export interface ServerProps {
   /**
    * Server name. Must be unique per project and a valid RFC 1123
@@ -168,8 +178,9 @@ export interface ServerProps {
    */
   startAfterCreate?: boolean;
   /**
-   * Prevent the Server from being deleted or rebuilt via the API until
-   * this is cleared. The provider disables protection before delete.
+   * Prevent the Server from being deleted or rebuilt via the API.
+   * While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    *
    * @default false
    */
@@ -247,8 +258,18 @@ export type Server = Resource<
      */
     volumes?: Array<{ volumeId: number; path: string }>;
   },
-  Providers
+  Providers,
+  ServerLookup
 >;
+
+/**
+ * Props for {@link Server.lookup}: find a server this stack
+ * doesn't manage by its name.
+ */
+export interface ServerLookup {
+  /** Server name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud Server — a virtual machine in a Location, created from
@@ -324,6 +345,19 @@ export type Server = Resource<
  * `userData` is merged with Alchemy's own bootstrap script into a
  * multipart cloud-init document, so both run. It is applied on first boot
  * only — changing it replaces the Server.
+ *
+ * ### Looking up an existing server
+ * `Server.lookup` references a server Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * Alchemy holds a server's SSH key only for servers it created, so a
+ * looked-up server has no `privateKey`.
+ *
+ * **Example:** Reference an existing server
+ * ```typescript
+ * const server = Hetzner.Server.lookup({ name: "web-1" });
+ * const address = server.ipv4;
+ * ```
  *
  * @resource
  * @product Server
@@ -796,7 +830,7 @@ const syncVolumes = Effect.fn(function* (input: {
     if (observed.has(volumeId)) continue;
     const { action } = yield* Hetzner.volumeActions.attachVolume({
       id: volumeId,
-      server: input.serverId,
+      assignee: { id: input.serverId, type: "server" },
     });
     yield* waitForAction(action);
   }
@@ -900,6 +934,11 @@ export const ServerProvider = () =>
       }
       return undefined;
     }),
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* createServerName(id, olds?.name, output?.name);
       const found = yield* observe({ id, name, outputId: output?.id ?? output?.serverId });
@@ -1073,7 +1112,16 @@ export const ServerProvider = () =>
         deploySshKeyId: deployKey.deploySshKeyId,
       };
     }),
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
+      const protectedServer = yield* getById(output.id);
+      if (protectedServer?.protection.delete === true && force !== true) {
+        return yield* new ServerDeleteProtected({
+          id: output.id,
+          message: `Hetzner server '${output.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+        });
+      }
       // Keep the server discoverable if key deletion fails. Removing the project
       // key does not revoke the public key already injected into the server.
       yield* deleteDeployKey(output.deploySshKeyId);

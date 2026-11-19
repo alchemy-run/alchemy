@@ -5,6 +5,7 @@ import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -55,6 +56,14 @@ test.provider(
           });
           return { topic, subscription, archive, snapshot };
         }),
+      );
+      yield* expectFound(
+        GCP.PubSub.Snapshot.lookup({ snapshotId: created.snapshot.snapshotId }),
+        created.snapshot,
+      );
+      yield* expectFound(
+        GCP.PubSub.Subscription.lookup({ subscriptionId: created.subscription.subscriptionId }),
+        created.subscription,
       );
 
       expect(created.snapshot.name).toContain("/snapshots/");

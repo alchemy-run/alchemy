@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Docker.providers(), Rivet.providers()),
@@ -31,6 +32,7 @@ const deployPool = (props: { drainOnVersionUpgrade?: boolean; actorEvictionPerio
       namespace: pool.namespace,
       drainOnVersionUpgrade: pool.drainOnVersionUpgrade,
       token: cluster.token,
+      pool,
     };
   }).pipe(Effect.provide(Cluster));
 
@@ -57,6 +59,20 @@ describe("Rivet.Pool", { tags: ["provider:rivet", "provider:rivet:pool", "local"
         yield* stack.destroy();
 
         const created = yield* stack.deploy(deployPool({}));
+        const connection = {
+          endpoint: created.pool.endpoint,
+          token: created.token as Redacted.Redacted<string>,
+        };
+        yield* expectFound(
+          Rivet.Pool.lookup({ ...connection, namespace: created.namespace, name: created.name }),
+          created.pool,
+          // What the pool hosts is the deploying stack's record.
+          { ignore: ["durableObjects", "env"] },
+        );
+        yield* expectFound(Rivet.Namespace.lookup({ ...connection, name: created.namespace }), {
+          name: created.namespace,
+          endpoint: created.pool.endpoint,
+        });
         expect(Redacted.isRedacted(created.token)).toBe(true);
         const first = yield* observe(created);
         expect(first?.name).toBe(created.name);

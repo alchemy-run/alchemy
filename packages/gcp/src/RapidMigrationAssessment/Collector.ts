@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -134,8 +135,32 @@ export type Collector = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CollectorLookup
 >;
+
+/**
+ * Props for {@link Collector.lookup}: find a collector this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface CollectorLookup {
+  /**
+   * Collector id (the `{collector}` segment of
+   * `projects/{project}/locations/{location}/collectors/{collector}`).
+   */
+  collectorId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Rapid Migration Assessment collector that manages the on-prem
@@ -175,6 +200,18 @@ export type Collector = Resource<
  *   description: "paused for maintenance",
  *   paused: true,
  *   labels: { env: "prod", team: "migration" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing collector
+ * `Collector.lookup` references a collector Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared collector.
+ *
+ * **Example:** Reference an existing collector
+ * ```typescript
+ * const collector = GCP.RapidMigrationAssessment.Collector.lookup({
+ *   collectorId: "my-collector",
  * });
  * ```
  *
@@ -280,6 +317,15 @@ export const CollectorProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ collectorId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, collectorId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

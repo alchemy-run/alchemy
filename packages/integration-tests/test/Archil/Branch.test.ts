@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as archil from "@distilled.cloud/archil";
 import * as Effect from "effect/Effect";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Archil.providers() });
 
@@ -23,6 +24,7 @@ test.provider(
           return { seed, branch };
         });
       const { seed, branch } = yield* stack.deploy(app());
+      yield* expectFound(Archil.Branch.lookup({ disk: seed.diskId, name: branch.name }), branch);
       const renamed = yield* stack.deploy(app("feature-2"));
       expect(renamed.branch.name).toBe("feature-2");
       expect(renamed.branch.filesystemId).not.toBe(branch.filesystemId);

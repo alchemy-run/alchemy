@@ -11,7 +11,7 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { Workflow, WorkflowEngine } from "effect/workflow";
-import { makeCallback } from "../Callback.ts";
+import { type Callbacks, makeCallback } from "../Callback.ts";
 import type { RuntimeContext } from "../RuntimeContext.ts";
 import {
   CurrentActivity,
@@ -320,6 +320,7 @@ CREATE TABLE IF NOT EXISTS workflow_progress (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   seq INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS workflow_ran (id INTEGER PRIMARY KEY CHECK (id = 1));
 `;
 
 interface ExecutionRow {
@@ -375,7 +376,7 @@ const executionObject = <State>(
       // Every wake-up (a start, a completed deferred, a fired clock, an
       // interrupt) records what changed and schedules this one job. Jobs run
       // one at a time and are retried until a run succeeds.
-      const runs = yield* makeCallback(RUN, () => run, { retry: { delay: "5 seconds" } });
+      const runs = yield* makeCallback(RUN, () => run);
       const wake = (progress?: number) =>
         runs
           .schedule(RUN, { after: 0, payload: {}, progress })
@@ -397,13 +398,10 @@ const executionObject = <State>(
           }),
         );
 
-      const clocks = yield* makeCallback(
-        "clock",
-        (job: { readonly deferred: string }) =>
-          Effect.gen(function* () {
-            yield* complete(job.deferred, yield* encodeExit(Exit.void));
-          }),
-        { retry: { delay: "5 seconds" } },
+      const clocks = yield* makeCallback("clock", (job: { readonly deferred: string }) =>
+        Effect.gen(function* () {
+          yield* complete(job.deferred, yield* encodeExit(Exit.void));
+        }),
       );
       // Replays reach the same sleep again: a clock that's done or already
       // pending is left alone.
@@ -429,6 +427,9 @@ const executionObject = <State>(
       const run: Effect.Effect<void> = Effect.gen(function* () {
         const row = yield* readExecution;
         if (row === undefined || row.result !== null) return;
+        // A duplicate start reads this to tell a run that suspended from an
+        // execution whose first run was never scheduled.
+        yield* query("INSERT OR IGNORE INTO workflow_ran (id) VALUES (1)");
         const { workflow, execute } = registration;
         const payload = yield* Schema.decodeEffect(payloadCodec(workflow))(
           JSON.parse(row.payload),
@@ -474,16 +475,31 @@ const executionObject = <State>(
         start: (executionId: string, payload: string, parent: string) =>
           reportDefects(
             Effect.gen(function* () {
-              const existing = yield* readExecution;
-              if (existing === undefined) {
-                yield* query(
-                  "INSERT INTO workflow_execution (id, execution_id, payload, parent) VALUES (1, ?, ?, ?)",
-                  executionId,
-                  payload,
-                  parent === "null" ? null : parent,
-                );
-                yield* wake();
-              }
+              // The execution and its first run commit together: a start that
+              // fails leaves neither, and its retry creates both.
+              yield* transaction(
+                Effect.gen(function* () {
+                  const existing = yield* readExecution;
+                  if (existing === undefined) {
+                    yield* query(
+                      "INSERT INTO workflow_execution (id, execution_id, payload, parent) VALUES (1, ?, ?, ?)",
+                      executionId,
+                      payload,
+                      parent === "null" ? null : parent,
+                    );
+                    return yield* wake();
+                  }
+                  // An earlier engine committed the execution before
+                  // scheduling its first run, so a failed schedule stranded
+                  // it. Schedule that run now; a run that is pending, has
+                  // ever run, or has finished is left alone.
+                  if (existing.result !== null) return;
+                  const ran = yield* query("SELECT 1 FROM workflow_ran");
+                  if (ran.length > 0) return;
+                  const pending = yield* runs.getStatus(RUN).pipe(Effect.orDie);
+                  if (pending === undefined) yield* wake();
+                }),
+              );
               return yield* result;
             }),
           ),
@@ -500,8 +516,10 @@ const executionObject = <State>(
         // The next run replays with the instance marked interrupted, which
         // fails the workflow and runs its compensations.
         interrupt: () =>
-          reportDefects(
-            query("UPDATE workflow_execution SET interrupted = 1").pipe(Effect.andThen(wake())),
+          query("UPDATE workflow_execution SET interrupted = 1").pipe(
+            Effect.andThen(wake()),
+            transaction,
+            reportDefects,
           ),
         // Stop without running compensations.
         interruptUnsafe: () =>
@@ -570,8 +588,22 @@ export interface Namespace {
 }
 
 /** The two-stage implementation of an execution object. */
+/**
+ * Provide an engine object's instances with a host's `Callbacks`
+ * implementation. Every host's `declare` does this with its own.
+ */
+export const provideCallbacks = <State, R>(
+  impl: ObjectImpl<State>,
+  callbacks: Layer.Layer<Callbacks, never, R>,
+) =>
+  Effect.map(impl, (instance) => instance.pipe(Effect.provide(callbacks))) as Effect.Effect<
+    Effect.Effect<Record<string, unknown>, never, State | RuntimeContext | Scope.Scope | R>,
+    never,
+    State
+  >;
+
 export type ObjectImpl<State> = Effect.Effect<
-  Effect.Effect<Record<string, unknown>, never, State | RuntimeContext | Scope.Scope>,
+  Effect.Effect<Record<string, unknown>, never, State | RuntimeContext | Callbacks | Scope.Scope>,
   never,
   State
 >;

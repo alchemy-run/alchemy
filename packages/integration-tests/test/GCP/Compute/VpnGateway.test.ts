@@ -5,6 +5,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { DEFAULT_NETWORK } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -38,6 +39,13 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { gateway };
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.VpnGateway.lookup({
+          vpnGatewayName: created.gateway.vpnGatewayName,
+          region: created.gateway.region,
+        }),
+        created.gateway,
       );
 
       expect(created.gateway.vpnGatewayName).toEqual(expect.any(String));

@@ -11,6 +11,7 @@ import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: providers() });
 
@@ -63,6 +64,14 @@ describe.concurrent("Neon.Role", { tags }, () => {
           });
 
         const { branch, role } = yield* stack.deploy(program());
+        yield* expectFound(
+          Role.lookup({
+            projectId: role.projectId,
+            branchId: role.branchId,
+            roleName: role.roleName,
+          }),
+          role,
+        );
         expect(role.roleName).toMatch(/^[a-z0-9_]+$/);
         expect(role.noLogin).toBe(false);
         expect(role.password).toBeDefined();

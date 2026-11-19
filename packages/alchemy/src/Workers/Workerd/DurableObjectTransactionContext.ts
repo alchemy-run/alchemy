@@ -7,8 +7,6 @@ export interface ActiveStorageTransaction {
   owner: Fiber.Fiber<unknown, unknown> | undefined;
   active: boolean;
   rolledBack: boolean;
-  alarmTablesEnsured: boolean;
-  alarmDirty: boolean;
   /** Resolves once the native transaction commits or rolls back. */
   readonly settled: Promise<void>;
 }

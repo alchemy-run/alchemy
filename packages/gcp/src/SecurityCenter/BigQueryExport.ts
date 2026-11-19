@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -73,8 +74,28 @@ export type BigQueryExport = Resource<
     mostRecentEditor: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BigQueryExportLookup
 >;
+
+/**
+ * Props for {@link BigQueryExport.lookup}: find a big query export this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface BigQueryExportLookup {
+  /**
+   * Export id (the `{export}` segment of
+   * `projects/{project}/bigQueryExports/{export}`). Lowercase letters,
+   * digits, and hyphens; must start with a letter; max 63 characters.
+   */
+  exportId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A project-scoped Security Command Center BigQuery export that writes
@@ -105,6 +126,19 @@ export type BigQueryExport = Resource<
  *   dataset: dataset.name,
  *   description: "high and critical",
  *   filter: 'severity="HIGH" OR severity="CRITICAL"',
+ * });
+ * ```
+ *
+ * ### Looking up an existing big query export
+ * `BigQueryExport.lookup` references a big query export Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * big query export.
+ *
+ * **Example:** Reference an existing big query export
+ * ```typescript
+ * const bigQueryExport = GCP.SecurityCenter.BigQueryExport.lookup({
+ *   exportId: "my-export",
  * });
  * ```
  *
@@ -154,6 +188,14 @@ export const BigQueryExportProvider = () =>
       if (!isResolved(news)) return undefined;
       return replaceOn(olds?.exportId ?? output?.exportId, news.exportId);
     }),
+
+    lookup: Effect.fn(function* ({ exportId }) {
+      const env = yield* GcpEnvironment.current;
+      const name = resourceName(env.project, exportId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

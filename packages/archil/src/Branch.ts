@@ -42,7 +42,25 @@ export interface BranchAttributes {
   createdAt: string;
 }
 
-export type Branch = Resource<"Archil.Branch", BranchProps, BranchAttributes, never, Providers>;
+export type Branch = Resource<
+  "Archil.Branch",
+  BranchProps,
+  BranchAttributes,
+  never,
+  Providers,
+  BranchLookup
+>;
+
+/**
+ * Props for {@link Branch.lookup}: find a branch this stack
+ * doesn't manage by its disk and name.
+ */
+export interface BranchLookup {
+  /** Id of the disk the branch belongs to. */
+  disk: string;
+  /** Branch name. */
+  name: string;
+}
 
 /**
  * An independent, writable fork of a disk, started from a committed
@@ -68,6 +86,16 @@ export type Branch = Resource<"Archil.Branch", BranchProps, BranchAttributes, ne
  * });
  * ```
  *
+ * ### Looking up an existing branch
+ * `Branch.lookup` references a branch Alchemy doesn't manage (created in
+ * the Archil console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing branch
+ * ```typescript
+ * const main = Archil.Branch.lookup({ disk: "dsk_123", name: "main" });
+ * ```
+ *
  * @resource
  * @product Disk
  */
@@ -87,7 +115,7 @@ export const toBranchAttributes = (branch: archil.BranchResponse): BranchAttribu
 export const getBranch = (diskId: string, name: string) =>
   archil.getBranch({ id: diskId, name }).pipe(
     Effect.map(({ data }) => toBranchAttributes(data)),
-    Effect.catchTag("BranchNotFound", () => Effect.undefined),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 /** Create a branch, or return the existing one with that name. */
@@ -108,7 +136,8 @@ export const ensureBranch = Effect.fn(function* (input: {
     })
     .pipe(
       Effect.map(({ data }) => toBranchAttributes(data)),
-      Effect.catchTag("BranchConflict", (conflict) =>
+      // A concurrent create of the same name won the race.
+      Effect.catchTag("Conflict", (conflict) =>
         getBranch(input.disk, input.name).pipe(
           Effect.flatMap((found) => (found ? Effect.succeed(found) : Effect.fail(conflict))),
         ),
@@ -147,6 +176,8 @@ export const BranchProvider = () =>
           }
           return undefined;
         }),
+        lookup: ({ disk, name }) => getBranch(disk, name),
+
         read: Effect.fn(function* ({ id, olds, output }) {
           if (!output && !olds) return undefined;
           const diskId = output?.diskId ?? olds!.disk;

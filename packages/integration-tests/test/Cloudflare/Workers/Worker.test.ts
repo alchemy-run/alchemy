@@ -109,6 +109,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const main = pathe.resolve(import.meta.dirname, "fixtures/worker.ts");
 const doMain = pathe.resolve(import.meta.dirname, "fixtures/do-counter-worker.ts");
+const buildPluginMain = pathe.resolve(import.meta.dirname, "fixtures/build-plugin/worker.mjs");
 const classNameAsyncMain = pathe.resolve(
   import.meta.dirname,
   "fixtures/do-class-name/async-host.ts",
@@ -118,6 +119,70 @@ describe.concurrent(
   "Cloudflare.Worker",
   { tags: ["provider:cloudflare", "provider:cloudflare:worker"] },
   () => {
+    test.provider(
+      "redeploys a Worker whose build plugins carry functions and RegExp filters",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+
+          // A virtual module resolved by a rolldown plugin. The diff hashes
+          // the bundle on every redeploy, so the plugin must survive it.
+          const program = (answer: number) =>
+            Cloudflare.Worker("BuildPluginWorker", {
+              main: buildPluginMain,
+              workersDev: true,
+              build: {
+                input: {
+                  plugins: [
+                    {
+                      name: "answer",
+                      resolveId: {
+                        filter: { id: /^virtual:answer$/ },
+                        handler: (id: string) => `\0${id}`,
+                      },
+                      load: {
+                        filter: { id: /^\0virtual:answer$/ },
+                        handler: () => `export default ${answer};`,
+                      },
+                    },
+                  ],
+                },
+              },
+            });
+          const answerOf = (url: string, expected: string) =>
+            requestWorker(
+              HttpClientRequest.get(url).pipe(HttpClientRequest.setHeader("connection", "close")),
+            ).pipe(
+              Effect.flatMap((response) => response.text),
+              Effect.repeat({
+                schedule: Schedule.spaced("2 seconds"),
+                until: (text) => text === expected,
+                times: 15,
+              }),
+            );
+          const actionOf = (plan: any) =>
+            (Object.values(plan.resources) as any[]).find(
+              (node: any) => node.resource.LogicalId === "BuildPluginWorker",
+            )?.action;
+
+          const v1 = yield* stack.deploy(program(42));
+          expect(yield* answerOf(v1.url!, "42")).toBe("42");
+
+          // An unchanged plugin hashes to the deployed bundle.
+          expect(actionOf(yield* stack.plan(program(42)))).toBe("noop");
+
+          // A changed plugin output updates the Worker.
+          expect(actionOf(yield* stack.plan(program(43)))).toBe("update");
+          const v2 = yield* stack.deploy(program(43));
+          expect(yield* answerOf(v2.url!, "43")).toBe("43");
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"] },
+    );
+
     test.provider(
       "create, update, delete worker",
       (stack) =>

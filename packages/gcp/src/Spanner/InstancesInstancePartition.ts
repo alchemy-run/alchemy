@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   configIdOf,
@@ -130,8 +131,33 @@ export type InstancesInstancePartition = Resource<
     referencingBackups: string[];
   },
   never,
-  Providers
+  Providers,
+  InstancesInstancePartitionLookup
 >;
+
+/**
+ * Props for {@link InstancesInstancePartition.lookup}: find an instances
+ * instance partition this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface InstancesInstancePartitionLookup {
+  /**
+   * Instance partition id (the `{partition}` segment of
+   * `.../instancePartitions/{partition}`). Must match
+   * `^[a-z][-a-z0-9]*[a-z0-9]$` (2–64 characters).
+   */
+  instancePartitionId: string;
+  /**
+   * Parent instance id or full name
+   * (`projects/{project}/instances/{instance}`).
+   */
+  instance: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Spanner instance partition for geo-partitioned data placement.
@@ -168,6 +194,20 @@ export type InstancesInstancePartition = Resource<
  *     nodeCount: 1,
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing instances instance partition
+ * `InstancesInstancePartition.lookup` references an instances instance
+ * partition Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared instances instance partition.
+ *
+ * **Example:** Reference an existing instances instance partition
+ * ```typescript
+ * const instancesInstancePartition = GCP.Spanner.InstancesInstancePartition.lookup({
+ *   instancePartitionId: "my-instance-partition",
+ *   instance: "my-instance",
+ * });
  * ```
  *
  * @resource
@@ -355,6 +395,16 @@ export const InstancesInstancePartitionProvider = () =>
           previousConfig !== nextConfig || (previousId !== undefined && nextId === previousId),
       };
     }),
+
+    lookup: Effect.fn(function* ({ instancePartitionId, instance }) {
+      const env = yield* GcpEnvironment.current;
+      const instanceId = instanceIdOf(instance ?? "");
+      if (instanceId.length === 0) return undefined;
+      const name = instancePartitionName(env.project, instanceId, instancePartitionId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

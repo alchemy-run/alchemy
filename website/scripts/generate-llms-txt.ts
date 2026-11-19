@@ -142,6 +142,7 @@ const SECTIONS: Section[] = [
         "environments/secret-providers",
         "environments/doppler",
         "environments/infisical",
+        "environments/1password",
         "environments/local-development",
         "environments/worktrees",
         "environments/ci",
@@ -485,6 +486,51 @@ const SECTIONS: Section[] = [
     pages: { directory: "railway/frontend" },
   },
   {
+    heading: "DigitalOcean",
+    intro:
+      "DigitalOcean: App Platform runtimes and Functions, Droplets, Kubernetes, MicroVM sandboxes, Spaces, Managed Databases, GenAI agents and inference, networking and monitoring, with bindings that give each runtime a key to one resource.",
+    pages: {
+      slugs: [
+        "digitalocean/index",
+        "digitalocean/what-is-digitalocean",
+        "digitalocean/setup",
+        "digitalocean/teams-projects-and-tokens",
+      ],
+    },
+  },
+  {
+    heading: "DigitalOcean — Tutorial",
+    pages: { directory: "digitalocean/tutorial" },
+  },
+  {
+    heading: "DigitalOcean — Security",
+    pages: { directory: "digitalocean/security" },
+  },
+  {
+    heading: "DigitalOcean — Compute",
+    pages: { directory: "digitalocean/compute" },
+  },
+  {
+    heading: "DigitalOcean — Data",
+    pages: { directory: "digitalocean/data" },
+  },
+  {
+    heading: "DigitalOcean — Networking",
+    pages: { directory: "digitalocean/networking" },
+  },
+  {
+    heading: "DigitalOcean — Observability",
+    pages: { directory: "digitalocean/observability" },
+  },
+  {
+    heading: "DigitalOcean — AI",
+    pages: { directory: "digitalocean/ai" },
+  },
+  {
+    heading: "DigitalOcean — Frontend",
+    pages: { directory: "digitalocean/frontend" },
+  },
+  {
     heading: "PlanetScale",
     intro:
       "Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.",
@@ -564,6 +610,32 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "E2B",
+    intro:
+      "E2B sandboxes for agents: what E2B is, team and API keys, network rules and egress secrets, templates, sandboxes from any Worker, warm snapshots and forks, programs baked into templates, volumes, and lifecycle events.",
+    pages: {
+      slugs: [
+        "e2b/index",
+        "e2b/what-is-e2b",
+        "e2b/setup",
+        "e2b/tutorial/part-1",
+        "e2b/tutorial/part-2",
+        "e2b/tutorial/part-3",
+        "e2b/tutorial/part-4",
+        "e2b/tutorial/part-5",
+        "e2b/tutorial/part-6",
+        "e2b/api-keys",
+        "e2b/network-and-secrets",
+        "e2b/templates",
+        "e2b/sandboxes",
+        "e2b/snapshots",
+        "e2b/programs",
+        "e2b/volumes",
+        "e2b/lifecycle-events",
+      ],
+    },
+  },
+  {
     heading: "Archil — start here",
     intro:
       "Archil runs commands, processes and programs against durable disks in Firecracker microVMs: serverless exec, sandboxes, programs and websites, branches, and mounts in your own Containers and ECS tasks.",
@@ -588,12 +660,36 @@ const SECTIONS: Section[] = [
     pages: { directory: "archil/compute" },
   },
   {
-    heading: "Archil — Frontend",
-    pages: { directory: "archil/frontend" },
-  },
-  {
     heading: "Archil — Storage",
     pages: { directory: "archil/storage" },
+  },
+  {
+    heading: "Boat",
+    intro:
+      "Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.",
+    pages: {
+      slugs: [
+        "boat/index",
+        "boat/what-is-boat",
+        "boat/setup",
+        "boat/tutorial/part-1",
+        "boat/tutorial/part-2",
+        "boat/tutorial/part-3",
+        "boat/tutorial/part-4",
+        "boat/tutorial/part-5",
+        "boat/tutorial/part-6",
+        "boat/account-and-keys",
+        "boat/security/credentials",
+        "boat/security/environments",
+        "boat/security/credential-profiles",
+        "boat/sandboxes/choosing-a-runtime",
+        "boat/sandboxes/sandboxes",
+        "boat/sandboxes/programs",
+        "boat/sandboxes/snapshots",
+        "boat/sandboxes/ports",
+        "boat/sandboxes/lifecycle-events",
+      ],
+    },
   },
   {
     heading: "Rivet",
@@ -618,6 +714,7 @@ const SECTIONS: Section[] = [
         "rivet/calling",
         "rivet/rivetkit",
         "rivet/rivetkit-effect",
+        "rivet/rivetkit-rust",
         "rivet/durable-streams",
         "rivet/control-planes",
         "rivet/pools",
@@ -664,6 +761,64 @@ const SECTIONS: Section[] = [
       ],
     },
   },
+  {
+    heading: "Daytona",
+    intro:
+      "Daytona sandboxes from Workers and Lambda: what Daytona is, organizations and scoped API keys, snapshots (images, Dockerfile builds, warm bases), sandboxes and their lifecycle, programs in a sandbox, volumes, the toolbox, network limits and previews, secrets the sandbox can't read, regions and runners, and telemetry.",
+    pages: {
+      slugs: ["daytona/index", "daytona/what-is-daytona", "daytona/setup"],
+    },
+  },
+  {
+    heading: "Daytona — Tutorial",
+    pages: { directory: "daytona/tutorial" },
+  },
+  {
+    heading: "Daytona — Accounts & access",
+    pages: {
+      slugs: [
+        "daytona/organizations-and-keys",
+        "daytona/organization/organization",
+        "daytona/security/secrets",
+      ],
+    },
+  },
+  {
+    heading: "Daytona — Sandboxes",
+    pages: { directory: "daytona/sandboxes" },
+  },
+  {
+    heading: "Daytona — Networking",
+    pages: { directory: "daytona/networking" },
+  },
+  {
+    heading: "Daytona — Observability",
+    pages: { directory: "daytona/observability" },
+  },
+  {
+    heading: "Modal",
+    intro:
+      "Modal runs code in containers, with GPUs on demand: Functions and Servers that scale from zero, Sandboxes created while your code runs, and Volumes, Dicts, Queues and Secrets beside them.",
+    pages: {
+      slugs: ["modal/index", "modal/what-is-modal", "modal/setup"],
+    },
+  },
+  { heading: "Modal — Tutorial", pages: { directory: "modal/tutorial" } },
+  {
+    heading: "Modal — Accounts & access",
+    pages: {
+      slugs: [
+        "modal/workspaces-and-tokens",
+        "modal/security/access-control",
+        "modal/security/secrets",
+      ],
+    },
+  },
+  { heading: "Modal — Compute", pages: { directory: "modal/compute" } },
+  { heading: "Modal — Services", pages: { directory: "modal/services" } },
+  { heading: "Modal — Sandboxes", pages: { directory: "modal/sandboxes" } },
+  { heading: "Modal — Storage", pages: { directory: "modal/storage" } },
+  { heading: "Modal — Networking", pages: { directory: "modal/networking" } },
   {
     heading: "Better Auth",
     intro:
@@ -774,7 +929,9 @@ const SECTIONS: Section[] = [
         "stripe/setup",
         "stripe/guides/subscriptions",
         "stripe/guides/connect",
+        "stripe/guides/pricing",
         "stripe/guides/webhooks",
+        "stripe/guides/tax-and-payouts",
       ],
     },
   },
@@ -787,9 +944,20 @@ const SECTIONS: Section[] = [
         "docker/index",
         "docker/what-is-docker",
         "docker/setup",
-        "docker/local-services",
-        "docker/build-and-push",
+        "docker/engines-and-contexts",
+        "docker/registries",
+        "docker/build-images",
+        "docker/build-caches",
+        "docker/remote-images",
+        "docker/cloud-runtimes",
+        "docker/containers",
+        "docker/networks",
+        "docker/volumes",
+        "docker/limits-and-security",
         "docker/swarm",
+        "docker/services",
+        "docker/effectful-services",
+        "docker/local-services",
       ],
     },
   },
@@ -882,7 +1050,7 @@ const SECTIONS: Section[] = [
   {
     heading: "Domain",
     intro:
-      "A domain-driven design framework: model commands, events, aggregates, views, projections, policies, and sagas once, then host them on Durable Objects or in memory.",
+      "A domain-driven design framework: model commands, events, aggregates, views, projections, policies, and sagas once, then host them on Cloudflare, Rivet, Effect Cluster or in memory.",
     pages: {
       slugs: [
         "domain/index",
@@ -900,6 +1068,7 @@ const SECTIONS: Section[] = [
         "domain/command",
         "domain/event",
         "domain/aggregate",
+        "domain/decision",
         "domain/view",
         "domain/projection",
         "domain/stream",
@@ -909,23 +1078,27 @@ const SECTIONS: Section[] = [
         "domain/external-system",
         "domain/api",
         "domain/annotations",
+        "domain/cloudflare",
+        "domain/rivet",
+        "domain/effect-cluster",
+        "domain/in-memory",
         "domain/story",
         "domain/testing-models",
+        "domain/verifying-models",
+        "domain/verifiable-code",
         "domain/testing-apis",
+        "domain/http-api",
+        "domain/cli",
+        "domain/mcp",
         "domain/foldkit",
         "domain/optimistic-updates",
         "domain/local-first",
-        "domain/mcp",
         "domain/sessions",
         "domain/better-auth",
         "domain/view-security",
         "domain/unique-values",
         "domain/deadlines",
-        "domain/cloudflare",
         "domain/backfill",
-        "domain/in-memory",
-        "domain/http-api",
-        "domain/cli",
         "domain/observability",
       ],
     },

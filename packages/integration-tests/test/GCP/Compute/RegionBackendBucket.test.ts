@@ -5,6 +5,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -47,6 +48,10 @@ test.provider(
             description: "static assets",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.RegionBackendBucket.lookup({ name: created.name, region: created.region }),
+        created,
       );
 
       expect(created.name).toEqual(expect.any(String));

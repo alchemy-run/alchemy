@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as marketplace from "@distilled.cloud/gcp/authorizedbuyersmarketplace_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { lifecycleParent, logLevel, probeName, probeParent, waitUntilGone } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -60,6 +61,14 @@ test.provider.skipIf(!!process.env.FAST || lifecycleParent === undefined)(
             email: "analyst@example.com",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.AuthorizedBuyersMarketplace.BuyersClientsUser.lookup({
+          parent: created.parent,
+          userId: created.userId,
+          email: created.email,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/users/");
