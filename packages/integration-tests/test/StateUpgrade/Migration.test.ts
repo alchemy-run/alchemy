@@ -151,7 +151,7 @@ test.provider(
   `a stage of ${RELEASED} the new version sealed in S3 migrates to DynamoDB still sealed`,
   (stack) =>
     Effect.gen(function* () {
-      const name = storeNameFor("ups", stack.stage);
+      const name = storeNameFor("upx", stack.stage);
       const table = `alchemy-state-${name}`;
       const { accountId, region } = yield* AWSEnvironment.current;
       const bucket = createStateBucketName(accountId, region, name);
