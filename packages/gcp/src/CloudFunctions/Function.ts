@@ -8,7 +8,7 @@ import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import { type ServerHost } from "alchemy/Runtime/Process";
-import { packEnvValue } from "alchemy/RuntimeContext";
+import { envStrings } from "alchemy/RuntimeContext";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -956,16 +956,7 @@ export const FunctionProvider = () =>
         ...news.serviceConfig,
         serviceAccountEmail: serviceAccount,
         environmentVariables: {
-          ...Object.fromEntries(
-            // A string is already an env value: the user's own (deployed
-            // verbatim, like every other host) or one the runtime context
-            // packed when it was bound. Packing it again would quote
-            // `"false"` and double-wrap bound secrets.
-            Object.entries(runtimeEnv).map(([key, value]) => [
-              key,
-              typeof value === "string" ? value : packEnvValue(value),
-            ]),
-          ),
+          ...envStrings(runtimeEnv),
           ...news.serviceConfig?.environmentVariables,
         },
       };

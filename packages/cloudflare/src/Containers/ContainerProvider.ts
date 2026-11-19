@@ -12,6 +12,7 @@ import { collectMountCapabilities, mountInstallLines, MountUnsupported } from "a
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { type ResourceBinding } from "alchemy/Resource";
+import { envStrings } from "alchemy/RuntimeContext";
 import { sha256Object } from "alchemy/Util/sha256";
 import { normalizeNulls } from "alchemy/Util/stable";
 import * as Data from "effect/Data";
@@ -263,9 +264,9 @@ export const LiveContainerProvider = () =>
           memory: props.memory,
           memoryMib: props.memoryMib,
           disk: props.disk,
-          environmentVariables: Object.entries(env).map(([name, value]) => ({
+          environmentVariables: Object.entries(envStrings(env)).map(([name, value]) => ({
             name,
-            value: Redacted.isRedacted(value) ? Redacted.value(value) : value,
+            value,
           })),
           labels: props.labels,
           network: props.network,

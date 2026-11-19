@@ -11,6 +11,7 @@ import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/
 import { safeHttpEffect } from "alchemy/Http";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createContainerRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
+import { envStrings } from "alchemy/RuntimeContext";
 import { Self } from "alchemy/Self";
 import {
   copyExtraFiles,
@@ -250,13 +251,11 @@ export const plainEnvValue = (value: unknown): string | undefined => {
   return undefined;
 };
 
-export const toEnvRecord = (env: Record<string, any> | undefined): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(env ?? {}).flatMap(([key, value]) => {
-      const raw = plainEnvValue(value);
-      return raw === undefined ? [] : [[key, raw]];
-    }),
-  );
+/**
+ * `env` as Railway variables. Bound values keep the runtime context's
+ * packing, so its `get` can rebuild a `Redacted`.
+ */
+export const toEnvRecord = envStrings;
 
 const coerceBindingId = (value: unknown): string | undefined => {
   const direct = plainEnvValue(value);

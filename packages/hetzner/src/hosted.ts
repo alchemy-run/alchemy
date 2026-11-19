@@ -8,6 +8,7 @@ import {
   type PackageInstall,
 } from "alchemy/Bundle/InstalledPackages";
 import { findCwdForBundle, resolveMainPath } from "alchemy/Bundle/TempRoot";
+import { dockerEnvFile, systemdEnvFile } from "alchemy/EnvFile";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import {
@@ -86,17 +87,6 @@ const matchesConfiguredExternal = (
 };
 
 export { extraFileDestination };
-
-const quoteEnvValue = (value: unknown) => {
-  const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
-  return `'${text.replaceAll(/'/g, `'""'`).replaceAll(/\n/g, "\\n")}'`;
-};
-
-export const renderEnvFile = (env: Record<string, unknown>) =>
-  Object.entries(env)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}=${quoteEnvValue(value)}`)
-    .join("\n");
 
 export const collectBindingState = (bindings: ResourceBinding<ServiceBinding>[]) => {
   const active = bindings.filter(
@@ -548,7 +538,7 @@ WantedBy=multi-user.target
       ].join("\n"),
     );
     yield* input.ssh.scp(input.archive, `${appDir}/bundle.zip`);
-    yield* input.ssh.scp(new TextEncoder().encode(renderEnvFile(input.env)), `${appDir}/env`);
+    yield* input.ssh.scp(new TextEncoder().encode(systemdEnvFile(input.env)), `${appDir}/env`);
     yield* input.ssh.scp(
       new TextEncoder().encode(renderUnit(input.unitName, appDir, input.entryRel ?? "index.mjs")),
       `/etc/systemd/system/${input.unitName}.service`,
@@ -587,17 +577,6 @@ WantedBy=multi-user.target
       ].join("\n"),
     );
   });
-
-  /** A `docker run --env-file`: one literal `NAME=value` per line, no quoting. */
-  const renderDockerEnvFile = (env: Record<string, unknown>) =>
-    Object.entries(env)
-      .filter(([, value]) => value !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => {
-        const text = typeof value === "string" ? value : JSON.stringify(value);
-        return `${key}=${text.replaceAll("\n", " ")}`;
-      })
-      .join("\n");
 
   const renderImageUnit = (unitName: string, appDir: string) => `[Unit]
 Description=Alchemy Hetzner Service ${unitName}
@@ -649,7 +628,10 @@ WantedBy=multi-user.target
       ].join("\n"),
     );
     yield* input.ssh.scp(input.archive, `${appDir}/image.tar`);
-    yield* input.ssh.scp(new TextEncoder().encode(renderDockerEnvFile(input.env)), `${appDir}/env`);
+    yield* input.ssh.scp(
+      new TextEncoder().encode(yield* dockerEnvFile(input.env)),
+      `${appDir}/env`,
+    );
     yield* input.ssh.scp(
       new TextEncoder().encode(renderImageUnit(input.unitName, appDir)),
       `/etc/systemd/system/${input.unitName}.service`,

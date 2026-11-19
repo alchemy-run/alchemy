@@ -159,6 +159,30 @@ export const packEnvValue = (value: unknown): string =>
       : JSON.stringify(value);
 
 /**
+ * The string a deployed process reads for a value in a user's `env` prop: a
+ * string as-is (`""` included), a `Redacted` unwrapped, anything else as
+ * JSON. `undefined` and `null` mean unset.
+ *
+ * Every host writes `env` through this, so `process.env` and `Config` read
+ * the same string on all of them. A string the runtime context packed when
+ * it bound a value is already an env string, so it passes through unchanged.
+ */
+export const envString = (value: unknown): string | undefined => {
+  const plain = Redacted.isRedacted(value) ? Redacted.value(value) : value;
+  if (plain === undefined || plain === null) return undefined;
+  return typeof plain === "string" ? plain : JSON.stringify(plain);
+};
+
+/** {@link envString} over a whole `env` record, dropping unset entries. */
+export const envStrings = (env: Record<string, unknown> | undefined): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(env ?? {}).flatMap(([key, value]) => {
+      const text = envString(value);
+      return text === undefined ? [] : [[key, text]];
+    }),
+  );
+
+/**
  * Like {@link packEnvValue}, but a `Redacted` input keeps its `Redacted`
  * wrapper on the *outside* of the packed string, so deploy-time code can
  * route secrets through a dedicated channel (Cloudflare `secret_text`,

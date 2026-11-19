@@ -8,6 +8,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, resolveMainPath } from "alchemy/Bundle/TempRoot";
+import { dockerEnvFile, systemdEnvFile } from "alchemy/EnvFile";
 import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import type { PlatformProps } from "alchemy/Platform";
@@ -335,27 +336,6 @@ await bootstrap(entrypoint);
     );
     return { archive, hash: bundleOutput.hash };
   });
-
-  const quoteEnvValue = (value: any) => {
-    const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
-    return `'${text.replaceAll(/'/g, `'""'`).replaceAll(/\n/g, "\\n")}'`;
-  };
-
-  /** A `docker run --env-file`: one literal `NAME=value` per line, no quoting. */
-  const renderDockerEnvFile = (env: Record<string, any>) =>
-    Object.entries(env)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => {
-        const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
-        return `${key}=${text.replaceAll("\n", " ")}`;
-      })
-      .join("\n");
-
-  const renderEnvFile = (env: Record<string, any>) =>
-    Object.entries(env)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => `${key}=${quoteEnvValue(value)}`)
-      .join("\n");
 
   const renderHostedUserData = Effect.fn(function* ({
     unitName,
@@ -725,10 +705,11 @@ systemctl enable --now ${unitName}.service
       Key: bundleKey,
       CopySource: `${yield* assets.bucketName}/${uploadedAssetKey}`,
     });
+    const envFile = image ? yield* dockerEnvFile(env) : systemdEnvFile(env);
     yield* s3.putObject({
       Bucket: yield* assets.bucketName,
       Key: envKey,
-      Body: image ? renderDockerEnvFile(env) : renderEnvFile(env),
+      Body: envFile,
       ContentType: "text/plain; charset=utf-8",
     });
   });
