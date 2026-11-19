@@ -213,3 +213,20 @@ export const doBindings = Effect.fn(function* (scriptName: string) {
       bindings[binding.name] = binding.className;
   return bindings;
 });
+
+/**
+ * The Worker's Durable Object bindings once they read as `expected`: right
+ * after an upload, the settings can still answer for the version before it.
+ * Gives up after about a minute and returns what it last read.
+ */
+export const bindingsUntil = (scriptName: string, expected: Record<string, string>) =>
+  doBindings(scriptName).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (bindings) => JSON.stringify(sorted(bindings)) === JSON.stringify(sorted(expected)),
+      times: 30,
+    }),
+  );
+
+const sorted = (record: Record<string, string>) =>
+  Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)));

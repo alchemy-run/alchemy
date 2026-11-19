@@ -26,7 +26,15 @@ import UpgradePlainWorker from "./fixtures/upgrade-plain-worker.ts";
 import UpgradeSharedNextWorker from "./fixtures/upgrade-shared-next-worker.ts";
 import UpgradeSharedWorker from "./fixtures/upgrade-shared-worker.ts";
 import UpgradeWorker from "./fixtures/upgrade-worker.ts";
-import { backdatePasses, doBindings, movedBy, namespacesOf, untilListed, watch } from "./move.ts";
+import {
+  backdatePasses,
+  bindingsUntil,
+  doBindings,
+  movedBy,
+  namespacesOf,
+  untilListed,
+  watch,
+} from "./move.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
@@ -312,7 +320,12 @@ test.provider(
       );
       // One deploy: every old class is gone but the saga's. Its runs are listed
       // nowhere before this code, so it waits for the passes over what Cloudflare lists.
-      expect(yield* doBindings(scriptName)).toEqual({
+      expect(
+        yield* bindingsUntil(scriptName, {
+          "Billing.Domain": "Billing.Domain",
+          "Billing.ApproveWorkflow": "Billing.ApproveWorkflow",
+        }),
+      ).toEqual({
         "Billing.Domain": "Billing.Domain",
         "Billing.ApproveWorkflow": "Billing.ApproveWorkflow",
       });
@@ -355,7 +368,9 @@ test.provider(
           return { worker: yield* UpgradeSharedWorker };
         }),
       );
-      expect(yield* doBindings(scriptName)).toEqual({ "Billing.Domain": "Billing.Domain" });
+      expect(yield* bindingsUntil(scriptName, { "Billing.Domain": "Billing.Domain" })).toEqual({
+        "Billing.Domain": "Billing.Domain",
+      });
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/state/a-2")).toEqual({ owner: "ann" });
@@ -455,7 +470,9 @@ test.provider(
         }),
       );
       yield* waitForVersion(url, 1);
-      expect(yield* doBindings(scriptName)).toEqual({ "Billing.Domain": "Billing.Domain" });
+      expect(yield* bindingsUntil(scriptName, { "Billing.Domain": "Billing.Domain" })).toEqual({
+        "Billing.Domain": "Billing.Domain",
+      });
       expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
       expect(yield* call(url, "/Billing/state/a-2")).toEqual({ owner: "ann" });
@@ -531,7 +548,12 @@ test.provider(
           return { worker: yield* SharedV1BillingWorker };
         }),
       );
-      expect(yield* doBindings(scriptName)).toEqual({
+      expect(
+        yield* bindingsUntil(scriptName, {
+          "Audit.Domain": "Audit.Domain",
+          "Billing.Domain": "Billing.Domain",
+        }),
+      ).toEqual({
         "Audit.Domain": "Audit.Domain",
         "Billing.Domain": "Billing.Domain",
       });

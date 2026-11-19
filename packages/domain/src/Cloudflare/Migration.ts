@@ -112,6 +112,9 @@ const pageKey = (target: string, n: string | number) => `mg:page:${target}:${n}`
 
 const skipKey = (target: string) => `mg:skip:${target}`;
 
+/** Why some of a run's objects were skipped, a few per class. */
+const whyKey = (target: string) => `mg:why:${target}`;
+
 /** The object that keeps page `n` of a run: the root takes no calls from the relay tree. */
 const pageObject = (target: string, n: number) => `page:${target}:${n}`;
 
@@ -146,7 +149,10 @@ const moveListed = (classes: Classes, item: ListedItem, waitMillis: number) =>
       yield* Effect.logWarning(
         `domain move skipped ${JSON.stringify(item)}: ${legacy === undefined ? "no binding for its class" : `no binding for ${classes.className}`}`,
       );
-      return "skipped" as const;
+      return {
+        skipped:
+          legacy === undefined ? "no binding for its class" : `no binding for ${classes.className}`,
+      };
     }
     const id = legacy.idFromString(item.id);
     const asked = yield* makeRpcStub<Stub>(legacy.get(id)).domainName!().pipe(
@@ -162,7 +168,7 @@ const moveListed = (classes: Classes, item: ListedItem, waitMillis: number) =>
     const name = asked.name;
     if (name === null) {
       yield* Effect.logWarning(`domain move skipped ${JSON.stringify(item)}: it knows no name`);
-      return "skipped" as const;
+      return { skipped: "it knows neither its name nor its key" };
     }
     const scoped = id.jurisdiction === undefined ? shared : shared.jurisdiction(id.jurisdiction);
     const target = makeRpcStub<Stub>(scoped.getByName(`${item.r}/${name}`));
@@ -314,9 +320,15 @@ const migrationWork = (classes: Classes): FanOut.Work<MovePass, MoveItem> => ({
   handle: (pass, item, waitMillis) => {
     if ("id" in item)
       return Effect.flatMap(moveListed(classes, item, waitMillis), (outcome) =>
-        outcome === "skipped"
+        typeof outcome === "object"
           ? Effect.as(
-              orDie(migrationStub(classes, skipsObject(pass.target)).mgSkip!(pass.target, item.c)),
+              orDie(
+                migrationStub(classes, skipsObject(pass.target)).mgSkip!(
+                  pass.target,
+                  item.c,
+                  `${item.id}: ${outcome.skipped}`,
+                ),
+              ),
               true,
             )
           : Effect.succeed(outcome === "moved"),
@@ -407,10 +419,11 @@ export const migrationObject = (classes: Classes): DomainObjectImpl =>
       mgProgress: (target: string) =>
         Effect.gen(function* () {
           const progress = yield* run!.progress(target);
-          const skipped = yield* orDie<Record<string, number>>(
-            migrationStub(classes, skipsObject(target)).mgSkipped!(target),
-          );
-          return { ...progress, skipped };
+          const { skipped, reasons } = yield* orDie<{
+            readonly skipped: Record<string, number>;
+            readonly reasons: Record<string, ReadonlyArray<string>>;
+          }>(migrationStub(classes, skipsObject(target)).mgSkipped!(target));
+          return { ...progress, skipped, skipReasons: reasons };
         }),
       /** What a path lists: see `listPath`. */
       mgList: (target: string, path: string, after?: string) =>
@@ -418,21 +431,34 @@ export const migrationObject = (classes: Classes): DomainObjectImpl =>
       /** A page of listed ids, kept in its own object (`pageObject`). */
       mgPage: (target: string, n: number) => storage.get<StoredPage>(pageKey(target, n)),
       /** An object that can't be moved (it knows neither its name nor its key): its class is kept. */
-      mgSkip: (target: string, className: string) =>
+      mgSkip: (target: string, className: string, reason?: string) =>
         storage.exclusive(
           Effect.gen(function* () {
             const skipped = (yield* storage.get<Record<string, number>>(skipKey(target))) ?? {};
+            const reasons =
+              (yield* storage.get<Record<string, ReadonlyArray<string>>>(whyKey(target))) ?? {};
+            const known = reasons[className] ?? [];
             yield* storage.put({
               [skipKey(target)]: { ...skipped, [className]: (skipped[className] ?? 0) + 1 },
+              // A few of each class's, for the deploy to report.
+              ...(reason === undefined || known.length >= 5
+                ? {}
+                : { [whyKey(target)]: { ...reasons, [className]: [...known, reason] } }),
             });
           }),
         ),
       /** The skipped objects' counts by class, kept in their own object (`skipsObject`). */
       mgSkipped: (target: string) =>
-        Effect.map(
-          storage.get<Record<string, number>>(skipKey(target)),
-          (skipped) => skipped ?? {},
-        ),
+        Effect.all({
+          skipped: Effect.map(
+            storage.get<Record<string, number>>(skipKey(target)),
+            (skipped) => skipped ?? {},
+          ),
+          reasons: Effect.map(
+            storage.get<Record<string, ReadonlyArray<string>>>(whyKey(target)),
+            (reasons) => reasons ?? {},
+          ),
+        }),
       mgRelay: (name: string, pass: MovePass, entries: ReadonlyArray<FanOut.Entry<MoveItem>>) =>
         relay.run(name, pass, entries),
     };
@@ -838,7 +864,12 @@ const migrateModel = Effect.fn(function* ({
   let runId = `mg-run-${target}`;
   let restarts = 0;
   yield* create([{ id: runId, params: runParams }]);
-  let progress: (FanOut.Progress & { readonly skipped?: Record<string, number> }) | undefined;
+  let progress:
+    | (FanOut.Progress & {
+        readonly skipped?: Record<string, number>;
+        readonly skipReasons?: Record<string, ReadonlyArray<string>>;
+      })
+    | undefined;
   while (true) {
     const status = yield* instance(runId);
     const latest = progressOf(status.steps ?? [])?.[0];
@@ -878,11 +909,11 @@ const migrateModel = Effect.fn(function* ({
 
   yield* phase(`run complete, ${progress?.instances ?? 0} objects handled`);
   const skipped = progress?.skipped ?? {};
-  for (const [className, count] of Object.entries(skipped))
-    yield* session.note(
-      `${count} objects of ${className} know neither their name nor their key, so they can't move to ${news.domainClass}: the class is kept.`,
-      { kind: "status" },
-    );
+  for (const [className, count] of Object.entries(skipped)) {
+    const line = `${count} objects of ${className} can't move to ${news.domainClass}, so the class is kept: ${(progress?.skipReasons?.[className] ?? []).join("; ")}`;
+    yield* session.note(line, { kind: "status" });
+    yield* Effect.logWarning(line);
+  }
   yield* mark(skipped);
   yield* session.note(`Moved ${total} Domain objects to ${news.domainClass}`, {
     kind: "status",
