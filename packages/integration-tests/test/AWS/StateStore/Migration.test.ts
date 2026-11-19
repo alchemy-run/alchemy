@@ -731,11 +731,8 @@ test.provider(
         [`alchemy-state-${name}`, createOverflowBucketName(accountId, region, name)].sort(),
       );
       const tornS3 = yield* Alchemist.State.teardown(s3Store).pipe(Effect.provide(alchemist));
-      // With both stores gone, so is their key.
-      expect(tornS3.deleted).toEqual([
-        `alchemy-state-${name}-${accountId}-${region}-an`,
-        `alias/alchemy-state-${name}`,
-      ]);
+      // With both stores gone, their key is still kept.
+      expect(tornS3.deleted).toEqual([`alchemy-state-${name}-${accountId}-${region}-an`]);
     }),
   { tags, timeout: 300_000 },
 );

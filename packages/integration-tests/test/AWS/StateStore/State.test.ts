@@ -480,11 +480,22 @@ test.provider(
       expect(text.startsWith(SEALED_PREFIX)).toBe(true);
       expect(text).not.toContain(secret);
       expect(text).toContain('"name": "visible"');
-      // The bucket is encrypted with the store's key.
-      const rule = (yield* s3.getBucketEncryption({ Bucket: bucket.bucketName }))
-        .ServerSideEncryptionConfiguration!.Rules[0]!;
-      const keyId = rule.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID;
-      expect(Redacted.isRedacted(keyId) ? Redacted.value(keyId) : keyId).toBe(key.keyArn);
+      // The bucket is encrypted with the store's key. Encryption reads lag a
+      // write, so wait for it to show.
+      const keyId = yield* s3.getBucketEncryption({ Bucket: bucket.bucketName }).pipe(
+        Effect.map((result) => {
+          const id =
+            result.ServerSideEncryptionConfiguration!.Rules[0]!.ApplyServerSideEncryptionByDefault
+              ?.KMSMasterKeyID;
+          return Redacted.isRedacted(id) ? Redacted.value(id) : id;
+        }),
+        Effect.repeat({
+          until: (id) => id === key.keyArn,
+          schedule: Schedule.spaced("1 second"),
+          times: 10,
+        }),
+      );
+      expect(keyId).toBe(key.keyArn);
 
       // What an earlier version wrote: the secret in plaintext.
       const legacy = resource("Legacy", { password: Redacted.make(secret) });

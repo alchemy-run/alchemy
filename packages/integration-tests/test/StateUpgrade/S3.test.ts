@@ -10,7 +10,7 @@ import * as Alchemist from "alchemy/Alchemist";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import { awsCiEnv } from "./Aws.ts";
+import { awsCiEnv, forgetStateKey } from "./Aws.ts";
 import {
   current,
   deployArgs,
@@ -102,6 +102,7 @@ test.provider(
       const alias = `alias/alchemy-state-${name}`;
 
       yield* teardownStore(name);
+      yield* forgetStateKey(alias);
       const cwd = yield* workdir(name);
       const old = yield* released();
       const next = yield* current();
@@ -196,7 +197,9 @@ test.provider(
       }
 
       yield* teardownStore(name);
-      expect(yield* keyArnOf(alias)).toBeUndefined();
+      // Teardown keeps the key: state stored elsewhere may be sealed under it.
+      expect(yield* keyArnOf(alias)).toBe(keyArn);
+      yield* forgetStateKey(alias);
     }),
   { tags, timeout: 600_000 },
 );

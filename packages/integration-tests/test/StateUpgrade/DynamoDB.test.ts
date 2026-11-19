@@ -12,7 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { awsCiEnv } from "./Aws.ts";
+import { awsCiEnv, forgetStateKey } from "./Aws.ts";
 import {
   current,
   deployArgs,
@@ -163,6 +163,7 @@ test.provider.skipIf(!!process.env.FAST)(
       const alias = `alias/alchemy-state-${name}`;
 
       yield* teardownStore(name);
+      yield* forgetStateKey(alias);
       const cwd = yield* workdir(name);
       const old = yield* released();
       const next = yield* current();
@@ -279,7 +280,9 @@ test.provider.skipIf(!!process.env.FAST)(
       }
 
       yield* teardownStore(name);
-      expect(yield* keyArnOf(alias)).toBeUndefined();
+      // Teardown keeps the key: state stored elsewhere may be sealed under it.
+      expect(yield* keyArnOf(alias)).toBe(keyArn);
+      yield* forgetStateKey(alias);
     }),
   // The table's move to the key, and its delete after, each take minutes.
   { tags, timeout: 3_600_000 },
