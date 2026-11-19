@@ -570,6 +570,15 @@ export const Platform = <
                       const configProvider = yield* ConfigProvider.ConfigProvider;
                       const phase = yield* ALCHEMY_PHASE;
 
+                      // At runtime the ambient provider is the host's
+                      // `reifyBoundConfigProvider`, which unwraps the values
+                      // bound below and leaves every other string verbatim.
+                      // Don't re-read through `ctx.get`: it JSON-decodes, so
+                      // `"false"` or a long numeric id would come back
+                      // changed (#2269, #3497).
+                      if (phase !== "plan") {
+                        return configProvider;
+                      }
                       return ConfigProvider.make(
                         Effect.fnUntraced(function* (path) {
                           const ctx = yield* CurrentRuntimeContext;
@@ -578,28 +587,11 @@ export const Platform = <
                           // handing it to the RuntimeContext.
                           const key = sanitizeKey(path.map((p) => p.toString()).join("_"));
                           const node = yield* configProvider.load(path);
-                          if (phase === "plan" && node) {
-                            // bind it to the RuntimeContext if running in plan phase
+                          if (node) {
+                            // bind it to the RuntimeContext during plan
                             const output = Output.literal(Redacted.make(node.value));
                             yield* ctx?.set(key, output) ?? Effect.void;
-                            return node;
-                          } else if (phase === "runtime" && ctx) {
-                            // retrieve from the RuntimeContext if running in runtime phase
-                            const value = yield* ctx.get<unknown>(key);
-                            if (value) {
-                              // `get` JSON-decodes unbound env values (`"true"` →
-                              // `true`), but a `Value` node holds the raw string the
-                              // `Config` schema parses.
-                              return ConfigProvider.makeValue(
-                                Redacted.isRedacted(value)
-                                  ? String(Redacted.value(value))
-                                  : typeof value === "string"
-                                    ? value
-                                    : JSON.stringify(value),
-                              );
-                            }
                           }
-                          // fallback to the config provider otherwise
                           return node;
                         }),
                       );

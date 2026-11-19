@@ -6,6 +6,7 @@
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Region from "@distilled.cloud/aws/Region";
 import { BunServices } from "@effect/platform-bun";
+import { reifyBoundConfigProvider } from "alchemy/Runtime";
 import {
   entrypointLayer,
   resolveProgram,
@@ -40,7 +41,12 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
         Layer.provideMerge(Credentials.fromContainerMetadata()),
         Layer.provideMerge(Region.fromEnv()),
         Layer.provideMerge(platform),
-        Layer.provideMerge(Layer.succeed(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv())),
+        Layer.provideMerge(
+          Layer.succeed(
+            ConfigProvider.ConfigProvider,
+            reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
+          ),
+        ),
       ),
     ),
     Effect.scoped,

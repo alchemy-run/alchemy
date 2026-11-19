@@ -113,8 +113,10 @@ export interface RedactedMarker {
 export const isRedactedMarker = (value: unknown): value is RedactedMarker =>
   typeof value === "object" &&
   value !== null &&
+  !Array.isArray(value) &&
   (value as { _tag?: unknown })._tag === "Redacted" &&
-  "value" in value;
+  "value" in value &&
+  Object.keys(value).length === 2;
 
 /**
  * Returns true when {@link unpackEnvValue}'s `JSON.parse` would reinterpret
@@ -176,14 +178,14 @@ const possibleJson = /^[\x20\t\r\n]*["{[0-9tfn-]/;
  * string from `packEnvValue`, or an env var the user set directly).
  * `undefined` passes through.
  *
+ * Only call this on a key Alchemy wrote with {@link packEnvValue}: a string
+ * someone else set verbatim may parse as JSON and come back as a different
+ * value (`"false"` → `false`). `Config` reads use {@link decodeConfigString}.
+ *
  * Runtime `get` accessors MUST feed this from the raw environment
  * (`process.env[key]` / the platform env object) — never through
  * `Config.String`: the ambient runtime `ConfigProvider` reifies bound
- * values (unwrapping the marker before it could be detected here), and
- * during init the ambient provider is the interceptor installed in
- * `Platform.ts`, whose runtime branch calls back into `ctx.get(key)` —
- * resolving through `Config` would re-enter it for the same key and
- * recurse forever.
+ * values, unwrapping the marker before it could be detected here.
  */
 export const unpackEnvValue = <T>(raw: string | undefined): T | undefined => {
   if (raw === undefined) {
@@ -201,6 +203,36 @@ export const unpackEnvValue = <T>(raw: string | undefined): T | undefined => {
   } catch {
     return raw as unknown as T; // assume it's just a string
   }
+};
+
+/**
+ * Decode an env-var string for a `Config` read.
+ *
+ * `Config` values are strings at their source, and the only encoding Alchemy
+ * puts on a variable a `Config` reads is the {@link RedactedMarker} that the
+ * deploy-time interceptor in `Platform.ts` binds it as. So the marker is
+ * unwrapped, and every other string is returned **verbatim**, including one
+ * that parses as JSON: a Worker `env` entry, a variable set in a dashboard or
+ * on the host. Reading those through {@link unpackEnvValue} turns `"false"`
+ * into `false` and rounds `"12345678901.12345678901234"` (#2269, #2847,
+ * #3497), because only the writer knows whether a string was packed.
+ *
+ * Use {@link unpackEnvValue} only for keys Alchemy wrote with
+ * {@link packEnvValue}.
+ */
+export const decodeConfigString = (raw: string): string => {
+  if (!raw.startsWith("{")) {
+    return raw;
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (isRedactedMarker(parsed)) {
+      return typeof parsed.value === "string" ? parsed.value : JSON.stringify(parsed.value);
+    }
+  } catch {
+    // not JSON — a plain value
+  }
+  return raw;
 };
 
 /**

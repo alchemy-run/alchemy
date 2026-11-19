@@ -5,6 +5,7 @@
  */
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
+import { reifyBoundConfigProvider } from "alchemy/Runtime";
 import {
   entrypointLayer,
   resolveProgram,
@@ -50,7 +51,7 @@ export const bootstrap = (entrypoint: unknown, options: PrismaBootstrapOptions):
             ConfigProvider.ConfigProvider,
             ConfigProvider.orElse(
               ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-              ConfigProvider.fromEnv(),
+              reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
             ),
           ),
         ),
