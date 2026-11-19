@@ -180,10 +180,9 @@ const makeFunctionBootstrap =
   (handler: string) =>
   (importPath: string): string =>
     `
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { makeEntrypointLayer, RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { Stack } from "alchemy/Stack";
 import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
@@ -215,12 +214,7 @@ await Effect.runPromise(
       layer.pipe(
         Layer.provideMerge(stack),
         Layer.provideMerge(platform),
-        Layer.provideMerge(
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
-            reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-          )
-        ),
+        Layer.provideMerge(RuntimeConfigProviderLive),
       )
     )
   )

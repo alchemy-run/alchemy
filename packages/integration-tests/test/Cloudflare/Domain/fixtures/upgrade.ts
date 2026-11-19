@@ -1,6 +1,6 @@
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
-import { DeployVersion } from "@alchemy.run/cloudflare/Domain/Version";
 import * as Domain from "@alchemy.run/domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import { DeployVersion } from "@alchemy.run/domain/Cloudflare/Version";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -27,7 +27,7 @@ export const ApproveLive = Approve.toLayer(
       yield* Activity.make({
         name: "open",
         execute: accounts
-          .send(key, new Open({ owner: `${owner}:${approvedBy}` }))
+          .send(new Open({ id: key, owner: `${owner}:${approvedBy}` }))
           .pipe(Effect.asVoid),
       });
     });
@@ -53,7 +53,8 @@ const SAGA = /^\/(saga|approve)\/([^/]+)(?:\/([^/]+))?$/;
 /**
  * A Worker hosting Billing, and Audit when `audit` is set, laid out as Domain
  * version `version` lays them out: `undefined` for the layout from before
- * versions existed.
+ * versions existed. `legacyData` names the model that keeps a class the two
+ * shared; the other sets `legacyData: false`. Unset, both take it over.
  */
 export const upgradeWorker = ({
   version,
@@ -68,7 +69,7 @@ export const upgradeWorker = ({
     const Platform = DomainCloudflare.layerDurableObjects();
     const billing = yield* Effect.all({ accounts: Account, owners: Owners, runs: Approve }).pipe(
       Effect.provide(
-        Billing.layer(ApproveLive, { legacyData: legacyData === "Billing" }).pipe(
+        Billing.layer(ApproveLive, legacyData === "Audit" ? { legacyData: false } : {}).pipe(
           Layer.provide(Platform),
         ),
       ),
@@ -78,7 +79,7 @@ export const upgradeWorker = ({
       Audit: audit
         ? yield* Effect.all({ accounts: Account, owners: Owners }).pipe(
             Effect.provide(
-              Audit.layer(Layer.empty, { legacyData: legacyData === "Audit" }).pipe(
+              Audit.layer(Layer.empty, legacyData === "Billing" ? { legacyData: false } : {}).pipe(
                 Layer.provide(Platform),
               ),
             ),
@@ -109,7 +110,7 @@ export const upgradeWorker = ({
         if (!route || !model) return HttpServerResponse.text("Not Found", { status: 404 });
         const id = decodeURIComponent(route[3]!);
         if (route[2] === "open") {
-          const receipt = yield* model.accounts.send(id, new Open({ owner: route[4]! }));
+          const receipt = yield* model.accounts.send(new Open({ id, owner: route[4]! }));
           return yield* HttpServerResponse.json({ version: receipt.version });
         }
         if (route[2] === "owners")

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -144,8 +145,34 @@ export type Transport = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TransportLookup
 >;
+
+/**
+ * Props for {@link Transport.lookup}: find a transport this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface TransportLookup {
+  /**
+   * Transport id (the `{transport}` segment of
+   * `projects/{project}/locations/{location}/transports/{transport}`). Must
+   * be 1-63 characters and match `[a-z]([-a-z0-9]*[a-z0-9])?`.
+   */
+  transportId: string;
+  /**
+   * Region of the transport (e.g. `us-east4`). Remote transport profiles
+   * are location-scoped, so this must match the profile's location.
+   * `US-CENTRAL1` is accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Connectivity Partner Cross-Cloud Interconnect transport.
@@ -211,6 +238,18 @@ export type Transport = Resource<
  *   advertisedRoutes: ["10.0.0.0/8", "192.168.0.0/16"],
  *   description: "prod aws interconnect v2",
  *   labels: { env: "prod", role: "cci" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing transport
+ * `Transport.lookup` references a transport Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared transport.
+ *
+ * **Example:** Reference an existing transport
+ * ```typescript
+ * const transport = GCP.NetworkConnectivity.Transport.lookup({
+ *   transportId: "my-transport",
  * });
  * ```
  *
@@ -505,6 +544,15 @@ export const TransportProvider = () =>
           !idChanged && !locationChanged && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ transportId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, transportId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

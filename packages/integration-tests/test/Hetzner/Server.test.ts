@@ -7,7 +7,9 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
 import { hetznerPrimaryIps } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
 
@@ -72,6 +74,10 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(Hetzner.Server.lookup({ name: created.name }), created, {
+        // Only the deploy that created the server holds its SSH key.
+        ignore: ["privateKey", "deploySshKeyId"],
+      });
 
       expect(created.id).toEqual(expect.any(Number));
       expect(created.serverId).toEqual(created.id);
@@ -120,6 +126,32 @@ test.provider(
       expect(refetched.server?.labels.env).toEqual("prod");
       expect(refetched.server?.labels.role).toEqual("web");
       expect(refetched.server?.public_net.ipv4?.ip).toEqual(created.ipv4);
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Server("Web", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+            labels: { env: "prod", role: "web" },
+            deleteProtection: true,
+          });
+        }),
+      );
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, { logicalId: "Web", tag: "Hetzner.ServerDeleteProtected" });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Server("Web", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+            labels: { env: "prod", role: "web" },
+            deleteProtection: false,
+          });
+        }),
+      );
 
       yield* stack.destroy();
 

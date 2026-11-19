@@ -6,8 +6,10 @@ import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
+import { loadNodeImage, saveNodeImage } from "../internal/NodeImage.ts";
 import {
   bundleNodes,
+  isImageProgram,
   makePoolLayer,
   nodeEnvironment,
   RIVETKIT_VERSION,
@@ -56,20 +58,41 @@ const asOutput = (value: Input<string>): Output.Output<string> =>
  * the current script again whenever the program, its env or the script
  * changes, so a deploy reaches running nodes without replacing them.
  */
-const startupScript = (options: { readonly bucket: string }) => `#!/bin/bash
-set -uo pipefail
-MD=http://metadata.google.internal/computeMetadata/v1
-mkdir -p ${APP_PATH}
-start() {
-  TOKEN="$(curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/service-accounts/default/token" | sed -E 's/.*"access_token":"([^"]+)".*/\\1/')"
-  curl -sf -H "Authorization: Bearer $TOKEN" -o ${APP_PATH}/node.mjs.next \\
-    "https://storage.googleapis.com/storage/v1/b/${options.bucket}/o/node.mjs?alt=media" \\
+/** Arm machine series (Axion and Ampere); every other series is x86. */
+const platformOf = (machineType: string) =>
+  /^(t2a|c4a|n4a)-/.test(machineType) ? ("linux/arm64" as const) : ("linux/amd64" as const);
+
+/** Fetch the node program from the bucket, then run it with Docker. */
+const runProgram = (bucket: string, image: boolean) =>
+  image
+    ? // A Rust program is a whole image: load it, and run it as it is.
+      `curl -sf -H "Authorization: Bearer $TOKEN" -o ${APP_PATH}/node.tar.next \\
+    "https://storage.googleapis.com/storage/v1/b/${bucket}/o/node.tar?alt=media" \\
+    && mv ${APP_PATH}/node.tar.next ${APP_PATH}/node.tar
+  curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/attributes/${ENV_KEY}" > ${APP_PATH}/env.list
+  ${loadNodeImage(`${APP_PATH}/node.tar`)}
+  docker rm -f rivet-node >/dev/null 2>&1 || true
+  docker run -d --name rivet-node --restart always --network host \\
+    --env-file ${APP_PATH}/env.list "$IMAGE"`
+    : `curl -sf -H "Authorization: Bearer $TOKEN" -o ${APP_PATH}/node.mjs.next \\
+    "https://storage.googleapis.com/storage/v1/b/${bucket}/o/node.mjs?alt=media" \\
     && mv ${APP_PATH}/node.mjs.next ${APP_PATH}/node.mjs
   curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/attributes/${ENV_KEY}" > ${APP_PATH}/env.list
   docker rm -f rivet-node >/dev/null 2>&1 || true
   docker run -d --name rivet-node --restart always --network host \\
     --env-file ${APP_PATH}/env.list -v ${APP_PATH}/node.mjs:/program/node.mjs:ro -w /app ${NODE_IMAGE} \\
-    sh -c 'cp /program/node.mjs . && npm install --no-save --no-fund --no-audit rivetkit@${RIVETKIT_VERSION} && exec node node.mjs'
+    sh -c 'cp /program/node.mjs . && npm install --no-save --no-fund --no-audit rivetkit@${RIVETKIT_VERSION} && exec node node.mjs'`;
+
+const startupScript = (options: {
+  readonly bucket: string;
+  readonly image: boolean;
+}) => `#!/bin/bash
+set -uo pipefail
+MD=http://metadata.google.internal/computeMetadata/v1
+mkdir -p ${APP_PATH}
+start() {
+  TOKEN="$(curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/service-accounts/default/token" | sed -E 's/.*"access_token":"([^"]+)".*/\\1/')"
+  ${runProgram(options.bucket, options.image)}
 }
 etag() {
   curl -sf -H 'Metadata-Flavor: Google' -D - -o /dev/null "$MD/instance/attributes/?recursive=true$1" \\
@@ -150,7 +173,12 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
         subnetwork = subnet.subnetworkName;
       }
 
-      const main = yield* bundleNodes("gcp", id, nodes);
+      const machineType = options.machineType ?? "e2-small";
+      const image = isImageProgram(nodes.program);
+      // A Rust program is its own image, saved for the VM to load.
+      const file = isImageProgram(nodes.program)
+        ? yield* saveNodeImage("gcp", id, nodes.program, platformOf(machineType))
+        : yield* bundleNodes("gcp", id, nodes.program);
       const bucket = yield* Storage.Bucket(`${id}Program`, {
         location: region,
         forceDestroy: true,
@@ -158,9 +186,9 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
       });
       const program = yield* Storage.Object(`${id}ProgramObject`, {
         bucketName: bucket.bucketName,
-        key: "node.mjs",
-        file: main as unknown as string,
-        contentType: "text/javascript",
+        key: image ? "node.tar" : "node.mjs",
+        file: file as unknown as string,
+        contentType: image ? "application/x-tar" : "text/javascript",
       });
 
       const account = yield* IAM.ServiceAccount(`${id}NodeAccount`, {
@@ -191,7 +219,7 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
       );
       const metadata = Output.all(bucket.bucketName, program.md5Hash, envFile, grant.role).pipe(
         Output.map(([bucketName, programHash, env]) => ({
-          "startup-script": startupScript({ bucket: bucketName }),
+          "startup-script": startupScript({ bucket: bucketName, image }),
           [HASH_KEY]: programHash ?? "",
           [ENV_KEY]: env,
         })),
@@ -200,7 +228,7 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
       for (let i = 0; i < (options.replicas ?? 1); i++) {
         yield* Compute.Instance(`${id}Node${i}`, {
           zone: zones[i % zones.length]!,
-          machineType: options.machineType ?? "e2-small",
+          machineType,
           sourceImage: COS_IMAGE,
           network: Output.interpolate`global/networks/${asOutput(network)}`,
           subnetwork: Output.interpolate`regions/${region}/subnetworks/${asOutput(subnetwork)}`,

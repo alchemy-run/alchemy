@@ -2,6 +2,7 @@ import * as Fly from "@alchemy.run/fly";
 import * as Effect from "effect/Effect";
 import {
   bundleNodes,
+  isImageProgram,
   makePoolLayer,
   nodeEnvironment,
   RIVETKIT_VERSION,
@@ -59,10 +60,14 @@ export const MachinePool = (id: string, options: MachinePoolOptions = {}) =>
     // Every class the pool hosts is bundled into the node program;
     // RivetKit is installed beside it (it loads a native addon).
     nodes: Effect.fn(function* (nodes) {
-      const main = yield* bundleNodes("fly", id, nodes);
       yield* Fly.Service(`${id}Nodes`, {
-        main: main as unknown as string,
-        build: { install: { rivetkit: RIVETKIT_VERSION } },
+        // A Rust program is its own image, built from its staged crate.
+        ...(isImageProgram(nodes.program)
+          ? { context: nodes.program.context }
+          : {
+              main: (yield* bundleNodes("fly", id, nodes.program)) as unknown as string,
+              build: { install: { rivetkit: RIVETKIT_VERSION } },
+            }),
         public: false,
         // Nodes only dial out: nothing listens for the proxy to check.
         services: [],

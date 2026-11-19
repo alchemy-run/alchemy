@@ -1,0 +1,158 @@
+---
+title: Services
+description: Run replicated containers on a swarm with Docker.Service — publish ports through the routing mesh, roll out new images with automatic rollback, connect services on overlay networks, mount Swarm secrets, and place tasks on nodes.
+---
+
+import Timeline from "../../../components/diagrams/Timeline.astro";
+
+A Swarm **service** asks for a number of identical containers, its **replicas**, and the swarm keeps that many **tasks** running, replacing any that stop. Changing a service doesn't replace it. The swarm **rolls** its tasks over to the new version a few at a time, and rolls back if the new ones fail.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "w1", label: "web.1", type: "task" },
+    { id: "w2", label: "web.2", type: "task" },
+  ]}
+  bars={[
+    { lane: "w1", start: 0, end: 3.6, label: "web:1.0.0", tone: "muted" },
+    { lane: "w1", start: 2.4, end: 10, label: "web:1.1.0", tone: "accent" },
+    { lane: "w2", start: 0, end: 7.2, label: "web:1.0.0", tone: "muted" },
+    { lane: "w2", start: 6, end: 10, label: "web:1.1.0", tone: "accent" },
+  ]}
+  marks={[{ at: 2.4, label: "deploy" }]}
+  caption="With order: start-first and parallelism 1, the swarm starts each new task before stopping its old one, one task at a time. The service never drops below two replicas."
+/>
+
+## Run a service
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Docker.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const swarm = yield* Docker.Swarm("swarm");
+
+    const web = yield* Docker.Service("web", {
+      context: swarm,
+      image: "ghcr.io/acme/web:1.0.0",
+      replicas: 2,
+      ports: [{ external: 8080, internal: 80 }],
+    });
+
+    return { service: web.name };
+  }),
+);
+```
+
+`image` takes a reference or a [`Docker.Image`](/docker/build-images) resource. A published port listens on every node, and the swarm's **routing mesh** sends each connection to a healthy task, wherever it runs. Set `mode: "host"` on a port to publish it only on the nodes that run a task. To run your own Effect program instead of an image, see [Effectful services](/docker/effectful-services).
+
+## Roll out a new image
+
+```diff lang="typescript"
+const web = yield* Docker.Service("web", {
+  context: swarm,
+-  image: "ghcr.io/acme/web:1.0.0",
++  image: "ghcr.io/acme/web:1.1.0",
+  replicas: 2,
++  updateConfig: {
++    parallelism: 1,
++    delay: "10s",
++    order: "start-first",
++    failureAction: "rollback",
++  },
+});
+```
+
+The deploy runs `docker service update`, and the swarm rolls the tasks over as `updateConfig` says: `parallelism` tasks at a time, `delay` between batches, new before old with `start-first`. If the new tasks fail, `failureAction: "rollback"` returns the service to its old version, and the deploy fails with `DockerServiceUpdateFailed`. `rollbackConfig` sets how the rollback itself proceeds.
+
+Image, replicas, environment, labels, networks, ports, mounts, secrets, configs, constraints, healthcheck and policies all roll out this way. Changing the name, context, `command`, `args`, `endpointMode`, placement preferences or `readOnlyRootFs` replaces the service, removing the old one first.
+
+## Keep tasks healthy
+
+```typescript
+const web = yield* Docker.Service("web", {
+  context: swarm,
+  image: "ghcr.io/acme/web:1.0.0",
+  healthcheck: { cmd: ["CMD", "wget", "-qO-", "http://localhost/health"], interval: "10s", retries: 3 },
+  restartPolicy: { condition: "on-failure", delay: "5s", maxAttempts: 5 },
+  stopGracePeriod: "30s",
+});
+```
+
+An unhealthy task is replaced, and a rollout waits for new tasks to pass their check. `restartPolicy` decides when a stopped task is restarted, and `stopGracePeriod` how long a task has to exit before it's killed.
+
+## Connect services on an overlay network
+
+An **overlay** network spans every node of the swarm:
+
+```typescript
+const network = yield* Docker.Network("app-net", {
+  context: swarm,
+  driver: "overlay",
+});
+
+const db = yield* Docker.Service("db", {
+  context: swarm,
+  image: "postgres:18-alpine",
+  networks: [{ name: network.name, aliases: ["postgres"] }],
+});
+
+const api = yield* Docker.Service("api", {
+  context: swarm,
+  image: "ghcr.io/acme/api:latest",
+  networks: [network.name],
+  environment: { DATABASE_HOST: "postgres" },
+});
+```
+
+Services on it reach each other by service name or alias, on any node. The name resolves to a virtual IP that balances across the service's tasks; `endpointMode: "dnsrr"` returns the task addresses instead. `attachable: true` on the network lets plain containers join it as well.
+
+## Mount secrets and configs
+
+A **Swarm secret** is a value the managers store encrypted and give only to the services that mount it, as a file under `/run/secrets/`. A **config** is the same for non-secret files. Create them on a manager first:
+
+```sh
+printf '%s' "$DB_PASSWORD" | docker secret create db-password -
+docker config create app-config ./config.yaml
+```
+
+Then mount them:
+
+```typescript
+const app = yield* Docker.Service("app", {
+  context: swarm,
+  image: "ghcr.io/acme/app:latest",
+  secrets: [{ source: "db-password", target: "db_password", mode: 0o400 }],
+  configs: [{ source: "app-config", target: "/etc/app/config.yaml" }],
+});
+```
+
+The app reads `/run/secrets/db_password`. A plain `environment` value, `Redacted` or not, is stored in the service's definition, where `docker service inspect` shows it, so prefer a Swarm secret for passwords on a shared swarm.
+
+## Place tasks on nodes
+
+```typescript
+const app = yield* Docker.Service("app", {
+  context: swarm,
+  image: "ghcr.io/acme/app:latest",
+  replicas: 4,
+  placement: {
+    constraints: ["node.role==worker", "node.labels.zone==eu"],
+    preferences: ["spread=node.labels.zone"],
+    maxReplicasPerNode: 2,
+  },
+});
+```
+
+`constraints` limit which nodes run the tasks, `preferences` spread them across a label's values, and `maxReplicasPerNode` caps how many share one node.
+
+## Volumes on a swarm
+
+`volumes` mounts a named volume or a host path into each task. A `local` volume lives on one node, so each node that runs a task gets its own, empty copy. For a database, keep its service on one node with a constraint, or use a volume driver that shares storage between nodes.

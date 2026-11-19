@@ -12,7 +12,9 @@ export class ConfigError extends Schema.TaggedError<ConfigError>()("ConfigError"
   subtag: Schema.String,
   message: Schema.String,
   hint: Schema.optional(Schema.String),
-  detail: Schema.optional(Schema.Unknown),
+  // `Defect` keeps any value and encodes it as JSON, so an error inside
+  // a serialized event (see `WorkerdEvent`) never fails to encode.
+  detail: Schema.optional(Schema.Defect()),
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
@@ -26,7 +28,9 @@ export class SystemError extends Schema.TaggedError<SystemError>()("SystemError"
   subtag: Schema.String,
   message: Schema.String,
   hint: Schema.optional(Schema.String),
-  detail: Schema.optional(Schema.Unknown),
+  // `Defect` keeps any value and encodes it as JSON, so an error inside
+  // a serialized event (see `WorkerdEvent`) never fails to encode.
+  detail: Schema.optional(Schema.Defect()),
   cause: Schema.optional(Schema.Defect()),
 }) {}
 
@@ -41,7 +45,9 @@ export class ApiError extends Schema.TaggedError<ApiError>()("ApiError", {
   subtag: Schema.String,
   message: Schema.String,
   hint: Schema.optional(Schema.String),
-  detail: Schema.optional(Schema.Unknown),
+  // `Defect` keeps any value and encodes it as JSON, so an error inside
+  // a serialized event (see `WorkerdEvent`) never fails to encode.
+  detail: Schema.optional(Schema.Defect()),
   cause: Schema.optional(Schema.Defect()),
 }) {}
 

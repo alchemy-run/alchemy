@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -214,8 +215,34 @@ export type BlockchainNode = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BlockchainNodeLookup
 >;
+
+/**
+ * Props for {@link BlockchainNode.lookup}: find a blockchain node this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface BlockchainNodeLookup {
+  /**
+   * Node id (the `{blockchainNode}` segment of
+   * `projects/{project}/locations
+   * /{location}/blockchainNodes/{blockchainNode}`). Must be 1-63
+   * characters, start with a letter, and end with a letter or digit.
+   */
+  blockchainNodeId: string;
+  /**
+   * Region (`us-central1`, `us-east1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Blockchain Node Engine node — a fully managed Ethereum execution
@@ -264,6 +291,19 @@ export type BlockchainNode = Resource<
  *       mevRelayUrls: ["https://relay.example"],
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing blockchain node
+ * `BlockchainNode.lookup` references a blockchain node Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * blockchain node.
+ *
+ * **Example:** Reference an existing blockchain node
+ * ```typescript
+ * const blockchainNode = GCP.BlockchainNodeEngine.BlockchainNode.lookup({
+ *   blockchainNodeId: "my-blockchain-node",
  * });
  * ```
  *
@@ -483,6 +523,15 @@ export const BlockchainNodeProvider = () =>
             ethereumIdentityKey(previousEthereum) !== ethereumIdentityKey(nextEthereum)),
       });
     }),
+
+    lookup: Effect.fn(function* ({ blockchainNodeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, blockchainNodeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

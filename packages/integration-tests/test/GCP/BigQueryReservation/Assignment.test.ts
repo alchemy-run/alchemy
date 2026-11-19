@@ -6,6 +6,7 @@ import * as bigqueryreservation from "@distilled.cloud/gcp/bigqueryreservation_v
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -74,6 +75,23 @@ test.provider.skipIf(!!process.env.FAST)(
           });
           return { reservation, assignment };
         }),
+      );
+      yield* expectFound(
+        GCP.BigQueryReservation.Assignment.lookup({
+          assignmentId: created.assignment.assignmentId,
+          reservation: created.assignment.reservation,
+          location: created.assignment.location,
+          assignee: created.assignment.assignee as string,
+          jobType: created.assignment.jobType as string,
+        }),
+        created.assignment,
+      );
+      yield* expectFound(
+        GCP.BigQueryReservation.Reservation.lookup({
+          reservationId: created.reservation.reservationId,
+          location: created.reservation.location,
+        }),
+        created.reservation,
       );
 
       expect(created.assignment.name).toContain("/assignments/");

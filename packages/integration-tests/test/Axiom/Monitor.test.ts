@@ -5,24 +5,18 @@ import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Axiom.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-// Axiom credentials are resolved via the AuthProvider (env method reads
-// AXIOM_TOKEN / AXIOM_API_KEY). When neither is present the suite can't talk
-// to the real API, so skipIf-gate the live list test. On an entitled run the
-// failure mode without creds is an `AuthError`:
-//   "Axiom env credentials not found. Set AXIOM_TOKEN (or AXIOM_API_KEY)."
-const hasAxiomCreds = !!(process.env.AXIOM_TOKEN || process.env.AXIOM_API_KEY);
 
 // Deterministic names so re-runs reconcile the same resources rather than
 // piling up duplicates. The monitor's APL query needs a real dataset target.
 const DATASET_NAME = "alchemy-test-monitor-list";
 const MONITOR_NAME = "alchemy-test-monitor-list";
 
-test.provider.skipIf(!hasAxiomCreds)(
+test.provider(
   "list enumerates the deployed monitor",
   (stack) =>
     Effect.gen(function* () {
@@ -51,6 +45,7 @@ test.provider.skipIf(!hasAxiomCreds)(
           });
         }),
       );
+      yield* expectFound(Axiom.Monitor.lookup({ id: deployed.id }), deployed);
 
       const provider = yield* Provider.findProvider(Axiom.Monitor);
       const all = yield* provider.list();

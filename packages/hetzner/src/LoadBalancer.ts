@@ -65,6 +65,18 @@ export type HealthCheckProtocol = "tcp" | "http";
 
 export type TargetHealthStatus = "healthy" | "unhealthy" | "unknown";
 
+/**
+ * Deletion was refused because the load balancer has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class LoadBalancerDeleteProtected extends Data.TaggedError(
+  "Hetzner.LoadBalancerDeleteProtected",
+)<{
+  readonly id: number;
+  readonly message: string;
+}> {}
+
 export interface LoadBalancerHealthCheckHttp {
   /**
    * Host header sent with the HTTP health check. `null` omits the header.
@@ -273,8 +285,8 @@ export interface LoadBalancerProps {
   publicInterface?: boolean;
   /**
    * Prevent the Load Balancer from being deleted in the Cloud Console /
-   * API until this is cleared. The provider disables protection before
-   * delete.
+   * API. While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   deleteProtection?: boolean;
@@ -373,8 +385,18 @@ export type LoadBalancer = Resource<
     created: string;
   },
   never,
-  Providers
+  Providers,
+  LoadBalancerLookup
 >;
+
+/**
+ * Props for {@link LoadBalancer.lookup}: find a load balancer this stack
+ * doesn't manage by its name.
+ */
+export interface LoadBalancerLookup {
+  /** Load balancer name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud Load Balancer. Create it in a Location (`nbg1` by
@@ -449,6 +471,16 @@ export type LoadBalancer = Resource<
  *     { protocol: "tcp", listenPort: 80, destinationPort: 80 },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing load balancer
+ * `LoadBalancer.lookup` references a load balancer Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing load balancer
+ * ```typescript
+ * const lb = Hetzner.LoadBalancer.lookup({ name: "ingress" });
  * ```
  *
  * @resource
@@ -1352,6 +1384,11 @@ export const LoadBalancerProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const found = yield* observe({
         id,
@@ -1458,11 +1495,19 @@ export const LoadBalancerProvider = () =>
       return toAttrs(yield* refresh(current.id));
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getById(output.id);
       if (current === undefined) return;
 
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new LoadBalancerDeleteProtected({
+            id: current.id,
+            message: `Hetzner load balancer '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* runAction(
           Hetzner.loadBalancerActions.changeLoadBalancerProtection({
             id: current.id,

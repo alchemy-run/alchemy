@@ -1,8 +1,10 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import { call, EVENTS, now, seedAccounts, seedOne, serving, settledUsage } from "./bench.ts";
 import BenchV1 from "./fixtures/bench/v1.ts";
 import BenchV2Summary from "./fixtures/bench/v2-summary.ts";
@@ -33,7 +35,9 @@ const totals = list("DOMAIN_BENCH_TOTAL", "100x100").map(
   (size) => size.split("x").map(Number) as [number, number],
 );
 
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+});
 
 type Next = typeof BenchV2 | typeof BenchV2Summary | typeof BenchV2Total;
 

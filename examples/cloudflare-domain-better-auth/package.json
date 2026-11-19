@@ -26,6 +26,7 @@
     "foldkit": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/frontend-frameworks": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@foldkit/vite-plugin": "catalog:",

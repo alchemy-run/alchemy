@@ -1,0 +1,765 @@
+import { DurableObjectCallbacks } from "@alchemy.run/cloudflare/Workers/AlarmCallback";
+import {
+  type DurableObjectJurisdiction,
+  type DurableObjectLocationHint,
+  type InlineDurableObjectProps,
+} from "@alchemy.run/cloudflare/Workers/DurableObject";
+import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
+import { makeRpcStub } from "@alchemy.run/cloudflare/Workers/Rpc";
+import { Worker as CloudflareWorker, type Worker } from "@alchemy.run/cloudflare/Workers/Worker";
+import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import {
+  sleep,
+  task,
+  Workflow,
+  type WorkflowImpl,
+} from "@alchemy.run/cloudflare/Workflows/Workflow";
+import { RuntimeContext } from "alchemy/RuntimeContext";
+import { makeDurableObjectEngine, provideCallbacks } from "alchemy/Workers/DurableObjectEngine";
+import { StorageName } from "alchemy/Workflows";
+import * as Cause from "effect/Cause";
+import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Headers from "effect/http/Headers";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import { WorkflowEngine } from "effect/workflow";
+import * as Backfill from "../Backfill.ts";
+import {
+  Attachment,
+  className,
+  consumerClass,
+  generationOfTarget,
+  type Host,
+  makePlatform,
+  type ModelLayout,
+  type Namespace,
+  ObjectState,
+  RUN_ROOT,
+  runClass,
+  SUBSCRIPTION_HEADER,
+  TRANSIT_RETRY,
+  unwrapDefects,
+} from "../DurableObjects.ts";
+import { type Platform, type Subscription } from "../Platform.ts";
+import { Backfill as BackfillRun } from "./Backfill.ts";
+import {
+  type Namespace as CloudflareNamespace,
+  type ObjectImpl as CloudflareImpl,
+  declare,
+  domainClass,
+  domainClassName,
+  objectState,
+  onCloudflare,
+  routeView,
+} from "./DomainClass.ts";
+import type { RetiringDomainClass } from "./Migration.ts";
+import type { Providers } from "./Providers.ts";
+import { DeployVersion } from "./Version.ts";
+
+export { Backfill, BackfillFailed, BackfillStillRunning } from "./Backfill.ts";
+export { providers, Providers, type ProviderRequirements } from "./Providers.ts";
+
+/** Where the platform keeps the model's Durable Objects. */
+interface Placement {
+  readonly jurisdiction: DurableObjectJurisdiction | undefined;
+  readonly locationHint: DurableObjectLocationHint | undefined;
+}
+
+/**
+ * A namespace whose objects live in the platform's jurisdiction and are
+ * created near its location hint. Every namespace Domain reaches goes
+ * through here, so no kind of object is left outside either.
+ */
+const placed = (namespace: CloudflareNamespace, placement: Placement): CloudflareNamespace => {
+  const inside =
+    placement.jurisdiction === undefined
+      ? namespace
+      : namespace.jurisdiction(placement.jurisdiction);
+  return placement.locationHint === undefined ? inside : hinted(inside, placement.locationHint);
+};
+
+/** A namespace that creates each new object near `locationHint`. */
+const hinted = (
+  namespace: CloudflareNamespace,
+  locationHint: DurableObjectLocationHint,
+): CloudflareNamespace => ({
+  ...namespace,
+  getByName: (name, options) => namespace.getByName(name, { locationHint, ...options }),
+  jurisdiction: (inside) => hinted(namespace.jurisdiction(inside), locationHint),
+});
+
+/**
+ * Forward a WebSocket upgrade (the current request) to the instance that owns
+ * `key`, carrying the subscription. The Worker sets the header, overwriting
+ * any a client sent, so the object can trust it.
+ */
+const connectTo = (namespace: Namespace, key: string, subscription: Subscription) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    const forwarded = request.modify({
+      headers: Headers.set(
+        request.headers,
+        SUBSCRIPTION_HEADER,
+        JSON.stringify({ key, subscription } satisfies Attachment),
+      ),
+    });
+    // Like every other call, ride out a deploy's rollout: an instance still
+    // running the previous script cannot upgrade, so retry until one does.
+    const response = yield* (namespace as CloudflareNamespace)
+      .getByName(key)
+      .fetch(forwarded)
+      .pipe(
+        Effect.filterOrFail(
+          (response) => response.status === 101,
+          (response) => new Error(`Live read upgrade answered ${response.status}`),
+        ),
+        Effect.retry(TRANSIT_RETRY),
+        Effect.orDie,
+      );
+    // A fetched Response's headers are immutable; re-wrap the socket so
+    // middleware (CORS, cookies) can still add headers to the upgrade.
+    const body = response.body;
+    if (body._tag === "Raw" && body.body instanceof Response) {
+      const webSocket = (body.body as unknown as { readonly webSocket: unknown }).webSocket;
+      if (webSocket) {
+        return HttpServerResponse.raw(
+          new Response(null, { status: 101, webSocket } as ResponseInit),
+          { status: 101 },
+        );
+      }
+    }
+    return response;
+  });
+
+/** A step of the deploy's Workflow couldn't reach a consumer's class: this invocation runs older code. */
+class Unreachable extends Data.TaggedError("Unreachable")<{ readonly message: string }> {}
+
+/**
+ * A Workflow step that reaches a consumer's class fails (rather than dies) when
+ * the invocation runs code without it, and is tried a few times. A run started
+ * on an edge that doesn't have the deployed code yet stays on that code: it
+ * ends with this error, and the deploy starts it again (see `Backfill.ts`).
+ */
+const reachable = <A>(effect: Effect.Effect<A>) =>
+  effect.pipe(
+    Effect.catchCause((cause) => Effect.fail(new Unreachable({ message: Cause.pretty(cause) }))),
+  );
+const REACH_RETRIES = { limit: 3, delay: "1 second", backoff: "constant" } as const;
+
+/**
+ * The class a model's class takes over: the one it was named before Domain
+ * version 0, when models in one Worker that listed the same definition shared
+ * its class. A model that sets `legacyData: false` takes over nothing.
+ */
+const renamedFrom = (
+  version: number | undefined,
+  legacyData: boolean,
+  legacyName: string,
+): InlineDurableObjectProps =>
+  version !== undefined && legacyData ? { renamedFrom: legacyName } : {};
+
+/** A model's one class on the Worker, as `domainClass` hands it back. */
+type SharedClass = Effect.Success<ReturnType<typeof domainClass>>;
+
+/**
+ * What Domain version 1 keeps of each model while its Layer is built: its
+ * class, where its objects live (for the deploy's migration), and the class
+ * each saga's runs move from.
+ */
+interface OneClass {
+  readonly random: SecureRandom.SecureRandom["Service"];
+  readonly shared: Map<string, SharedClass>;
+  readonly layouts: Map<string, ModelLayout>;
+  /** Each saga's class in version 0 (`Billing.ApproveWorkflow`): its model, its saga, and the class it was before versions. */
+  readonly sagas: Map<
+    string,
+    { readonly modelName: string; readonly saga: string; readonly renamedFrom?: string }
+  >;
+}
+
+/** The model's class, declared the first time and remembered for `lookup`. */
+const sharedOf = (oneClass: OneClass, modelName: string) =>
+  Effect.tap(domainClass(oneClass.random, modelName), (shared) =>
+    Effect.sync(() => oneClass.shared.set(modelName, shared)),
+  );
+
+/**
+ * Tell the Worker deploy that `route`'s version 0 class is kept only while
+ * its objects move into the model's class: the deploy moves them between its
+ * two uploads, then deletes the class (see `DurableObjectRetirement`).
+ */
+const retiring = (modelName: string, route: string, timeoutSeconds: number | undefined) =>
+  globalThis.__ALCHEMY_RUNTIME__
+    ? Effect.void
+    : Effect.gen(function* () {
+        const worker = yield* CloudflareWorker;
+        const data: RetiringDomainClass = {
+          route,
+          domainClass: domainClassName(modelName),
+          ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }),
+        };
+        yield* worker.bind`${route}.Retiring`({
+          retiringClasses: [
+            { group: modelName, className: route, binding: route, data: { ...data } },
+          ],
+        });
+      });
+
+/**
+ * A saga's run objects, listed in their model's directory as they start, like
+ * every other object of the model: a later layout change finds each run
+ * exactly. The workflow engine stays as it is; only `start` is wrapped.
+ */
+const listedRuns = (
+  oneClass: OneClass,
+  modelName: string,
+  saga: string,
+  impl: CloudflareImpl,
+): CloudflareImpl =>
+  Effect.map(impl, (make) =>
+    Effect.gen(function* () {
+      const instance = yield* make;
+      const start = instance.start as
+        | ((executionId: string, ...rest: ReadonlyArray<unknown>) => Effect.Effect<unknown>)
+        | undefined;
+      if (typeof start !== "function") return instance;
+      const state = yield* DurableObjectState;
+      const runtime = yield* RuntimeContext;
+      return {
+        ...instance,
+        start: (executionId: string, ...rest: ReadonlyArray<unknown>) =>
+          Effect.andThen(
+            Effect.suspend(() => {
+              const layout = oneClass.layouts.get(modelName);
+              return layout === undefined
+                ? Effect.void
+                : layout
+                    .register("Workflow", saga, executionId)
+                    .pipe(Effect.provideService(ObjectState, objectState(state, runtime)));
+            }),
+            start(executionId, ...rest),
+          ),
+      };
+    }),
+  );
+
+/** The Domain host over a Worker's Durable Objects. */
+const cloudflareHost = (
+  placement: Placement,
+  /** How long a deploy waits for a backfill, in seconds. */
+  backfillTimeoutSeconds: number | undefined,
+  /** The Domain version to lay models out with: `undefined` for the layout from before versions. */
+  version: number | undefined,
+  legacySagas: Map<string, string>,
+  /** The class each saga's runs live on, by its name before Domain version 0. */
+  sagaRenames: Map<string, InlineDurableObjectProps>,
+  /** Version 1: every object of a model in one class, `Billing.Domain` (see `DomainClass.ts`). */
+  oneClass: OneClass | undefined,
+): Layer.Layer<Platform, never, Worker | SecureRandom.SecureRandom> =>
+  Layer.unwrap(
+    Effect.gen(function* () {
+      /** A Durable Object namespace from the Worker's bindings, placed as the platform says. */
+      const fromBinding = (native: any): CloudflareNamespace => {
+        const wrap = (namespace: any): CloudflareNamespace => ({
+          getByName: (name, options) => makeRpcStub(namespace.getByName(name, options)) as never,
+          jurisdiction: (inside) => wrap(namespace.jurisdiction(inside)),
+        });
+        return placed(wrap(native), placement);
+      };
+      // The Worker's bindings, at runtime: see `lookup`.
+      const env = Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment));
+      /** A model's class name on the Worker: `Bank.AccountAggregate` (or the bare name before versions). */
+      const named = (modelName: string, name: string) =>
+        version === undefined ? name : className(modelName, name);
+      const fromEnv = (
+        workerEnv: Record<string, any> | undefined,
+        binding: string,
+      ): CloudflareNamespace | undefined => {
+        const namespace = workerEnv?.[binding];
+        return namespace !== undefined && typeof namespace.getByName === "function"
+          ? fromBinding(namespace)
+          : undefined;
+      };
+      /** A class of the model from the Worker's bindings: a route of its one class in version 1. */
+      const classIn = (
+        workerEnv: Record<string, any> | undefined,
+        modelName: string,
+        name: string,
+      ): CloudflareNamespace | undefined => {
+        if (oneClass === undefined) return fromEnv(workerEnv, named(modelName, name));
+        const namespace = fromEnv(workerEnv, domainClassName(modelName));
+        return namespace === undefined
+          ? undefined
+          : routeView(namespace, className(modelName, name));
+      };
+      const host: Host<Worker> = {
+        // Every kind of object is declared through here, so none is left
+        // outside the jurisdiction or the location hint.
+        declare: ({ modelName, legacyData }, name, impl) =>
+          oneClass === undefined
+            ? Effect.map(
+                declare(
+                  named(modelName, name),
+                  renamedFrom(version, legacyData, name),
+                  onCloudflare(impl),
+                ),
+                (namespace) => placed(namespace, placement),
+              )
+            : Effect.gen(function* () {
+                const shared = yield* sharedOf(oneClass, modelName);
+                const route = className(modelName, name);
+                // The version 0 class stays declared while its objects move over.
+                yield* retiring(modelName, route, backfillTimeoutSeconds);
+                const namespace = yield* shared.object(route, onCloudflare(impl), {
+                  className: route,
+                  ...renamedFrom(0, legacyData, name),
+                });
+                return placed(namespace, placement);
+              }),
+        lookup: ({ modelName }, name) => {
+          // A route this isolate's model hosts, or (code that doesn't build the model) any.
+          const shared = oneClass?.shared.get(modelName);
+          if (shared === undefined) return classIn(env, modelName, name);
+          const view = shared.bound(className(modelName, name));
+          return view === undefined ? undefined : placed(view, placement);
+        },
+        // How the deploy's migration finds every object of a model in version 1.
+        layout: ({ modelName }, layout) =>
+          oneClass === undefined
+            ? Effect.void
+            : Effect.gen(function* () {
+                const shared = yield* sharedOf(oneClass, modelName);
+                oneClass.layouts.set(modelName, layout);
+                const route = (name: string) => className(modelName, name);
+                yield* shared.resolve({
+                  namespace: placed(shared.namespace, placement),
+                  directory: route(layout.directory),
+                  entry: (ref) => {
+                    const entry = layout.entry(ref);
+                    if (entry !== undefined)
+                      return { route: route(entry.name), source: entry.source };
+                    // Saga runs: the engine declares their classes, not the platform.
+                    const run = route(ref.source);
+                    return shared.bound(run) === undefined
+                      ? undefined
+                      : { route: run, source: false };
+                  },
+                  consumer: (target) => {
+                    const consumer = layout.consumer(target);
+                    return { keys: route(consumer.keys), run: route(consumer.run) };
+                  },
+                  streams: (projection) => layout.streams(projection).map(route),
+                  runs: () => layout.runs().map(route),
+                  scanner: layout.scanner,
+                });
+              }),
+        // Each saga's runs live on a Durable Object class of the workflow
+        // engine, named after the model too.
+        hosted: (model) =>
+          Effect.sync(() => {
+            for (const saga of model.sagas) {
+              if (version === undefined) legacySagas.set(`${model.modelName}.${saga}`, saga);
+              else if (oneClass !== undefined)
+                oneClass.sagas.set(className(model.modelName, `${saga}Workflow`), {
+                  modelName: model.modelName,
+                  saga,
+                  ...renamedFrom(
+                    0,
+                    model.legacyData,
+                    `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
+                  ),
+                });
+              else
+                sagaRenames.set(
+                  className(model.modelName, `${saga}Workflow`),
+                  renamedFrom(
+                    version,
+                    model.legacyData,
+                    `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
+                  ),
+                );
+            }
+          }),
+        connect: connectTo,
+        claimKey: CloudflareWorker,
+        // A deploy's backfill: a Workflow starts each new consumer's run, then
+        // waits until every one is complete. Reconciliation starts it and waits.
+        backfill: ({ modelName }, plansOf) =>
+          Effect.gen(function* () {
+            const backfill = yield* Workflow(
+              named(modelName, "DomainBackfill"),
+              Effect.succeed(
+                (params: {
+                  readonly targets: ReadonlyArray<string>;
+                  readonly plans?: Readonly<Record<string, Backfill.Plan>>;
+                }) =>
+                  Effect.gen(function* () {
+                    const plans = { ...plansOf(params.targets), ...params.plans };
+                    const targets = params.targets.filter((target) => plans[target] !== undefined);
+                    // This isolate doesn't build the model: reach each run's root by its binding.
+                    const workerEnv = yield* WorkerEnvironment;
+                    const root = (target: string) =>
+                      Effect.suspend(() => {
+                        const namespace = classIn(
+                          workerEnv,
+                          modelName,
+                          runClass(
+                            consumerClass(
+                              Backfill.consumerOf(target).kind,
+                              Backfill.consumerOf(target).name,
+                              generationOfTarget(target),
+                            ),
+                          ),
+                        );
+                        return namespace === undefined
+                          ? Effect.die(
+                              new Error(`backfill: ${target} isn't in the code this runs yet`),
+                            )
+                          : Effect.succeed(namespace.getByName(RUN_ROOT));
+                      });
+                    for (const target of targets) {
+                      const begun = yield* task(
+                        `begin-${target}`,
+                        reachable(
+                          Effect.flatMap(root(target), (stub) =>
+                            unwrapDefects<Backfill.Begin>(stub.bfRunBegin(target, plans[target]!)),
+                          ),
+                        ),
+                        { retries: REACH_RETRIES },
+                      );
+                      // Started reading other sources: waiting on it would report a history
+                      // that misses the new ones. The deploy fails, saying to bump the version.
+                      if (begun.status === "changed")
+                        return yield* Effect.die(
+                          new Backfill.PlanChanged({
+                            message: Backfill.planChanged(target, begun.started, plans[target]!),
+                          }),
+                        );
+                    }
+                    // Each check's output is the runs' progress: the deploy reads the latest one
+                    // from the instance's steps, and reports it while it waits.
+                    for (let check = 0; ; check++) {
+                      const progress = yield* task(
+                        `check-${check}`,
+                        reachable(
+                          Effect.forEach(targets, (target) =>
+                            Effect.flatMap(root(target), (stub) =>
+                              unwrapDefects<Backfill.Progress>(stub.bfRunProgress(target)),
+                            ),
+                          ),
+                        ),
+                        { retries: REACH_RETRIES },
+                      );
+                      if (progress.every((run) => run.phase === "complete"))
+                        return { complete: true, progress };
+                      yield* sleep(
+                        `wait-${check}`,
+                        // Soon at first, then less often: each check is a step (an instance has 10,000).
+                        `${Math.min(5_000, Math.round(500 * 1.25 ** check))} millis`,
+                      );
+                    }
+                  }),
+              ) as unknown as Effect.Effect<WorkflowImpl<any, any, unknown>>,
+            );
+            return (targets: ReadonlyArray<string>) =>
+              Effect.gen(function* () {
+                const worker = yield* CloudflareWorker;
+                yield* BackfillRun(named(modelName, "DomainBackfillRun"), {
+                  scriptName: worker.workerName as unknown as string,
+                  workflowName: backfill.workflowName as string,
+                  targets: [...targets],
+                  plans: plansOf(targets) as Record<
+                    string,
+                    { sources?: string[]; singleSource: boolean }
+                  >,
+                  ...(backfillTimeoutSeconds === undefined
+                    ? {}
+                    : { timeoutSeconds: backfillTimeoutSeconds }),
+                }) as unknown as Effect.Effect<unknown>;
+              });
+          }),
+      };
+      return makePlatform(host);
+    }),
+  );
+
+/**
+ * Host a domain model on Cloudflare Durable Objects. Every aggregate, view
+ * and policy becomes a Durable Object class on the host Worker, declared
+ * while the model's Layer is built, so there are no bindings to write. One
+ * instance per aggregate id, per view key, and per policy and source.
+ *
+ * Commands to one instance run one at a time, and their events, state and
+ * outbox commit together. Deliveries to views and policies are at least once
+ * and in order per source, and survive restarts. Live reads over
+ * `Domain.protocolWebSocket` are WebSockets to the object that owns the key,
+ * pushed on every commit; the object hibernates in between.
+ *
+ * A view or projection added in a later deploy receives the history recorded
+ * before it, and the deploy waits until it has. Every instance lists itself in
+ * a directory of Durable Objects; a run of new objects reads it, fans out six
+ * ways, and gives each key of the new consumer its sources' events, which the
+ * key applies in timestamp order.
+ *
+ * ### Hosting on Cloudflare
+ * The Stack that deploys the Worker registers `DomainCloudflare.providers()`
+ * next to `Cloudflare.providers()`, for the backfills its deploys wait on.
+ *
+ * **Example:** A Worker serving an Api
+ * ```typescript
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+ * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankPolicies } from "./Bank.ts";
+ * import { CustomerApi } from "./CustomerApi.ts";
+ * import { SessionLive } from "./Session.ts";
+ *
+ * const BankLive = SessionLive.pipe(
+ *   Layer.provideMerge(Bank.layer(BankPolicies)),
+ *   Layer.provide(DomainCloudflare.layerDurableObjects()),
+ * );
+ *
+ * export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
+ *   "BankWorker",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const api = yield* CustomerApi;
+ *     return { fetch: api.fetch };
+ *   }).pipe(Effect.provide(BankLive)),
+ * ) {}
+ * ```
+ *
+ * ### Restricting a model to a jurisdiction
+ * **Example:** Every Durable Object of the model in the EU
+ * ```typescript
+ * import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankPolicies } from "./Bank.ts";
+ *
+ * const BankLive = Bank.layer(BankPolicies).pipe(
+ *   Layer.provide(DomainCloudflare.layerDurableObjects({ jurisdiction: "eu" })),
+ * );
+ * ```
+ *
+ * ### Placing a model's Durable Objects
+ * A Durable Object is created near the Worker that first reaches it, and
+ * stays there. When the model's other dependencies sit in one region (the
+ * database its projections write to, the Workers that call it), hint that
+ * region instead.
+ *
+ * **Example:** Every new Durable Object of the model in western North America
+ * ```typescript
+ * import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankPolicies } from "./Bank.ts";
+ *
+ * const BankLive = Bank.layer(BankPolicies).pipe(
+ *   Layer.provide(DomainCloudflare.layerDurableObjects({ locationHint: "wnam" })),
+ * );
+ * ```
+ *
+ * ### Hosting several models in one Worker
+ * Each model gets its own Durable Object classes, named after the model
+ * (`Billing.AccountAggregate`), so models that list the same aggregate never
+ * share its data. A Worker deployed before Domain version 0 named a class
+ * after its definition alone (`AccountAggregate`), shared by every model that
+ * listed it; the next deploy renames it to the model's class with
+ * `renamedFrom`, keeping its objects. When two models shared one, set
+ * `legacyData: false` on the `layer` of each model that starts empty.
+ *
+ * **Example:** Two models that both list `Account`
+ * ```typescript
+ * import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+ * import * as Layer from "effect/Layer";
+ * import { Audit, AuditHandlers } from "./Audit.ts";
+ * import { Billing, BillingHandlers } from "./Billing.ts";
+ *
+ * const Platform = DomainCloudflare.layerDurableObjects();
+ * const BillingLive = Billing.layer(BillingHandlers).pipe(Layer.provide(Platform));
+ * const AuditLive = Audit.layer(AuditHandlers).pipe(Layer.provide(Platform));
+ * ```
+ *
+ * @layer
+ * @provides Domain.Platform
+ * @provides WorkflowEngine
+ */
+export function layerDurableObjects({
+  jurisdiction,
+  locationHint,
+  backfillTimeout,
+}: DurableObjectsOptions = {}): Layer.Layer<
+  Platform | WorkflowEngine.WorkflowEngine,
+  never,
+  Worker | SecureRandom.SecureRandom | Providers
+> {
+  const timeoutSeconds =
+    backfillTimeout === undefined ? undefined : Duration.toSeconds(backfillTimeout);
+  // The same options return the same Layer, so models that each provide it
+  // share one platform and one workflow engine.
+  const key = `${jurisdiction ?? ""}|${locationHint ?? ""}|${timeoutSeconds ?? ""}`;
+  const placement: Placement = { jurisdiction, locationHint };
+  let platform = platforms.get(key);
+  if (platform === undefined)
+    platforms.set(
+      key,
+      (platform = Layer.unwrap(
+        Effect.gen(function* () {
+          const version = yield* DeployVersion;
+          const sagaRenames = new Map<string, InlineDurableObjectProps>();
+          const oneClass: OneClass | undefined =
+            version !== undefined && version >= 1
+              ? {
+                  random: yield* SecureRandom.SecureRandom,
+                  shared: new Map(),
+                  layouts: new Map(),
+                  sagas: new Map(),
+                }
+              : undefined;
+          const engine = sagaEngine(placement, sagaRenames, oneClass, timeoutSeconds);
+          const legacySagas = new Map<string, string>();
+          return Layer.merge(
+            cloudflareHost(placement, timeoutSeconds, version, legacySagas, sagaRenames, oneClass),
+            version === undefined ? legacyEngine(legacySagas).pipe(Layer.provide(engine)) : engine,
+          );
+        }),
+      )),
+    );
+  // The Stack that deploys the Worker must register the providers too.
+  return platform as Layer.Layer<
+    Platform | WorkflowEngine.WorkflowEngine,
+    never,
+    Worker | SecureRandom.SecureRandom | Providers
+  >;
+}
+
+/**
+ * Effect's workflow engine on the Worker's Durable Objects, as
+ * `Cloudflare.Workflows.layerDurableObjectEngine` runs it, with each saga's
+ * class taking over the class its runs lived on before Domain version 0.
+ */
+const sagaEngine = (
+  placement: Placement,
+  sagaRenames: ReadonlyMap<string, InlineDurableObjectProps>,
+  oneClass: OneClass | undefined,
+  timeoutSeconds: number | undefined,
+): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =>
+  makeDurableObjectEngine({
+    declare: (name, impl) => {
+      const cloudflareImpl = provideCallbacks(
+        impl,
+        DurableObjectCallbacks,
+      ) as unknown as CloudflareImpl;
+      // Version 1: a saga's runs are objects of its model's class too, on a route of their own.
+      const saga = oneClass?.sagas.get(name);
+      if (oneClass === undefined || saga === undefined)
+        return Effect.map(declare(name, sagaRenames.get(name) ?? {}, cloudflareImpl), (namespace) =>
+          placed(namespace, placement),
+        );
+      return Effect.gen(function* () {
+        const shared = yield* sharedOf(oneClass, saga.modelName);
+        yield* retiring(saga.modelName, name, timeoutSeconds);
+        const namespace = yield* shared.object(
+          name,
+          listedRuns(oneClass, saga.modelName, saga.saga, cloudflareImpl),
+          {
+            className: name,
+            ...(saga.renamedFrom === undefined ? {} : { renamedFrom: saga.renamedFrom }),
+          },
+        );
+        return placed(namespace, placement);
+      });
+    },
+    state: DurableObjectState,
+  });
+
+/**
+ * Before Domain version 0, a saga's runs lived on a class named after the
+ * saga alone. Store each under that name, given by `legacySagas`.
+ */
+const legacyEngine = (
+  legacySagas: ReadonlyMap<string, string>,
+): Layer.Layer<WorkflowEngine.WorkflowEngine, never, WorkflowEngine.WorkflowEngine> =>
+  Layer.effect(
+    WorkflowEngine.WorkflowEngine,
+    Effect.gen(function* () {
+      const engine = yield* WorkflowEngine.WorkflowEngine;
+      const legacy: WorkflowEngine.WorkflowEngine["Service"] = {
+        ...engine,
+        register: (workflow, execute) => {
+          const storageName = Context.getOrUndefined(workflow.annotations, StorageName);
+          const legacyName = storageName === undefined ? undefined : legacySagas.get(storageName);
+          return engine.register(
+            legacyName === undefined
+              ? workflow
+              : Object.create(workflow, {
+                  annotations: {
+                    value: Context.add(workflow.annotations, StorageName, legacyName),
+                    enumerable: true,
+                  },
+                }),
+            execute,
+          );
+        },
+      };
+      return legacy;
+    }),
+  );
+
+/** Options for {@link layerDurableObjects}. */
+export interface DurableObjectsOptions {
+  /**
+   * Create and store every Durable Object of the model (aggregates, views,
+   * policies, projections, streams and saga executions) only inside this
+   * jurisdiction, e.g. `"eu"`.
+   *
+   * A Durable Object in a jurisdiction is a different object from the one
+   * with the same name outside it. Setting this on a model that already has
+   * data does not move that data: the model starts empty in the
+   * jurisdiction, and the old objects are left as they were. Choose it before
+   * the first deploy, or migrate deliberately.
+   *
+   * Like a D1 database, R2 bucket or Queue declared with a jurisdiction, it is
+   * enforced when deployed and not emulated in `alchemy dev`: local workerd
+   * does not implement jurisdictions, so the model runs unrestricted there.
+   *
+   * @default undefined (no jurisdiction restriction)
+   */
+  readonly jurisdiction?: DurableObjectJurisdiction;
+  /**
+   * Create every new Durable Object of the model (aggregates, views,
+   * policies, projections, streams and saga executions) near this location,
+   * e.g. `"wnam"`, instead of near the Worker that first reaches it.
+   *
+   * It only affects objects that do not exist yet: an object stays where it
+   * was created, so setting or changing the hint does not move existing
+   * ones. It is a hint, as on Cloudflare: an object is created in the
+   * nearest location that can host it, which may not be the hinted one.
+   * Unlike `jurisdiction`, it does not change which object a name refers to.
+   *
+   * Not emulated in `alchemy dev`, where every object runs on this machine.
+   *
+   * @default undefined (each object is created near its first request)
+   */
+  readonly locationHint?: DurableObjectLocationHint;
+  /**
+   * How long a deploy waits for the backfill of the views and projections it
+   * adds or rebuilds. Past it the deploy fails with `BackfillStillRunning`,
+   * naming how far each one has got, while the backfill keeps running on
+   * Cloudflare: the next deploy waits on it again, from where it is.
+   *
+   * @default "30 minutes"
+   */
+  readonly backfillTimeout?: Duration.Input;
+}
+
+const platforms = new Map<
+  string,
+  Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker | SecureRandom.SecureRandom>
+>();

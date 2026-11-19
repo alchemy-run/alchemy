@@ -8,7 +8,6 @@ import * as Pipeable from "effect/Pipeable";
 import * as Scheduler from "effect/Scheduler";
 import * as Stream from "effect/Stream";
 import type { RuntimeContext } from "../../RuntimeContext.ts";
-import { flushDurableObjectAlarm } from "./DurableObjectAlarmStorage.ts";
 import { liveStorage } from "./DurableObjectMove.ts";
 import {
   ActiveStorageTransactions,
@@ -59,7 +58,10 @@ const settledTransaction = (
       : Effect.promise(() => transaction.settled).pipe(Effect.andThen(settledTransaction(storage)));
   });
 
-/** @internal Joins an owned transaction, or starts a native transaction. */
+/**
+ * @internal Starts a native transaction. Inside another transaction, workerd
+ * runs it as a savepoint: its failure or rollback leaves the outer one intact.
+ */
 function withStorageTransaction<A, E, R>(
   storage: cf.DurableObjectStorage,
   effect: Effect.Effect<A, E, R>,
@@ -74,34 +76,9 @@ function withStorageTransaction<A, E, R>(
 ): Effect.Effect<A, E | DurableObjectStorageError, R> {
   return Effect.gen(function* () {
     const transactions = yield* ActiveStorageTransactions;
-    const existing = transactions.get(storage) ?? (yield* settledTransaction(storage));
-    const evaluate = (transaction: ActiveStorageTransaction) =>
-      Effect.suspend(() =>
-        typeof body === "function"
-          ? body(
-              makeDurableObjectTransaction(
-                transaction.transaction,
-                checkTransactionOwner(transaction).pipe(Effect.orDie),
-                checkTransactionOwner(transaction, true).pipe(
-                  Effect.andThen(() =>
-                    Effect.sync(() => {
-                      if (!transaction.rolledBack) {
-                        transaction.transaction.rollback();
-                        transaction.rolledBack = true;
-                      }
-                    }),
-                  ),
-                  Effect.orDie,
-                ),
-                flushDurableObjectAlarm(storage),
-              ),
-            )
-          : body,
-      );
-
-    if (existing !== undefined) {
-      yield* checkTransactionOwner(existing);
-      return yield* evaluate(existing);
+    const parent = transactions.get(storage) ?? (yield* settledTransaction(storage));
+    if (parent !== undefined) {
+      yield* checkTransactionOwner(parent);
     }
 
     const context = yield* Effect.context<R>();
@@ -119,11 +96,34 @@ function withStorageTransaction<A, E, R>(
           if (currentTransaction !== undefined) {
             currentTransaction.active = false;
             if (activeStorageTransactions.get(storage) === currentTransaction) {
-              activeStorageTransactions.delete(storage);
+              if (parent === undefined) activeStorageTransactions.delete(storage);
+              else activeStorageTransactions.set(storage, parent);
             }
           }
           settlement.resolve();
         };
+        const evaluate = (transaction: ActiveStorageTransaction) =>
+          Effect.suspend(() =>
+            typeof body === "function"
+              ? body(
+                  makeDurableObjectTransaction(
+                    transaction.transaction,
+                    checkTransactionOwner(transaction).pipe(Effect.orDie),
+                    checkTransactionOwner(transaction, true).pipe(
+                      Effect.andThen(() =>
+                        Effect.sync(() => {
+                          if (!transaction.rolledBack) {
+                            transaction.transaction.rollback();
+                            transaction.rolledBack = true;
+                          }
+                        }),
+                      ),
+                      Effect.orDie,
+                    ),
+                  ),
+                )
+              : body,
+          );
 
         yield* Effect.addFinalizer(
           Effect.fn(function* () {
@@ -177,8 +177,6 @@ function withStorageTransaction<A, E, R>(
                 owner: undefined,
                 active: true,
                 rolledBack: false,
-                alarmTablesEnsured: false,
-                alarmDirty: false,
                 settled: settlement.promise,
               };
               currentTransaction = transaction;
@@ -193,10 +191,7 @@ function withStorageTransaction<A, E, R>(
                 const callbackFiber = Effect.runForkWith(callbackContext)(
                   Effect.withFiber((fiber) => {
                     transaction.owner = fiber;
-                    return evaluate(transaction).pipe(
-                      Effect.scoped,
-                      Effect.tap(() => flushDurableObjectAlarm(storage)),
-                    );
+                    return Effect.scoped(evaluate(transaction));
                   }),
                   { scheduler },
                 );
@@ -434,8 +429,10 @@ export interface DurableObjectStorage {
    * On SQLite-backed storage, SQL, KV, and alarm writes to this storage commit
    * together. Typed failures, defects, and interruption roll back the transaction.
    * Interruption waits for the callback fiber and native rollback to finish.
-   * Nested calls on the same fiber join the active transaction; transaction
-   * handles cannot be used by another fiber or after the callback finishes.
+   * A call inside another transaction starts a nested one: if it fails or rolls
+   * back, only its own writes are undone, and the outer transaction continues.
+   * Transaction handles cannot be used by another fiber or after the callback
+   * finishes.
    */
   transaction<A, E = never, R = never>(
     effect: Effect.Effect<A, E, R>,
@@ -476,10 +473,8 @@ const makeDurableObjectTransaction = (
     checkOwner,
     Effect.sync(() => txn.rollback()),
   ),
-  flushAlarm: Effect.Effect<void> = Effect.void,
 ): DurableObjectTransaction => {
   const use = <A>(effect: Effect.Effect<A>) => Effect.andThen(checkOwner, effect);
-  const useAlarm = <A>(effect: Effect.Effect<A>) => use(Effect.andThen(flushAlarm, effect));
 
   return {
     get: ((keyOrKeys: string | string[], options?: cf.DurableObjectGetOptions) =>
@@ -501,11 +496,11 @@ const makeDurableObjectTransaction = (
       use(Effect.promise(() => txn.delete(keyOrKeys as any, options)))) as any,
     rollback: () => rollback,
     getAlarm: (options?: cf.DurableObjectGetAlarmOptions) =>
-      useAlarm(Effect.promise(() => txn.getAlarm(options))),
+      use(Effect.promise(() => txn.getAlarm(options))),
     setAlarm: (scheduledTime: number | Date, options?: cf.DurableObjectSetAlarmOptions) =>
-      useAlarm(Effect.promise(() => txn.setAlarm(scheduledTime, options))),
+      use(Effect.promise(() => txn.setAlarm(scheduledTime, options))),
     deleteAlarm: (options?: cf.DurableObjectSetAlarmOptions) =>
-      useAlarm(Effect.promise(() => txn.deleteAlarm(options))),
+      use(Effect.promise(() => txn.deleteAlarm(options))),
   };
 };
 
@@ -526,8 +521,6 @@ export const fromDurableObjectStorage = (
   // on every call, so a wrapper made before the move began does too.
   const live = () => liveStorage(storage);
   const use = <A>(effect: Effect.Effect<A>) => Effect.andThen(checkOwner, effect);
-  const useAlarm = <A>(effect: Effect.Effect<A>) =>
-    use(Effect.andThen(flushDurableObjectAlarm(storage), effect));
 
   return {
     get: ((keyOrKeys: string | string[], options?: cf.DurableObjectGetOptions) =>
@@ -554,11 +547,11 @@ export const fromDurableObjectStorage = (
       body: Effect.Effect<A, E, R> | ((txn: DurableObjectTransaction) => Effect.Effect<A, E, R>),
     ) => withStorageTransaction(storage, (txn) => (typeof body === "function" ? body(txn) : body)),
     getAlarm: (options?: cf.DurableObjectGetAlarmOptions) =>
-      useAlarm(Effect.promise(() => live().getAlarm(options))),
+      use(Effect.promise(() => live().getAlarm(options))),
     setAlarm: (scheduledTime: number | Date, options?: cf.DurableObjectSetAlarmOptions) =>
-      useAlarm(Effect.promise(() => live().setAlarm(scheduledTime, options))),
+      use(Effect.promise(() => live().setAlarm(scheduledTime, options))),
     deleteAlarm: (options?: cf.DurableObjectSetAlarmOptions) =>
-      useAlarm(Effect.promise(() => live().deleteAlarm(options))),
+      use(Effect.promise(() => live().deleteAlarm(options))),
     sync: () => use(Effect.promise(() => live().sync())),
     get sql() {
       return fromSqlStorage(live().sql, checkOwner);

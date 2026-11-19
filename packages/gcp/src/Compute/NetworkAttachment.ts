@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { ignoredCodes } from "./internal.ts";
@@ -106,8 +107,31 @@ export type NetworkAttachment = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NetworkAttachmentLookup
 >;
+
+/**
+ * Props for {@link NetworkAttachment.lookup}: find a network attachment
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface NetworkAttachmentLookup {
+  /**
+   * Attachment name (RFC1035, 1-63 characters).
+   */
+  networkAttachmentName: string;
+  /**
+   * Region the attachment lives in. `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine Private Service Connect network attachment.
@@ -135,6 +159,19 @@ export type NetworkAttachment = Resource<
  *   subnetworks: [subnet.selfLink],
  *   connectionPreference: "ACCEPT_MANUAL",
  *   producerAcceptLists: ["my-producer-project"],
+ * });
+ * ```
+ *
+ * ### Looking up an existing network attachment
+ * `NetworkAttachment.lookup` references a network attachment Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared network attachment.
+ *
+ * **Example:** Reference an existing network attachment
+ * ```typescript
+ * const networkAttachment = GCP.Compute.NetworkAttachment.lookup({
+ *   networkAttachmentName: "my-network-attachment",
  * });
  * ```
  *
@@ -368,6 +405,14 @@ export const NetworkAttachmentProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ networkAttachmentName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, networkAttachmentName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, networkAttachmentName);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

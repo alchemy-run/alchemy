@@ -81,8 +81,26 @@ export type AccessPoliciesAuthorizedOrgsDesc = Resource<
     orgs: string[];
   },
   never,
-  Providers
+  Providers,
+  AccessPoliciesAuthorizedOrgsDescLookup
 >;
+
+/**
+ * Props for {@link AccessPoliciesAuthorizedOrgsDesc.lookup}: find an access
+ * policies authorized orgs desc this stack doesn't manage by its
+ * identifiers.
+ */
+export interface AccessPoliciesAuthorizedOrgsDescLookup {
+  /**
+   * Authorized-orgs descriptor id (the `{authorized_orgs_desc}` segment).
+   * Must begin with a letter, then alphanumeric or `_`.
+   */
+  authorizedOrgsDescId: string;
+  /**
+   * Parent access policy (`accessPolicies/{policy}` or the policy id).
+   */
+  policy: string;
+}
 
 /**
  * An Access Context Manager authorized-orgs descriptor.
@@ -129,6 +147,20 @@ export type AccessPoliciesAuthorizedOrgsDesc = Resource<
  *     orgs: ["organizations/111", "organizations/222"],
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing access policies authorized orgs desc
+ * `AccessPoliciesAuthorizedOrgsDesc.lookup` references an access policies
+ * authorized orgs desc Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared access policies authorized orgs desc.
+ *
+ * **Example:** Reference an existing access policies authorized orgs desc
+ * ```typescript
+ * const accessPoliciesAuthorizedOrgsDesc = GCP.AccessContextManager.AccessPoliciesAuthorizedOrgsDesc.lookup({
+ *   authorizedOrgsDescId: "my-authorized-orgs-desc",
+ *   policy: "my-policy",
+ * });
  * ```
  *
  * @resource
@@ -206,6 +238,14 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
       return replaceOnIdentity(
         idChanged || policyChanged || directionChanged || assetChanged || typeChanged,
       );
+    }),
+
+    lookup: Effect.fn(function* ({ authorizedOrgsDescId, policy }) {
+      if (policy === undefined) return undefined;
+      const name = resourceNameOf(policy, "authorizedOrgsDescs", authorizedOrgsDescId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

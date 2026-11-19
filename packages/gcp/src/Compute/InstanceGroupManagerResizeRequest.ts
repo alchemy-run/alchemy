@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitZoneOperation } from "./operations.ts";
@@ -79,8 +80,34 @@ export type InstanceGroupManagerResizeRequest = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstanceGroupManagerResizeRequestLookup
 >;
+
+/**
+ * Props for {@link InstanceGroupManagerResizeRequest.lookup}: find an
+ * instance group manager resize request this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface InstanceGroupManagerResizeRequestLookup {
+  /**
+   * Resize request name (RFC1035, 1-63 chars).
+   */
+  resizeRequestName: string;
+  /**
+   * Zone of the managed instance group (e.g. `us-central1-a`).
+   */
+  zone?: string;
+  /**
+   * Managed instance group name or URL.
+   */
+  instanceGroupManager: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal queued resize request on a managed instance group.
@@ -111,6 +138,21 @@ export type InstanceGroupManagerResizeRequest = Resource<
  *     requestedRunDuration: { seconds: "3600" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing instance group manager resize request
+ * `InstanceGroupManagerResizeRequest.lookup` references an instance group
+ * manager resize request Alchemy doesn't manage (created in the console or
+ * by another stack). It is read during plan/deploy, never created, updated
+ * or deleted, and binds like a declared instance group manager resize
+ * request.
+ *
+ * **Example:** Reference an existing instance group manager resize request
+ * ```typescript
+ * const instanceGroupManagerResizeRequest = GCP.Compute.InstanceGroupManagerResizeRequest.lookup({
+ *   resizeRequestName: "my-resize-request",
+ *   instanceGroupManager: "my-instance-group-manager",
+ * });
  * ```
  *
  * @resource
@@ -286,6 +328,20 @@ export const InstanceGroupManagerResizeRequestProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({
+      resizeRequestName,
+      zone: lookupZone,
+      instanceGroupManager: lookupInstanceGroupManager,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = zoneOf(lookupZone);
+      const instanceGroupManager = lastSegment(lookupInstanceGroupManager);
+      if (!instanceGroupManager) return undefined;
+      const existing = yield* getByName(env.project, zone, instanceGroupManager, resizeRequestName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, instanceGroupManager);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

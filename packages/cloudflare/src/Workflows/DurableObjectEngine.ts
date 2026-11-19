@@ -1,10 +1,12 @@
 import {
   makeDurableObjectEngine,
+  provideCallbacks,
   type DurableObjectEngineHost,
 } from "alchemy/Workers/DurableObjectEngine";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type { WorkflowEngine } from "effect/workflow";
+import { DurableObjectCallbacks } from "../Workers/AlarmCallback.ts";
 import { DurableObject, type DurableObjectJurisdiction } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import type { Worker } from "../Workers/Worker.ts";
@@ -126,28 +128,15 @@ const declare = DurableObject as unknown as (
   Worker
 >;
 
-/**
- * An engine that declares each workflow's class with `declareClass`: a Domain
- * model's engine hosts its runs in the Domain's shared class.
- *
- * @internal
- */
-export const makeEngine = (
+const makeEngine = (
   jurisdiction: DurableObjectJurisdiction | undefined,
-  declareClass: (...args: Parameters<Declare>) => Effect.Effect<
-    Effect.Success<ReturnType<Declare>> & {
-      readonly jurisdiction: (jurisdiction: DurableObjectJurisdiction) => unknown;
-    },
-    never,
-    Worker
-  > = declare,
 ): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =>
   makeDurableObjectEngine({
     declare: (name, impl) =>
-      Effect.map(declareClass(name, impl), (namespace) =>
-        jurisdiction === undefined
-          ? namespace
-          : (namespace.jurisdiction(jurisdiction) as typeof namespace),
+      Effect.map(
+        declare(name, provideCallbacks(impl, DurableObjectCallbacks) as never),
+        (namespace) =>
+          jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction),
       ),
     state: DurableObjectState,
   });

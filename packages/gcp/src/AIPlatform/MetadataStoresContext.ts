@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -101,8 +102,32 @@ export type MetadataStoresContext = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MetadataStoresContextLookup
 >;
+
+/**
+ * Props for {@link MetadataStoresContext.lookup}: find a metadata stores
+ * context this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface MetadataStoresContextLookup {
+  /**
+   * Context id. Must be 4-128 characters of `a-z` and `-`.
+   */
+  contextId: string;
+  /**
+   * Parent MetadataStore resource name
+   * `projects/{project}/locations/{locati
+   * on}/metadataStores/{metadatastore}`.
+   */
+  metadataStore: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex ML Metadata Context associated with a MetadataStore.
@@ -117,6 +142,20 @@ export type MetadataStoresContext = Resource<
  *   metadataStore: store.name,
  *   displayName: "training-run",
  *   labels: { env: "prod" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing metadata stores context
+ * `MetadataStoresContext.lookup` references a metadata stores context
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared metadata stores context.
+ *
+ * **Example:** Reference an existing metadata stores context
+ * ```typescript
+ * const metadataStoresContext = GCP.AIPlatform.MetadataStoresContext.lookup({
+ *   contextId: "my-context",
+ *   metadataStore: "my-metadata-store",
  * });
  * ```
  *
@@ -227,6 +266,15 @@ export const MetadataStoresContextProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ contextId, metadataStore }) {
+      const env = yield* GcpEnvironment.current;
+      const name = metadataStore !== undefined ? resourceName(metadataStore, contextId) : "";
+      if (name.length === 0) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

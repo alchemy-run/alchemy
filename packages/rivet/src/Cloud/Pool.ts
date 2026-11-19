@@ -4,6 +4,7 @@ import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import {
   bundleNodes,
+  isImageProgram,
   makePoolLayer,
   nodeEnvironment,
   RIVETKIT_VERSION,
@@ -77,7 +78,6 @@ export const Pool = (id: string, options: PoolOptions = {}) =>
     // Every class the pool hosts is bundled into the node program, which
     // Rivet Cloud runs from an image with RivetKit installed beside it.
     nodes: Effect.fn(function* (nodes) {
-      const main = yield* bundleNodes("rivet-cloud", id, nodes);
       const stack = yield* Stack;
       // What every alchemy runtime host sets; the node program reads it.
       const env = nodeEnvironment(nodes).pipe(
@@ -91,8 +91,13 @@ export const Pool = (id: string, options: PoolOptions = {}) =>
       yield* RunnerPool(`${id}Nodes`, {
         cluster: nodes.network.cluster as string,
         region: options.region,
-        main: main as unknown as string,
-        rivetkitVersion: RIVETKIT_VERSION,
+        // A Rust program is its own image, built from its staged crate.
+        ...(isImageProgram(nodes.program)
+          ? { context: nodes.program.context }
+          : {
+              main: (yield* bundleNodes("rivet-cloud", id, nodes.program)) as unknown as string,
+              rivetkitVersion: RIVETKIT_VERSION,
+            }),
         env: env as unknown as Record<string, string>,
         machineType: options.machineType,
         nodeCount: options.nodeCount,

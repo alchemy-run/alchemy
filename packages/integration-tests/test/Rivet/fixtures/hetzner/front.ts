@@ -10,6 +10,9 @@ export const FrontServer = Hetzner.Server("RivetHetznerFrontServer", {
   serverType: "cx23",
   image: "ubuntu-24.04",
   location: "nbg1",
+  // The suite reaches it over IPv4; skipping IPv6 keeps the project's
+  // shared primary-IP quota for the suite's other Servers.
+  enableIpv6: false,
 });
 
 export default class Front extends Hetzner.Service<Front>()(

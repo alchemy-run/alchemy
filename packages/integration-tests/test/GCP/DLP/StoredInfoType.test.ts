@@ -6,6 +6,7 @@ import * as dlp from "@distilled.cloud/gcp/dlp_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -56,6 +57,10 @@ test.provider(
             regex: { pattern: "ACCT[0-9]{8}" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.DLP.StoredInfoType.lookup({ storedInfoTypeId: created.storedInfoTypeId }),
+        created,
       );
 
       expect(created.storedInfoTypeId).toEqual(expect.any(String));

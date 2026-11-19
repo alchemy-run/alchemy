@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -97,8 +98,30 @@ export type BackendAuthenticationConfig = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  BackendAuthenticationConfigLookup
 >;
+
+/**
+ * Props for {@link BackendAuthenticationConfig.lookup}: find a backend
+ * authentication config this stack doesn't manage by its identifiers, in
+ * the ambient project unless `project` names another.
+ */
+export interface BackendAuthenticationConfigLookup {
+  /**
+   * Backend authentication config id.
+   */
+  backendAuthenticationConfigId: string;
+  /**
+   * Location (`global`, `us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Security BackendAuthenticationConfig — how a load balancer
@@ -128,6 +151,19 @@ export type BackendAuthenticationConfig = Resource<
  *     labels: { env: "prod" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing backend authentication config
+ * `BackendAuthenticationConfig.lookup` references a backend authentication
+ * config Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared backend authentication config.
+ *
+ * **Example:** Reference an existing backend authentication config
+ * ```typescript
+ * const backendAuthenticationConfig = GCP.NetworkSecurity.BackendAuthenticationConfig.lookup({
+ *   backendAuthenticationConfigId: "my-backend-authentication-config",
+ * });
  * ```
  *
  * @resource
@@ -204,6 +240,15 @@ export const BackendAuthenticationConfigProvider = () =>
           previousLocation === nextLocation && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ backendAuthenticationConfigId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, backendAuthenticationConfigId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

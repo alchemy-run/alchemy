@@ -81,7 +81,6 @@ test.provider(
         "missing-instance": AWS.DocDB.DBInstance.lookup({ dbInstanceIdentifier: name })
           .dbInstanceArn,
         "missing-cluster": AWS.DocDB.DBCluster.lookup({ dbClusterIdentifier: name }).dbClusterArn,
-        "missing-elastic": AWS.DocDBElastic.Cluster.lookup({ clusterName: name }).clusterArn,
       };
       for (const [id, value] of Object.entries(lookups)) {
         yield* expectDeployFails(stack.deploy(AWS.SSM.Parameter(id, { value })), [

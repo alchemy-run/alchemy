@@ -3,7 +3,6 @@ import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects"
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import * as workflowsApi from "@distilled.cloud/cloudflare/workflows";
 import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import { Artifacts } from "alchemy/Artifacts";
@@ -32,8 +31,6 @@ import {
   assertBindingContainersOnAsyncClasses,
   mergeWorkerContainers,
 } from "../Containers/ContainerConfiguration.ts";
-import { migrateModel } from "../Domain/Migration.ts";
-import * as DomainVersion from "../Domain/Version.ts";
 import { localRuntimeServices } from "../LocalRuntime.ts";
 import { CloudflareLogs } from "../Logs.ts";
 import { detachQueueConsumersOfScript } from "../Queues/Consumer.ts";
@@ -45,8 +42,14 @@ import {
   readAssetsConfigFiles,
   uploadAssets,
 } from "./Assets.ts";
+import { resolveBuildEnv } from "./BuildEnv.ts";
 import { getCompatibility } from "./Compatibility.ts";
 import { isDurableObjectExport } from "./DurableObject.ts";
+import {
+  DurableObjectRetirement,
+  MissingDurableObjectRetirement,
+  type RetiringClass,
+} from "./DurableObjectRetirement.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { placeholderResetReason } from "./Placeholder.ts";
 import { routePatternUrl } from "./RoutePattern.ts";
@@ -69,7 +72,11 @@ import { createWorkerName } from "./WorkerName.ts";
 class MissingDurableObjects extends Data.TaggedError("MissingDurableObjects")<{
   scriptName: string;
   expected: string[];
-}> {}
+}> {
+  override get message() {
+    return `Durable Object namespaces not found for Worker '${this.scriptName}': ${this.expected.join(", ")}`;
+  }
+}
 
 /**
  * A Durable Object class is being dropped from this Worker while a binding in
@@ -117,6 +124,26 @@ export class AmbiguousDurableObjectTransfer extends Data.TaggedError(
     return (
       `Durable Object '${this.logicalId}' (class '${this.className}') is new to Worker '${this.scriptName}' and multiple scripts match its transferredFrom declaration: ${this.sources.join(", ")}. ` +
       `Narrow transferredFrom to the exact physical script name that holds the data.`
+    );
+  }
+}
+
+/**
+ * Two Durable Object classes of one deploy declare `renamedFrom` the same
+ * class, which the Worker still hosts. A class's namespace, and every object
+ * stored in it, can move to one class only, so the deploy fails before any
+ * upload. Keep `renamedFrom` on the class that takes over the objects; the
+ * others start empty.
+ */
+export class DurableObjectRenameConflict extends Data.TaggedError("DurableObjectRenameConflict")<{
+  scriptName: string;
+  renamedFrom: string;
+  classNames: string[];
+}> {
+  override get message() {
+    return (
+      `Durable Object classes ${this.classNames.map((className) => `'${className}'`).join(", ")} on Worker '${this.scriptName}' are all renamed from '${this.renamedFrom}', which the Worker still hosts. ` +
+      `Only one class can take over its objects: keep renamedFrom on that one, and remove it from the others.`
     );
   }
 }
@@ -215,6 +242,24 @@ export const resolvePreviewParentName = (preview: WorkerProps["preview"]): strin
   if (typeof parent === "string") return parent;
   const workerName = (parent as { workerName?: unknown }).workerName;
   return typeof workerName === "string" ? workerName : undefined;
+};
+
+/**
+ * Whether a Preview's observed observability already holds every field the
+ * desired settings set. A desired `false` also matches an absent field, so
+ * a Preview that never had traces is not patched to turn them off.
+ */
+const observabilityCovered = (desired: unknown, observed: unknown): boolean => {
+  if (desired === undefined) return true;
+  if (desired === false) return observed === undefined || observed === null || observed === false;
+  if (Array.isArray(desired)) return JSON.stringify(desired) === JSON.stringify(observed ?? []);
+  if (desired !== null && typeof desired === "object") {
+    const fields = (observed ?? {}) as Record<string, unknown>;
+    return Object.entries(desired).every(([key, value]) =>
+      observabilityCovered(value, fields[key]),
+    );
+  }
+  return desired === observed;
 };
 
 const toPreviewWireKey = (key: string) => key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
@@ -2353,7 +2398,12 @@ export const LiveWorkerProvider = () =>
             id,
             fqn,
             workerName,
-            props,
+            // Literals replace `Worker.URL` and env-bound Effects; bindings
+            // stay, so a source can still read them (Vinext's KV cache).
+            props: {
+              ...props,
+              env: { ...props.env, ...(yield* resolveBuildEnv(props.env, opts.selfUrl)) },
+            },
             compatibility: getCompatibility(props),
             stack: { name: stack.name, stage: stack.stage },
             selfUrl: opts.selfUrl,
@@ -2944,7 +2994,9 @@ export const LiveWorkerProvider = () =>
        * Reconcile a *Preview Worker*: create/update a first-class Preview of
        * the parent script and upload this Worker's code + bindings as a
        * Preview deployment. Isolated same-Worker Durable Object classes
-       * get their own namespace per Preview.
+       * get their own namespace per Preview, which the Preview reports in
+       * `durableObjectNamespaces` so a class's container application
+       * attaches to it.
        */
       const putWorkerPreview = Effect.fn(function* (
         id: string,
@@ -3042,7 +3094,29 @@ export const LiveWorkerProvider = () =>
             }),
           );
 
-        const previewResource =
+        // Cloudflare keeps observability per Preview, independent of the
+        // parent, and a new Preview starts with it off. It must be on the
+        // Preview before the deployment is created: a deployment created
+        // first is not recorded, even after a later PATCH. An omitted
+        // section is turned off explicitly, so removing traces or logs from
+        // the props turns them off on an existing Preview.
+        const resolvedObservability = yield* resolveObservability(news, bindings);
+        // The Preview API takes no `null` sampling rate; omit it instead.
+        const sampled = <T extends { headSamplingRate?: number | null }>(settings: T) => ({
+          ...settings,
+          headSamplingRate: settings.headSamplingRate ?? undefined,
+        });
+        const observability = {
+          ...sampled(resolvedObservability),
+          logs: resolvedObservability.logs
+            ? sampled(resolvedObservability.logs)
+            : { enabled: false },
+          traces: resolvedObservability.traces
+            ? sampled(resolvedObservability.traces)
+            : { enabled: false },
+        };
+
+        const createdPreview =
           existingPreview ??
           (yield* workers
             .createPreview({
@@ -3050,6 +3124,7 @@ export const LiveWorkerProvider = () =>
               workerId: parentName,
               name: previewName,
               ignoreBaseConfig: true,
+              observability,
             })
             .pipe(
               Effect.catchTag("PreviewAlreadyExists", () =>
@@ -3071,6 +3146,17 @@ export const LiveWorkerProvider = () =>
                 ),
               ),
             ));
+
+        // Sync against the observed settings: an existing (or raced)
+        // Preview may carry different or no observability.
+        const previewResource = observabilityCovered(observability, createdPreview.observability)
+          ? createdPreview
+          : yield* workers.updatePreview({
+              accountId,
+              workerId: parentName,
+              previewId: createdPreview.id,
+              observability,
+            });
 
         const accountSubdomain = yield* getAccountSubdomain(accountId);
         const parentAttrs =
@@ -3167,6 +3253,18 @@ export const LiveWorkerProvider = () =>
           }
         }
 
+        // A container-backed class carries its images as the parent's does,
+        // without the parent's application name: the Preview's namespace gets
+        // its own application, attached through `durableObjectNamespaces`.
+        const containerRows = bindings.flatMap((b) => b.data.containers ?? []);
+        yield* assertBindingContainersOnAsyncClasses(
+          containerRows,
+          effectNativeDurableObjectClasses(news.exports),
+        );
+        const containers = (yield* mergeWorkerContainers(containerRows)).map(
+          ({ className, images }) => ({ className, images }),
+        );
+
         const compatibility = getCompatibility(news);
         const annotations =
           preview.message !== undefined || preview.tag !== undefined
@@ -3191,6 +3289,9 @@ export const LiveWorkerProvider = () =>
             cacheOptions: news.cache ?? getCacheBinding(bindings),
             annotations,
             migrations,
+            containers: containers.length > 0 ? containers : undefined,
+            limits: news.limits,
+            placement: news.placement,
             exports: nonEmptyExports(
               yield* workerEntrypointExports(parentName, news.entrypoints, classNames),
             ),
@@ -3198,6 +3299,16 @@ export const LiveWorkerProvider = () =>
           },
           files: bundle.files,
         });
+
+        const durableObjectNamespaces =
+          classNames.length > 0
+            ? yield* getPreviewDurableObjectNamespaces(
+                accountId,
+                parentName,
+                deployment.previewId ?? previewResource.id,
+                classNames,
+              )
+            : {};
 
         const refreshed = yield* workers
           .getPreview({ accountId, workerId: parentName, previewId: previewResource.id })
@@ -3217,7 +3328,7 @@ export const LiveWorkerProvider = () =>
           urls,
           domain: undefined,
           tags: undefined,
-          durableObjectNamespaces: {},
+          durableObjectNamespaces,
           accountId,
           routes: [],
           crons: [],
@@ -3304,10 +3415,10 @@ export const LiveWorkerProvider = () =>
           assets: prebuiltAssets?.hash ?? preparedHash.assets,
           metadata: metadataHash,
         } satisfies Worker["Attributes"]["hash"];
-        // `transferredFrom` is alchemy-only transfer metadata on
-        // durable_object_namespace bindings — it drives the
-        // `transferred_classes` migration below and must be stripped from the
-        // wire-shape binding before upload.
+        // `transferredFrom` and `renamedFrom` are alchemy-only migration
+        // metadata on durable_object_namespace bindings — they drive the
+        // `transferred_classes` and `renamed_classes` migrations below and
+        // must be stripped from the wire-shape binding before upload.
         const metadataBindings = bindings.flatMap((b) =>
           withoutDevOnlyBindings(b.data.bindings ?? []).map((item): WireWorkerBinding => {
             // Lower the `Worker.URL` sentinel into the resolved URL —
@@ -3328,9 +3439,18 @@ export const LiveWorkerProvider = () =>
             }
             if (
               item.type === "durable_object_namespace" &&
-              (item.transferredFrom !== undefined || item.storage !== undefined)
+              (item.transferredFrom !== undefined ||
+                item.renamedFrom !== undefined ||
+                item.storage !== undefined ||
+                "hostNamespace" in item)
             ) {
-              const { transferredFrom: _, storage: __, ...rest } = item;
+              const {
+                transferredFrom: _,
+                renamedFrom: ____,
+                storage: __,
+                hostNamespace: ___,
+                ...rest
+              } = item;
               return rest;
             }
             // `queueId` (mode discrimination) and `shim` (dev-mode remote
@@ -3435,43 +3555,52 @@ export const LiveWorkerProvider = () =>
         const oldDoClassNameByLogicalId = getDurableObjectTagMap(oldTags);
         const currentDoBindings = getDurableObjectBindings(bindings, name);
 
-        // Domain models named their classes differently in earlier Domain
-        // versions. Map each old class to the logical id of its new name, so
-        // the rename below carries its data over instead of deleting it.
-        const domainClasses = bindings.flatMap((b) => b.data.domainClasses ?? []);
-        const deployedDomainVersion = DomainVersion.deployedVersion(oldTags);
-        yield* DomainVersion.refuseDowngrade({ scriptName: name, deployed: deployedDomainVersion });
-        if (domainClasses.length > 0) {
-          const { renamed, kept } = yield* DomainVersion.migrate({
-            scriptName: name,
-            deployed: deployedDomainVersion,
-            classes: domainClasses,
-            deployedClasses: new Set([
-              ...Object.values(oldDoClassNameByLogicalId),
-              ...oldBindings.flatMap((old) =>
-                old.type === "durable_object_namespace" &&
-                "className" in old &&
-                old.className &&
-                (!("scriptName" in old) || old.scriptName === undefined || old.scriptName === name)
-                  ? [old.className]
-                  : [],
-              ),
-            ]),
-          });
-          for (const { from, to } of renamed) {
-            for (const [logicalId, className] of Object.entries(oldDoClassNameByLogicalId)) {
-              if (className === from) delete oldDoClassNameByLogicalId[logicalId];
-            }
-            // A Domain class's logical id is its class name.
-            oldDoClassNameByLogicalId[to] = from;
+        // `renamedFrom`: a class that takes over a class this script still
+        // hosts under its old name. Map the old class to the new binding's
+        // logical id, so the rename below carries its objects over instead of
+        // deleting them. Inert when the script doesn't host the old class, or
+        // already hosts the new one.
+        const hostedBefore = new Set([
+          ...Object.values(oldDoClassNameByLogicalId),
+          ...oldBindings.flatMap((old) =>
+            old.type === "durable_object_namespace" &&
+            "className" in old &&
+            old.className &&
+            (!("scriptName" in old) || old.scriptName === undefined || old.scriptName === name)
+              ? [old.className]
+              : [],
+          ),
+        ]);
+        const hostedNow = new Set(currentDoBindings.map((binding) => binding.className));
+        const renamesFrom = new Map<string, Array<{ logicalId: string; className: string }>>();
+        for (const binding of currentDoBindings) {
+          const from = binding.renamedFrom;
+          if (
+            from === undefined ||
+            from === binding.className ||
+            !hostedBefore.has(from) ||
+            hostedBefore.has(binding.className) ||
+            hostedNow.has(from)
+          )
+            continue;
+          renamesFrom.set(from, [
+            ...(renamesFrom.get(from) ?? []),
+            { logicalId: binding.logicalId, className: binding.className },
+          ]);
+        }
+        for (const [from, claims] of renamesFrom) {
+          const classNames = [...new Set(claims.map((claim) => claim.className))];
+          if (classNames.length > 1) {
+            return yield* new DurableObjectRenameConflict({
+              scriptName: name,
+              renamedFrom: from,
+              classNames,
+            });
           }
-          // Kept under its own name, now through the binding of the model that keeps it.
-          for (const { className, binding } of kept) {
-            for (const [logicalId, deployedClass] of Object.entries(oldDoClassNameByLogicalId)) {
-              if (deployedClass === className) delete oldDoClassNameByLogicalId[logicalId];
-            }
-            oldDoClassNameByLogicalId[binding] = className;
+          for (const [logicalId, className] of Object.entries(oldDoClassNameByLogicalId)) {
+            if (className === from) delete oldDoClassNameByLogicalId[logicalId];
           }
+          for (const { logicalId } of claims) oldDoClassNameByLogicalId[logicalId] = from;
         }
         const currentDoClassNameByLogicalId = Object.fromEntries(
           currentDoBindings.map((binding) => [binding.logicalId, binding.className]),
@@ -3570,22 +3699,34 @@ export const LiveWorkerProvider = () =>
             continue;
           }
           const targetScriptName = crossScriptClassTargets.get(className);
+          const localNamespaceId = oldBindings.flatMap((binding) =>
+            binding.type === "durable_object_namespace" &&
+            "className" in binding &&
+            binding.className === className &&
+            (!("scriptName" in binding) ||
+              binding.scriptName == null ||
+              binding.scriptName === name) &&
+            "namespaceId" in binding &&
+            typeof binding.namespaceId === "string"
+              ? [binding.namespaceId]
+              : [],
+          )[0];
           const namespaceId =
-            oldBindings.flatMap((binding) =>
-              binding.type === "durable_object_namespace" &&
-              "className" in binding &&
-              binding.className === className &&
-              (!("scriptName" in binding) ||
-                binding.scriptName === undefined ||
-                binding.scriptName === name) &&
-              "namespaceId" in binding &&
-              typeof binding.namespaceId === "string"
-                ? [binding.namespaceId]
-                : [],
-            )[0] ??
+            localNamespaceId ??
             output?.durableObjectNamespaces?.[className] ??
             observedNamespaces.find((ns) => ns.script === name && ns.class === className)?.id;
           if (targetScriptName === undefined) {
+            // The script's own live settings are the authority on what it
+            // hosts. A transfer rewrites the former host's binding (dropping
+            // its class name, or repointing it at the new host through
+            // `scriptName`), so a local binding that still names the class
+            // with a namespace id proves the class lives here. Delete it
+            // without consulting the account-wide listing, whose pages
+            // Cloudflare doesn't return in a stable order.
+            if (localNamespaceId !== undefined) {
+              deletedClasses.push(className);
+              continue;
+            }
             const findNamespace = (namespaces: typeof observedNamespaces) =>
               namespaces.find((ns) =>
                 namespaceId === undefined
@@ -3790,19 +3931,7 @@ export const LiveWorkerProvider = () =>
         // at 7+ bindings (#811).
         const alchemyDoTags = encodeDurableObjectTags(currentDoBindings);
 
-        // The Domain version goes up with every upload that can change the
-        // classes, in the same request, so the tag and the classes never disagree.
-        const domainTags =
-          domainClasses.length > 0
-            ? [
-                // The layout the code deployed: version 1 code records its
-                // classes as movers; tests still deploy version 0 layouts.
-                DomainVersion.versionTag(
-                  domainClasses.some((domainClass) => domainClass.mover) ? 1 : 0,
-                ),
-              ]
-            : [];
-        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags, ...domainTags];
+        const alchemyTags = [...createAlchemyWorkerTags(id), ...alchemyDoTags];
         const metadataTags = Array.from(new Set([...alchemyTags, ...(news.tags ?? [])]));
         yield* validateWorkerTags(name, metadataTags, alchemyTags.length);
 
@@ -4000,7 +4129,6 @@ export const LiveWorkerProvider = () =>
                 ...encodeDurableObjectTags(
                   currentDoBindings.filter((binding) => !transferringIn.has(binding.className)),
                 ),
-                ...domainTags,
                 ...(news.tags ?? []),
               ]),
             );
@@ -4356,10 +4484,17 @@ export const LiveWorkerProvider = () =>
             ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
             : [];
         if (!dispatchNamespace && versionId === undefined) {
-          const { deployments } = yield* workers.listScriptDeployments({
-            accountId,
-            scriptName: name,
-          });
+          // Same eventual-consistency window as `setWorkerSubdomain`: on a
+          // Worker's first deploy, GET /deployments can still return
+          // `WorkerNotFound` (code 10007) after `putScript` succeeded (#2999).
+          const { deployments } = yield* workers
+            .listScriptDeployments({ accountId, scriptName: name })
+            .pipe(
+              Effect.retry({
+                while: (error) => error._tag === "WorkerNotFound",
+                schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
+              }),
+            );
           const active = deployments[0];
           deploymentId = active?.id;
           versionId = active?.versions.find((version) => version.percentage === 100)?.versionId;
@@ -4770,15 +4905,25 @@ export const LiveWorkerProvider = () =>
           // update even when nothing else changed, so reconcile re-records
           // the immutable Worker ID.
           const legacyWorkerId = cachedWorkerId(output.workerId, output.workerName) === undefined;
+          // Previews deployed by older releases recorded no namespaces, so
+          // their classes' container applications never attached. Plan one
+          // update so reconcile records them.
+          const previewNamespacesMissing = newIsPreview && !doNamespacesStable;
           if (
             legacyWorkerId ||
+            previewNamespacesMissing ||
             domainsChanged ||
             routesChanged ||
             cronsChanged ||
             (yield* hasChanged(
               id,
               fqn,
-              news,
+              // `stripEffects` keeps plain data only, so it drops the hook
+              // functions and RegExp filters of `build` plugins. Hashing
+              // builds the bundle, which needs them as written.
+              (desired as WorkerProps).build === undefined
+                ? news
+                : { ...news, build: (desired as WorkerProps).build },
               output,
               Array.isArray(newBindings)
                 ? (newBindings as ResourceBinding<Worker["Binding"]>[])
@@ -4937,30 +5082,31 @@ export const LiveWorkerProvider = () =>
             } satisfies Worker["Attributes"];
           }
           const dispatchNamespace = resolveNamespaceName(news.namespace);
-          // Old Domain classes the script doesn't already have are left out, as
-          // reconcile leaves them out: a placeholder that declared them would
-          // keep them live (see `withoutSettledDomainMovers`).
-          const hostedSettings = declared.some((binding) =>
-            (binding.data.domainClasses ?? []).some((domainClass) => domainClass.mover),
-          )
-            ? yield* getScriptSettings(accountId, name, dispatchNamespace).pipe(
-                Effect.catchTags({
-                  WorkerNotFound: () => Effect.undefined,
-                  WorkerHasNoVersions: () => Effect.undefined,
-                  DispatchNamespaceScriptNotFound: () => Effect.undefined,
-                  DispatchNamespaceNotFound: () => Effect.undefined,
-                }),
-              )
-            : undefined;
-          const { bindings, dropped } = yield* withoutSettledDomainMovers({
-            accountId,
-            scriptName: name,
-            bindings: declared,
-            existingSettings: hostedSettings,
-          });
-          const exportMap = Object.fromEntries(
-            Object.entries(news.exports ?? {}).filter(([className]) => !dropped.has(className)),
+          // Retiring classes the script doesn't have are left out, as reconcile
+          // leaves them out: a placeholder that declared them would create them.
+          const retiring = declared.flatMap((binding) => binding.data.retiringClasses ?? []);
+          const hosted =
+            retiring.length === 0
+              ? undefined
+              : hostedClasses(
+                  (yield* getScriptSettings(accountId, name, dispatchNamespace).pipe(
+                    Effect.catchTags({
+                      WorkerNotFound: () => Effect.undefined,
+                      WorkerHasNoVersions: () => Effect.undefined,
+                      DispatchNamespaceScriptNotFound: () => Effect.undefined,
+                      DispatchNamespaceNotFound: () => Effect.undefined,
+                    }),
+                  ))?.bindings,
+                  declared,
+                  name,
+                );
+          const unknownRetiring = new Set(
+            retiring
+              .filter(({ className }) => !hosted?.has(className))
+              .map(({ className }) => className),
           );
+          const bindings = withoutClasses(declared, name, unknownRetiring);
+          const exportMap = withoutExports(news, unknownRetiring).exports ?? {};
           // A worker hosts Durable Object classes from two independent sources:
           // Effect-native DO *exports* (classes defined in the worker entry) and
           // DO *bindings* declared in `env` — e.g. a bare `Cloudflare.DurableObject`
@@ -5500,21 +5646,21 @@ export const LiveWorkerProvider = () =>
             )}`,
           );
 
-          // Old Domain classes whose objects have all moved leave the upload:
-          // their bindings and their exports (Cloudflare deletes a class only
-          // once the code no longer exports it).
-          const settled = yield* withoutSettledDomainMovers({
-            accountId,
-            scriptName: name,
-            bindings,
-            existingSettings,
-          });
-          /** Upload the Worker without the `dropped` classes. */
-          const upload = (
-            dropped: ReadonlySet<string>,
-            uploaded: ResourceBinding<Worker["Binding"]>[],
-            settings: typeof existingSettings,
-          ) =>
+          const retiring = bindings.flatMap((binding) => binding.data.retiringClasses ?? []);
+          if (retiring.length === 0)
+            return yield* putWorker(
+              id,
+              fqn,
+              news,
+              bindings,
+              olds,
+              output,
+              session,
+              existingSettings,
+            );
+
+          /** Upload the Worker without the Durable Object classes in `dropped`. */
+          const upload = (dropped: ReadonlySet<string>, settings: typeof existingSettings) =>
             Effect.gen(function* () {
               // The build planned with every class: build again without the dropped ones.
               if (dropped.size > 0) {
@@ -5524,109 +5670,77 @@ export const LiveWorkerProvider = () =>
               return yield* putWorker(
                 id,
                 fqn,
-                dropped.size === 0 || news.exports === undefined
-                  ? news
-                  : {
-                      ...news,
-                      exports: Object.fromEntries(
-                        Object.entries(news.exports).filter(
-                          ([className]) => !dropped.has(className),
-                        ),
-                      ),
-                    },
-                uploaded,
+                withoutExports(news, dropped),
+                withoutClasses(bindings, name, dropped),
                 olds,
                 output,
                 session,
                 settings,
               );
             });
-          const uploaded = yield* upload(settled.dropped, settled.bindings, existingSettings);
-
-          // Domain models whose old classes this upload kept: move their objects now, then
-          // upload again without each old class the move accounted for, so this one deploy
-          // leaves only the models' classes.
-          const migrations = bindings.flatMap((b) => b.data.domainMigrations ?? []);
-          const keptClasses = new Set(
-            settled.bindings.flatMap((b) =>
-              (b.data.bindings ?? []).flatMap((item: WorkerBinding) =>
-                item.type === "durable_object_namespace" && "className" in item && item.className
-                  ? [item.className]
-                  : [],
-              ),
-            ),
+          // Retiring classes: their objects move out between two uploads (see `DurableObjectRetirement`).
+          const deployedClasses = hostedClasses(existingSettings?.bindings, bindings, name);
+          // A class the Worker doesn't have yet is never created just to retire it.
+          const unknown = new Set(
+            retiring
+              .filter(({ className }) => !deployedClasses.has(className))
+              .map(({ className }) => className),
           );
-          const moving = migrations
-            .map((migration) => ({
-              ...migration,
-              classes: migration.classes.filter(
-                ({ className }) =>
-                  keptClasses.has(className) &&
-                  uploaded.durableObjectNamespaces[className] !== undefined,
-              ),
-            }))
-            .filter((migration) => migration.classes.length > 0);
+          const live = retiring.filter(({ className }) => deployedClasses.has(className));
+          if (live.length === 0) return yield* upload(unknown, existingSettings);
+          const retirement = yield* Effect.serviceOption(DurableObjectRetirement);
+          if (Option.isNone(retirement))
+            return yield* new MissingDurableObjectRetirement({
+              message: `Worker '${name}' retires the Durable Object classes ${live.map(({ className }) => `'${className}'`).join(", ")}, and nothing in the Stack's providers moves their objects. Register the providers of the package that hosts them.`,
+            });
+          const workerBindings = bindings.flatMap((binding) => binding.data.bindings ?? []);
+          const groups = groupRetiring(live);
+          const request = (
+            group: string,
+            classes: ReadonlyArray<RetiringClass>,
+            namespaces: Record<string, string>,
+          ) => ({
+            scriptName: name,
+            group,
+            classes,
+            bindings: workerBindings,
+            deployedClasses,
+            namespaces,
+            session,
+          });
+          const before = getDurableObjects(existingSettings?.bindings);
+          const settled = new Set(
+            (yield* Effect.forEach(
+              [...groups],
+              ([group, classes]) => retirement.value.settled(request(group, classes, before)),
+              { concurrency: "unbounded" },
+            )).flatMap((classes) => [...classes]),
+          );
+          const dropped = new Set([...unknown, ...settled]);
+          const uploaded = yield* upload(dropped, existingSettings);
+          const moving = [...groups]
+            .map(
+              ([group, classes]) =>
+                [group, classes.filter(({ className }) => !settled.has(className))] as const,
+            )
+            .filter(([, classes]) => classes.length > 0);
           if (moving.length === 0) return uploaded;
-          const workflowName = settled.bindings
-            .flatMap((b) => b.data.bindings ?? [])
-            .find(
-              (item: WorkerBinding) =>
-                item.type === "workflow" && item.className === DomainVersion.MIGRATION_WORKFLOW,
-            ) as { readonly workflowName?: unknown } | undefined;
-          if (typeof workflowName?.workflowName !== "string") return uploaded;
-          // Code from before Domain versions listed none of its objects: what it wrote in its
-          // last minutes is in neither the directory nor Cloudflare's listing yet. Its old
-          // classes stay for a later upload, which deletes them once the move has settled.
-          const listedEverything =
-            DomainVersion.deployedVersion(existingSettings?.tags ?? []) !== undefined;
-          const moved = yield* Effect.forEach(
-            moving,
-            (migration) =>
-              Effect.map(
-                migrateModel({
-                  id: `${migration.model}.DomainMigration`,
-                  news: {
-                    scriptName: name,
-                    workflowName: workflowName.workflowName as string,
-                    domainClass: migration.domainClass,
-                    classes: [...migration.classes],
-                    namespaces: uploaded.durableObjectNamespaces,
-                    deployment: undefined,
-                    walk: true,
-                    ...(migration.timeoutSeconds === undefined
-                      ? {}
-                      : { timeoutSeconds: migration.timeoutSeconds }),
-                  },
-                  session,
-                }),
-                (result) => ({ migration, skipped: result.skipped }),
-              ),
-            { concurrency: "unbounded" },
+          const empty = new Set(
+            (yield* Effect.forEach(
+              moving,
+              ([group, classes]) =>
+                retirement.value.retire(request(group, classes, uploaded.durableObjectNamespaces)),
+              { concurrency: "unbounded" },
+            )).flatMap((classes) => [...classes]),
           );
-          if (!listedEverything) return uploaded;
-          // Every old class the move accounted for: each object it had is in the model's
-          // directory or Cloudflare's listing, or a source's history named it. Saga runs are
-          // listed nowhere until they start on this code, so their classes wait for the passes.
-          const accounted = new Set(
-            moved.flatMap(({ migration, skipped }) =>
-              migration.classes
-                .filter(
-                  ({ className }) =>
-                    !className.endsWith("Workflow") && (skipped[className] ?? 0) === 0,
-                )
-                .map(({ className }) => className),
-            ),
-          );
-          if (accounted.size === 0) return uploaded;
+          if (empty.size === 0) return uploaded;
           yield* session.note(
-            `Deleting ${accounted.size} old Domain classes: every object of theirs has moved.`,
+            `Deleting ${empty.size} Durable Object classes: every object of theirs has moved.`,
             { kind: "status" },
           );
-          const dropped = new Set([...settled.dropped, ...accounted]);
           const settings = yield* getScriptSettings(accountId, name, dispatchNamespace);
           return yield* upload(
-            dropped,
-            withoutClasses(settled.bindings, name, accounted),
+            new Set([...dropped, ...empty]),
             settings as typeof existingSettings,
           );
         }),
@@ -5757,16 +5871,12 @@ export const LiveWorkerProvider = () =>
             }).pipe(Effect.ignore);
           }
           if (liveDomains.length) {
-            yield* Effect.all(
-              liveDomains.flatMap((d) =>
-                d.id
-                  ? [
-                      workers
-                        .deleteDomain({ accountId: output.accountId, domainId: d.id })
-                        .pipe(Effect.catchTag("DomainNotFound", () => Effect.void)),
-                    ]
-                  : [],
-              ),
+            yield* Effect.forEach(
+              liveDomains.flatMap((d) => (d.id ? [d.id] : [])),
+              (domainId) =>
+                workers
+                  .deleteDomain({ accountId: output.accountId, domainId })
+                  .pipe(Effect.catchTag("DomainNotFound", () => Effect.void)),
               { concurrency: "unbounded" },
             );
           }
@@ -5850,6 +5960,14 @@ const contentTypeFromExtension = (extension: string) => {
 };
 
 /**
+ * Cloudflare returns the namespace listing's pages in an unstable order, so a
+ * walk of 20-row pages can return some rows twice and skip others (#3300).
+ * One large page sidesteps that for every account under this many
+ * namespaces.
+ */
+const LIST_NAMESPACES_PAGE_SIZE = 1000;
+
+/**
  * Observe every Durable Object namespace on the account with its identity,
  * script and class. Namespace ownership is authoritative cloud state: after a
  * transfer the namespace moves to the receiving
@@ -5860,7 +5978,7 @@ const contentTypeFromExtension = (extension: string) => {
  * are inconclusive because pagination is not an atomic account snapshot.
  */
 const listDurableObjectNamespaces = (accountId: string, dispatchNamespace?: string) =>
-  durableObjectsApi.listNamespaces.items({ accountId }).pipe(
+  durableObjectsApi.listNamespaces.items({ accountId, perPage: LIST_NAMESPACES_PAGE_SIZE }).pipe(
     Stream.runCollect,
     Effect.map((namespaces) =>
       Array.from(namespaces).flatMap((ns) =>
@@ -5878,6 +5996,42 @@ const listDurableObjectNamespaces = (accountId: string, dispatchNamespace?: stri
           : [],
       ),
     ),
+  );
+
+/**
+ * The namespace Cloudflare provisioned for each of a Preview's own Durable
+ * Object classes, by class. A Preview's namespaces name the parent Worker as
+ * their `script`, like the parent's own, and carry the Preview's id. They can
+ * appear in the listing shortly after the Preview deployment that creates
+ * them, so a missing class is retried before it fails.
+ */
+const getPreviewDurableObjectNamespaces = (
+  accountId: string,
+  parentName: string,
+  previewId: string,
+  classNames: readonly string[],
+) =>
+  durableObjectsApi.listNamespaces.items({ accountId, perPage: LIST_NAMESPACES_PAGE_SIZE }).pipe(
+    Stream.runCollect,
+    Effect.flatMap((namespaces) => {
+      const byClass: Record<string, string> = {};
+      for (const ns of namespaces) {
+        if (ns.id && ns.class && ns.script === parentName && ns.preview?.id === previewId) {
+          byClass[ns.class] = ns.id;
+        }
+      }
+      const missing = classNames.filter((className) => !byClass[className]);
+      return missing.length > 0
+        ? Effect.fail(new MissingDurableObjects({ scriptName: parentName, expected: missing }))
+        : Effect.succeed(
+            Object.fromEntries(classNames.map((className) => [className, byClass[className]!])),
+          );
+    }),
+    Effect.retry({
+      while: (error) => error._tag === "MissingDurableObjects",
+      schedule: Schedule.spaced("1 second"),
+      times: 15,
+    }),
   );
 
 type ObservedDurableObjectNamespace = {
@@ -5976,13 +6130,13 @@ const withoutClasses = (
 ) =>
   classes.size === 0
     ? bindings
-    : bindings.map((binding) =>
-        binding.data.bindings === undefined
-          ? binding
-          : {
-              ...binding,
-              data: {
-                ...binding.data,
+    : bindings.map((binding) => ({
+        ...binding,
+        data: {
+          ...binding.data,
+          ...(binding.data.bindings === undefined
+            ? {}
+            : {
                 bindings: binding.data.bindings.filter(
                   (item: WorkerBinding) =>
                     !(
@@ -5993,65 +6147,42 @@ const withoutClasses = (
                       (item.scriptName === undefined || item.scriptName === scriptName)
                     ),
                 ),
-              },
-            },
-      );
-
-/** `bindings` without the Durable Object bindings named in `names`. */
-const withoutBindings = (
-  bindings: ResourceBinding<Worker["Binding"]>[],
-  scriptName: string,
-  names: ReadonlySet<string>,
-) =>
-  names.size === 0
-    ? bindings
-    : bindings.map((binding) =>
-        binding.data.bindings === undefined
-          ? binding
-          : {
-              ...binding,
-              data: {
-                ...binding.data,
-                bindings: binding.data.bindings.filter(
-                  (item: WorkerBinding) =>
-                    !(
-                      item.type === "durable_object_namespace" &&
-                      names.has(item.name) &&
-                      (item.scriptName === undefined || item.scriptName === scriptName)
-                    ),
+              }),
+          ...(binding.data.retiringClasses === undefined
+            ? {}
+            : {
+                retiringClasses: binding.data.retiringClasses.filter(
+                  ({ className }) => !classes.has(className),
                 ),
-              },
-            },
-      );
+              }),
+        },
+      }));
+
+/** `news` without the exports of `classes`. */
+const withoutExports = <P extends { readonly exports?: Record<string, unknown> }>(
+  news: P,
+  classes: ReadonlySet<string>,
+): P =>
+  classes.size === 0 || news.exports === undefined
+    ? news
+    : {
+        ...news,
+        exports: Object.fromEntries(
+          Object.entries(news.exports).filter(([className]) => !classes.has(className)),
+        ),
+      };
 
 /**
- * Leave out of the upload each version 0 Domain class whose objects have all
- * moved to the shared class, so the upload deletes it (see
- * `DomainVersion.keptMovers`). The others stay live, to finish moving.
+ * The Durable Object classes the script has (from its settings), and those
+ * this upload renames from one it has: a renamed class keeps its objects.
  */
-const withoutSettledDomainMovers = Effect.fn(function* ({
-  accountId,
-  scriptName,
-  bindings,
-  existingSettings,
-}: {
-  accountId: string;
-  scriptName: string;
-  bindings: ResourceBinding<Worker["Binding"]>[];
-  existingSettings:
-    | {
-        readonly tags?: ReadonlyArray<string> | null;
-        readonly bindings?: ReadonlyArray<unknown> | null;
-      }
-    | undefined;
-}) {
-  const domainClasses = bindings.flatMap((b) => b.data.domainClasses ?? []);
-  const allMovers = domainClasses.filter((domainClass) => domainClass.mover);
-  if (allMovers.length === 0) return { bindings, dropped: new Set<string>() };
-  const tags = Array.from(existingSettings?.tags ?? []);
-  const deployed = DomainVersion.deployedVersion(tags);
-  const deployedClasses = new Set(
-    (existingSettings?.bindings ?? []).flatMap((binding) =>
+const hostedClasses = (
+  settingsBindings: ReadonlyArray<unknown> | null | undefined,
+  bindings: ResourceBinding<Worker["Binding"]>[],
+  scriptName: string,
+) => {
+  const hosted = new Set(
+    (settingsBindings ?? []).flatMap((binding) =>
       typeof binding === "object" &&
       binding !== null &&
       "type" in binding &&
@@ -6063,82 +6194,30 @@ const withoutSettledDomainMovers = Effect.fn(function* ({
         : [],
     ),
   );
-  // Classes from before Domain versions are renamed to their version 0 names in this upload.
-  const { renamed } = yield* DomainVersion.migrate({
-    scriptName,
-    deployed,
-    classes: domainClasses,
-    deployedClasses,
-  });
-  for (const { to } of renamed) deployedClasses.add(to);
-  // A class from before Domain versions that models shared is bound by each of
-  // them: only the binding of the model that keeps its data stays.
-  const beforeVersions = allMovers.filter((mover) => mover.binding !== undefined);
-  const keepers = yield* DomainVersion.legacyKeepers({
-    scriptName,
-    classes: beforeVersions,
-    deployedClasses,
-  });
-  const unkept = new Set(
-    beforeVersions
-      .filter((mover) => keepers.get(mover.className)?.binding !== mover.binding)
-      .map((mover) => mover.binding!),
-  );
-  const movers = allMovers.filter(
-    (mover) => mover.binding === undefined || !unkept.has(mover.binding),
-  );
-  const leaveOut = (dropped: ReadonlySet<string>) => ({
-    bindings: withoutBindings(withoutClasses(bindings, scriptName, dropped), scriptName, unkept),
-    dropped,
-  });
-  // None of them on the script (a new Worker, or every one deleted): nothing to look up.
-  if (!movers.some((mover) => deployedClasses.has(mover.className)))
-    return leaveOut(new Set(allMovers.map((mover) => mover.className)));
-  // The migration Workflow's complete passes: see `DomainVersion.passMarker`.
-  const workflowName = bindings
-    .flatMap((b) => b.data.bindings ?? [])
-    .find(
-      (item: WorkerBinding) =>
-        item.type === "workflow" && item.className === DomainVersion.MIGRATION_WORKFLOW,
-    );
-  const passes =
-    workflowName === undefined ||
-    !("workflowName" in workflowName) ||
-    typeof workflowName.workflowName !== "string"
-      ? []
-      : Array.from(
-          yield* workflowsApi.listInstances
-            .items({
-              accountId,
-              workflowName: workflowName.workflowName as string,
-              status: "complete",
-            })
-            .pipe(
-              Stream.map((instance) => instance.id),
-              Stream.runCollect,
-              Effect.catchTag("WorkflowNotFound", () => Effect.succeed([] as Array<string>)),
-            ),
-        );
-  // Each class's namespace: a pass counts only for the namespace it moved.
-  const namespaces = new Map<string, string>();
-  for (const namespace of yield* durableObjectsApi.listNamespaces
-    .items({ accountId })
-    .pipe(Stream.runCollect))
-    if (namespace.script === scriptName && namespace.class && namespace.id)
-      namespaces.set(namespace.class, namespace.id);
-  const kept = DomainVersion.keptMovers({ movers, deployedClasses, namespaces, passes });
-  for (const className of kept) {
-    const namespace = namespaces.get(className);
-    const times =
-      namespace === undefined ? [] : DomainVersion.passesOf(className, namespace, passes);
-    yield* Effect.logInfo(
-      `Keeping the old Domain class ${className} while its objects move (namespace ${namespace ?? "not listed"}, passes at ${times.length === 0 ? "none" : times.join(", ")}).`,
-    );
+  for (const item of bindings.flatMap((binding) => binding.data.bindings ?? []))
+    if (
+      item.type === "durable_object_namespace" &&
+      "renamedFrom" in item &&
+      typeof item.renamedFrom === "string" &&
+      hosted.has(item.renamedFrom) &&
+      "className" in item &&
+      typeof item.className === "string"
+    )
+      hosted.add(item.className);
+  return hosted;
+};
+
+/** Retiring classes by group, each class once. */
+const groupRetiring = (retiring: ReadonlyArray<RetiringClass>) => {
+  const groups = new Map<string, Array<RetiringClass>>();
+  for (const retiringClass of retiring) {
+    const group = groups.get(retiringClass.group) ?? [];
+    if (!group.some(({ className }) => className === retiringClass.className))
+      group.push(retiringClass);
+    groups.set(retiringClass.group, group);
   }
-  return leaveOut(
-    new Set(allMovers.map((mover) => mover.className).filter((className) => !kept.has(className))),
-  );
-});
+  return groups;
+};
 
 /**
  * The `{ type: "worker", cache }` export entries for a Worker's configured
@@ -6412,6 +6491,7 @@ function getDurableObjectBindings(bindings: ReadonlyArray<ResourceBinding>, work
             Array.isArray(item.transferredFrom) && item.transferredFrom.length === 0
               ? undefined
               : item.transferredFrom,
+          renamedFrom: item.renamedFrom,
           storage: item.storage,
         },
       ];

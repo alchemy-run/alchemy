@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { CloudflareApiLive } from "@alchemy.run/cloudflare/Providers";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
@@ -8,9 +8,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { getWorkerTags } from "../Utils/Worker.ts";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import DuplicateWorker from "./fixtures/duplicate-worker.ts";
 import Stack from "./fixtures/isolation-stack.ts";
@@ -18,7 +18,7 @@ import TwiceWorker from "./fixtures/twice-worker.ts";
 import { boundClasses } from "./move.ts";
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
-  providers: Cloudflare.providers(),
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
 });
 
 const stack = beforeAll(deploy(Stack));
@@ -85,20 +85,6 @@ test(
     expect(yield* call(base, "POST", `/saga/Support/${key}/alex`)).toEqual({ owner: "alex" });
   }),
   { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 180_000 },
-);
-
-test(
-  "a Worker hosting models records the Domain version it was deployed with",
-  Effect.gen(function* () {
-    const { workerName } = yield* stack;
-    const { accountId } = yield* yield* CloudflareEnvironment;
-    expect(
-      (yield* getWorkerTags(workerName, accountId)).filter((tag) =>
-        tag.startsWith("alchemy:domain:"),
-      ),
-    ).toEqual(["alchemy:domain:v1"]);
-  }).pipe(Effect.provide(CloudflareApiLive()), Effect.scoped),
-  { tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"], timeout: 60_000 },
 );
 
 test(

@@ -77,8 +77,10 @@ export type ShareProps = {
    */
   name?: string;
   /**
-   * Recipients of the share. The create API requires at least one. Changes
-   * are reconciled via the recipient sub-API (add/remove deltas). Do not mix
+   * Recipients of the share. The create API requires at least one. Account
+   * changes are reconciled via the recipient sub-API (add/remove deltas);
+   * changing the organization recipients replaces the share, because
+   * Cloudflare takes them only at creation. Do not mix
    * with standalone `ShareRecipient` resources on the same share — the Share
    * provider treats this list as the full desired set.
    */
@@ -242,10 +244,15 @@ export const ShareProvider = () =>
           ),
         );
     }),
-    diff: Effect.fn(function* ({ news, output }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return undefined;
       const { accountId } = yield* yield* CloudflareEnvironment;
       if ((output?.accountId ?? accountId) !== accountId) {
+        return { action: "replace" } as const;
+      }
+      // Cloudflare takes organization recipients only when it creates the
+      // share; the recipient API adds accounts.
+      if (olds !== undefined && organizationRecipients(olds) !== organizationRecipients(news)) {
         return { action: "replace" } as const;
       }
       return undefined;
@@ -330,6 +337,8 @@ export const ShareProvider = () =>
         (r) => r.associationStatus !== "disassociated",
       );
       for (const desired of desiredRecipients) {
+        // Organization recipients are set when the share is created.
+        if (desired.accountId === undefined) continue;
         const match = liveRecipients.find(
           (r) => r.accountId === (desired.accountId ?? desired.organizationId),
         );
@@ -338,7 +347,6 @@ export const ShareProvider = () =>
             accountId: acct,
             shareId: observed.id,
             recipientAccountId: desired.accountId,
-            organizationId: desired.organizationId,
           });
         }
       }
@@ -448,6 +456,13 @@ const findByName = (accountId: string, name: string) =>
         .at(0),
     ),
   );
+
+/** The share's organization recipients as one comparable key. */
+const organizationRecipients = (props: { recipients: readonly ShareRecipientInput[] }) =>
+  props.recipients
+    .flatMap((r) => (r.organizationId === undefined ? [] : [r.organizationId]))
+    .sort()
+    .join(",");
 
 const createShareName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import { waitForOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
@@ -68,8 +69,28 @@ export type WorkloadIdentityPool = Resource<
     state: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  WorkloadIdentityPoolLookup
 >;
+
+/**
+ * Props for {@link WorkloadIdentityPool.lookup}: find a workload identity
+ * pool this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface WorkloadIdentityPoolLookup {
+  /**
+   * Pool id: 4-32 lowercase letters, digits, or hyphens (the `gcp-` prefix
+   * is reserved). Deleted pools keep their id for 30 days; redeploying the
+   * same id in that window restores the pool instead of creating a new one.
+   */
+  workloadIdentityPoolId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Google Cloud IAM workload identity pool: a trust boundary that lets
@@ -98,6 +119,19 @@ export type WorkloadIdentityPool = Resource<
  *   name: deployer.name,
  *   role: "roles/iam.workloadIdentityUser",
  *   member: Output.interpolate`principalSet://iam.googleapis.com/${pool.name}/attribute.repository/my-org/my-repo`,
+ * });
+ * ```
+ *
+ * ### Looking up an existing workload identity pool
+ * `WorkloadIdentityPool.lookup` references a workload identity pool Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared workload identity pool.
+ *
+ * **Example:** Reference an existing workload identity pool
+ * ```typescript
+ * const workloadIdentityPool = GCP.IAM.WorkloadIdentityPool.lookup({
+ *   workloadIdentityPoolId: "my-workload-identity-pool",
  * });
  * ```
  *
@@ -172,6 +206,15 @@ export const WorkloadIdentityPoolProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ workloadIdentityPoolId }) {
+      const env = yield* GcpEnvironment.current;
+      const project = env.project;
+      const existing = yield* getPool(poolName(project, workloadIdentityPoolId));
+      // A deleted pool is recoverable for 30 days but is not a live resource.
+      if (existing === undefined || existing.state === "DELETED") return undefined;
+      return toAttrs(existing, project, workloadIdentityPoolId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

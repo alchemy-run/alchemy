@@ -8,7 +8,7 @@ import {
   type Service as RailwayService,
   type VariableUpsertInput,
 } from "@distilled.cloud/railway";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, stripUnowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -128,8 +128,22 @@ export type Redis = Resource<
     deploymentStatus: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RedisLookup
 >;
+
+/**
+ * Props for {@link Redis.lookup}: find a Redis service this stack
+ * doesn't manage by its project, environment and id.
+ */
+export interface RedisLookup {
+  /** Railway project id. */
+  projectId: string;
+  /** Railway environment id. */
+  environmentId: string;
+  /** Railway service id of the Redis container. */
+  serviceId: string;
+}
 
 const resolveRedisProps = (
   props: RedisProps | Effect.Effect<RedisProps, never, Providers>,
@@ -251,6 +265,20 @@ const RedisResource = Resource<Redis>("Railway.Redis");
  *
  * export const Site = Railway.Project("Site");
  * export const Cache = Railway.Redis("Cache", { project: Site });
+ * ```
+ *
+ * ### Looking up an existing Redis service
+ * `Redis.lookup` references a Redis service Alchemy doesn't manage (created in
+ * the Railway dashboard or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted.
+ *
+ * **Example:** Connect to an existing Redis
+ * ```typescript
+ * const cache = Railway.Redis.lookup({
+ *   projectId: "a1b2c3d4-…",
+ *   environmentId: "e5f6a7b8-…",
+ *   serviceId: "c9d0e1f2-…",
+ * });
  * ```
  *
  * @resource
@@ -548,6 +576,49 @@ export {
   run as runRedisCommand,
 } from "@alchemy.run/redis/Protocol";
 
+/**
+ * Observe a Redis from its last known attributes or its props. `lookup`
+ * passes the ids it was given as a partial `output`, as a refresh would.
+ */
+const readRedisAttributes = Effect.fn(function* ({
+  id,
+  olds,
+  output,
+}: {
+  id: string;
+  olds?: RedisProps;
+  output?: Partial<Redis["Attributes"]>;
+}) {
+  const projectId =
+    output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
+  const environmentId =
+    output?.environmentId ??
+    (olds !== undefined
+      ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.project))
+      : undefined);
+  const name = yield* resolveName(id, olds?.name, output?.name);
+  const byId =
+    output?.serviceId !== undefined && output.serviceId.length > 0
+      ? yield* getById(output.serviceId)
+      : undefined;
+  const found = byId ?? (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
+  if (found === undefined) return undefined;
+  const resolvedProjectId = projectIdOf(found) ?? projectId ?? "";
+  const resolvedEnvId =
+    environmentId ?? environmentIdOf(olds?.project) ?? output?.environmentId ?? "";
+  const instance =
+    resolvedEnvId.length > 0 ? yield* getInstance(resolvedEnvId, found.id) : undefined;
+  const attrs = toAttrs({
+    service: found,
+    instance,
+    projectId: resolvedProjectId,
+    environmentId: resolvedEnvId,
+    image: instance?.source?.image ?? olds?.image ?? DEFAULT_REDIS_IMAGE,
+  });
+  if (output !== undefined) return attrs;
+  return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
+});
+
 export const RedisProvider = () =>
   Provider.succeed(Redis, {
     stables: ["serviceId", "projectId", "environmentId"],
@@ -566,37 +637,19 @@ export const RedisProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
-      const projectId =
-        output?.projectId ?? (olds !== undefined ? projectIdOf(olds.project) : undefined);
-      const environmentId =
-        output?.environmentId ??
-        (olds !== undefined
-          ? (environmentIdOf(olds.environment) ?? environmentIdOf(olds.project))
-          : undefined);
-      const name = yield* resolveName(id, olds?.name, output?.name);
-      const byId =
-        output?.serviceId !== undefined && output.serviceId.length > 0
-          ? yield* getById(output.serviceId)
-          : undefined;
-      const found =
-        byId ?? (projectId !== undefined ? yield* findByName(projectId, name) : undefined);
-      if (found === undefined) return undefined;
-      const resolvedProjectId = projectIdOf(found) ?? projectId ?? "";
-      const resolvedEnvId =
-        environmentId ?? environmentIdOf(olds?.project) ?? output?.environmentId ?? "";
-      const instance =
-        resolvedEnvId.length > 0 ? yield* getInstance(resolvedEnvId, found.id) : undefined;
-      const attrs = toAttrs({
-        service: found,
-        instance,
-        projectId: resolvedProjectId,
-        environmentId: resolvedEnvId,
-        image: instance?.source?.image ?? olds?.image ?? DEFAULT_REDIS_IMAGE,
-      });
-      if (output !== undefined) return attrs;
-      return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
-    }),
+    lookup: ({ projectId, environmentId, serviceId }) =>
+      // The ids find it; an empty name only stops `read` deriving a physical
+      // name, which needs a deploy's resource context. Railway answers an id
+      // it doesn't know with Not Authorized, so that is a miss too.
+      readRedisAttributes({
+        id: serviceId,
+        output: { projectId, environmentId, serviceId, name: "" },
+      }).pipe(
+        Effect.map((attrs) => (attrs === undefined ? undefined : stripUnowned(attrs))),
+        Effect.catchTag("RailwayForbidden", () => Effect.undefined),
+      ),
+
+    read: readRedisAttributes,
 
     list: Effect.fn(function* () {
       const projects = yield* ownedProjects();

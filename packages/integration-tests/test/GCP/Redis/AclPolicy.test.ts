@@ -6,6 +6,7 @@ import * as redis from "@distilled.cloud/gcp/redis_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -64,6 +65,13 @@ test.provider(
           });
           return { policy };
         }),
+      );
+      yield* expectFound(
+        GCP.Redis.AclPolicy.lookup({
+          aclPolicyId: created.policy.aclPolicyId,
+          location: created.policy.location,
+        }),
+        created.policy,
       );
 
       expect(created.policy.name).toContain("/aclPolicies/");

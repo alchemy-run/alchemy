@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -97,8 +98,32 @@ export type DataDomain = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DataDomainLookup
 >;
+
+/**
+ * Props for {@link DataDomain.lookup}: find a data domain this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface DataDomainLookup {
+  /**
+   * DataDomain id. Must contain only lowercase letters, numbers and
+   * hyphens, start with a letter, end with a letter or number, and be 1-63
+   * characters.
+   */
+  dataDomainId: string;
+  /**
+   * Region (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Dataplex DataDomain — a logical grouping of data resources for
@@ -122,6 +147,19 @@ export type DataDomain = Resource<
  *       },
  *     ],
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing data domain
+ * `DataDomain.lookup` references a data domain Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * data domain.
+ *
+ * **Example:** Reference an existing data domain
+ * ```typescript
+ * const dataDomain = GCP.Dataplex.DataDomain.lookup({
+ *   dataDomainId: "my-data-domain",
  * });
  * ```
  *
@@ -202,6 +240,15 @@ export const DataDomainProvider = () =>
         nextParent: news.parentDataDomain ?? olds?.parentDataDomain,
       });
     }),
+
+    lookup: Effect.fn(function* ({ dataDomainId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, dataDomainId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

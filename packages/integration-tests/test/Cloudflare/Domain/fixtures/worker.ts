@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -39,7 +39,7 @@ export default class DomainScheduleWorker extends Cloudflare.Worker<DomainSchedu
         if (!route) return HttpServerResponse.text("Not Found", { status: 404 });
         const id = decodeURIComponent(route[2]!);
         if (route[1] === "schedule" || route[1] === "rearm") {
-          const receipt = yield* holds.schedule(id, new ExpireHold(), {
+          const receipt = yield* holds.schedule(new ExpireHold({ id }), {
             after: route[1] === "rearm" ? "1 second" : HOLD_WINDOW,
             commandId: EXPIRY,
           });
@@ -57,8 +57,8 @@ export default class DomainScheduleWorker extends Cloudflare.Worker<DomainSchedu
               ),
             ),
           });
-        if (route[1] === "place") yield* holds.send(id, new PlaceHold());
-        if (route[1] === "release") yield* holds.send(id, new ReleaseHold());
+        if (route[1] === "place") yield* holds.send(new PlaceHold({ id }));
+        if (route[1] === "release") yield* holds.send(new ReleaseHold({ id }));
         return yield* HttpServerResponse.json(yield* holds.get(id));
       }),
     };

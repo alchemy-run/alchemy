@@ -1,6 +1,11 @@
 import * as ECS from "@alchemy.run/aws/ECS";
 import * as Effect from "effect/Effect";
-import { makePoolLayer, NODE_DOCKERFILE, type PoolSettings } from "../internal/PoolHost.ts";
+import {
+  isImageProgram,
+  makePoolLayer,
+  NODE_DOCKERFILE,
+  type PoolSettings,
+} from "../internal/PoolHost.ts";
 import { nodeEnvironment, poolNetworkOf, resolvePoolNetwork } from "./internal/Pool.ts";
 
 export interface EcsPoolOptions extends PoolSettings {
@@ -77,10 +82,12 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
         const network = yield* resolvePoolNetwork(id, nodes.network, options.cidrBlock);
         const cluster = yield* ECS.Cluster(`${id}Cluster`, {});
         // Every class the pool hosts is bundled into its node image.
+        // A Rust program is its own image, built from its staged crate.
         yield* ECS.Service(`${id}Nodes`, {
-          ...program,
+          ...(isImageProgram(program)
+            ? program
+            : { ...program, dockerfile: { content: NODE_DOCKERFILE } }),
           cluster,
-          dockerfile: { content: NODE_DOCKERFILE },
           desiredCount: options.replicas ?? 1,
           cpu: options.cpu ?? 512,
           memory: options.memory ?? 1024,

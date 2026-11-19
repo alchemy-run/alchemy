@@ -88,8 +88,25 @@ export type AccessPoliciesAccessLevel = Resource<
     custom: AccessLevelCustom | undefined;
   },
   never,
-  Providers
+  Providers,
+  AccessPoliciesAccessLevelLookup
 >;
+
+/**
+ * Props for {@link AccessPoliciesAccessLevel.lookup}: find an access
+ * policies access level this stack doesn't manage by its identifiers.
+ */
+export interface AccessPoliciesAccessLevelLookup {
+  /**
+   * Access level id (the `{access_level}` segment). Must begin with a
+   * letter, then alphanumeric or `_`, max 50 characters.
+   */
+  accessLevelId: string;
+  /**
+   * Parent access policy (`accessPolicies/{policy}` or the policy id).
+   */
+  policy: string;
+}
 
 /**
  * An Access Context Manager access level.
@@ -146,6 +163,20 @@ export type AccessPoliciesAccessLevel = Resource<
  *     },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing access policies access level
+ * `AccessPoliciesAccessLevel.lookup` references an access policies access
+ * level Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared access policies access level.
+ *
+ * **Example:** Reference an existing access policies access level
+ * ```typescript
+ * const accessPoliciesAccessLevel = GCP.AccessContextManager.AccessPoliciesAccessLevel.lookup({
+ *   accessLevelId: "my-access-level",
+ *   policy: "my-policy",
+ * });
  * ```
  *
  * @resource
@@ -206,6 +237,14 @@ export const AccessPoliciesAccessLevelProvider = () =>
       const policyChanged =
         previousPolicy !== undefined && policyNameOf(news.policy) !== policyNameOf(previousPolicy);
       return replaceOnIdentity(idChanged || policyChanged);
+    }),
+
+    lookup: Effect.fn(function* ({ accessLevelId, policy }) {
+      if (policy === undefined) return undefined;
+      const name = resourceNameOf(policy, "accessLevels", accessLevelId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

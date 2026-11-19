@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -91,8 +92,36 @@ export type SourcesDiskMigrationJob = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SourcesDiskMigrationJobLookup
 >;
+
+/**
+ * Props for {@link SourcesDiskMigrationJob.lookup}: find a sources disk
+ * migration job this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface SourcesDiskMigrationJobLookup {
+  /**
+   * Disk migration job id.
+   */
+  diskMigrationJobId: string;
+  /**
+   * Region used when `source` is a bare id.
+   */
+  location?: string;
+  /**
+   * Parent source. Full name
+   * `projects/{project}/locations/{location}/sources/{source}` or the
+   * source id (combined with `location`).
+   */
+  source: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A VM Migration disk migration job that copies an unattached source
@@ -116,6 +145,20 @@ export type SourcesDiskMigrationJob = Resource<
  *       diskId: "imported-boot",
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing sources disk migration job
+ * `SourcesDiskMigrationJob.lookup` references a sources disk migration job
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared sources disk migration job.
+ *
+ * **Example:** Reference an existing sources disk migration job
+ * ```typescript
+ * const sourcesDiskMigrationJob = GCP.VMMigration.SourcesDiskMigrationJob.lookup({
+ *   diskMigrationJobId: "my-disk-migration-job",
+ *   source: "my-source",
  * });
  * ```
  *
@@ -209,6 +252,21 @@ export const SourcesDiskMigrationJobProvider = () =>
         extra: previousVolume !== nextVolume,
       });
     }),
+
+    lookup: Effect.fn(function* ({
+      diskMigrationJobId,
+      location: lookupLocation,
+      source: lookupSource,
+    }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const source =
+        lookupSource !== undefined ? sourceOf(lookupSource, env.project, location) : "";
+      const name = source.length > 0 ? resourceName(source, diskMigrationJobId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

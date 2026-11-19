@@ -83,9 +83,8 @@ export class NoteWritten extends Domain.Event("NoteWritten", {
 
 /** Write a note in your own notebook. */
 export class WriteNote extends Domain.Command("WriteNote", {
-  target: UserId,
   middleware: [Session],
-  input: { text: Schema.NonEmptyString },
+  input: { userId: UserId, text: Schema.NonEmptyString },
   events: [NoteWritten],
   rejects: [NotYours],
 }) {}
@@ -111,6 +110,7 @@ export class Notebook extends Domain.Aggregate("Notebook", {
   state: Schema.Struct({ notes: Schema.Int }),
   initial: { notes: 0 },
   commands: [WriteNote],
+  keyOf: (cmd) => cmd.userId,
   decide: {
     WriteNote: Effect.fn(function* (_, cmd, { id }) {
       const user = yield* CurrentUser;
@@ -293,7 +293,7 @@ export const AuthDb = Cloudflare.D1.Database("AuthDb");
 // src/NotesWorker.ts
 import { CloudflareD1 } from "@alchemy.run/better-auth/CloudflareD1";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as Layer from "effect/Layer";
@@ -457,7 +457,7 @@ export const WriteNote = Command.define("WriteNote", {
   execute: ({ userId, text }) =>
     Effect.gen(function* () {
       const notes = yield* NotesApi.Client;
-      yield* notes.WriteNote(userId, { text });
+      yield* notes.WriteNote({ userId, text });
       return Message.Saved();
     }).pipe(Effect.catch((error) => Effect.succeed(Message.Failed({ reason: error._tag })))),
 });
@@ -626,13 +626,18 @@ The app's Worker serves the built page and forwards `/api` to the Notes Worker. 
 ```typescript
 // alchemy.run.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import NotesWorker from "./src/NotesWorker.ts";
 
 export default Alchemy.Stack(
   "DomainBetterAuth",
-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+    state: Cloudflare.state(),
+  },
   Effect.gen(function* () {
     const notes = yield* NotesWorker;
     // The foldkit app, built with Vite. Its Worker serves the build and

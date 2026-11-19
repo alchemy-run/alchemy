@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { ignoredCodes } from "./internal.ts";
@@ -96,8 +97,26 @@ export type NetworkFirewallPolicy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  NetworkFirewallPolicyLookup
 >;
+
+/**
+ * Props for {@link NetworkFirewallPolicy.lookup}: find a network firewall
+ * policy this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface NetworkFirewallPolicyLookup {
+  /**
+   * Policy name (RFC1035, 1-63 characters).
+   */
+  networkFirewallPolicyName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Compute Engine network firewall policy.
@@ -135,6 +154,19 @@ export type NetworkFirewallPolicy = Resource<
  * const policy = yield* GCP.Compute.NetworkFirewallPolicy("VpcFw", {
  *   networkFirewallPolicyName: "app-nfw",
  *   associations: [{ name: "vpc", attachmentTarget: network.selfLink }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing network firewall policy
+ * `NetworkFirewallPolicy.lookup` references a network firewall policy
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared network firewall policy.
+ *
+ * **Example:** Reference an existing network firewall policy
+ * ```typescript
+ * const networkFirewallPolicy = GCP.Compute.NetworkFirewallPolicy.lookup({
+ *   networkFirewallPolicyName: "my-network-firewall-policy",
  * });
  * ```
  *
@@ -563,6 +595,13 @@ export const NetworkFirewallPolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ networkFirewallPolicyName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, networkFirewallPolicyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

@@ -1,0 +1,64 @@
+---
+title: Dicts
+description: Share key-value data between Modal sandboxes, functions and Workers.
+---
+
+import Records from "../../../../components/diagrams/Records.astro";
+
+A **Dict** is a key-value store in an environment. Functions, Servers, Sandboxes, Python code and your Workers read and write the same entries, so it's where they share small results and state.
+
+## Entries are JSON, and expire
+
+Keys and values are JSON, so Python reads them with `json.loads`. An entry expires 7 days after its last write:
+
+<Records
+  title="Results · Modal Dict"
+  columns={["key", "value"]}
+  keys={1}
+  rows={[
+    ["last-run", "{ ok: true }"],
+    ["a", "1"],
+    ["b", "2"],
+  ]}
+  query={{ label: 'get("last-run")', rows: [0] }}
+  caption="Each entry is one JSON key and one JSON value. get reads one entry by its key."
+/>
+
+## Declare a Dict
+
+```typescript title="src/Storage.ts"
+import * as Modal from "@alchemy.run/modal";
+
+export const Results = Modal.Dict("Results", {});
+```
+
+## Bind it in a runtime
+
+```typescript
+const results = yield* Modal.ReadWriteDict(Results);
+```
+
+Provide `Modal.ReadWriteDictHttp`. Use `ReadDict` or `WriteDict` for one direction.
+
+## Write entries
+
+```typescript
+yield* results.put("last-run", { ok: true });
+yield* results.update([["a", 1], ["b", 2]]);
+```
+
+## Read entries
+
+```typescript
+const last = yield* results.get<{ ok: boolean }>("last-run");
+const all = yield* results.entries();
+```
+
+## Remove entries
+
+```typescript
+const popped = yield* results.pop("a");
+yield* results.clear();
+```
+
+`pop` returns the value it removed.

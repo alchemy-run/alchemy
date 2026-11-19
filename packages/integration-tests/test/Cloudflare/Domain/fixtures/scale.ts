@@ -1,6 +1,6 @@
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
-import { DeployVersion } from "@alchemy.run/cloudflare/Domain/Version";
 import * as Domain from "@alchemy.run/domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import { DeployVersion } from "@alchemy.run/domain/Cloudflare/Version";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -22,8 +22,7 @@ export const MODELS = 10;
 const definitions = (n: number) => {
   class Opened extends Domain.Event(`Opened${n}`, { owner: Schema.String }) {}
   class Open extends Domain.Command(`Open${n}`, {
-    target: Schema.String,
-    input: { owner: Schema.String },
+    input: { id: Schema.String, owner: Schema.String },
     events: [Opened],
   }) {}
   const account = (name: string) =>
@@ -32,6 +31,7 @@ const definitions = (n: number) => {
       state: Schema.Struct({ owner: Schema.NullOr(Schema.String) }),
       initial: { owner: null },
       commands: [Open],
+      keyOf: (command: { readonly id: string }) => command.id,
       decide: {
         [`Open${n}`]: (_: unknown, { owner }: { owner: string }) => [new Opened({ owner })],
       },
@@ -102,17 +102,17 @@ export const scaleWorker = (version: number | undefined) =>
         const checking = route[2] === "checking";
         const accounts = checking ? model.checking : model.savings;
         if (route[3] === "open") {
-          const receipt = yield* accounts.send(id, new bank.Open({ owner: route[5]! } as never));
+          const receipt = yield* accounts.send(new bank.Open({ id, owner: route[5]! } as never));
           return yield* HttpServerResponse.json({ version: receipt.version });
         }
         if (route[3] === "owners") {
           const owners = checking ? model.checkingOwners : model.savingsOwners;
           const ref = ((checking ? bank.Checking : bank.Savings) as any).ref(id);
           return yield* HttpServerResponse.json(
-            Option.getOrNull(yield* owners.query(ref).pipe(Effect.orDie)),
+            Option.getOrNull(yield* owners.get(ref).pipe(Effect.orDie)),
           );
         }
-        return yield* HttpServerResponse.json(yield* accounts.state(id));
+        return yield* HttpServerResponse.json(yield* accounts.get(id));
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),

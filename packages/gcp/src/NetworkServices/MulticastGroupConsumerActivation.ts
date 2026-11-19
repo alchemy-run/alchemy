@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -123,8 +124,34 @@ export type MulticastGroupConsumerActivation = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  MulticastGroupConsumerActivationLookup
 >;
+
+/**
+ * Props for {@link MulticastGroupConsumerActivation.lookup}: find a
+ * multicast group consumer activation this stack doesn't manage by its
+ * identifiers, in the ambient project unless `project` names another.
+ */
+export interface MulticastGroupConsumerActivationLookup {
+  /**
+   * Activation id (the `{multicastGroupConsumerActivation}` segment of
+   * `proj
+   * ects/{project}/locations/{location}/multicastGroupConsumerActivations/{m
+   * ulticastGroupConsumerActivation}`). Must be at most 48 characters.
+   */
+  multicastGroupConsumerActivationId: string;
+  /**
+   * Zone of the activation (`us-central1-a`, …). `US-CENTRAL1-A` is
+   * accepted and normalized to `us-central1-a`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A multicast group consumer activation lets VMs in an associated
@@ -148,6 +175,19 @@ export type MulticastGroupConsumerActivation = Resource<
  *     labels: { env: "prod" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing multicast group consumer activation
+ * `MulticastGroupConsumerActivation.lookup` references a multicast group
+ * consumer activation Alchemy doesn't manage (created in the console or by
+ * another stack). It is read during plan/deploy, never created, updated or
+ * deleted, and binds like a declared multicast group consumer activation.
+ *
+ * **Example:** Reference an existing multicast group consumer activation
+ * ```typescript
+ * const multicastGroupConsumerActivation = GCP.NetworkServices.MulticastGroupConsumerActivation.lookup({
+ *   multicastGroupConsumerActivationId: "my-multicast-group-consumer-activation",
+ * });
  * ```
  *
  * @resource
@@ -253,6 +293,20 @@ export const MulticastGroupConsumerActivationProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ multicastGroupConsumerActivationId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_ZONE);
+      const name = resourceName(
+        env.project,
+        location,
+        COLLECTION,
+        multicastGroupConsumerActivationId,
+      );
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

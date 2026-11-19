@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteTerminalLocation,
   GetTerminalLocations,
@@ -169,8 +168,18 @@ export type TerminalLocation = Resource<
     livemode: boolean;
   },
   never,
-  Providers
+  Providers,
+  TerminalLocationLookup
 >;
+
+/**
+ * Props for {@link TerminalLocation.lookup}: find a Terminal location this stack
+ * doesn't manage by its id.
+ */
+export interface TerminalLocationLookup {
+  /** Stripe Terminal location id, e.g. `"tml_A2b3C4d5E6f7G8"`. */
+  id: string;
+}
 
 /**
  * A Stripe Terminal Location — a grouping of Terminal readers at a
@@ -242,6 +251,16 @@ export type TerminalLocation = Resource<
  *     country: "US",
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing Terminal location
+ * `TerminalLocation.lookup` references a Terminal location Alchemy doesn't manage (created in
+ * the Stripe Dashboard or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Terminal location
+ * ```typescript
+ * const ref = Stripe.TerminalLocation.lookup({ id: "tml_A2b3C4d5E6f7G8" });
  * ```
  *
  * @resource
@@ -431,6 +450,11 @@ export const TerminalLocationProvider = () =>
       return undefined;
     }),
 
+    lookup: Effect.fn(function* ({ id }) {
+      const existing = yield* getById(id);
+      return existing === undefined ? undefined : toAttrs(existing);
+    }),
+
     read: Effect.fn(function* ({ id, output }) {
       const existing = yield* observe({
         id: output?.id,
@@ -487,11 +511,8 @@ export const TerminalLocationProvider = () =>
             ? { display_name_kanji: desiredDisplayNameKanji }
             : {}),
           ...(desiredPhone.length > 0 ? { phone: desiredPhone } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-terminal-location-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-terminal-location-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

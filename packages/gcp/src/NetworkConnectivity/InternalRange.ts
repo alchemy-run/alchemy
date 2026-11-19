@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -200,8 +201,34 @@ export type InternalRange = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InternalRangeLookup
 >;
+
+/**
+ * Props for {@link InternalRange.lookup}: find an internal range this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface InternalRangeLookup {
+  /**
+   * Internal range id (the `{internal_range}` segment of
+   * `projects/{project}
+   * /locations/{location}/internalRanges/{internal_range}`). Must be 1-63
+   * characters and match `[a-z]([-a-z0-9]*[a-z0-9])?`.
+   */
+  internalRangeId: string;
+  /**
+   * Location of the range. Internal ranges are global — always `"global"`.
+   * `GLOBAL` is accepted and normalized to `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Connectivity internal range — an IPAM reservation inside a
@@ -275,6 +302,19 @@ export type InternalRange = Resource<
  *   ipCidrRange: "10.0.0.0/24",
  *   description: "app subnet space v2",
  *   labels: { env: "prod", role: "ipam" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing internal range
+ * `InternalRange.lookup` references an internal range Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * internal range.
+ *
+ * **Example:** Reference an existing internal range
+ * ```typescript
+ * const internalRange = GCP.NetworkConnectivity.InternalRange.lookup({
+ *   internalRangeId: "my-internal-range",
  * });
  * ```
  *
@@ -579,6 +619,15 @@ export const InternalRangeProvider = () =>
           !idChanged && !locationChanged && previousId !== undefined && nextId === previousId,
       };
     }),
+
+    lookup: Effect.fn(function* ({ internalRangeId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, internalRangeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

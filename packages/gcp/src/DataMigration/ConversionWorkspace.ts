@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -120,8 +121,34 @@ export type ConversionWorkspace = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ConversionWorkspaceLookup
 >;
+
+/**
+ * Props for {@link ConversionWorkspace.lookup}: find a conversion workspace
+ * this stack doesn't manage by its identifiers, in the ambient project
+ * unless `project` names another.
+ */
+export interface ConversionWorkspaceLookup {
+  /**
+   * Conversion workspace id (the `{conversionWorkspace}` segment of
+   * `project
+   * s/{project}/locations/{location}/conversionWorkspaces/{conversionWorkspa
+   * ce}`).
+   */
+  conversionWorkspaceId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Database Migration Service conversion workspace: source and
@@ -149,6 +176,19 @@ export type ConversionWorkspace = Resource<
  *   source: { engine: "ORACLE", version: "19" },
  *   destination: { engine: "POSTGRESQL", version: "15" },
  *   globalSettings: { skip_triggers: "true" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing conversion workspace
+ * `ConversionWorkspace.lookup` references a conversion workspace Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared conversion workspace.
+ *
+ * **Example:** Reference an existing conversion workspace
+ * ```typescript
+ * const conversionWorkspace = GCP.DataMigration.ConversionWorkspace.lookup({
+ *   conversionWorkspaceId: "my-conversion-workspace",
  * });
  * ```
  *
@@ -262,6 +302,15 @@ export const ConversionWorkspaceProvider = () =>
             (olds?.destinationProvider ?? output?.destinationProvider),
       });
     }),
+
+    lookup: Effect.fn(function* ({ conversionWorkspaceId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, conversionWorkspaceId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

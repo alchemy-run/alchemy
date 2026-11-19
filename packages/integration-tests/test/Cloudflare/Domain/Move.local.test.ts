@@ -1,15 +1,20 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { call, seedAccounts, seedOne, serving } from "./bench.ts";
 import MoveV0 from "./fixtures/move/v0.ts";
 import MoveV1 from "./fixtures/move/v1.ts";
 import { depositsOf, writer } from "./move.ts";
 
-const { test } = Test.make({ providers: Cloudflare.providers(), dev: true });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+  dev: true,
+});
 
 const DEPTH = Number(process.env.DOMAIN_MOVE_DEPTH ?? 1000);
 const WIDTH = 20;

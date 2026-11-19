@@ -9,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, stripInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -117,8 +118,37 @@ export type LocationsDlpJob = Resource<
     endTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LocationsDlpJobLookup
 >;
+
+/**
+ * Props for {@link LocationsDlpJob.lookup}: find a locations dlp job this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface LocationsDlpJobLookup {
+  /**
+   * Job id (the `{dlpJob}` segment of
+   * `projects/{project}/locations/{location}/dlpJobs/{dlpJob}`). Must match
+   * `[a-zA-Z0-9_-]+` and is at most 64 characters.
+   */
+  jobId: string;
+  /**
+   * Processing location (`global`, `us`, `europe-west1`, …). `us-central1`
+   * is not a valid DLP job location.
+   */
+  location?: string;
+  /**
+   * Risk-analysis job configuration. Mutually exclusive with `inspectJob`.
+   */
+  riskJob?: RiskAnalysisJobConfig;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Cloud DLP job (`projects.locations.dlpJobs`).
@@ -139,6 +169,17 @@ export type LocationsDlpJob = Resource<
  *     storageConfig: { hybridOptions: { description: "inbox" } },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing locations dlp job
+ * `LocationsDlpJob.lookup` references a locations dlp job Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * locations dlp job.
+ *
+ * **Example:** Reference an existing locations dlp job
+ * ```typescript
+ * const locationsDlpJob = GCP.DLP.LocationsDlpJob.lookup({ jobId: "my-job" });
  * ```
  *
  * @resource
@@ -276,6 +317,16 @@ export const LocationsDlpJobProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ jobId, location: lookupLocation, riskJob }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, LOCATION);
+      const name = resourceName(env.project, location, jobId, riskJob !== undefined);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      const attrs = toAttrs(existing, env.project);
+      return attrs;
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

@@ -90,7 +90,7 @@ jobs:
           ${{ contains(github.event.pull_request.labels.*.name, 'force-ci') && '--all' || '' }}
           --rebuild-all-path 'scripts/package-build.ts'
           --group 'alchemy=./packages/alchemy'
-          --group '@alchemy.run[Collapsed]=./packages/{better-auth,git,drizzle,sqlite,acme,archil,axiom,doppler,infisical,turso,planetscale,neon,prisma,hetzner,railway,fly,github,stripe,cloudflare,gcp,aws,domain,kubernetes,docker,redis,sql,cloudflare-runtime,frontend-frameworks,node-utils,pkg}'
+          --group '@alchemy.run[Collapsed]=./packages/{better-auth,git,drizzle,sqlite,acme,archil,boat,axiom,doppler,infisical,1password,turso,e2b,daytona,modal,planetscale,neon,prisma,hetzner,digitalocean,railway,fly,github,stripe,cloudflare,gcp,aws,domain,kubernetes,docker,redis,sql,cloudflare-runtime,frontend-frameworks,node-utils,pkg}'
 
       - name: Vouch for the manifest
         if: steps.pack.outputs.package-count != '0'
@@ -105,3 +105,11 @@ jobs:
       - name: Publish packages
         if: steps.pack.outputs.package-count != '0'
         run: pnpm exec pkg publish
+
+      # Installs the tarballs just published in a new project outside the
+      # workspace and verifies a model there. Inside the workspace the package
+      # is source the test runner transforms, which hides what an installed
+      # package does. It does nothing when @alchemy.run/domain was not packed.
+      - name: Verify a model as a consumer of @alchemy.run/domain
+        if: steps.pack.outputs.package-count != '0'
+        run: node scripts/test-domain-consumer.ts

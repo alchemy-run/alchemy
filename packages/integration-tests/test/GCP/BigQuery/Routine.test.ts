@@ -5,6 +5,7 @@ import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -49,6 +50,10 @@ test.provider(
             description: "multiply by three",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.BigQuery.Routine.lookup({ routineId: created.routineId, datasetId: created.datasetId }),
+        created,
       );
 
       expect(created.routineId).toEqual(expect.any(String));

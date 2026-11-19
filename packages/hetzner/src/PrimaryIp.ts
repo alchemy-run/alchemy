@@ -27,6 +27,16 @@ import type { Providers } from "./Providers.ts";
 
 export type PrimaryIpType = "ipv4" | "ipv6";
 
+/**
+ * Deletion was refused because the Primary IP has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class PrimaryIpDeleteProtected extends Data.TaggedError("Hetzner.PrimaryIpDeleteProtected")<{
+  readonly id: number;
+  readonly message: string;
+}> {}
+
 export interface PrimaryIpProps {
   /**
    * Address family. Cannot be changed after creation — changing it
@@ -133,8 +143,18 @@ export type PrimaryIp = Resource<
     deleteProtection: boolean;
   },
   never,
-  Providers
+  Providers,
+  PrimaryIpLookup
 >;
+
+/**
+ * Props for {@link PrimaryIp.lookup}: find a Primary IP this stack
+ * doesn't manage by its name.
+ */
+export interface PrimaryIpLookup {
+  /** Primary IP name (unique in the project). */
+  name: string;
+}
 
 /**
  * An unassigned Hetzner Cloud Primary IP. Provide `type` and either a
@@ -174,6 +194,16 @@ export type PrimaryIp = Resource<
  *   autoDelete: false,
  *   labels: { role: "mail" },
  * });
+ * ```
+ *
+ * ### Looking up an existing Primary IP
+ * `PrimaryIp.lookup` references a Primary IP Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Primary IP
+ * ```typescript
+ * const ip = Hetzner.PrimaryIp.lookup({ name: "web-v4" });
  * ```
  *
  * @resource
@@ -327,6 +357,11 @@ export const PrimaryIpProvider = () =>
       }
       return undefined;
     }),
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found, {});
+    }),
+
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const found = yield* observe({ id, name: olds?.name ?? output?.name, outputId: output?.id });
       if (found === undefined) return undefined;
@@ -425,10 +460,18 @@ export const PrimaryIpProvider = () =>
 
       return toAttrs(yield* refresh(current.id), { datacenter: news.datacenter });
     }),
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getById(output.id);
       if (current === undefined) return;
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new PrimaryIpDeleteProtected({
+            id: current.id,
+            message: `Hetzner Primary IP '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* disableProtection(current.id);
       }
       if (current.assignee_id !== null) {

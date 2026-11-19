@@ -6,6 +6,7 @@ import type { RuntimeContext } from "../../RuntimeContext.ts";
 import { ensureAlarmTables, reconcileDurableObjectAlarm } from "./DurableObjectAlarmStorage.ts";
 import type { WorkerdDurableObjectState } from "./DurableObjectState.ts";
 import type { SqlStorageValue } from "./DurableObjectStorage.ts";
+import { inStorageTransaction } from "./internal/StorageTransaction.ts";
 
 // ---------------------------------------------------------------------------
 // Scheduled Events — SQLite-backed cron/timer for Durable Objects
@@ -46,7 +47,9 @@ export const makeScheduledEvents = <I>(State: Context.Key<I, WorkerdDurableObjec
   const inTransaction = <A, R>(effect: Effect.Effect<A, never, R>) =>
     Effect.gen(function* () {
       const ctx = yield* State;
-      return yield* ctx.storage.transaction(effect).pipe(Effect.orDie);
+      return yield* inStorageTransaction(ctx.raw.storage, effect, (effect) =>
+        ctx.storage.transaction(effect),
+      ).pipe(Effect.orDie);
     });
 
   /**

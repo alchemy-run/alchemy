@@ -48,6 +48,16 @@ type Ref<T> = T | Effect.Effect<T, never, Providers>;
  */
 export type VolumeServer = { readonly serverId: number };
 
+/**
+ * Deletion was refused because the volume has delete protection on, set
+ * outside the stack. Turn it off in the Hetzner Console or API before
+ * deleting it.
+ */
+export class VolumeDeleteProtected extends Data.TaggedError("Hetzner.VolumeDeleteProtected")<{
+  readonly id: number;
+  readonly message: string;
+}> {}
+
 export interface VolumeProps {
   /**
    * Size of the Volume in GB. Minimum 10, maximum 10240. Increasing size
@@ -123,8 +133,18 @@ export type Volume = Resource<
     labels: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  VolumeLookup
 >;
+
+/**
+ * Props for {@link Volume.lookup}: find a volume this stack
+ * doesn't manage by its name.
+ */
+export interface VolumeLookup {
+  /** Volume name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud Volume — a network block device that can be attached to
@@ -171,6 +191,16 @@ export type Volume = Resource<
  *   server,
  *   automount: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing volume
+ * `Volume.lookup` references a volume Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Reference an existing volume
+ * ```typescript
+ * const data = Hetzner.Volume.lookup({ name: "data" });
  * ```
  *
  * @resource
@@ -346,6 +376,11 @@ export const VolumeProvider = () =>
       }
       return undefined;
     }),
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const found = yield* observe({ id, name: olds?.name ?? output?.name, outputId: output?.id });
       if (found === undefined) return undefined;
@@ -442,7 +477,7 @@ export const VolumeProvider = () =>
         if (desiredServerId !== undefined) {
           const { action } = yield* Hetzner.volumeActions.attachVolume({
             id: current.id,
-            server: desiredServerId,
+            assignee: { id: desiredServerId, type: "server" },
             automount: news.automount,
           });
           yield* settleAction(action);
@@ -452,11 +487,19 @@ export const VolumeProvider = () =>
 
       return toAttrs(current);
     }),
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getById(output.id);
       if (current === undefined) return;
 
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new VolumeDeleteProtected({
+            id: current.id,
+            message: `Hetzner volume '${current.id}' has delete protection on. Turn it off in the Hetzner Console or API before deleting it.`,
+          });
+        }
         const { action } = yield* Hetzner.volumeActions.changeVolumeProtection({
           id: current.id,
           delete: false,

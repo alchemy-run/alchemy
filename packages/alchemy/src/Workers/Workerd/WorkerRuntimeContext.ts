@@ -94,9 +94,9 @@ export const makeWorkerRuntimeContext = (
         // registered inside the Worker's init effect, so their requirements
         // are met by whatever init provided to itself. Capture that context
         // and run each of the handler's events in it, minus what the bridge
-        // supplies per event. Init's `ConfigProvider` is Platform's config
-        // interceptor; handlers read config through the bridge's runtime
-        // provider.
+        // supplies per event. During plan, Init's `ConfigProvider` is
+        // Platform's config interceptor; handlers always read config through
+        // the bridge's runtime provider.
         const services = (yield* Effect.context<never>()).pipe(
           Context.omit(
             ConfigProvider.ConfigProvider,

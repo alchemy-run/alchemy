@@ -140,8 +140,18 @@ export type Bucket = Resource<
     bucketName: Redacted.Redacted<string> | undefined;
   },
   never,
-  Providers
+  Providers,
+  BucketLookup
 >;
+
+/**
+ * Props for {@link Bucket.lookup}: find a Tigris bucket this stack
+ * doesn't manage by its name.
+ */
+export interface BucketLookup {
+  /** Tigris bucket / add-on name. */
+  name: string;
+}
 
 /**
  * A Fly.Bucket is Tigris S3-compatible object storage, billed through
@@ -252,6 +262,18 @@ export type Bucket = Resource<
  * });
  * ```
  *
+ * ### Looking up an existing bucket
+ * `Bucket.lookup` references a bucket Alchemy doesn't manage (created with
+ * `fly storage create` or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted. Tigris returns a bucket's access keys
+ * only when it is created, so a looked-up bucket's credential attributes
+ * are `undefined` unless Fly still reports them.
+ *
+ * **Example:** Reference an existing bucket
+ * ```typescript
+ * const assets = Fly.Bucket.lookup({ name: "my-assets" });
+ * ```
+ *
  * @resource
  * @product Bucket
  */
@@ -274,7 +296,11 @@ export class BucketProvisionFailed extends Data.TaggedError("Fly.BucketProvision
 class BucketPending extends Data.TaggedError("Fly.BucketPending")<{
   resourceName: string;
   status: string;
-}> {}
+}> {
+  override get message() {
+    return `Tigris bucket ${this.resourceName} is still ${this.status}`;
+  }
+}
 
 /**
  * Fly lists an add-on whose Tigris bucket is gone, and Fly's delete
@@ -552,8 +578,8 @@ const withTigrisKeys = <A, E>(
 
 /**
  * Signed HeadBucket. Tigris answers 404 for a name it has no bucket
- * under — even to the deleted bucket's own keys — and 403 for a bucket
- * the keys don't own.
+ * under and 403 for a bucket the keys don't own. After a delete it can
+ * keep answering 200 to the deleted bucket's own keys for minutes.
  */
 const tigrisHasBucket = (keys: TigrisKeys, bucketName: string) =>
   withTigrisKeys(keys, S3.headBucket({ Bucket: bucketName })).pipe(
@@ -589,8 +615,9 @@ const deleteTargetOf = (attrs: Bucket["Attributes"]): DeleteTarget => ({
 
 /**
  * Delete through Fly (which also empties the bucket), then confirm.
- * With the bucket's keys, Tigris decides: Fly's list lags it and can
- * keep a stale record. Without keys, the add-on must leave Fly's list.
+ * With the bucket's keys, Tigris decides (its missing-bucket answer to
+ * the delete, else HeadBucket): Fly's list lags it and can keep a stale
+ * record. Without keys, the add-on must leave Fly's list.
  * Fails with BucketPending once the confirm runs out; `missing` reports
  * whether Fly's last delete said Tigris has no such bucket while the
  * record stayed listed (only without keys).
@@ -604,6 +631,10 @@ const deleteVerified = (target: DeleteTarget) =>
       const requested = yield* Effect.result(requestDelete(target.addOnId, target.name));
       state.missing = Result.isSuccess(requested) && requested.success === "missing";
       if (target.keys !== undefined) {
+        // Fly forwards Tigris's own "bucket does not exist" for the delete:
+        // the bucket is gone. HeadBucket can keep answering 200 to the
+        // deleted bucket's keys for minutes after that.
+        if (state.missing) return;
         if (!(yield* tigrisHasBucket(target.keys, target.bucketName))) return;
         return yield* new BucketPending({ resourceName: target.name, status: "deleting" });
       }
@@ -778,6 +809,15 @@ export const BucketProvider = () =>
         return { action: "replace" as const };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* findByName(name);
+      if (found === undefined) return undefined;
+      const detail = yield* addons
+        .addOn({ id: found.id, name: found.name ?? name, provider: TIGRIS })
+        .pipe(Effect.catchTag("FlyIoParseError", () => Effect.undefined));
+      return toAttrs(detail ?? found, undefined, { name });
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

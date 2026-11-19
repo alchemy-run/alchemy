@@ -1,5 +1,5 @@
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { passMarker } from "@alchemy.run/cloudflare/Domain/Version";
+import { passMarker } from "@alchemy.run/domain/Cloudflare/Version";
 import { expect } from "@alchemy.run/test";
 import * as durableObjects from "@distilled.cloud/cloudflare/durable-objects";
 import * as workers from "@distilled.cloud/cloudflare/workers";

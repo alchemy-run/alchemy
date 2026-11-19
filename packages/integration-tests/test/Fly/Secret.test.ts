@@ -4,10 +4,13 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import TokenReader, { VAULT_SECRET_NAME, Vault, VaultSecret } from "./fixtures/token-reader.ts";
 import { flyApi } from "./limit.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
@@ -62,6 +65,10 @@ describe.concurrent("Secret", () => {
             });
             return { app, secret };
           }),
+        );
+        yield* expectFound(
+          Fly.Secret.lookup({ appName: created.secret.appName, name: created.secret.name }),
+          created.secret,
         );
 
         expect(created.secret.appName).toEqual(created.app.appName);
@@ -227,6 +234,71 @@ describe.concurrent("Secret", () => {
         "live",
       ],
       timeout: 120_000,
+    },
+  );
+
+  test.provider(
+    "a Service in its own App keeps the org token in an App secret",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            const vault = yield* Vault;
+            const secret = yield* VaultSecret;
+            const reader = yield* TokenReader;
+            return { vault, secret, reader };
+          }),
+        );
+        const { reader } = deployed;
+
+        // The token is an App secret on the reader's App under the Service's
+        // scoped name, mapped back to FLY_API_TOKEN; it is not Machine env.
+        const tokenSecret = reader.secrets?.FLY_API_TOKEN?.name;
+        expect(tokenSecret).toMatch(/^ALCHEMY_[0-9A-F]{8}_FLY_API_TOKEN$/);
+        const listed = yield* machines.listSecrets({
+          app_name: reader.appName,
+          show_secrets: false,
+        });
+        expect((listed.secrets ?? []).map((secret) => secret.name)).toContain(tokenSecret);
+        const machine = yield* machines.getMachine({
+          app_name: reader.appName,
+          machine_id: reader.machineId,
+        });
+        expect(machine.config?.env?.FLY_API_TOKEN).toBeUndefined();
+        expect(machine.config?.processes?.[0]?.secrets).toEqual(
+          expect.arrayContaining([{ env_var: "FLY_API_TOKEN", name: tokenSecret }]),
+        );
+
+        // The Machine still authenticates with it: it lists the Vault's secrets.
+        const client = yield* HttpClient.HttpClient;
+        const body = yield* client.get(`${reader.url}/secret`).pipe(
+          Effect.flatMap((response) => response.json),
+          // Fresh fly.dev hosts answer 502 or non-JSON while the Machine boots.
+          Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }),
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (json) =>
+              ((json as { names?: string[] }).names ?? []).includes(VAULT_SECRET_NAME),
+            times: 15,
+          }),
+        );
+        expect((body as { names: string[] }).names).toContain(VAULT_SECRET_NAME);
+
+        yield* stack.destroy();
+        const gone = yield* waitUntilGone(deployed.secret.appName, deployed.secret.name);
+        expect(gone).toEqual("gone");
+      }).pipe(logLevel),
+    {
+      tags: [
+        "provider:fly",
+        "provider:fly:app",
+        "provider:fly:secret",
+        "provider:fly:service",
+        "live",
+      ],
+      timeout: 300_000,
     },
   );
 });

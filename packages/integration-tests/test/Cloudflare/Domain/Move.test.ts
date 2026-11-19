@@ -1,10 +1,12 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { call, now, seedAccounts, seedOne, serving, settledUsage } from "./bench.ts";
 import MoveV0 from "./fixtures/move/v0.ts";
@@ -39,7 +41,9 @@ import {
  *   compare with the backfill benchmark's same width (`CatchUp.bench.test.ts`).
  */
 
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+});
 
 const DEPTH = Number(process.env.DOMAIN_MOVE_DEPTH ?? 3000);
 const WIDTH = 100;

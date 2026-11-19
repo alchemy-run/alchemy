@@ -4,17 +4,11 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Axiom.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-// Axiom credentials are resolved via the AuthProvider (env method reads
-// AXIOM_TOKEN / AXIOM_API_KEY). When neither is present the suite can't talk
-// to the real API, so skipIf-gate the live list test. On an entitled run the
-// failure mode without creds is an `AuthError`:
-//   "Axiom env credentials not found. Set AXIOM_TOKEN (or AXIOM_API_KEY)."
-const hasAxiomCreds = !!(process.env.AXIOM_TOKEN || process.env.AXIOM_API_KEY);
 
 // Deterministic names (no Date.now) so reruns target the same view/dataset and
 // the start/end destroy bookends keep the org clean. A view's APL query is
@@ -23,7 +17,7 @@ const hasAxiomCreds = !!(process.env.AXIOM_TOKEN || process.env.AXIOM_API_KEY);
 const VIEW_NAME = "alchemy-list-test-view";
 const DATASET_NAME = "alchemy-list-test-view-dataset";
 
-test.provider.skipIf(!hasAxiomCreds)(
+test.provider(
   "list enumerates the deployed view",
   (stack) =>
     Effect.gen(function* () {
@@ -42,6 +36,7 @@ test.provider.skipIf(!hasAxiomCreds)(
           });
         }),
       );
+      yield* expectFound(Axiom.View.lookup({ id: deployed.id }), deployed);
 
       const provider = yield* Provider.findProvider(Axiom.View);
       const all = yield* provider.list();

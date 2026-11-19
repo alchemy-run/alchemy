@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   type ClassItem,
@@ -72,8 +73,34 @@ export type CustomClass = Resource<
     kmsKeyName: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  CustomClassLookup
 >;
+
+/**
+ * Props for {@link CustomClass.lookup}: find a custom class this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface CustomClassLookup {
+  /**
+   * Custom class id (the `{custom_class}` segment of
+   * `projects/{project}/locations/{location}/customClasses/{custom_class}`).
+   * Letters, numbers, and hyphens; 4-63 characters; must start with a
+   * letter.
+   */
+  customClassId: string;
+  /**
+   * Speech-to-Text Adaptation location. The global Speech endpoint accepts
+   * `global`; `us` and `eu` need matching regional endpoints.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Speech-to-Text Adaptation custom class. Custom classes group words
@@ -108,6 +135,19 @@ export type CustomClass = Resource<
  * ```typescript
  * const ships = yield* GCP.Speech.CustomClass("Ships", {
  *   items: [{ value: "brig" }, { value: "barque" }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing custom class
+ * `CustomClass.lookup` references a custom class Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * custom class.
+ *
+ * **Example:** Reference an existing custom class
+ * ```typescript
+ * const customClass = GCP.Speech.CustomClass.lookup({
+ *   customClassId: "my-custom-class",
  * });
  * ```
  *
@@ -152,6 +192,16 @@ export const CustomClassProvider = () =>
         nextLocation: news.location ?? olds?.location ?? output?.location,
       });
     }),
+
+    lookup: Effect.fn(function* ({ customClassId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const existing = yield* getCustomClass(
+        customClassNameOf(env.project, location, customClassId),
+      );
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

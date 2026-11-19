@@ -1,10 +1,12 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { call, seedAccounts, serving } from "./bench.ts";
 import MoveV0 from "./fixtures/move/v0.ts";
@@ -21,7 +23,9 @@ import { boundClasses, depositsOf, namespacesOf, untilListed, writer } from "./m
  * applied twice, and the deploy that finishes the move deletes the old classes.
  */
 
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+});
 
 const ACCOUNTS = 60;
 const DEPOSITS = 5;

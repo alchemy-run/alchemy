@@ -5,7 +5,7 @@ import * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
-import type { Resource, ResourceBinding } from "alchemy/Resource";
+import type { LookupMethod, Resource, ResourceBinding } from "alchemy/Resource";
 import type { ServerHost } from "alchemy/Runtime/Process";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags } from "alchemy/Tags";
@@ -119,8 +119,18 @@ export type Sprite = Resource<
     };
   },
   SpriteBinding,
-  Providers
+  Providers,
+  SpriteLookup
 >;
+
+/**
+ * Props for {@link Sprite.lookup}: find a Sprite this stack doesn't
+ * manage by its name.
+ */
+export interface SpriteLookup {
+  /** Sprite name (unique per org). */
+  name: string;
+}
 
 export const isSprite = (value: unknown): value is Sprite =>
   typeof value === "object" && value !== null && (value as { Type?: string }).Type === "Fly.Sprite";
@@ -307,15 +317,24 @@ export type SpriteRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
+ * ### Looking up an existing Sprite
+ * `Sprite.lookup` references a Sprite Alchemy doesn't manage (created with
+ * `sprite create` or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted. `code.hash` is empty: the Sprite's
+ * program isn't Alchemy's.
+ *
+ * **Example:** Reference an existing Sprite
+ * ```typescript
+ * const box = Fly.Sprite.lookup({ name: "my-box" });
+ * ```
+ *
  * @resource
  * @product Sprite
  */
-export const Sprite: Platform<Sprite, SpriteServices, SpriteShape, SpriteRuntimeContext> = Platform(
-  "Fly.Sprite",
-  {
-    createRuntimeContext: createFlyHostRuntimeContext("Fly.Sprite"),
-  },
-);
+export const Sprite: Platform<Sprite, SpriteServices, SpriteShape, SpriteRuntimeContext> &
+  LookupMethod<Sprite> = Platform("Fly.Sprite", {
+  createRuntimeContext: createFlyHostRuntimeContext("Fly.Sprite"),
+});
 
 export class SpriteNotCreated extends Data.TaggedError("Fly.SpriteNotCreated")<{
   resourceName: string;
@@ -573,6 +592,13 @@ export const SpriteProvider = () =>
             }
           }
           return undefined;
+        }),
+
+        lookup: Effect.fn(function* ({ name }) {
+          const found = yield* getByName(name).pipe(
+            Effect.catchTag("SpritesNotEnabled", () => Effect.undefined),
+          );
+          return found === undefined ? undefined : toAttrs(found, name, "");
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

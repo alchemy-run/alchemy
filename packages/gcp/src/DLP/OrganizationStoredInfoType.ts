@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -99,8 +100,32 @@ export type OrganizationStoredInfoType = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationStoredInfoTypeLookup
 >;
+
+/**
+ * Props for {@link OrganizationStoredInfoType.lookup}: find an organization
+ * stored info type this stack doesn't manage by its identifiers, in the
+ * ambient project unless `project` names another.
+ */
+export interface OrganizationStoredInfoTypeLookup {
+  /**
+   * StoredInfoType id (the `{storedInfoType}` segment of
+   * `organizations/{organization}/storedInfoTypes/{storedInfoType}`). Must
+   * match `[a-zA-Z0-9_-]+` and is at most 100 characters.
+   */
+  storedInfoTypeId: string;
+  /**
+   * Parent organization (`organizations/{organization}` or the numeric id).
+   */
+  organization?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An organization-scoped Cloud DLP stored info type.
@@ -127,6 +152,19 @@ export type OrganizationStoredInfoType = Resource<
  *   displayName: "employee ids",
  *   description: "badge numbers v2",
  *   regex: { pattern: "EMP[0-9]{8}" },
+ * });
+ * ```
+ *
+ * ### Looking up an existing organization stored info type
+ * `OrganizationStoredInfoType.lookup` references an organization stored
+ * info type Alchemy doesn't manage (created in the console or by another
+ * stack). It is read during plan/deploy, never created, updated or deleted,
+ * and binds like a declared organization stored info type.
+ *
+ * **Example:** Reference an existing organization stored info type
+ * ```typescript
+ * const organizationStoredInfoType = GCP.DLP.OrganizationStoredInfoType.lookup({
+ *   storedInfoTypeId: "my-stored-info-type",
  * });
  * ```
  *
@@ -206,6 +244,15 @@ export const OrganizationStoredInfoTypeProvider = () =>
         news.organization !== previousOrg;
       return replaceOnIdentity(idChanged || orgChanged);
     }),
+
+    lookup: Effect.fn(function* ({ storedInfoTypeId, organization: lookupOrganization }) {
+      const env = yield* GcpEnvironment.current;
+      const organization = yield* resolveOrganization(lookupOrganization, undefined);
+      const name = resourceName(organization, storedInfoTypeId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, organization, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

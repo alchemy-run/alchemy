@@ -141,8 +141,18 @@ export interface Project extends Resource<
     password: Redacted.Redacted<string> | undefined;
   },
   never,
-  Providers
+  Providers,
+  ProjectLookup
 > {}
+
+/**
+ * Props for {@link Project.lookup}: find a project this stack
+ * doesn't manage by its id.
+ */
+export interface ProjectLookup {
+  /** Prisma project id. */
+  projectId: string;
+}
 
 /**
  * A Prisma project, optionally with a default Prisma Postgres database.
@@ -166,6 +176,20 @@ export interface Project extends Resource<
  * const project = yield* Prisma.Project("control-plane", {
  *   createDatabase: false,
  * });
+ * ```
+ *
+ * ### Looking up an existing project
+ * `Project.lookup` references a project Alchemy doesn't manage (created in
+ * the Prisma Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * Prisma returns connection strings only when it creates a database, so a
+ * looked-up one has none; declare a `Prisma.Connection` on it to mint
+ * credentials.
+ *
+ * **Example:** Add a database to an existing project
+ * ```typescript
+ * const project = Prisma.Project.lookup({ projectId: "proj_cmabc123def456ghi789jkl0" });
+ * const db = yield* Prisma.Database("Analytics", { project });
  * ```
  *
  * @resource
@@ -462,6 +486,18 @@ const ProviderLive = () =>
           }
           return undefined;
         }),
+        lookup: Effect.fn(function* ({ projectId }) {
+          const project = yield* getProject({ id: projectId }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+          if (!project) return undefined;
+          const database = yield* defaultDatabase(project.id).pipe(
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+          return attrsFrom(project, database, {});
+        }),
+
         read: Effect.fn(function* ({ id, output, olds = {}, previous }) {
           const projectId = isPrismaDevId(output?.projectId) ? undefined : output?.projectId;
           const project = projectId

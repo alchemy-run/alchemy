@@ -6,6 +6,7 @@ import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -116,6 +117,13 @@ test.provider.skipIf(!process.env.GCP_TEST_AUTHZ_POLICY_TARGET)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.AuthzPolicy.lookup({
+          authzPolicyId: created.authzPolicyId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/authzPolicies/");

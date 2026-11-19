@@ -22,6 +22,7 @@ import LocalDockerfileJob, { BUILD_SECRET } from "./fixtures/local-dockerfile-jo
 import LocalEffectJob from "./fixtures/local-job.ts";
 import LocalEffectServer from "./fixtures/local-server.ts";
 import { TestLocalCluster } from "./fixtures/local.ts";
+import { expectFound } from "./lookup.ts";
 
 const testOptions = { providers: Kubernetes.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -193,6 +194,14 @@ describe("Kubernetes LocalCluster E2E", { tags: [...tags, "live"] }, () => {
       expect(containers).not.toContain(cluster.registryContainer);
     }),
     { timeout: 180_000 },
+  );
+
+  test.provider("a lookup of the cluster finds the deployed attributes", () =>
+    expectFound(
+      cluster.connection,
+      Kubernetes.LocalCluster.lookup({ name: cluster.name, kubeconfig: cluster.kubeconfig }),
+      cluster,
+    ),
   );
 
   test.provider("the cluster exposes a connection with its registry and architecture", () =>

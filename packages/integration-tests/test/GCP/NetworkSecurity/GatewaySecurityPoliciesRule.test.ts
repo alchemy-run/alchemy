@@ -6,6 +6,7 @@ import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -67,6 +68,21 @@ test.provider(
           });
           return { policy, rule };
         }),
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.GatewaySecurityPoliciesRule.lookup({
+          gatewaySecurityPolicyRuleId: created.rule.gatewaySecurityPolicyRuleId,
+          location: created.rule.location,
+          gatewaySecurityPolicy: created.rule.gatewaySecurityPolicy,
+        }),
+        created.rule,
+      );
+      yield* expectFound(
+        GCP.NetworkSecurity.GatewaySecurityPolicy.lookup({
+          gatewaySecurityPolicyId: created.policy.gatewaySecurityPolicyId,
+          location: created.policy.location,
+        }),
+        created.policy,
       );
 
       expect(created.rule.name).toContain("/rules/");
