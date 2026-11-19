@@ -30,11 +30,19 @@ import { PlatformServices } from "@/Util/PlatformServices";
  * A keyring that wraps data keys under one in-memory master key, binding
  * each to its stage the way KMS's encryption context does, and counts calls.
  */
-const memoryKeyring = (options: { failGenerate?: number; id?: string } = {}) => {
+const memoryKeyring = (
+  options: {
+    failGenerate?: number;
+    id?: string;
+    /** The wrapping context of a scope; KMS binds its whole encryption context. */
+    context?: (scope: SealingScope) => string;
+  } = {},
+) => {
   const master = randomBytes(32);
   const calls = { generate: 0, unwrap: 0 };
   let failures = options.failGenerate ?? 0;
-  const aad = (scope: SealingScope) => Buffer.from(`${scope.stack}/${scope.stage}`);
+  const aad = (scope: SealingScope) =>
+    Buffer.from(options.context?.(scope) ?? `${scope.stack}/${scope.stage}`);
   const keyring: StateEncryptionService = {
     id: options.id ?? "memory",
     generate: (scope) =>
@@ -367,6 +375,66 @@ describe("BucketState with a sealing codec", { tags: ["unit", "local"] }, () => 
     expect(objects.get(key)?.text.startsWith(SEALED_PREFIX)).toBe(true);
     expect(objects.get(key)?.text).not.toContain("hunter2");
     expect(objects.get("app/prod/Cache.json")?.text.startsWith(SEALED_PREFIX)).toBe(true);
+  });
+
+  /** Run `use` on a fresh bucket store over `bucket`, with `encryption` in context. */
+  const inBucketStore = <A>(
+    bucket: BucketObjects,
+    encryption: StateEncryptionService,
+    use: (
+      state: Effect.Success<ReturnType<typeof makeBucketState>>,
+    ) => Effect.Effect<A, StateStoreError>,
+  ) =>
+    Effect.runPromise(
+      makeBucketState({ id: "memory", label: "memory", objects: Effect.succeed(bucket) }).pipe(
+        Effect.flatMap(use),
+        Effect.scoped,
+        Effect.provide(Layer.succeed(StateEncryption, encryption)),
+        Effect.provide(SecureRandom.layerWebCrypto),
+      ),
+    );
+
+  const withSecret = (secret: string) =>
+    ({ status: "created", attr: { password: Redacted.make(secret) } }) as never;
+
+  // BucketState.ts set and get pass their whole request (fqn, and value on
+  // a set) as the SealingScope, and StateEncryption.ts dataKey hands it on.
+  test("the StateEncryption is given only the stack and stage", async () => {
+    const { bucket } = memoryObjects();
+    const { keyring } = memoryKeyring();
+    const seen: Array<{ call: string; keys: string[] }> = [];
+    const recording: StateEncryptionService = {
+      ...keyring,
+      generate: (given) => {
+        seen.push({ call: "generate", keys: Object.keys(given).sort() });
+        return keyring.generate(given);
+      },
+      unwrap: (wrapped, given) => {
+        seen.push({ call: "unwrap", keys: Object.keys(given).sort() });
+        return keyring.unwrap(wrapped, given);
+      },
+    };
+    await inBucketStore(bucket, recording, (state) =>
+      state.set({ ...scope, fqn: "Database", value: withSecret("hunter2") }),
+    );
+    // A later run: a fresh store unwraps the data key it finds.
+    await inBucketStore(bucket, recording, (state) => state.get({ ...scope, fqn: "Database" }));
+    expect(seen).toEqual([
+      { call: "generate", keys: ["stack", "stage"] },
+      { call: "unwrap", keys: ["stack", "stage"] },
+    ]);
+  });
+
+  test("a provider that binds its whole scope reopens what an earlier store wrote", async () => {
+    const { bucket } = memoryObjects();
+    const { keyring } = memoryKeyring({ context: (given) => JSON.stringify(given) });
+    await inBucketStore(bucket, keyring, (state) =>
+      state.set({ ...scope, fqn: "Database", value: withSecret("hunter2") }),
+    );
+    const read = await inBucketStore(bucket, keyring, (state) =>
+      state.get({ ...scope, fqn: "Database" }),
+    );
+    expect(read).toMatchObject({ attr: { password: Redacted.make("hunter2") } });
   });
 });
 
