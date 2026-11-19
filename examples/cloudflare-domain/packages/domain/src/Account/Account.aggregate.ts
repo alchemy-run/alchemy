@@ -82,6 +82,26 @@ export class Account extends Domain.Aggregate("Account", {
   id: AccountId,
   state: AccountState,
   initial: { _tag: "Unopened" },
+  invariants: {
+    NeverOverdrawn: (account) => account._tag !== "Open" || account.balance >= 0,
+    WithinDailyLimit: (account) =>
+      account._tag !== "Open" || account.today.withdrawn <= DAILY_LIMIT,
+  },
+  transitions: {
+    AClosedAccountStaysClosed: ({ before, after }) =>
+      before._tag !== "Closed" || after._tag === "Closed",
+    MoneyLeavesOnlyByWithdrawalOrTransfer: ({ before, after, command }) =>
+      before._tag !== "Open" ||
+      after._tag !== "Open" ||
+      after.balance >= before.balance ||
+      command._tag === "WithdrawMoney" ||
+      command._tag === "DebitTransfer",
+    OnlyAnAgentChangesTheOwner: Effect.fn(function* ({ before, after }) {
+      if (before._tag !== "Open" || after._tag !== "Open") return true;
+      if (before.customerId === after.customerId) return true;
+      return (yield* CurrentActor)._tag === "Agent";
+    }),
+  },
   commands: [
     OpenAccount,
     ChangeOwner,

@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  // Editor support only: the demo is not part of the root `tsrs -b`.
+  "include": ["src", "remotion.config.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM"],
+    "rootDir": "../.."
+  }
+}

@@ -125,7 +125,7 @@ decide: {
 
 After the commit, the deliveries are sent. Every view, projection and policy receives every event it consumes, at least once, and in the order its source instance recorded them, even if something restarts in between. Views and projections drop events they've already accepted; policies make repeats harmless (see [Policy](/domain/policy#make-it-safe-to-run-twice)).
 
-Because this happens after the commit, views are eventually consistent: for a moment, the aggregate has the new state and a view doesn't yet. A reader who needs to see their own change passes the command's receipt, and the view waits until it has applied that version.
+Because this happens after the commit, views are eventually consistent: for a moment, the aggregate has the new state and a view doesn't yet. A reader who needs to see their own change passes the command's receipt, and the view waits until it has applied that version. A command sent through an Api can also [wait for its views](/domain/command#choose-when-it-answers) before it answers.
 
 In the bank, one `MoneyDeposited` reaches both views that read accounts:
 
@@ -328,6 +328,8 @@ it("the model is well defined", () => {
 ```
 
 Each problem is a `Domain.DefinitionError`. Its `reason` is a tagged error that says which problem it is, such as `MissingKeyOf` or `TwoWriters`, with the names involved as fields, and its message names the block and the fix. Mistakes that depend on what a handler returns, like `decide` returning an event its command doesn't declare, still fail when the handler runs.
+
+`Domain.verify` checks how the model is declared, not what it does. To check that it keeps its rules, whatever commands arrive, see [Verifying a model](/domain/verifying-models).
 
 ## Run it
 

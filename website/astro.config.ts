@@ -453,6 +453,7 @@ export default defineConfig({
                 },
                 { label: "Doppler", link: "/environments/doppler" },
                 { label: "Infisical", link: "/environments/infisical" },
+                { label: "1Password", link: "/environments/1password" },
                 {
                   label: "Local development",
                   link: "/environments/local-development",
@@ -2000,6 +2001,8 @@ export default defineConfig({
               items: [
                 { label: "Story", link: "/domain/story" },
                 { label: "Testing a model", link: "/domain/testing-models" },
+                { label: "Verifying a model", link: "/domain/verifying-models" },
+                { label: "What the prover reads", link: "/domain/verifiable-code" },
                 { label: "Testing an Api", link: "/domain/testing-apis" },
               ],
             },

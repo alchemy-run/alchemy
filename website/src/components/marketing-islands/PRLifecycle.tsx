@@ -9,7 +9,7 @@ import {
 } from "react";
 import { yantraSvg } from "../../brand/yantra";
 import { prefersReducedMotion, useSpinner } from "./_terminal";
-import { AgentPane, EDIT_MS, EditorPane, LIVE_SPEED, LOCAL_MS } from "./LocalLoop";
+import { AgentPane, EditorPane, LIVE_SPEED, LOCAL_MS, PROVE_MS, SPECIFY_MS } from "./LocalLoop";
 import "./PRLifecycle.css";
 
 /*
@@ -28,11 +28,12 @@ import "./PRLifecycle.css";
  * can be jumped to directly from the tab bar.
  */
 
-type StepId = "edit" | "local" | "open" | "deploy" | "test" | "merge";
+type StepId = "specify" | "prove" | "local" | "open" | "deploy" | "test" | "merge";
 type Status = "queued" | "running" | "success";
 
 const STEPS: { id: StepId; label: string; ms: number }[] = [
-  { id: "edit", label: "Edit", ms: EDIT_MS },
+  { id: "specify", label: "Specify", ms: SPECIFY_MS },
+  { id: "prove", label: "Prove", ms: PROVE_MS },
   { id: "local", label: "Iterate locally", ms: LOCAL_MS },
   { id: "open", label: "PR opened", ms: 2600 },
   { id: "deploy", label: "Deploy", ms: 14550 },
@@ -42,15 +43,15 @@ const STEPS: { id: StepId; label: string; ms: number }[] = [
 
 // The tab bar's headers. Each fills as the animation moves through its steps.
 const GROUPS = [
-  { label: "Your machine", steps: 2 },
+  { label: "Your machine", steps: 3 },
   { label: "CI/CD", steps: 4 },
 ];
 
 const PR = 147;
 const STAGE = `pr-${PR}`;
-const HOST = `${STAGE}.my-app.workers.dev`;
+const HOST = `${STAGE}.bank.workers.dev`;
 const RESOURCES = [
-  { id: "Photos", type: "Cloudflare.R2.Bucket" },
+  { id: "Ledger", type: "Cloudflare.D1Database" },
   { id: "Sessions", type: "Cloudflare.KV.Namespace" },
   { id: "Api", type: "Cloudflare.Worker" },
   { id: "PreviewComment", type: "GitHub.Comment" },
@@ -88,7 +89,8 @@ const T_SETUP_DONE = SETUP_DONE.map((x) => x + T_JOB_START);
 // run of examples/cloudflare-preview-benchmark (alchemy 2.0.0-beta.79):
 // deploy 13.35s, URL live 0.94s, test 4.83s, destroy 4.76s. The GitHub
 // comment was not part of that run; its ~0.35s create/delete is estimated.
-// Row spans are in RESOURCES order: Photos, Sessions, Api, PreviewComment.
+// Row spans are in RESOURCES order: Ledger, Sessions, Api, PreviewComment. The
+// benchmark app stores photos in R2; the bank's names are laid over its timings.
 
 // Deploy: CLI start + plan 3.35s, then Sessions 0.62s, Photos 3.3s, and Api
 // 9.9s (it waits for Photos, then bundles and uploads). The ~0.94s hold at
@@ -110,8 +112,8 @@ const DEPLOY_PREP: Phase[] = [
   { at: 1400, label: "planning 4 resources" },
 ];
 const API_PHASES: Phase[] = [
-  { at: 3350, label: "waiting for Photos" },
-  { at: 6650, label: "bundling src/api.ts" },
+  { at: 3350, label: "waiting for Ledger" },
+  { at: 6650, label: "bundling src/Bank.ts" },
   { at: 8850, label: "uploading worker" },
   { at: 12150, label: "enabling workers.dev" },
 ];
@@ -179,10 +181,15 @@ const secs = (t: number, from: number) => `${Math.max(0, (t - from) / 1000).toFi
  */
 const TIMING: Record<StepId, { badge: string; tone: "real" | "scaled" | "staged"; note: string }> =
   {
-    edit: {
+    specify: {
       badge: "Staged",
       tone: "staged",
-      note: "The agent's typing is staged. The type check itself answers in milliseconds.",
+      note: "The agent's typing is staged. A story runs in memory, with nothing deployed.",
+    },
+    prove: {
+      badge: "Staged",
+      tone: "staged",
+      note: "The agent's typing is staged. The proof covers every state and input, not only the cases with a story.",
     },
     local: {
       badge: `Measured · ${LIVE_SPEED}× speed`,
@@ -438,7 +445,7 @@ export default function PRLifecycle() {
         </div>
 
         <div className="prf-stage" id="prf-panel" role="tabpanel" aria-labelledby={`prf-tab-${id}`}>
-          {id === "edit" || id === "local" ? (
+          {id === "specify" || id === "prove" || id === "local" ? (
             <>
               <div className="prf-side">
                 <EditorPane id={id} t={t} />
@@ -715,7 +722,7 @@ function Actions({ id, t }: { id: StepId; t: number }) {
           : ({ text: "MERGE", tone: "sky" } as const);
 
   return (
-    <Win title="Actions · acme/my-app" badge={badge}>
+    <Win title="Actions · acme/bank" badge={badge}>
       <div className="prf-jobs" ref={listRef}>
         <Job
           name="preview"
@@ -910,9 +917,9 @@ function DeployLog({ t }: { t: number }) {
 }
 
 const TESTS = [
-  { name: "GET /photos renders the gallery", ms: "272ms" },
-  { name: "uploads a photo to R2", ms: "273ms" },
-  { name: "session survives a reload", ms: "284ms" },
+  { name: "the account page shows the balance", ms: "272ms" },
+  { name: "an overdraft is rejected", ms: "273ms" },
+  { name: "a withdrawal updates the balance", ms: "284ms" },
 ];
 
 function TestLog({ t }: { t: number }) {
@@ -920,7 +927,7 @@ function TestLog({ t }: { t: number }) {
   const checkSpin = useSpin(t < T_TESTS[0]![0]);
   const lines: ReactNode[] = [
     <>
-      <span className="prf-muted">$ </span>alchemy test test/preview.test.ts
+      <span className="prf-muted">$ </span>alchemy test
     </>,
     <span className="prf-muted">
       PREVIEW_URL=<span className="prf-hl">https://{HOST}</span>
@@ -935,6 +942,15 @@ function TestLog({ t }: { t: number }) {
       </span>
     </>,
   ];
+  if (t >= T_TESTS[0]![0])
+    lines.push(
+      <>
+        <span className="prf-log__icon" style={{ color: GREEN }}>
+          ✓
+        </span>
+        14 stories · 6 rules proved<span className="prf-muted"> · in memory</span>
+      </>,
+    );
   TESTS.forEach((x, i) => {
     const [a, b] = T_TESTS[i]!;
     if (t < a) return;
@@ -958,13 +974,13 @@ function TestLog({ t }: { t: number }) {
   if (t >= T_TESTS_DONE) {
     lines.push(
       <>
-        <span style={{ color: GREEN }}>3 pass</span>
+        <span style={{ color: GREEN }}>17 pass</span>
         <span className="prf-muted"> · </span>0 fail
         <span className="prf-muted"> · 4.8s</span>
       </>,
     );
   }
-  return <Log lines={lines} rows={7} />;
+  return <Log lines={lines} rows={8} />;
 }
 
 function DestroyLog({ t }: { t: number }) {
@@ -1047,28 +1063,28 @@ function PullRequest({
         <span className="prf-dot" style={{ background: "var(--alc-dot-green)" }} />
         <span className={`prf-btab ${tab ? "" : "is-active"}`}>
           <PrIcon />
-          Add image upload… #{PR}
+          Let customers withdraw… #{PR}
         </span>
         {tab && (
           <span className={`prf-btab is-active is-new ${tab.closing ? "is-closing" : ""}`}>
             {tab.t < T_PAGE_LOADED && <span className="prf-btab__spin" />}
-            Photos · {STAGE}
+            Bank · {STAGE}
             <span className="prf-btab__x">×</span>
           </span>
         )}
       </div>
       <div className="prf-win__body">
-        <div className="prf-pr__url">github.com/acme/my-app/pull/{PR}</div>
+        <div className="prf-pr__url">github.com/acme/bank/pull/{PR}</div>
         <div className="prf-pr__head">
           <div className="prf-pr__title">
-            Add image upload to /photos <span className="prf-pr__num">#{PR}</span>
+            Let customers withdraw money <span className="prf-pr__num">#{PR}</span>
           </div>
           <div className="prf-pr__meta">
             <span className={`prf-state ${merged ? "prf-state--merged" : "prf-state--open"}`}>
               {merged ? <MergeIcon /> : <PrIcon />}
               {merged ? "Merged" : "Open"}
             </span>
-            <span className="prf-branch">feature/photo-upload</span>
+            <span className="prf-branch">feature/withdrawals</span>
             <span className="prf-arrow">→</span>
             <span className="prf-branch">main</span>
           </div>
@@ -1209,22 +1225,20 @@ function MergeIcon() {
 /* Test step: `alchemy test` opens the preview in a new tab of the PR window */
 /* ------------------------------------------------------------------ */
 
-const PHOTOS = [
-  "linear-gradient(135deg,#6b8f4e,#2f4a22)",
-  "linear-gradient(135deg,#d8834f,#7a3c1c)",
-  "linear-gradient(135deg,#7ddfff,#2a6f8a)",
-  "linear-gradient(135deg,#ffe38a,#b98a2a)",
-  "linear-gradient(135deg,#c4729a,#5d2a47)",
+const LEDGER = [
+  { label: "Deposit", amount: "+50.00" },
+  { label: "Account opened", amount: "0.00" },
 ];
 
 function SitePage({ t, closing }: { t: number; closing: boolean }) {
-  // Test 1 loads the gallery, test 2 uploads, test 3 reloads.
-  const reloadAt = T_TESTS[2]![0];
-  const reloading = t >= reloadAt && t < reloadAt + 300;
-  const loaded = t >= T_PAGE_LOADED && !reloading;
-  const [upA, upB] = T_TESTS[1]!;
-  const progress = Math.min(1, Math.max(0, (t - upA) / (upB - upA - 40)));
-  const shown = loaded ? Math.min(4, Math.floor((t - T_PAGE_LOADED) / 40) + 1) : 0;
+  // Test 1 loads the account, test 2 overdraws, test 3 withdraws.
+  const loaded = t >= T_PAGE_LOADED;
+  const [overA, overB] = T_TESTS[1]!;
+  const [wdA, wdB] = T_TESTS[2]!;
+  const rejected = t >= overA + (overB - overA) / 2 && t < wdA;
+  const withdrawn = t >= wdA + (wdB - wdA) / 2;
+  const asking = (t >= overA && !rejected && t < wdA) || (t >= wdA && !withdrawn);
+  const shown = loaded ? Math.min(LEDGER.length, Math.floor((t - T_PAGE_LOADED) / 60) + 1) : 0;
   const active = T_TESTS.findIndex(([a, b]) => t >= a && t < b);
   return (
     <div className={`prf-tabpage ${closing ? "is-closing" : ""}`} aria-hidden>
@@ -1232,7 +1246,7 @@ function SitePage({ t, closing }: { t: number; closing: boolean }) {
         <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden fill="currentColor">
           <path d="M5 7V5a3 3 0 0 1 6 0v2h.5A1.5 1.5 0 0 1 13 8.5v5A1.5 1.5 0 0 1 11.5 15h-7A1.5 1.5 0 0 1 3 13.5v-5A1.5 1.5 0 0 1 4.5 7Zm1.5 0h3V5a1.5 1.5 0 0 0-3 0Z" />
         </svg>
-        {HOST}/photos
+        {HOST}/accounts/sam
         <span className="prf-tabwin__driven">controlled by alchemy test</span>
       </div>
       <div className="prf-site">
@@ -1241,31 +1255,37 @@ function SitePage({ t, closing }: { t: number; closing: boolean }) {
         ) : (
           <>
             <div className="prf-site__nav">
-              <span className="prf-site__logo">Photos</span>
-              <span className="prf-site__upload">
-                {progress > 0 && progress < 1 ? "Uploading…" : "Upload"}
-              </span>
+              <span className="prf-site__logo">Bank</span>
+              <span className="prf-site__upload">{asking ? "Withdrawing…" : "Withdraw"}</span>
             </div>
-            <div className="prf-site__grid">
-              {progress > 0 && (
-                <div
-                  className="prf-site__tile prf-enter"
-                  style={{
-                    background:
-                      progress >= 1 ? "linear-gradient(135deg,#8fb15e,#3f5a2a)" : undefined,
-                  }}
-                >
-                  {progress < 1 && (
-                    <div className="prf-site__progress">
-                      <span style={{ transform: `scaleX(${progress})` }} />
-                    </div>
-                  )}
-                  {progress >= 1 && <span className="prf-site__new">new</span>}
+            <div className="prf-bank">
+              <div className="prf-bank__balance">
+                <span className="prf-bank__label">Balance</span>
+                <span className="prf-bank__amount" key={withdrawn ? "after" : "before"}>
+                  ${withdrawn ? "20.00" : "50.00"}
+                </span>
+              </div>
+              {rejected && (
+                <div className="prf-bank__reject prf-enter">
+                  Withdraw $80.00 rejected · InsufficientFunds
                 </div>
               )}
-              {PHOTOS.slice(0, shown).map((bg, i) => (
-                <div key={i} className="prf-site__tile prf-enter" style={{ background: bg }} />
-              ))}
+              <div className="prf-bank__rows">
+                {withdrawn && (
+                  <div className="prf-bank__row prf-enter">
+                    <span>
+                      Withdrawal <span className="prf-site__new prf-bank__new">new</span>
+                    </span>
+                    <span>-30.00</span>
+                  </div>
+                )}
+                {LEDGER.slice(0, shown).map((r) => (
+                  <div key={r.label} className="prf-bank__row prf-enter">
+                    <span>{r.label}</span>
+                    <span>{r.amount}</span>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="prf-site__foot">
               {active >= 0 ? (
