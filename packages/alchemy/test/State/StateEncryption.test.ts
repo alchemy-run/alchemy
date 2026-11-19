@@ -179,6 +179,40 @@ describe("sealing codec", { tags: ["unit", "local"] }, () => {
     expect(opened).toBe(JSON.stringify(encodeState(record)));
   });
 
+  test("state shaped like a sealed secret survives next to a real one", async () => {
+    const { keyring } = memoryKeyring();
+    const codec = makeSealingCodec(keyring);
+    // What a resource can hold when its props are themselves a state record.
+    const lookalike = {
+      status: "created",
+      props: { password: Redacted.make("hunter2") },
+      attr: {
+        copied: { __sealed__: "bm90IGEgc2VjcmV0" },
+        nested: [{ __sealed__: { any: "shape" } }],
+        beside: { __sealed__: "kept", other: true },
+      },
+    };
+    const text = await run(codec.encode(scope, lookalike));
+    expect(text).not.toContain("hunter2");
+    expect(text).not.toContain("bm90IGEgc2VjcmV0");
+
+    const decoded = await run(codec.decode<typeof lookalike>(scope, text, "record"));
+    expect(Redacted.value(decoded.props.password)).toBe("hunter2");
+    expect(decoded.attr).toEqual(lookalike.attr);
+    expect(await run(codec.open(scope, text))).toBe(JSON.stringify(encodeState(lookalike)));
+
+    const json = await run(codec.encodeJson(scope, lookalike));
+    const fromJson = await run(codec.decodeJson<typeof lookalike>(scope, json, "record"));
+    expect(Redacted.value(fromJson.props.password)).toBe("hunter2");
+    expect(fromJson.attr).toEqual(lookalike.attr);
+
+    // Without a secret the record isn't sealed, and reads back as written.
+    const plain = { attr: lookalike.attr };
+    const plainText = await run(codec.encode(scope, plain));
+    expect(plainText).toBe(JSON.stringify(plain));
+    expect(await run(codec.decode<typeof plain>(scope, plainText, "record"))).toEqual(plain);
+  });
+
   test("a failed data key request is retried, not cached", async () => {
     const { keyring, calls } = memoryKeyring({ failGenerate: 1 });
     const codec = makeSealingCodec(keyring);

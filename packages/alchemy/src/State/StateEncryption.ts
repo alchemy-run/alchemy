@@ -160,13 +160,31 @@ const holdsSecret = (value: unknown): boolean => {
   return false;
 };
 
-/** Replace every envelope of `marker` in `value` with `f` of its contents. */
-const mapEnvelopes = (value: unknown, marker: string, f: (inner: unknown) => unknown): unknown => {
-  if (isEnvelope(value, marker)) return f(value[marker]);
-  if (Array.isArray(value)) return value.map((item) => mapEnvelopes(item, marker, f));
+/**
+ * Starts the plaintext of a sealed value that isn't a secret: state that
+ * already looked like `{ "__sealed__": … }`. The JSON of a secret never
+ * starts with it.
+ */
+const LITERAL_PREFIX = "=";
+
+/** `value` with every envelope replaced: a sealed one by `sealed` of its contents, a secret by `secret`. */
+const mapEnvelopes = (
+  value: unknown,
+  f: {
+    readonly secret?: (inner: unknown) => unknown;
+    readonly sealed?: (inner: unknown, envelope: Record<string, unknown>) => unknown;
+  },
+): unknown => {
+  if (f.secret !== undefined && isEnvelope(value, REDACTED_MARKER)) {
+    return f.secret(value[REDACTED_MARKER]);
+  }
+  if (f.sealed !== undefined && isEnvelope(value, SEALED_MARKER)) {
+    return f.sealed(value[SEALED_MARKER], value);
+  }
+  if (Array.isArray(value)) return value.map((item) => mapEnvelopes(item, f));
   if (isRecord(value)) {
     const result: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) result[k] = mapEnvelopes(v, marker, f);
+    for (const [k, v] of Object.entries(value)) result[k] = mapEnvelopes(v, f);
     return result;
   }
   return value;
@@ -360,9 +378,19 @@ export const makeSealingCodec = (encryption: StateEncryptionService): StateCodec
   const seal = Effect.fn(function* (scope: SealingScope, encoded: unknown) {
     const key = yield* dataKey(scope);
     const body = yield* Effect.sync(() =>
-      mapEnvelopes(encoded, REDACTED_MARKER, (secret) => ({
-        [SEALED_MARKER]: sealSecret(key.plaintext, JSON.stringify(secret)),
-      })),
+      mapEnvelopes(encoded, {
+        secret: (secret) => ({
+          [SEALED_MARKER]: sealSecret(key.plaintext, JSON.stringify(secret)),
+        }),
+        // State shaped like a sealed secret is sealed too, whole, so opening
+        // the record can tell it from one.
+        sealed: (_, envelope) => ({
+          [SEALED_MARKER]: sealSecret(
+            key.plaintext,
+            `${LITERAL_PREFIX}${JSON.stringify(envelope)}`,
+          ),
+        }),
+      }),
     );
     return { header: { by: encryption.id, key: key.wrapped } satisfies SealedHeader, body };
   });
@@ -377,9 +405,14 @@ export const makeSealingCodec = (encryption: StateEncryptionService): StateCodec
     const key = yield* unwrap(header, scope, what);
     return yield* Effect.try({
       try: () =>
-        mapEnvelopes(body, SEALED_MARKER, (sealed) => ({
-          [REDACTED_MARKER]: JSON.parse(openSecret(key, sealed)),
-        })),
+        mapEnvelopes(body, {
+          sealed: (sealed) => {
+            const plaintext = openSecret(key, sealed);
+            return plaintext.startsWith(LITERAL_PREFIX)
+              ? JSON.parse(plaintext.slice(LITERAL_PREFIX.length))
+              : { [REDACTED_MARKER]: JSON.parse(plaintext) };
+          },
+        }),
       catch: (cause) => parseError(what, cause),
     });
   });

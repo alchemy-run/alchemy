@@ -5,8 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { deleteAllObjects } from "../AssetsBucket.ts";
 import { AWSEnvironment } from "../Environment.ts";
-import { createStateTableName, stateTableExists } from "../StateStore/DynamoDBState.ts";
-import { createStateKeyAlias, ensureStateKey, removeStateKey } from "../StateStore/Key.ts";
+import { createStateKeyAlias, ensureStateKey, keepStateKey } from "../StateStore/Key.ts";
 import { openLegacyBucket } from "../StateStore/LegacyLayout.ts";
 import {
   createStateBucketName,
@@ -31,21 +30,17 @@ const bootstrapStateBucket = Effect.fn("AWS.state.bootstrap")(function* (name?: 
 
 /**
  * Empty and delete a state bucket (by default the account's in this region),
- * every object version included, and schedule the KMS key it shares with the
- * DynamoDB store of the same name for deletion once that store is gone too.
- * A missing bucket or key is not an error.
+ * every object version included. A missing bucket is not an error. The KMS
+ * key it shares with the DynamoDB store of the same name is kept: see
+ * {@link keepStateKey}.
  */
 export const teardownStateBucket = Effect.fn("AWS.state.teardown")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
   if (name !== undefined) yield* Provisioning.storeName(name);
   const bucketName = createStateBucketName(accountId, region, name);
-  // The DynamoDB store holds records sealed under the shared key.
-  const removeKey = Effect.gen(function* () {
-    if (yield* stateTableExists(createStateTableName(name))) return undefined;
-    return yield* removeStateKey(createStateKeyAlias(name));
-  });
   if (!(yield* stateBucketExists(bucketName))) {
-    return { bucketName, deleted: false, keyAlias: yield* removeKey };
+    yield* keepStateKey(createStateKeyAlias(name));
+    return { bucketName, deleted: false };
   }
   // A migration denies object access in the bucket policy; lift it first.
   yield* openLegacyBucket(bucketName);
@@ -57,7 +52,8 @@ export const teardownStateBucket = Effect.fn("AWS.state.teardown")(function* (na
       schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
     }),
   );
-  return { bucketName, deleted: true, keyAlias: yield* removeKey };
+  yield* keepStateKey(createStateKeyAlias(name));
+  return { bucketName, deleted: true };
 });
 
 /** The AWS environment of the profile core runs the operation under. */
@@ -86,9 +82,7 @@ export const lifecycle: StateStoreLifecycle<S3StateStoreOptions> = {
     ),
   teardown: ({ name }) =>
     teardownStateBucket(name).pipe(
-      Effect.map(({ bucketName, deleted, keyAlias }) => ({
-        deleted: [...(deleted ? [bucketName] : []), ...(keyAlias === undefined ? [] : [keyAlias])],
-      })),
+      Effect.map(({ bucketName, deleted }) => ({ deleted: deleted ? [bucketName] : [] })),
       Effect.provide(environment),
     ),
 };

@@ -41,7 +41,7 @@ export const createStateKeyAlias = (name?: string) =>
 /** Starts the description of every key a state store creates. */
 export const STATE_KEY_DESCRIPTION = "Alchemy state store key";
 
-/** How long a torn-down store's key waits before KMS deletes it. */
+/** How long a key that lost a create race, and sealed nothing, waits before KMS deletes it. */
 const DELETION_WINDOW_DAYS = 7;
 
 /** A key's metadata, or `undefined` when no key has that id or alias. */
@@ -177,23 +177,19 @@ export const customerKeyArn = Effect.fn("AWS.state.customerKey")(function* (keyI
 });
 
 /**
- * Remove a torn-down store's own key: delete its alias and schedule the key
- * for deletion after {@link DELETION_WINDOW_DAYS} days, which
- * `aws kms cancel-key-deletion` can still undo. A missing key is not an
- * error. Returns the alias when there was a key to remove.
+ * Teardown keeps a store's own key, and says how to delete it. Stores that
+ * teardown can't see may seal under the same key: a Cloudflare, local or
+ * Postgres store given `AWS.stateEncryption()`, or an AWS store with its own
+ * `tableName`. Deleting the key would leave their secrets unreadable.
  */
-export const removeStateKey = Effect.fn("AWS.state.removeKey")(function* (alias: string) {
+export const keepStateKey = Effect.fn("AWS.state.keepKey")(function* (alias: string) {
   const metadata = yield* describeKey(alias);
-  if (metadata === undefined) return undefined;
-  yield* kms
-    .deleteAlias({ AliasName: alias })
-    .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
-  if (metadata.KeyState !== "PendingDeletion") {
-    yield* kms
-      .scheduleKeyDeletion({ KeyId: metadata.KeyId, PendingWindowInDays: DELETION_WINDOW_DAYS })
-      .pipe(Effect.catchTag("NotFoundException", () => Effect.void));
-  }
-  return alias;
+  if (metadata === undefined || metadata.KeyState === "PendingDeletion") return;
+  yield* Effect.logInfo(
+    `AWS state store: kept KMS key ${alias}, since state stored elsewhere may be sealed under it. ` +
+      `Once nothing is, delete it with 'aws kms schedule-key-deletion --key-id ${metadata.KeyId}' ` +
+      `and 'aws kms delete-alias --alias-name ${alias}'.`,
+  );
 });
 
 /** Binds each data key to its stage, so a key policy can grant decrypt per stage. */

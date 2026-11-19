@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { expect } from "@alchemy.run/test";
@@ -5,6 +6,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as kms from "@distilled.cloud/aws/kms";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Alchemist from "alchemy/Alchemist";
+import type { ResourceState } from "alchemy/State";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -68,8 +70,10 @@ test.provider(
       expect(Redacted.isRedacted(keyId) ? Redacted.value(keyId) : keyId).toBe(key?.Arn);
 
       const torn = yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
-      expect(torn.deleted).toEqual([bucket, alias]);
+      expect(torn.deleted).toEqual([bucket]);
       expect(yield* bucketExists(bucket)).toBe(false);
+      // Kept: state stored elsewhere may be sealed under it.
+      expect((yield* kms.describeKey({ KeyId: alias })).KeyMetadata?.KeyState).toBe("Enabled");
 
       const again = yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
       expect(again.deleted).toEqual([]);
@@ -102,5 +106,68 @@ test.provider(
     ],
     timeout: 180_000,
     exclusive: true,
+  },
+);
+
+test.provider(
+  "a store whose key was scheduled for deletion outside alchemy brings it back",
+  (stack) =>
+    Effect.gen(function* () {
+      const name = `recover-${yield* Effect.sync(() =>
+        createHash("sha256").update(stack.stage).digest("hex").slice(0, 8),
+      )}`;
+      const target = { type: "provider", backend: "aws-s3", name } as const;
+      const alias = `alias/alchemy-state-${name}`;
+      const alchemist = Alchemist.layer();
+      const record = {
+        resourceType: "test:resource",
+        namespace: undefined,
+        fqn: "Sealed",
+        logicalId: "Sealed",
+        instanceId: "instance-Sealed",
+        providerVersion: 1,
+        status: "created",
+        downstream: [],
+        bindings: [],
+        props: {},
+        attr: { password: Redacted.make("hunter2") },
+      } as ResourceState;
+      const address = { stack: "KeyRecoveryStack", stage: stack.stage, fqn: "Sealed" };
+
+      yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
+      yield* Alchemist.State.bootstrap(target).pipe(Effect.provide(alchemist));
+      // Each store in its own scope, which releases its stage lock.
+      yield* Effect.scoped(
+        Alchemist.State.store(target).pipe(
+          Effect.flatMap((store) => store.set({ ...address, value: record })),
+          Effect.provide(alchemist),
+        ),
+      );
+
+      // What `aws kms schedule-key-deletion` (or an account sweep) does.
+      const keyId = (yield* kms.describeKey({ KeyId: alias })).KeyMetadata!.KeyId;
+      yield* kms.scheduleKeyDeletion({ KeyId: keyId, PendingWindowInDays: 7 });
+
+      // A fresh store cancels the deletion and opens the secret straight away.
+      const read = (yield* Effect.scoped(
+        Alchemist.State.store(target).pipe(
+          Effect.flatMap((store) => store.get(address)),
+          Effect.provide(alchemist),
+        ),
+      )) as ResourceState;
+      expect(Redacted.value(read.attr!.password as Redacted.Redacted<string>)).toBe("hunter2");
+      expect((yield* kms.describeKey({ KeyId: keyId })).KeyMetadata?.KeyState).toBe("Enabled");
+
+      yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:s3",
+      "provider:aws:kms",
+      "provider:aws:statestore",
+      "live",
+    ],
+    timeout: 180_000,
   },
 );

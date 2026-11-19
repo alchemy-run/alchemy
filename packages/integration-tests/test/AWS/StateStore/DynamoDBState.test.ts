@@ -1021,12 +1021,10 @@ test.provider(
       expect(described?.SSEDescription?.KMSMasterKeyArn).toBe(key?.Arn);
 
       const torn = yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
-      expect([...torn.deleted].sort()).toEqual([table, bucket, alias].sort());
+      expect([...torn.deleted].sort()).toEqual([table, bucket].sort());
       expect(yield* tableExists(table)).toBe(false);
-      // Scheduled for deletion, which can still be cancelled.
-      expect((yield* kms.describeKey({ KeyId: key!.KeyId })).KeyMetadata?.KeyState).toBe(
-        "PendingDeletion",
-      );
+      // Kept: state stored elsewhere may be sealed under it.
+      expect((yield* kms.describeKey({ KeyId: alias })).KeyMetadata?.KeyState).toBe("Enabled");
 
       const again = yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
       expect(again.deleted).toEqual([]);

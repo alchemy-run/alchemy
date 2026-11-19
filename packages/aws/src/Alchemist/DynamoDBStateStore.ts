@@ -18,15 +18,10 @@ import {
 import {
   createStateKeyAlias,
   ensureStateKey,
-  removeStateKey,
+  keepStateKey,
   stateKeyArn,
 } from "../StateStore/Key.ts";
-import {
-  createStateBucketName,
-  provisionStateBucket,
-  stateBucketExists,
-  stateEnvironment,
-} from "../StateStore/State.ts";
+import { provisionStateBucket, stateBucketExists, stateEnvironment } from "../StateStore/State.ts";
 
 /**
  * Ensure a state table, its overflow bucket and its KMS key (by default the
@@ -60,9 +55,9 @@ const bootstrapStateTable = Effect.fn("AWS.state.bootstrap")(function* (name?: s
 /**
  * Delete a state table, lifting its deletion protection, and empty and
  * delete its overflow bucket, every object version included. The S3 store it
- * replaced is kept: `--backend aws-s3` tears that down. The KMS key the two
- * share is scheduled for deletion once neither is left. A missing table,
- * bucket or key is not an error.
+ * replaced is kept: `--backend aws-s3` tears that down. A missing table or
+ * bucket is not an error. The store's KMS key is kept: see
+ * {@link keepStateKey}.
  */
 const teardownStateTable = Effect.fn("AWS.state.teardownTable")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
@@ -117,11 +112,7 @@ const teardownStateTable = Effect.fn("AWS.state.teardownTable")(function* (name?
     );
     deleted.push(bucketName);
   }
-  // Records moved from the S3 store, or back to it, are sealed under it.
-  if (!(yield* stateBucketExists(createStateBucketName(accountId, region, name)))) {
-    const alias = yield* removeStateKey(createStateKeyAlias(name));
-    if (alias !== undefined) deleted.push(alias);
-  }
+  yield* keepStateKey(createStateKeyAlias(name));
   return { deleted };
 });
 
