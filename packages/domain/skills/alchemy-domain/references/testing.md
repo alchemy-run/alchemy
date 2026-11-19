@@ -167,6 +167,73 @@ Story.rejected(new NotOwner()),
 
 More: [Testing models: Check every outcome](https://alchemy.run/domain/testing-models#check-every-outcome).
 
+## Rules: verify the model
+
+A story checks one example. A rule says what is always true, and `Verify` looks for any state, input or sequence of commands that breaks it. Write a rule for each thing the business says can never happen.
+
+Rules go on the declaration. An aggregate has `invariants` (what no state may be) and `transitions` (what no command may do); a model has `invariants` (true whenever nothing is left to react) and `eventually` (true once every reaction and scheduled command has run). A model's rule is given every instance by aggregate name (`bank.Account`), every view key by view name (`bank.DailyOutflow`), and what each projection was given by projection name (`bank.Ledger`).
+
+```ts
+export class Account extends Domain.Aggregate("Account", {
+  // id, state, initial, commands, decide, evolve
+  invariants: {
+    NeverOverdrawn: (account) => account._tag !== "Open" || account.balance >= 0,
+  },
+  transitions: {
+    AClosedAccountStaysClosed: ({ before, after }) =>
+      before._tag !== "Closed" || after._tag === "Closed",
+  },
+}) {}
+
+export class Bank extends Domain.Model("Bank", {
+  // aggregates, views, policies, sagas
+  invariants: {
+    NoTransferLeftPending: (bank) =>
+      bank.Transfer.every((transfer) => transfer.state._tag !== "Pending"),
+  },
+  eventually: {
+    EveryTransferEnds: (bank) =>
+      bank.Transfer.every(
+        (transfer) => transfer.state._tag === "Completed" || transfer.state._tag === "Failed",
+      ),
+  },
+}) {}
+```
+
+One test per model verifies them, and one per aggregate is the fast check to write first. Pass the story runner so every sequence found is also run on the real model. They run under Node (vitest), not Bun; the solver and parser come with `@alchemy.run/domain`.
+
+```ts
+import * as Verify from "@alchemy.run/domain/Verify";
+
+it.effect("an account keeps its rules", () =>
+  Verify.aggregate(Account).pipe(Effect.provide(NodeServices.layer)),
+);
+
+it.effect(
+  "the bank keeps its promises",
+  () =>
+    Verify.model(Bank, { apis: [CustomerApi, SupportApi], story }).pipe(
+      Effect.provide(NodeServices.layer),
+    ),
+  120_000,
+);
+```
+
+Rules of thumb:
+
+- A failure prints the shortest sequence that breaks the rule, and a `Story` to paste in as a regression test. Fix the model, or fix the rule when the business agrees it was wrong.
+- `Proved` holds for every state and input. `Checked` holds in the sequences run (2 commands deep by default, each event delivered twice, each saga step run twice, reactions reordered, schedules late, every answer an external system's schema allows). `Sampled` is 200 seeded random walks of up to 12 commands, for rules that take longer to break. Raise `depth` with `faults` off, or `walks`, when you need more.
+- Keep numbers that are added or multiplied whole (`Schema.Int`, `Schema.BigInt`, money in cents). Arithmetic JavaScript rounds is reported as not read. A division is read through `Math.floor`, `Math.ceil` or `Math.trunc`.
+- A `Domain.Decision` states rules about its step in `transitions`: `({ before, after, command, events })`, with each state under its name in `reads`. `Verify.model` proves them, and proves the decision keeps the rules of every aggregate it records on; `Prove.decision(Transfer, { source })` does it for one decision. Two names of the same aggregate are tried as two instances and as one. An aggregate a decision records on is verified through its model, not alone.
+- A model's `relations` relate a few instances, each made with `Domain.Relation({ over: { customer: Customer, claim: UsernameClaim }, holds: ({ customer, claim }) => ... })`. `holds` is given `{ id, state }` for each name and starts with which instances it is about (`claim.state.customerId !== customer.id || ...`). `Verify.model` proves one where every command and decision that records on its aggregates keeps it, so a decision that writes both sides is what makes it provable. When a proof fails on states nothing reaches, add the relation that rules them out: relations are proved together.
+- `decide`, `evolve` and rules are plain functions of their inputs: loops, `+=`, rest patterns, `Option`, `effect/Array`, `effect/Record` and `effect/Struct` helpers are read. A loop over a list from the state or a command is tried up to 2 items past what its schema asks for, so its rule is `Checked`, not `Proved`.
+- Pin the rules that must stay proved with `require: { proved: ["Account.NeverOverdrawn"] }`: one that slips to `Checked` then fails the test.
+- Never widen `allow` to get a pass. It names what the check may skip, and each entry is something no longer verified.
+- A rule that is true but not proved needs a second invariant that rules out the state the prover started from.
+- An external call listed under "called again" must be safe to repeat: give the vendor an idempotency key made from the event.
+
+More: [Verifying a model](https://alchemy.run/domain/verifying-models).
+
 ## Api tests: the client's view
 
 In the server package, host the model in memory with the real middleware, and drive it through the Api client. This checks authentication, `validate`, and live reads.
