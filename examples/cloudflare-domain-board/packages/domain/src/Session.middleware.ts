@@ -10,10 +10,19 @@ export class Unauthorized extends Schema.TaggedError<Unauthorized>()("Unauthoriz
 export const ACTOR_HEADER = "x-board-actor";
 
 /**
+ * The cookies a browser signs in with: the board's token, and who it is. A
+ * WebSocket upgrade carries cookies, never a header a page sets, so the web
+ * app's live reads authenticate with these.
+ */
+export const TOKEN_COOKIE = "board_token";
+export const ACTOR_COOKIE = "board_actor";
+
+/**
  * Authenticates a request and provides who is making it as the
  * {@link CurrentActor}. A caller sends the board's token as
  * `Authorization: Bearer <token>` and its name in `x-board-actor`: the same
- * headers from the CLI, an MCP client, or a typed client.
+ * headers from the CLI, an MCP client, or a typed client. A browser sends
+ * both as cookies instead, set by `POST /api/session`.
  */
 export class Session extends RpcMiddleware.Service<Session, { provides: CurrentActor }>()(
   "Board/Session",

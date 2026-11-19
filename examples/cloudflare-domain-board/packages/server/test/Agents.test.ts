@@ -173,3 +173,41 @@ describe("the board from the CLI", () => {
     }).pipe(Effect.scoped),
   );
 });
+
+// ---------------------------------------------------------------- the web app
+
+describe("the web app's session", () => {
+  it.live("a browser signs in with the token, and its cookies act as its name", () =>
+    Effect.gen(function* () {
+      const fetch = yield* served;
+      const session = (init?: RequestInit) =>
+        Effect.promise(() => fetch("http://board.test/api/session", init));
+      const signIn = (token: string) =>
+        session({ method: "POST", body: JSON.stringify({ token, actor: "sam" }) });
+
+      expect((yield* signIn("wrong")).status).toBe(401);
+      expect((yield* session()).status).toBe(401);
+
+      const signedIn = yield* signIn(TOKEN);
+      expect(signedIn.status).toBe(200);
+      const setCookies = signedIn.headers.getSetCookie();
+      expect(setCookies.every((c) => /HttpOnly/i.test(c) && /SameSite=Strict/i.test(c))).toBe(true);
+      // What the browser sends back on every request and WebSocket upgrade.
+      const cookie = setCookies.map((c) => c.split(";")[0]).join("; ");
+
+      const whoAmI = yield* session({ headers: { cookie } });
+      expect(yield* Effect.promise(() => whoAmI.json())).toEqual({ actor: "sam" });
+
+      const mcp = mcpClient("http://board.test", TOKEN, fetch);
+      const created = yield* mcp.callWith({ cookie }, "BoardApi_StartThread_send", {
+        input: { threadId: "t-1", channel: "dev", title: "Hello", text: "From the web" },
+      });
+      expect(created.isError).toBe(false);
+      const summary = yield* mcp.call("fixer", "BoardApi_ThreadSummary_get", { key: "t-1" });
+      expect(summary.structuredContent).toMatchObject({ value: { author: "sam" } });
+
+      const signedOut = yield* session({ method: "DELETE", headers: { cookie } });
+      expect(signedOut.headers.getSetCookie().every((c) => /Max-Age=0/i.test(c))).toBe(true);
+    }).pipe(Effect.scoped),
+  );
+});

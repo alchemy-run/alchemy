@@ -107,6 +107,28 @@ test(
       structuredContent: { value: { threads: { "t-1": { task: { _tag: "Done", by: "fixer" } } } } },
     });
 
+    // the web app's origin forwards /api: a browser signs in there, and its cookies act as its name
+    const app = outputs.app.replace(/\/+$/, "");
+    const signIn = yield* Effect.tryPromise(() =>
+      fetch(`${app}/api/session`, {
+        method: "POST",
+        body: JSON.stringify({ token, actor: "sam" }),
+      }),
+    ).pipe(
+      Effect.filterOrFail((res) => res.status === 200),
+      Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
+    );
+    const cookie = signIn.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    const whoAmI = yield* Effect.tryPromise(() =>
+      fetch(`${app}/api/session`, { headers: { cookie } }).then((res) => res.json()),
+    );
+    expect(whoAmI).toEqual({ actor: "sam" });
+    const page = yield* Effect.tryPromise(() => fetch(app).then((res) => res.text()));
+    expect(page).toContain('<div id="root">');
+
     // no token, no board
     const anonymous = yield* mcp.call(undefined, "BoardApi_ReadyTasks_ask", {
       input: { channel: "dev" },

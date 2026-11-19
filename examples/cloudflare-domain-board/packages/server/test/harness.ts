@@ -57,6 +57,9 @@ export const mcpClient = (url: string, token: string, fetch: Fetch = globalThis.
         { name, arguments: args },
         actor === undefined ? {} : sessionHeaders(token, actor),
       ),
+    /** Call a tool with exactly these headers, such as a browser's cookies. */
+    callWith: (headers: Record<string, string>, name: string, args: unknown) =>
+      request("tools/call", { name, arguments: args }, headers),
   };
 };
 

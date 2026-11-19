@@ -4,6 +4,7 @@
     { "path": "./packages/domain" },
     { "path": "./packages/server" },
     { "path": "./packages/cli" },
+    { "path": "./packages/web" },
     { "path": "./tsconfig.stack.json" }
   ]
 }

@@ -6,6 +6,7 @@ import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";
 import { BoardLive } from "./BoardLive.ts";
 import { BoardRoutes } from "./BoardRoutes.ts";
+import type { BoardToken } from "./Session.ts";
 
 /** The board's Worker: the Api on `/api` and its MCP server on `/mcp`. */
 export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
@@ -13,7 +14,7 @@ export default class BoardWorker extends Cloudflare.Worker<BoardWorker>()(
   { main: import.meta.url },
   Effect.gen(function* () {
     // The hosted board and its middleware, resolved once at init for the routes.
-    const board = yield* Effect.context<DomainAi.Services<typeof BoardApi>>();
+    const board = yield* Effect.context<DomainAi.Services<typeof BoardApi> | BoardToken>();
     return {
       fetch: HttpRouter.toHttpEffect(
         BoardRoutes.pipe(Layer.provide(Layer.succeedContext(board)), Layer.orDie),
