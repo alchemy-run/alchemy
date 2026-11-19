@@ -231,15 +231,28 @@ export const makeRpcClient = (
   const client = makeFunctionClient(resolved, ops);
   const callMethod = (name: string, args: ReadonlyArray<unknown>) =>
     Effect.all([key, currentRpcMeta]).pipe(
-      Effect.flatMap(([value, meta]) =>
-        makeFunctionClient({ ...resolved, method: name }, ops).call(args, {
-          // The binding's key: the program serves only callers it issued keys to.
-          ...(value === undefined ? {} : { [RPC_KEY_KWARG]: value }),
-          // The call's metadata (the caller's trace context). The target is a
-          // Function this stack deploys, so its entrypoint reads it.
-          ...(Object.keys(meta).length === 0 ? {} : { [RPC_META_KWARG]: meta }),
-        }),
-      ),
+      Effect.flatMap(([value, meta]) => {
+        const send = (withMeta: boolean) =>
+          makeFunctionClient({ ...resolved, method: name }, ops).call(args, {
+            // The binding's key: the program serves only callers it issued keys to.
+            ...(value === undefined ? {} : { [RPC_KEY_KWARG]: value }),
+            // The call's metadata (the caller's trace context), which the
+            // entrypoint forwards to the program as headers.
+            ...(withMeta ? { [RPC_META_KWARG]: meta } : {}),
+          });
+        if (Object.keys(meta).length === 0) return send(false);
+        return send(true).pipe(
+          // An entrypoint on an older alchemy refuses keyword arguments it
+          // doesn't know, before it reaches the program. Send the call the
+          // way that entrypoint reads it: the call succeeds, untraced.
+          Effect.catchIf(
+            (error) =>
+              error._tag === "Modal.FunctionCallFailed" &&
+              error.message.includes(`RPC method ${name} takes positional arguments only`),
+            () => send(false),
+          ),
+        );
+      }),
       Effect.flatMap((value) =>
         isStreamResult(value)
           ? // The stream's values, re-encoded as the NDJSON the RPC codec
