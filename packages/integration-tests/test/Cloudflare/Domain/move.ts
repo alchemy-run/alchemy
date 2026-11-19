@@ -230,3 +230,14 @@ export const bindingsUntil = (scriptName: string, expected: Record<string, strin
 
 const sorted = (record: Record<string, string>) =>
   Object.fromEntries(Object.entries(record).sort(([a], [b]) => a.localeCompare(b)));
+
+/** The Worker's Durable Object classes once they read as `expected` (see `bindingsUntil`). */
+export const classesUntil = (scriptName: string, expected: ReadonlyArray<string>) =>
+  boundClasses(scriptName).pipe(
+    Effect.map((classes) => Object.keys(classes).sort()),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (classes) => JSON.stringify(classes) === JSON.stringify([...expected].sort()),
+      times: 30,
+    }),
+  );

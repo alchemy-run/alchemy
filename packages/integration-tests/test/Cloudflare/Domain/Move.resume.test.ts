@@ -14,7 +14,14 @@ import MoveV1Broken from "./fixtures/move/v1-broken.ts";
 import MoveV1Timeout from "./fixtures/move/v1-timeout.ts";
 import MoveV1 from "./fixtures/move/v1.ts";
 import MoveV1b from "./fixtures/move/v1b.ts";
-import { boundClasses, depositsOf, namespacesOf, untilListed, writer } from "./move.ts";
+import {
+  boundClasses,
+  classesUntil,
+  depositsOf,
+  namespacesOf,
+  untilListed,
+  writer,
+} from "./move.ts";
 
 /**
  * Moving a Domain from version 0 to the one class of version 1 when the
@@ -101,7 +108,7 @@ const oldClassesDeleted = (
   balances: Record<string, number> = {},
 ) =>
   Effect.gen(function* () {
-    expect(Object.keys(yield* boundClasses(scriptName))).toEqual(["Ledger.Domain"]);
+    expect(yield* classesUntil(scriptName, ["Ledger.Domain"])).toEqual(["Ledger.Domain"]);
     yield* everyAccountReads(url, balances);
     yield* stack.deploy(
       Effect.gen(function* () {
@@ -109,7 +116,7 @@ const oldClassesDeleted = (
       }),
     );
     yield* serving(url, "v1b");
-    expect(Object.keys(yield* boundClasses(scriptName))).toEqual(["Ledger.Domain"]);
+    expect(yield* classesUntil(scriptName, ["Ledger.Domain"])).toEqual(["Ledger.Domain"]);
     yield* everyAccountReads(url, balances);
   });
 

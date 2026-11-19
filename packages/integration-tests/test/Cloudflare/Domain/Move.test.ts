@@ -15,6 +15,7 @@ import MoveV1b from "./fixtures/move/v1b.ts";
 import {
   backdatePasses,
   boundClasses,
+  classesUntil,
   depositsOf,
   movedBy,
   namespacesOf,
@@ -172,7 +173,7 @@ describe("moving a Domain to one class", { tags: ["provider:cloudflare", "live"]
           }),
         );
         yield* serving(url, "v1b");
-        expect(Object.keys(yield* boundClasses(scriptName))).toEqual(["Ledger.Domain"]);
+        expect(yield* classesUntil(scriptName, ["Ledger.Domain"])).toEqual(["Ledger.Domain"]);
         expect(yield* json(url, "/account/deep")).toEqual({ balance: deepTotal });
         expect(yield* json(url, `/account/b${WIDTH - 1}`)).toEqual({ balance: sum(1, SMALL) });
         // And it takes new writes.
