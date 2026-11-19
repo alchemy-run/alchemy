@@ -166,6 +166,15 @@ describe("runtimeConfigProvider", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  it.effect("lists the whole env at the root, not just ALCHEMY_PHASE", () =>
+    Effect.gen(function* () {
+      const node = yield* runtimeConfigProvider(
+        ConfigProvider.fromEnv({ env: { A: "1", B: "2" } }),
+      ).load([]);
+      expect(node?._tag === "Record" ? [...node.keys].sort() : node).toEqual(["A", "B"]);
+    }),
+  );
+
   it.effect("falls back to the sanitized key the interceptor bound under", () =>
     Effect.gen(function* () {
       const env = { my_key: packEnvValue(Redacted.make("1.0")) };

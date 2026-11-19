@@ -178,14 +178,11 @@ const possibleJson = /^[\x20\t\r\n]*["{[0-9tfn-]/;
  * string from `packEnvValue`, or an env var the user set directly).
  * `undefined` passes through.
  *
- * Only call this on a key Alchemy wrote with {@link packEnvValue}: a string
- * someone else set verbatim may parse as JSON and come back as a different
- * value (`"false"` → `false`). `Config` reads use {@link unwrapRedactedMarker}.
- *
- * Runtime `get` accessors MUST feed this from the raw environment
- * (`process.env[key]` / the platform env object) — never through
- * `Config.String`: the runtime `ConfigProvider` unwraps the marker before it
- * could be detected here.
+ * Only call this on a key Alchemy wrote with {@link packEnvValue}, read from
+ * the raw environment (`process.env[key]` / the platform env object): a string
+ * someone else set may parse as JSON and come back changed (`"false"` →
+ * `false`), and `Config` reads have already unwrapped the marker. `Config`
+ * reads use {@link unwrapRedactedMarker} instead.
  */
 export const unpackEnvValue = <T>(raw: string | undefined): T | undefined => {
   if (raw === undefined) {

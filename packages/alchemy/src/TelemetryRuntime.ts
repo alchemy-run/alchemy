@@ -12,7 +12,6 @@ import * as OtlpMetrics from "effect/observability/OtlpMetrics";
 import * as OtlpSerialization from "effect/observability/OtlpSerialization";
 import * as OtlpTracer from "effect/observability/OtlpTracer";
 import * as Predicate from "effect/Predicate";
-import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import type * as Scope from "effect/Scope";
 import * as Tracer from "effect/Tracer";
@@ -28,11 +27,11 @@ export type TelemetryLayer = Layer.Layer<never, any, any>;
 
 /**
  * Read one string variable (`OTEL_*`, `ALCHEMY_*`) through the ambient
- * `ConfigProvider`, which on every runtime host is `runtimeConfigProvider`:
- * it unwraps a bound `Redacted` marker and returns every other string verbatim, so a user's `OTEL_SERVICE_NAME=1.0`
- * stays `"1.0"`. `undefined` when unset or empty.
+ * `ConfigProvider` (`runtimeConfigProvider` on every runtime host), so a
+ * user's `OTEL_SERVICE_NAME=1.0` stays `"1.0"`. `undefined` when unset or
+ * empty.
  */
-const readBound = (key: string): Effect.Effect<string | undefined> =>
+const readString = (key: string): Effect.Effect<string | undefined> =>
   Effect.flatMap(ConfigProvider.ConfigProvider, (provider) => provider.load([key])).pipe(
     // Missing optional bindings are normal on every event. Read their scalar
     // directly instead of constructing a Config/Schema error for each absence.
@@ -48,40 +47,34 @@ const readBound = (key: string): Effect.Effect<string | undefined> =>
  * Read a value `layerOtlp` bound with `rc.set` under an Alchemy-owned key.
  * `rc.set` packs it, so it is unpacked with {@link unpackEnvValue}; no user
  * sets these keys, so nothing verbatim is misread. A bound `Redacted` value
- * arrives already unwrapped by the host's provider, so it is assumed to be
- * JSON once unwrapped (the destination list is).
+ * arrives already unwrapped by the runtime provider.
  */
-const readBoundValue = (key: string): Effect.Effect<unknown> =>
-  readBound(key).pipe(
-    Effect.map((raw) => {
-      const value = raw === undefined ? undefined : unpackEnvValue<unknown>(raw);
-      return Redacted.isRedacted(value) ? Redacted.value(value) : value;
-    }),
-  );
+const readPackedValue = (key: string): Effect.Effect<unknown> =>
+  readString(key).pipe(Effect.map((raw) => unpackEnvValue<unknown>(raw)));
 
 /**
  * `service.name` fallback chain for the default exporter: `layerOtlp`'s
- * `serviceName`, the standard OTEL variable, then the physical Function/Worker name, then the stack
- * name. `OtlpResource.fromConfig` dies without a service name, so the
+ * `serviceName`, the standard OTEL variable, then the physical
+ * Function/Worker name, then the stack name. `OtlpResource.fromConfig` dies without a service name, so the
  * chain must always produce one.
  */
 const defaultServiceName = Effect.gen(function* () {
   return (
-    (yield* readBoundValue(SERVICE_NAME_KEY).pipe(
+    (yield* readPackedValue(SERVICE_NAME_KEY).pipe(
       Effect.map((name) => (typeof name === "string" ? name : undefined)),
     )) ??
-    (yield* readBound("OTEL_SERVICE_NAME")) ??
-    (yield* readBound("ALCHEMY_WORKER_NAME")) ??
-    (yield* readBound("AWS_LAMBDA_FUNCTION_NAME")) ??
-    (yield* readBound("ALCHEMY_STACK_NAME")) ??
+    (yield* readString("OTEL_SERVICE_NAME")) ??
+    (yield* readString("ALCHEMY_WORKER_NAME")) ??
+    (yield* readString("AWS_LAMBDA_FUNCTION_NAME")) ??
+    (yield* readString("ALCHEMY_STACK_NAME")) ??
     "alchemy"
   );
 });
 
 const defaultResource = Effect.gen(function* () {
   const serviceName = yield* defaultServiceName;
-  const stack = yield* readBound("ALCHEMY_STACK_NAME");
-  const stage = yield* readBound("ALCHEMY_STAGE");
+  const stack = yield* readString("ALCHEMY_STACK_NAME");
+  const stage = yield* readString("ALCHEMY_STAGE");
   return {
     serviceName,
     attributes: {
@@ -163,7 +156,7 @@ export const SERVICE_NAME_KEY = "ALCHEMY_OTEL_SERVICE_NAME";
  */
 const signalConfig = (signal: "TRACES" | "LOGS" | "METRICS", base: string | undefined) =>
   Effect.gen(function* () {
-    const specific = yield* readBound(`OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`);
+    const specific = yield* readString(`OTEL_EXPORTER_OTLP_${signal}_ENDPOINT`);
     const url =
       specific !== undefined && specific !== ""
         ? specific
@@ -174,8 +167,8 @@ const signalConfig = (signal: "TRACES" | "LOGS" | "METRICS", base: string | unde
       return undefined;
     }
     const rawHeaders =
-      (yield* readBound(`OTEL_EXPORTER_OTLP_${signal}_HEADERS`)) ??
-      (yield* readBound("OTEL_EXPORTER_OTLP_HEADERS"));
+      (yield* readString(`OTEL_EXPORTER_OTLP_${signal}_HEADERS`)) ??
+      (yield* readString("OTEL_EXPORTER_OTLP_HEADERS"));
     return { url, headers: parseOtlpHeaders(rawHeaders) } as ResolvedSignal;
   });
 
@@ -260,13 +253,13 @@ export const configuredDestinations: Effect.Effect<ResolvedDestination[]> = Effe
   function* () {
     // Depending on the secret/plain packing path, the bound list arrives
     // as a JSON string or already parsed into an array.
-    const rawList = yield* readBoundValue(EXPORTERS_KEY);
+    const rawList = yield* readPackedValue(EXPORTERS_KEY);
     const bound: ResolvedDestination[] = Array.isArray(rawList)
       ? (rawList as ResolvedDestination[])
       : typeof rawList === "string" && rawList !== ""
         ? yield* Effect.try(() => JSON.parse(rawList) as ResolvedDestination[]).pipe(Effect.orDie)
         : [];
-    const baseEndpoint = yield* readBound("OTEL_EXPORTER_OTLP_ENDPOINT");
+    const baseEndpoint = yield* readString("OTEL_EXPORTER_OTLP_ENDPOINT");
     const [stdTraces, stdLogs, stdMetrics] = yield* Effect.all([
       signalConfig("TRACES", baseEndpoint),
       signalConfig("LOGS", baseEndpoint),

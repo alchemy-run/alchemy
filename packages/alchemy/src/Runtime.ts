@@ -55,29 +55,30 @@ export const makeEntrypointLayer = (tag: any, entrypoint: any): Layer.Layer<any>
 export const runtimeConfigProvider = (
   source: ConfigProvider.ConfigProvider = ConfigProvider.fromEnv(),
 ): ConfigProvider.ConfigProvider =>
-  ConfigProvider.orElse(
-    ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-    ConfigProvider.make((path) =>
-      source.load(path).pipe(
-        Effect.flatMap((node) => {
-          const key = sanitizeKey(path.join("_"));
-          return node === undefined && !(path.length === 1 && path[0] === key)
-            ? source.load([key])
-            : Effect.succeed(node);
-        }),
-        Effect.map((node) =>
-          // Record and Array nodes carry a value too (`PORT` beside `PORT_X`).
-          node?.value === undefined ? node : { ...node, value: unwrapRedactedMarker(node.value) },
-        ),
+  ConfigProvider.make((path) => {
+    const key = sanitizeKey(path.join("_"));
+    if (key === "ALCHEMY_PHASE") {
+      return Effect.succeed(ConfigProvider.makeValue("runtime"));
+    }
+    return source.load(path).pipe(
+      Effect.flatMap((node) =>
+        node === undefined && !(path.length === 1 && path[0] === key)
+          ? source.load([key])
+          : Effect.succeed(node),
       ),
-    ),
-  );
+      Effect.map((node) =>
+        // Record and Array nodes carry a value too (`PORT` beside `PORT_X`).
+        node?.value === undefined ? node : { ...node, value: unwrapRedactedMarker(node.value) },
+      ),
+    );
+  });
 
 /**
  * {@link runtimeConfigProvider} over `process.env`. Every process-based
  * runtime host (Lambda, containers, VMs, sandboxes) provides this Layer.
+ * `process.env` is read when the Layer builds, so env a host sets before
+ * its first event is seen.
  */
-export const RuntimeConfigProviderLive: Layer.Layer<never> = Layer.effect(
-  ConfigProvider.ConfigProvider,
+export const RuntimeConfigProviderLive = ConfigProvider.layer(
   Effect.sync(() => runtimeConfigProvider()),
 );

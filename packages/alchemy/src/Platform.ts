@@ -570,12 +570,8 @@ export const Platform = <
                       const configProvider = yield* ConfigProvider.ConfigProvider;
                       const phase = yield* ALCHEMY_PHASE;
 
-                      // At runtime the ambient provider is
-                      // `runtimeConfigProvider`, which unwraps the values
-                      // bound below and leaves every other string verbatim.
-                      // Don't re-read through `ctx.get`: it JSON-decodes, so
-                      // `"false"` or a long numeric id would come back
-                      // changed (#2269, #3497).
+                      // At runtime the ambient provider is `runtimeConfigProvider`;
+                      // reads pass straight through.
                       if (phase !== "plan") {
                         return configProvider;
                       }
@@ -585,10 +581,9 @@ export const Platform = <
                           // `set`/`get` store keys verbatim, so canonicalize the
                           // logical config path here (the caller's job) before
                           // handing it to the RuntimeContext.
-                          const key = sanitizeKey(path.map((p) => p.toString()).join("_"));
+                          const key = sanitizeKey(path.join("_"));
                           const node = yield* configProvider.load(path);
                           if (node) {
-                            // bind it to the RuntimeContext during plan
                             const output = Output.literal(Redacted.make(node.value));
                             yield* ctx?.set(key, output) ?? Effect.void;
                           }
