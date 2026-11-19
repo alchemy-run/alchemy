@@ -8,7 +8,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Redacted from "effect/Redacted";
-import { reifyBoundConfigProvider } from "@/Runtime.ts";
+import { runtimeConfigProvider } from "@/Runtime.ts";
 import { packEnvValue } from "@/RuntimeContext.ts";
 import * as Telemetry from "@/Telemetry.ts";
 
@@ -67,7 +67,7 @@ const post = (
         Context.make(HttpServerRequest.HttpServerRequest, incoming).pipe(
           Context.add(HttpClient.HttpClient, client),
           // Every runtime host wraps its env provider this way.
-          Context.add(ConfigProvider.ConfigProvider, reifyBoundConfigProvider(backend, {})),
+          Context.add(ConfigProvider.ConfigProvider, runtimeConfigProvider(backend)),
         ),
       ),
     );

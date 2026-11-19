@@ -8,7 +8,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Layer from "effect/Layer";
 import * as Metric from "effect/Metric";
 import * as Redacted from "effect/Redacted";
-import { reifyBoundConfigProvider } from "@/Runtime.ts";
+import { runtimeConfigProvider } from "@/Runtime.ts";
 import { packEnvValue } from "@/RuntimeContext.ts";
 import { buildEventTelemetry, EXPORTERS_KEY, SERVICE_NAME_KEY } from "@/TelemetryRuntime.ts";
 
@@ -18,10 +18,9 @@ const runEvent = (
   override?: Layer.Layer<never>,
 ) => {
   // Every runtime host wraps its env provider this way.
-  const context = Context.make(
-    ConfigProvider.ConfigProvider,
-    reifyBoundConfigProvider(provider, {}),
-  ).pipe(Context.add(HttpClient.HttpClient, client));
+  const context = Context.make(ConfigProvider.ConfigProvider, runtimeConfigProvider(provider)).pipe(
+    Context.add(HttpClient.HttpClient, client),
+  );
   return Effect.scoped(
     Effect.gen(function* () {
       const telemetry = yield* buildEventTelemetry(context, yield* Effect.scope, override);

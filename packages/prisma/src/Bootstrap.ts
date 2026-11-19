@@ -5,14 +5,13 @@
  */
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
   entrypointLayer,
   resolveProgram,
   runProcess,
   stackConstant,
 } from "alchemy/Runtime/Bootstrap";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -46,15 +45,7 @@ export const bootstrap = (entrypoint: unknown, options: PrismaBootstrapOptions):
         Layer.provideMerge(stack),
         Layer.provideMerge(BunHttpServer({ hostname: "0.0.0.0" })),
         Layer.provideMerge(platform),
-        Layer.provideMerge(
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.orElse(
-              ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-              reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
-            ),
-          ),
-        ),
+        Layer.provideMerge(RuntimeConfigProviderLive),
         Layer.provideMerge(Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")),
       ),
     ),

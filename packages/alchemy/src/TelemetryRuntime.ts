@@ -28,9 +28,8 @@ export type TelemetryLayer = Layer.Layer<never, any, any>;
 
 /**
  * Read one string variable (`OTEL_*`, `ALCHEMY_*`) through the ambient
- * `ConfigProvider`. Every runtime host wraps that in
- * `reifyBoundConfigProvider`, which unwraps a bound `Redacted` marker and
- * returns every other string verbatim, so a user's `OTEL_SERVICE_NAME=1.0`
+ * `ConfigProvider`, which on every runtime host is `runtimeConfigProvider`:
+ * it unwraps a bound `Redacted` marker and returns every other string verbatim, so a user's `OTEL_SERVICE_NAME=1.0`
  * stays `"1.0"`. `undefined` when unset or empty.
  */
 const readBound = (key: string): Effect.Effect<string | undefined> =>

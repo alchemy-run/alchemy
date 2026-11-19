@@ -3,8 +3,8 @@ import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { reifyBoundConfigProvider } from "@/Runtime.ts";
-import { decodeConfigString, packEnvValue } from "@/RuntimeContext.ts";
+import { runtimeConfigProvider } from "@/Runtime.ts";
+import { packEnvValue, unwrapRedactedMarker } from "@/RuntimeContext.ts";
 
 // Strings a user can put in a Worker `env` prop, a dashboard or a host
 // environment that `JSON.parse` would turn into something else (#2269,
@@ -34,26 +34,26 @@ const jsonLooking = [
 
 const plain = ["my-queue", "https://example.com/a?b=c", "", "line\nbreak", "{not json"];
 
-describe("decodeConfigString", { tags: ["unit", "local"] }, () => {
+describe("unwrapRedactedMarker", { tags: ["unit", "local"] }, () => {
   it("returns every string that isn't a Redacted marker verbatim", () => {
     for (const raw of [...jsonLooking, ...plain]) {
-      expect(decodeConfigString(raw)).toBe(raw);
+      expect(unwrapRedactedMarker(raw)).toBe(raw);
     }
   });
 
   it("unwraps a bound Redacted marker to its source string", () => {
     for (const source of [...jsonLooking, ...plain]) {
-      expect(decodeConfigString(packEnvValue(Redacted.make(source)))).toBe(source);
+      expect(unwrapRedactedMarker(packEnvValue(Redacted.make(source)))).toBe(source);
     }
   });
 
   it("unwraps a marker that holds a marker-shaped string exactly once", () => {
     const inner = packEnvValue(Redacted.make("s3cret"));
-    expect(decodeConfigString(packEnvValue(Redacted.make(inner)))).toBe(inner);
+    expect(unwrapRedactedMarker(packEnvValue(Redacted.make(inner)))).toBe(inner);
   });
 
   it("serialises a marker's structured value as JSON", () => {
-    expect(decodeConfigString(packEnvValue(Redacted.make({ token: "abc" })))).toBe(
+    expect(unwrapRedactedMarker(packEnvValue(Redacted.make({ token: "abc" })))).toBe(
       '{"token":"abc"}',
     );
   });
@@ -69,12 +69,12 @@ const readAll = <A>(config: (key: string) => Config.Config<A>, env: Record<strin
 
 const providers = (env: Record<string, string>) => ({
   // workerd: the env object (`ConfigProvider.fromUnknown`)
-  fromUnknown: reifyBoundConfigProvider(ConfigProvider.fromUnknown(env), env),
+  fromUnknown: runtimeConfigProvider(ConfigProvider.fromUnknown(env)),
   // Node hosts: `process.env` (`ConfigProvider.fromEnv`)
-  fromEnv: reifyBoundConfigProvider(ConfigProvider.fromEnv({ env }), env),
+  fromEnv: runtimeConfigProvider(ConfigProvider.fromEnv({ env })),
 });
 
-describe("reifyBoundConfigProvider", { tags: ["unit", "local"] }, () => {
+describe("runtimeConfigProvider", { tags: ["unit", "local"] }, () => {
   const verbatim = Object.fromEntries(jsonLooking.map((value, i) => [`VAR_${i}`, value]));
 
   for (const [name, provider] of Object.entries(providers(verbatim))) {
@@ -147,10 +147,22 @@ describe("reifyBoundConfigProvider", { tags: ["unit", "local"] }, () => {
       }).pipe(
         Effect.provideService(
           ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv({ env }), env),
+          runtimeConfigProvider(ConfigProvider.fromEnv({ env })),
         ),
       );
       expect(read).toEqual({ port: 8080, list: "1.0", raw: "1e3" });
+    }),
+  );
+
+  it.effect("always reads ALCHEMY_PHASE as runtime", () =>
+    Effect.gen(function* () {
+      const phase = yield* Config.String("ALCHEMY_PHASE").pipe(
+        Effect.provideService(
+          ConfigProvider.ConfigProvider,
+          runtimeConfigProvider(ConfigProvider.fromEnv({ env: { ALCHEMY_PHASE: "plan" } })),
+        ),
+      );
+      expect(phase).toBe("runtime");
     }),
   );
 
@@ -160,7 +172,7 @@ describe("reifyBoundConfigProvider", { tags: ["unit", "local"] }, () => {
       const value = yield* Config.String("my.key").pipe(
         Effect.provideService(
           ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv({ env: {} }), env),
+          runtimeConfigProvider(ConfigProvider.fromEnv({ env })),
         ),
       );
       expect(value).toBe("1.0");

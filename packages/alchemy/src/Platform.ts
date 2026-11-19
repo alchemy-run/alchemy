@@ -570,8 +570,8 @@ export const Platform = <
                       const configProvider = yield* ConfigProvider.ConfigProvider;
                       const phase = yield* ALCHEMY_PHASE;
 
-                      // At runtime the ambient provider is the host's
-                      // `reifyBoundConfigProvider`, which unwraps the values
+                      // At runtime the ambient provider is
+                      // `runtimeConfigProvider`, which unwraps the values
                       // bound below and leaves every other string verbatim.
                       // Don't re-read through `ctx.get`: it JSON-decodes, so
                       // `"false"` or a long numeric id would come back

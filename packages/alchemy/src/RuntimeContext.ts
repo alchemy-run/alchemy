@@ -180,12 +180,12 @@ const possibleJson = /^[\x20\t\r\n]*["{[0-9tfn-]/;
  *
  * Only call this on a key Alchemy wrote with {@link packEnvValue}: a string
  * someone else set verbatim may parse as JSON and come back as a different
- * value (`"false"` → `false`). `Config` reads use {@link decodeConfigString}.
+ * value (`"false"` → `false`). `Config` reads use {@link unwrapRedactedMarker}.
  *
  * Runtime `get` accessors MUST feed this from the raw environment
  * (`process.env[key]` / the platform env object) — never through
- * `Config.String`: the ambient runtime `ConfigProvider` reifies bound
- * values, unwrapping the marker before it could be detected here.
+ * `Config.String`: the runtime `ConfigProvider` unwraps the marker before it
+ * could be detected here.
  */
 export const unpackEnvValue = <T>(raw: string | undefined): T | undefined => {
   if (raw === undefined) {
@@ -206,21 +206,15 @@ export const unpackEnvValue = <T>(raw: string | undefined): T | undefined => {
 };
 
 /**
- * Decode an env-var string for a `Config` read.
+ * If `raw` is a `{"_tag":"Redacted","value":...}` marker, return its value as
+ * a string; otherwise return `raw` unchanged, even when it parses as JSON.
  *
- * `Config` values are strings at their source, and the only encoding Alchemy
- * puts on a variable a `Config` reads is the {@link RedactedMarker} that the
- * deploy-time interceptor in `Platform.ts` binds it as. So the marker is
- * unwrapped, and every other string is returned **verbatim**, including one
- * that parses as JSON: a Worker `env` entry, a variable set in a dashboard or
- * on the host. Reading those through {@link unpackEnvValue} turns `"false"`
- * into `false` and rounds `"12345678901.12345678901234"` (#2269, #2847,
- * #3497), because only the writer knows whether a string was packed.
- *
- * Use {@link unpackEnvValue} only for keys Alchemy wrote with
- * {@link packEnvValue}.
+ * `Config` reads use this (through `runtimeConfigProvider`): the marker is the
+ * only encoding Alchemy puts on a value a `Config` reads. Any other string was
+ * set by someone else (a Worker `env` entry, a dashboard, the host), so only
+ * they know whether `"false"` meant a string (#2269, #2847, #3497).
  */
-export const decodeConfigString = (raw: string): string => {
+export const unwrapRedactedMarker = (raw: string): string => {
   if (!raw.startsWith("{")) {
     return raw;
   }
