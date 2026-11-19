@@ -1,3 +1,10 @@
+/**
+ * A fake Prisma Compute platform on `FakeManagementApi`, for cases that need
+ * the platform to misbehave on cue or need state the live helpers cannot
+ * write yet. The main paths run live in `ActiveVersion.live.test.ts`,
+ * `ComputeArtifact.live.test.ts` and `Compute.live.test.ts`. Meant to be
+ * replaced by live fixtures.
+ */
 import { PrismaApiError, type PrismaManagementClient } from "@alchemy.run/prisma/Client";
 import type { CustomDomain as ApiCustomDomain } from "@alchemy.run/prisma/Types";
 import * as Effect from "effect/Effect";
