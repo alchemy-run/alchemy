@@ -445,22 +445,23 @@ const PROVIDERS = [
 
   <nav class="v2-rail" aria-label="From a declaration to production">
     <span class="v2-rail__track" aria-hidden="true"><span class="v2-rail__fill"></span></span>
-    {RAIL.map((group) => (
-      <div class="v2-rail__group">
-        <span class="v2-rail__label">{group.label}</span>
-        <ol class="v2-rail__steps">
-          {group.steps.map((step) => (
-            <li>
-              <a class="v2-rail__step" href={`#${step.id}`} data-rail={step.id}>
-                <span class="v2-rail__dot" aria-hidden="true"></span>
-                {step.title}
-              </a>
-            </li>
-          ))}
-        </ol>
-      </div>
-    ))}
+    <ol class="v2-rail__steps">
+      {RAIL.flatMap((group) =>
+        group.steps.map((step) => (
+          <li>
+            <a class="v2-rail__step" href={`#${step.id}`} data-rail={step.id}>
+              <span class="v2-rail__dot" aria-hidden="true"></span>
+              <span class="v2-rail__text">
+                <span class="v2-rail__label">{group.label}</span>
+                <span class="v2-rail__title">{step.title}</span>
+              </span>
+            </a>
+          </li>
+        )),
+      )}
+    </ol>
   </nav>
+
   <script>
     // Light the rail's step for the section in the middle of the viewport,
     // fill the track up to it, and show the rail only while those sections
@@ -1313,9 +1314,6 @@ const PROVIDERS = [
     top: 50%;
     left: max(16px, calc((100vw - 1080px) / 2 - 176px));
     z-index: 5;
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
     width: 150px;
     translate: -8px -50%;
     opacity: 0;
@@ -1329,33 +1327,41 @@ const PROVIDERS = [
     translate: 0 -50%;
     pointer-events: auto;
   }
-  .v2-rail__label {
-    display: block;
-    margin-bottom: 8px;
-    padding-left: 21px;
-    font-family: var(--alc-font-mono);
-    font-size: 10.5px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--alc-fg-2);
-  }
   .v2-rail__steps {
     list-style: none;
     margin: 0;
     padding: 0;
-  }
-  .v2-rail__step {
-    position: relative;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    gap: 16px;
+  }
+  /* The verb is the step; what it acts on sits under it, quieter. */
+  .v2-rail__step {
+    display: flex;
+    align-items: flex-start;
     gap: 12px;
-    padding: 5px 0;
-    font-size: 13.5px;
-    color: var(--alc-fg-2);
     text-decoration: none;
+  }
+  .v2-rail__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .v2-rail__label {
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 18px;
+    color: var(--alc-fg-2);
     transition: color 160ms ease;
   }
-  .v2-rail__step:hover {
+  .v2-rail__title {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--alc-fg-4);
+    opacity: 0.7;
+    transition: opacity 160ms ease;
+  }
+  .v2-rail__step:hover .v2-rail__label {
     color: var(--alc-fg-1);
   }
   /* One track behind every dot; the fill grows to the current step. */
@@ -1375,9 +1381,8 @@ const PROVIDERS = [
   .v2-rail__dot {
     position: relative;
     z-index: 1;
-  }
-  .v2-rail__dot {
     flex: none;
+    margin-top: 4.5px;
     width: 9px;
     height: 9px;
     border-radius: 50%;
@@ -1392,9 +1397,11 @@ const PROVIDERS = [
     border-color: var(--alc-accent);
     background: var(--alc-accent);
   }
-  .v2-rail__step.is-current {
-    color: var(--alc-fg-1);
-    font-weight: 600;
+  .v2-rail__step.is-current .v2-rail__label {
+    color: var(--alc-accent-text);
+  }
+  .v2-rail__step.is-current .v2-rail__title {
+    opacity: 1;
   }
   .v2-rail__step.is-current .v2-rail__dot {
     border-color: var(--alc-accent);
