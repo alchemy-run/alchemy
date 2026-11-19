@@ -1,5 +1,5 @@
+import * as Boat from "@alchemy.run/boat";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as E2B from "@alchemy.run/e2b";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
@@ -10,7 +10,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import PiApi from "./fixtures/Api.ts";
 
-const providers = Layer.mergeAll(Cloudflare.providers(), E2B.providers());
+const providers = Layer.mergeAll(Cloudflare.providers(), Boat.providers());
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({ providers });
 
@@ -23,7 +23,8 @@ const Stack = Alchemy.Stack(
   }),
 );
 
-const stack = beforeAll(deploy(Stack));
+// The first deploy builds the sandbox snapshot.
+const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 const tags = ["provider:cloudflare", "provider:pi", "live"];
@@ -155,10 +156,10 @@ test(
 );
 
 test(
-  "coding tools run in an E2B sandbox that suspends, resumes and is removed",
+  "coding tools run in a Boat sandbox that suspends, resumes and is removed",
   Effect.gen(function* () {
     const name = `sbx-${Date.now()}`;
-    /** E2B's listing trails a state change by a moment. */
+    /** Boat's listing trails a state change by a moment. */
     const stateBecomes = (wanted: string | null) =>
       call(`/sandbox/${name}/state`).pipe(
         Effect.repeat({
@@ -216,10 +217,10 @@ test(
       yield* call(`/sandbox/${name}/kill`, {});
       yield* call(`/sandbox/${name}/kill`, {});
       expect((yield* stateBecomes(null)).state).toBeNull();
-      // A failed assertion must not leave a sandbox holding the template.
+      // A failed assertion must not leave a sandbox running.
     }).pipe(Effect.ensuring(Effect.ignore(call(`/sandbox/${name}/kill`, {}))));
   }),
-  { tags: [...tags, "provider:e2b"], timeout: 300_000 },
+  { tags: [...tags, "provider:boat"], timeout: 300_000 },
 );
 
 test(

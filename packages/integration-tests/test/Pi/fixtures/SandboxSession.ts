@@ -1,6 +1,6 @@
 import * as AI from "@alchemy.run/ai";
+import * as Boat from "@alchemy.run/boat";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as E2B from "@alchemy.run/e2b";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
@@ -20,35 +20,42 @@ const ModelsLive = Layer.unwrap(
   ),
 );
 
-/** The sandbox client, bound to the image every conversation's sandbox boots from. */
+/** The sandbox client, bound to the snapshot every conversation's sandbox boots from. */
 const Sandboxes = Effect.gen(function* () {
-  const base = yield* E2B.Template("PiBase", { image: "node:22-bookworm" });
-  return yield* E2B.CreateSandbox(base);
+  const base = yield* Boat.Snapshot("PiBase", { run: ["node --version"] });
+  return yield* Boat.CreateSandbox(base);
 });
 
-/** E2B finds a sandbox by its metadata and pauses it on `suspend`. */
+/** Boat finds a sandbox by a label and stops it on `suspend`, keeping its disk. */
 const SandboxLive = Layer.effect(
   AI.Sandboxes,
   Effect.gen(function* () {
     const sandboxes = yield* Sandboxes;
-    const find = (key: string) =>
-      sandboxes.list({ metadata: { key }, state: ["running", "paused"] });
+    const find = (key: string) => sandboxes.list({ labels: { key } });
     return {
       open: Effect.fn(function* (key) {
         const [existing] = yield* find(key);
-        return existing
-          ? yield* sandboxes.connect(existing.sandboxID, { timeout: 600 })
-          : yield* sandboxes.create({ metadata: { key }, timeout: 600 });
+        if (existing === undefined) {
+          return yield* sandboxes.create({
+            type: "small",
+            noEnv: true,
+            autoStop: "10 minutes",
+            labels: { key },
+          });
+        }
+        const sandbox = yield* sandboxes.connect(existing.id);
+        yield* sandbox.resume({ autoStop: "10 minutes" });
+        return sandbox;
       }),
       suspend: Effect.fn(function* (key) {
         const [existing] = yield* find(key);
-        if (existing?.state !== "running") return;
-        const sandbox = yield* sandboxes.connect(existing.sandboxID);
-        yield* sandbox.pause();
+        if (existing === undefined) return;
+        const sandbox = yield* sandboxes.connect(existing.id);
+        yield* sandbox.stop();
       }),
       remove: Effect.fn(function* (key) {
         const found = yield* find(key);
-        yield* Effect.forEach(found, (sandbox) => sandboxes.kill(sandbox.sandboxID));
+        yield* Effect.forEach(found, (sandbox) => sandboxes.delete(sandbox.id));
       }),
     };
   }),
@@ -74,7 +81,7 @@ class CountBytes extends AI.Tool<CountBytes>()(
 ) {}
 
 const HarnessLive = Layer.mergeAll(ModelsLive, PiCloudflare.DurableObjectStorage, SandboxLive).pipe(
-  Layer.provideMerge(Layer.mergeAll(Cloudflare.AI.QueryGatewayBinding, E2B.CreateSandboxHttp)),
+  Layer.provideMerge(Layer.mergeAll(Cloudflare.AI.QueryGatewayBinding, Boat.CreateSandboxHttp)),
 );
 
 export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandboxSession>()(
@@ -84,13 +91,10 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
     const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools, CountBytes] });
 
     return Effect.gen(function* () {
-      /** The conversation's sandbox as E2B lists it, if it has one. */
+      /** The conversation's sandbox as Boat lists it, if it has one. */
       const sandboxOf = Effect.fn(function* (name: string) {
         const conversation = yield* harness.conversationByName(name);
-        const [found] = yield* sandboxes.list({
-          metadata: { key: conversation.sandboxKey },
-          state: ["running", "paused"],
-        });
+        const [found] = yield* sandboxes.list({ labels: { key: conversation.sandboxKey } });
         return found;
       });
 
@@ -113,15 +117,10 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
           return (yield* submission.wait).status;
         }),
         readFile: Effect.fn(function* (name: string, path: string) {
-          const sandboxId = (yield* sandboxOf(name))?.sandboxID;
+          const sandboxId = (yield* sandboxOf(name))?.id;
           if (sandboxId === undefined) return null;
-          // A sandbox killed a moment ago can still be listed.
-          const sandbox = yield* sandboxes
-            .connect(sandboxId)
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
-          return sandbox === undefined
-            ? null
-            : yield* sandbox.files.readText(path).pipe(Effect.orElseSucceed(() => null));
+          const sandbox = yield* sandboxes.connect(sandboxId);
+          return yield* sandbox.files.readText(path).pipe(Effect.orElseSucceed(() => null));
         }),
         toolsUsed: Effect.fn(function* (name: string) {
           const conversation = yield* harness.conversationByName(name);
@@ -132,9 +131,11 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
               : [],
           );
         }),
-        /** The sandbox's state on E2B: `running`, `paused`, or `null` when it has none. */
+        /** The sandbox's state on Boat: `running`, `paused` (stopped, disk kept), or `null` when it has none. */
         sandboxState: Effect.fn(function* (name: string) {
-          return (yield* sandboxOf(name))?.state ?? null;
+          const state = (yield* sandboxOf(name))?.state;
+          if (state === undefined) return null;
+          return state === "archiving" || state === "archived" ? "paused" : "running";
         }),
         suspend: (name: string) => harness.suspendSandbox(name),
         kill: (name: string) => harness.removeSandbox(name),
