@@ -1,7 +1,9 @@
 import { DockerLive } from "@alchemy.run/docker/Docker";
+import { Retry as GcpRetry } from "@distilled.cloud/gcp/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Command from "alchemy/Command";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import {
   Server as WebsiteServer,
@@ -429,9 +431,6 @@ import {
   VolumesSnapshot as BaremetalsolutionVolumesSnapshot,
   VolumesSnapshotProvider as BaremetalsolutionVolumesSnapshotProvider,
 } from "./BareMetalSolution/VolumesSnapshot.ts";
-import { AppConnection, AppConnectionProvider } from "./BeyondCorp/AppConnection.ts";
-import { AppConnector, AppConnectorProvider } from "./BeyondCorp/AppConnector.ts";
-import { AppGateway, AppGatewayProvider } from "./BeyondCorp/AppGateway.ts";
 import { SecurityGateway, SecurityGatewayProvider } from "./BeyondCorp/SecurityGateway.ts";
 import {
   SecurityGatewaysApplication,
@@ -911,10 +910,6 @@ import {
 } from "./ContactCenterInsights/ConversationsFeedbackLabel.ts";
 import { Dashboard, DashboardProvider } from "./ContactCenterInsights/Dashboard.ts";
 import {
-  DashboardsChart,
-  DashboardsChartProvider,
-} from "./ContactCenterInsights/DashboardsChart.ts";
-import {
   DatasetsConversationsFeedbackLabel,
   DatasetsConversationsFeedbackLabelProvider,
 } from "./ContactCenterInsights/DatasetsConversationsFeedbackLabel.ts";
@@ -978,7 +973,6 @@ import {
   SynonymSetProvider as ContentwarehouseSynonymSetProvider,
 } from "./ContentWarehouse/SynonymSet.ts";
 import * as Credentials from "./Credentials.ts";
-import { TagTemplate, TagTemplateProvider } from "./DataCatalog/TagTemplate.ts";
 import {
   TaxonomiesPolicyTag,
   TaxonomiesPolicyTagProvider,
@@ -2446,6 +2440,10 @@ import {
 } from "./Storage/Object.ts";
 import { ObjectAccessControl, ObjectAccessControlProvider } from "./Storage/ObjectAccessControl.ts";
 import { PutObjectHttp } from "./Storage/PutObjectHttp.ts";
+import {
+  ReportConfig as StorageInsightsReportConfig,
+  ReportConfigProvider as StorageInsightsReportConfigProvider,
+} from "./StorageInsights/ReportConfig.ts";
 import { AgentPool, AgentPoolProvider } from "./StorageTransfer/AgentPool.ts";
 import { GetGoogleServiceAccountHttp } from "./StorageTransfer/GetGoogleServiceAccountHttp.ts";
 import { RunTransferJobHttp } from "./StorageTransfer/RunTransferJobHttp.ts";
@@ -2623,6 +2621,7 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
  */
 /** Auth + env + HTTP client for resource providers, HTTP bindings, and GKE. */
 const gcpLive = fromCredentials().pipe(
+  Layer.provideMerge(Layer.succeed(GcpRetry, DeployRetry.policy)),
   Layer.provideMerge(Credentials.fromAuthProvider()),
   Layer.provideMerge(GcpAuth),
   Layer.provideMerge(ProfileStoreLive),
@@ -2652,6 +2651,7 @@ const makeProviders = () =>
           Managed,
           ObjectAccessControl,
           StorageObject,
+          StorageInsightsReportConfig,
           AgentPool,
           TransferJob,
           Topic,
@@ -3104,7 +3104,6 @@ const makeProviders = () =>
           LakesEntity,
           LakesEntitiesPartition,
           MetadataFeed,
-          TagTemplate,
           Taxonomy,
           TaxonomiesPolicyTag,
           DataStoresBranchesDocument,
@@ -3143,7 +3142,6 @@ const makeProviders = () =>
           ConversationsAssessment,
           ConversationsFeedbackLabel,
           Dashboard,
-          DashboardsChart,
           DatasetsConversationsFeedbackLabel,
           IssueModel,
           IssueModelsIssue,
@@ -3463,9 +3461,6 @@ const makeProviders = () =>
           ClouddeployTarget,
           ConfigDeploymentGroup,
           ConfigPreview,
-          AppConnection,
-          AppConnector,
-          AppGateway,
           SecurityGateway,
           SecurityGatewaysApplication,
           ManagedKafkaCluster,
@@ -3663,6 +3658,7 @@ const makeProviders = () =>
             ManagedProvider(),
             ObjectAccessControlProvider(),
             StorageObjectProvider(),
+            StorageInsightsReportConfigProvider(),
             AgentPoolProvider(),
             TransferJobProvider(),
           ),
@@ -4104,7 +4100,7 @@ const makeProviders = () =>
             LakesEntitiesPartitionProvider(),
             MetadataFeedProvider(),
           ),
-          Layer.mergeAll(TagTemplateProvider(), TaxonomyProvider(), TaxonomiesPolicyTagProvider()),
+          Layer.mergeAll(TaxonomyProvider(), TaxonomiesPolicyTagProvider()),
           Layer.mergeAll(
             DataStoresBranchesDocumentProvider(),
             DataStoresControlProvider(),
@@ -4149,7 +4145,6 @@ const makeProviders = () =>
               ConversationsAssessmentProvider(),
               ConversationsFeedbackLabelProvider(),
               DashboardProvider(),
-              DashboardsChartProvider(),
               DatasetsConversationsFeedbackLabelProvider(),
               IssueModelProvider(),
               IssueModelsIssueProvider(),
@@ -4600,13 +4595,7 @@ const makeProviders = () =>
                 SchemaRegistriesSubjectsVersionProvider(),
                 SchemaRegistriesContextsSubjectsVersionProvider(),
               ),
-              Layer.mergeAll(
-                AppConnectionProvider(),
-                AppConnectorProvider(),
-                AppGatewayProvider(),
-                SecurityGatewayProvider(),
-                SecurityGatewaysApplicationProvider(),
-              ),
+              Layer.mergeAll(SecurityGatewayProvider(), SecurityGatewaysApplicationProvider()),
               Layer.mergeAll(
                 RepositoriesBranchRuleProvider(),
                 RepositoriesHookProvider(),

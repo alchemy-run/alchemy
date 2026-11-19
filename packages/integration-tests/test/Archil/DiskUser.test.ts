@@ -14,7 +14,7 @@ const { test } = Test.make({ providers: Archil.providers() });
 const users = (diskId: string) =>
   archil.getDisk({ id: diskId }).pipe(
     Effect.map(({ data }) => (data.authorizedUsers ?? []).map((u) => u.identifier)),
-    Effect.catchTag("DiskNotFound", () => Effect.succeed([] as Array<string | undefined>)),
+    Effect.catchTag("NotFound", () => Effect.succeed([] as Array<string | undefined>)),
   );
 
 /**

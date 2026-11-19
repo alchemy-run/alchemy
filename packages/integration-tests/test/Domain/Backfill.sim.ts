@@ -733,6 +733,7 @@ export class Sim {
         {
           ref,
           model: () => (knows() ? this.targets : []),
+          targets: () => (knows() ? this.targets : []),
           singleSource: () => this.singleSource,
           log: (after, limit) =>
             Effect.sync(() => data.events.filter((event) => event.seq > after).slice(0, limit)),
@@ -806,7 +807,9 @@ export class Sim {
 
   /**
    * Commit an event on a source, as an aggregate does: decide routing under its
-   * lock, then send what goes out live. The first commit lists it in the directory.
+   * lock, then send what goes out live. The first commit stores that the instance
+   * has to be listed in the directory (as the real object's register job does), and
+   * the instance lists itself once the commit has returned (see {@link Sim.list}).
    */
   commit(sourceId: string, keys: ReadonlyArray<string>, staleUntil = 0) {
     const [name, id] = sourceId.split("/") as [string, string];
@@ -814,14 +817,7 @@ export class Sim {
     if (source.events.length === 0) source.staleUntil = staleUntil;
     this.busy(source);
     const knows = this.deployed && this.now >= source.staleUntil;
-    // The first commit lists the instance in the directory before it persists.
-    const register =
-      source.events.length === 0
-        ? this.retry(
-            this.net.node.register(Backfill.leafOf(source.ref, this.limits.depth), source.ref),
-          )
-        : Effect.void;
-    return register.pipe(
+    return Effect.succeed(undefined).pipe(
       Effect.andThen(
         source.object
           .section(
@@ -867,8 +863,29 @@ export class Sim {
                 }
               }),
             ),
+            // Listed after the commit returned, unless a test holds the listing.
+            Effect.tap(() => (this.holdListing ? Effect.void : this.list(sourceId))),
           ),
       ),
+    );
+  }
+
+  /** Instances do not list themselves after their first commit: a test calls {@link Sim.list}. */
+  holdListing = false;
+
+  /**
+   * The instance's register job: list it in the directory, then ask for a reader
+   * for every consumer it is behind on, as a run that listed the directory
+   * without it would not have caught it up. Retried until it lands.
+   */
+  list(sourceId: string) {
+    const [name, id] = sourceId.split("/") as [string, string];
+    const source = this.source({ source: name, id });
+    return this.retry(
+      this.net.node.register(Backfill.leafOf(source.ref, this.limits.depth), source.ref),
+    ).pipe(
+      // The instance's own job: no call crosses the network.
+      Effect.andThen(this.retry(Effect.suspend(() => this.busy(source).role.catchUp))),
     );
   }
 

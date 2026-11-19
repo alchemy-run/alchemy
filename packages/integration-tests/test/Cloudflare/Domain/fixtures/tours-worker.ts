@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -52,8 +52,9 @@ export default class DomainToursWorker extends Cloudflare.Worker<DomainToursWork
         if (action === "book" || action === "cancel") {
           const orgId = OrgId.make(second!);
           const receipt = yield* tours.send(
-            first!,
-            action === "book" ? new BookTour({ orgId, unit: third! }) : new CancelTour({ orgId }),
+            action === "book"
+              ? new BookTour({ id: first!, orgId, unit: third! })
+              : new CancelTour({ id: first!, orgId }),
           );
           const state = yield* schedules.get(orgId, {
             atLeast: { stream: receipt.stream, version: receipt.version },

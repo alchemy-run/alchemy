@@ -1,6 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { progressOf } from "@alchemy.run/cloudflare/Domain/Backfill";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
+import { progressOf } from "@alchemy.run/domain/Cloudflare/Backfill";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as workflows from "@distilled.cloud/cloudflare/workflows";
@@ -8,6 +9,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
@@ -133,7 +135,9 @@ const lastWait = (workerName: string) =>
     });
   });
 
-const { test } = Test.make({ providers: Cloudflare.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+});
 
 describe.sequential(
   "a deploy and its backfill",
@@ -164,6 +168,27 @@ describe.sequential(
           );
           expect(plan.resources["Ledger.DomainBackfillRun"]?.action).toBe("noop");
 
+          yield* stack.destroy();
+        }),
+      { timeout: 900_000 },
+    );
+
+    test.provider(
+      "the first deploy after a destroy waits on a backfill whose Workflow it just created, and deploying again succeeds",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          // The Worker, its backfill Workflow and the wait's instance are all new in this deploy.
+          const { worker } = yield* deployOf(stack, BenchV2);
+          const url = worker.url!.replace(/\/+$/, "");
+          yield* serving(url, "v2");
+          const history = JSON.parse(yield* call(url, "GET", "/history")) as {
+            complete: boolean;
+          };
+          expect(history.complete).toBe(true);
+
+          yield* deployOf(stack, BenchV2);
+          yield* serving(url, "v2");
           yield* stack.destroy();
         }),
       { timeout: 900_000 },

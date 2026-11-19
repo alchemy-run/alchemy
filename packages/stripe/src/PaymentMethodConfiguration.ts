@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   GetPaymentMethodConfigurations,
   GetPaymentMethodConfiguration,
@@ -103,6 +102,8 @@ export interface PaymentMethodConfigurationProps {
   amazonPay?: PaymentMethodPreferenceInput;
   /** Display preference for Apple Pay. */
   applePay?: PaymentMethodPreferenceInput;
+  /** Display preference for Apple Pay Later. Stripe reports it back only where it is available. */
+  applePayLater?: PaymentMethodPreferenceInput;
   /** Display preference for AU BECS Debit. */
   auBecsDebit?: PaymentMethodPreferenceInput;
   /** Display preference for Bacs Direct Debit. */
@@ -131,6 +132,8 @@ export interface PaymentMethodConfigurationProps {
   eps?: PaymentMethodPreferenceInput;
   /** Display preference for FPX. */
   fpx?: PaymentMethodPreferenceInput;
+  /** Display preference for Conecs meal vouchers (French accounts only). */
+  frMealVoucherConecs?: PaymentMethodPreferenceInput;
   /** Display preference for giropay. */
   giropay?: PaymentMethodPreferenceInput;
   /** Display preference for Google Pay. */
@@ -173,6 +176,8 @@ export interface PaymentMethodConfigurationProps {
   paynow?: PaymentMethodPreferenceInput;
   /** Display preference for PayPal. */
   paypal?: PaymentMethodPreferenceInput;
+  /** Display preference for PayPay (Japan). */
+  paypay?: PaymentMethodPreferenceInput;
   /** Display preference for PayTo. */
   payto?: PaymentMethodPreferenceInput;
   /** Display preference for Pix. */
@@ -189,6 +194,8 @@ export interface PaymentMethodConfigurationProps {
   scalapay?: PaymentMethodPreferenceInput;
   /** Display preference for SEPA Debit. */
   sepaDebit?: PaymentMethodPreferenceInput;
+  /** Display preference for SeQura (Spanish accounts only). */
+  sequra?: PaymentMethodPreferenceInput;
   /** Display preference for Sofort. */
   sofort?: PaymentMethodPreferenceInput;
   /** Display preference for Sunbit. */
@@ -219,6 +226,7 @@ const METHOD_MAP = [
   ["alma", "alma"],
   ["amazonPay", "amazon_pay"],
   ["applePay", "apple_pay"],
+  ["applePayLater", "apple_pay_later"],
   ["auBecsDebit", "au_becs_debit"],
   ["bacsDebit", "bacs_debit"],
   ["bancontact", "bancontact"],
@@ -233,6 +241,7 @@ const METHOD_MAP = [
   ["customerBalance", "customer_balance"],
   ["eps", "eps"],
   ["fpx", "fpx"],
+  ["frMealVoucherConecs", "fr_meal_voucher_conecs"],
   ["giropay", "giropay"],
   ["googlePay", "google_pay"],
   ["grabpay", "grabpay"],
@@ -254,6 +263,7 @@ const METHOD_MAP = [
   ["payco", "payco"],
   ["paynow", "paynow"],
   ["paypal", "paypal"],
+  ["paypay", "paypay"],
   ["payto", "payto"],
   ["pix", "pix"],
   ["promptpay", "promptpay"],
@@ -262,6 +272,7 @@ const METHOD_MAP = [
   ["satispay", "satispay"],
   ["scalapay", "scalapay"],
   ["sepaDebit", "sepa_debit"],
+  ["sequra", "sequra"],
   ["sofort", "sofort"],
   ["sunbit", "sunbit"],
   ["swish", "swish"],
@@ -410,10 +421,22 @@ const toMethodState = (
   };
 };
 
+/**
+ * Stripe reports a method only where it is available to the account, so a
+ * method the response type doesn't list (Apple Pay Later, Conecs) reads as
+ * unset.
+ */
 const readMethod = (
   configuration: StripePaymentMethodConfiguration,
   snake: SnakeMethodKey,
-): PaymentMethodState | undefined => toMethodState(configuration[snake]);
+): PaymentMethodState | undefined =>
+  snake in configuration
+    ? toMethodState(
+        configuration[snake as keyof StripePaymentMethodConfiguration] as
+          | PaymentMethodConfigResourcePaymentMethodProperties
+          | undefined,
+      )
+    : undefined;
 
 const toAttrs = (configuration: StripePaymentMethodConfiguration): ConfigurationAttributes => {
   const methods = {} as PaymentMethodAttributes;
@@ -591,11 +614,8 @@ export const PaymentMethodConfigurationProvider = () =>
           name,
           ...(news.parent !== undefined ? { parent: news.parent } : {}),
           ...wireMethods,
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-payment-method-configuration-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-payment-method-configuration-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

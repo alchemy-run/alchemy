@@ -266,7 +266,7 @@ export const ImageProvider = () =>
         lookup: Effect.fn(function* ({ imageId }) {
           return yield* archil.getImage({ image_id: imageId }).pipe(
             Effect.map(({ data }) => toImageAttributes(data, "")),
-            Effect.catchTag("ImageNotFound", () => Effect.undefined),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         }),
 
@@ -274,7 +274,7 @@ export const ImageProvider = () =>
           if (!output) return undefined;
           return yield* archil.getImage({ image_id: output.imageId }).pipe(
             Effect.map(({ data }) => toImageAttributes(data, output.hash, output.source)),
-            Effect.catchTag("ImageNotFound", () => Effect.undefined),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         }),
         reconcile: Effect.fn(function* ({ news, output, session }) {
@@ -285,7 +285,7 @@ export const ImageProvider = () =>
           if (output && output.hash === plan.hash) {
             const observed = yield* archil.getImage({ image_id: output.imageId }).pipe(
               Effect.map(({ data }) => data),
-              Effect.catchTag("ImageNotFound", () => Effect.undefined),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             );
             if (observed?.status === "ready")
               return toImageAttributes(observed, plan.hash, output.source);

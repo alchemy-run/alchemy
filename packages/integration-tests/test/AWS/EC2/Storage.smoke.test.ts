@@ -12,6 +12,7 @@ import {
 } from "@alchemy.run/aws/EC2";
 import { expect } from "@alchemy.run/test";
 import * as EC2 from "@distilled.cloud/aws/ec2";
+import { Region } from "@distilled.cloud/aws/Region";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -21,8 +22,6 @@ import * as Test from "./VpcTest.ts";
 const { test } = Test.make({ providers: AWS.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const AZ = "us-west-2a";
 
 // A single cheap t3.micro instance hosts both the EBS volume attachment and the
 // ENI attachment so we pay for exactly one instance launch. The instance,
@@ -34,6 +33,8 @@ test.provider(
       yield* stack.destroy();
 
       const imageId = amazonLinux2023();
+      // The first zone of the Region the stack deploys to.
+      const AZ = `${yield* yield* Region}a`;
 
       const deployed = yield* stack.deploy(
         Effect.gen(function* () {

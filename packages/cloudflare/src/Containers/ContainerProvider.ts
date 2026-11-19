@@ -17,7 +17,6 @@ import { normalizeNulls } from "alchemy/Util/stable";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Path from "effect/Path";
@@ -48,7 +47,7 @@ import {
   isDurableObjectContainer,
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
-import { waitForContainerImage } from "./ContainerImagePreparation.ts";
+import { resolveContainerBuildPaths, waitForContainerImage } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 import { retryContainerPublication } from "./ContainerPublication.ts";
 import { retryNamespacePropagation } from "./DurableObjectApplication.ts";
@@ -195,7 +194,6 @@ export const LiveContainerProvider = () =>
     ContainerPlatform,
     Effect.gen(function* () {
       const { dotAlchemy } = yield* AlchemyContext;
-      const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const docker = yield* Docker;
       const http = yield* HttpClient.HttpClient;
@@ -300,16 +298,22 @@ export const LiveContainerProvider = () =>
         constraints: props.constraints ?? {},
       });
 
-      const applicationConfigurationHash = Effect.fn("applicationConfigurationHash")(function* (
+      const applicationHashes = Effect.fn("applicationHashes")(function* (
         scaling: ReturnType<typeof scalingDefaults>,
         affinities: ContainerApplication.Affinities | undefined,
         configuration: ContainerApplication.Configuration,
       ) {
-        return yield* sha256Object({
-          scaling,
-          affinities: normalizeNulls(affinities),
-          configuration,
-        });
+        return {
+          // Everything update sends: a change here updates the application.
+          configuration: yield* sha256Object({
+            scaling,
+            affinities: normalizeNulls(affinities),
+            configuration,
+          }),
+          // What the instances run: only a change here needs a rollout.
+          // Scaling and placement changes apply without replacing instances.
+          rollout: yield* sha256Object({ configuration }),
+        };
       });
 
       const registryCredentials = Effect.fn("registryCredentials")(function* (
@@ -320,11 +324,11 @@ export const LiveContainerProvider = () =>
         const registryId = props.registryId ?? "registry.cloudflare.com";
         const credentials = yield* Containers.createContainerRegistryCredentials({
           accountId,
-          registryId,
+          domain: registryId,
           permissions,
           expirationMinutes: 60,
         });
-        const username = credentials.username ?? credentials.user;
+        const username = credentials.username;
         if (!username) {
           return yield* ContainerRegistryError.make({
             reason: "CredentialsMissingUsername",
@@ -569,10 +573,10 @@ export const LiveContainerProvider = () =>
 
         // Variant 3b — user-supplied Dockerfile path + build context
         // directory.
-        const context = yield* fs.realPath(props.context ?? ".");
-        const dockerfile = props.dockerfile
-          ? yield* fs.realPath(props.dockerfile)
-          : path.join(context, "Dockerfile");
+        const { context, dockerfile } = yield* resolveContainerBuildPaths({
+          context: props.context,
+          dockerfile: props.dockerfile,
+        });
         // Hash what Docker can consume, including gitignored files and file
         // modes, but excluding ancestor lockfiles outside the build context.
         const contextHash = yield* hashDockerBuildInputs(
@@ -786,7 +790,6 @@ export const LiveContainerProvider = () =>
         build: ImageBuild,
         imageRef: string,
         imageHash: string,
-        previousImageRef: string | undefined,
         session?: ScopedPlanStatusSession,
         reuseRemotePublication = false,
       ) {
@@ -823,16 +826,7 @@ export const LiveContainerProvider = () =>
           publications.set(key, candidate);
           return candidate;
         });
-        const published = yield* publication;
-        return {
-          ...published,
-          // Previous image identity belongs to each application, not the
-          // shared image publication. Resolve it separately for every caller.
-          previousDigest:
-            previousImageRef === undefined
-              ? undefined
-              : (yield* resolvePublishedImageRef(props, previousImageRef)).digest,
-        };
+        return yield* publication;
       });
 
       const resolveDeploymentImage = Effect.fn(function* ({
@@ -859,26 +853,23 @@ export const LiveContainerProvider = () =>
             message: `Container application '${existing.applicationName}' has no deployment image.`,
           });
         }
-        let deploymentImageRef = existingImage;
-        let imageDigest = existing.hash?.digest;
-        if (imageHash !== existing.hash?.image) {
-          const published = yield* buildAndPushImage(
-            id,
-            news,
-            build,
-            imageRef,
-            imageHash,
-            existing.hash?.digest === undefined ? existingImage : undefined,
-            session,
-          );
-          const existingDigest = existing.hash?.digest ?? published.previousDigest;
-          deploymentImageRef =
-            published.digest === existingDigest && news.publish?.repository === undefined
+        const published =
+          imageHash === existing.hash?.image &&
+          existing.hash?.digest !== undefined &&
+          isRegistryDigest(existing.hash.digest)
+            ? {
+                imageRef: `${repositoryFromImageRef(imageRef)}@${existing.hash.digest}`,
+                digest: existing.hash.digest,
+              }
+            : yield* buildAndPushImage(id, news, build, imageRef, imageHash, session);
+        const observed = yield* resolvePublishedImageRef(news, existingImage);
+        return {
+          deploymentImageRef:
+            observed.digest === published.digest && news.publish?.repository === undefined
               ? existingImage
-              : published.imageRef;
-          imageDigest = published.digest;
-        }
-        return { deploymentImageRef, imageDigest };
+              : published.imageRef,
+          imageDigest: published.digest,
+        };
       });
 
       // ---------------------------------------------------------------
@@ -957,7 +948,6 @@ export const LiveContainerProvider = () =>
             image.build,
             image.imageRef,
             image.imageHash,
-            undefined,
             session,
             // The registry tag keyed by image inputs is the durable publication checkpoint.
             // Reuse it after an interrupted preparation, including mirrored images.
@@ -1203,12 +1193,12 @@ export const LiveContainerProvider = () =>
         });
         const configuration = desiredConfiguration(news, env, deploymentImageRef);
         const scaling = scalingDefaults(news);
-        const configurationHash = yield* applicationConfigurationHash(
-          scaling,
-          news.affinities,
-          configuration,
-        );
-        if (existing.hash?.configuration === configurationHash) {
+        const hashes = yield* applicationHashes(scaling, news.affinities, configuration);
+        if (
+          existing.hash?.configuration === hashes.configuration &&
+          existing.configuration.image === deploymentImageRef &&
+          (news.instances === undefined || existing.instances === news.instances)
+        ) {
           yield* Effect.logInfo(
             `Cloudflare Container update: ${existing.applicationName} has no effective changes`,
           );
@@ -1220,7 +1210,7 @@ export const LiveContainerProvider = () =>
             hash: {
               image: imageHash,
               digest: imageDigest,
-              configuration: configurationHash,
+              ...hashes,
             },
             dev,
           };
@@ -1233,7 +1223,11 @@ export const LiveContainerProvider = () =>
           Containers.updateContainerApplication({
             accountId,
             applicationId: existing.applicationId,
-            ...scaling,
+            maxInstances: scaling.maxInstances,
+            schedulingPolicy: scaling.schedulingPolicy,
+            constraints: scaling.constraints,
+            // Live capacity belongs to the runtime unless a count is declared.
+            ...(news.instances === undefined ? {} : { instances: news.instances }),
             affinities: news.affinities,
             configuration,
           }),
@@ -1267,7 +1261,13 @@ export const LiveContainerProvider = () =>
           ),
         );
         const updated = toAttributes(application);
-        if (!deepEqual(existing.configuration, configuration)) {
+        if (
+          // Out-of-band image drift leaves the saved hashes current, so the
+          // observed image is compared too.
+          (existing.hash?.rollout !== hashes.rollout ||
+            existing.configuration.image !== deploymentImageRef) &&
+          !deepEqual(existing.configuration, configuration)
+        ) {
           yield* Effect.logInfo(
             `Cloudflare Container update: creating rollout for ${updated.applicationName}`,
           );
@@ -1305,7 +1305,7 @@ export const LiveContainerProvider = () =>
           hash: {
             image: imageHash,
             digest: imageDigest,
-            configuration: configurationHash,
+            ...hashes,
           },
           dev,
         };
@@ -1421,12 +1421,31 @@ export const LiveContainerProvider = () =>
             return { action: "update", stables: ["accountId"] } as const;
           }
 
+          if (
+            application &&
+            news.instances !== undefined &&
+            toAttributes(application).instances !== news.instances
+          ) {
+            return { action: "update" } as const;
+          }
+
           const { imageHash, dev } = yield* computeImage(
             id,
             news,
             makeContainerEnv(news, accountId, newBindings),
           );
           if (imageHash !== output.hash?.image || !deepEqual(dev, output.dev)) {
+            return { action: "update" } as const;
+          }
+          // Current inputs don't prove the live image is current: an
+          // out-of-band rollout leaves every saved hash intact. Compare the
+          // live image's digest with the one this resource published.
+          const liveImage = application && toAttributes(application).configuration.image;
+          if (!liveImage || !output.hash?.digest || !isRegistryDigest(output.hash.digest)) {
+            return { action: "update" } as const;
+          }
+          const observed = yield* resolvePublishedImageRef(news, liveImage);
+          if (observed.digest !== output.hash.digest) {
             return { action: "update" } as const;
           }
         }),
@@ -1469,17 +1488,9 @@ export const LiveContainerProvider = () =>
           }
           const env = makeContainerEnv(news, accountId);
           const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
-          const published = yield* buildAndPushImage(
-            id,
-            news,
-            build,
-            imageRef,
-            imageHash,
-            undefined,
-            session,
-          );
+          const published = yield* buildAndPushImage(id, news, build, imageRef, imageHash, session);
           const configuration = desiredConfiguration(news, env, published.imageRef);
-          const configurationHash = yield* applicationConfigurationHash(
+          const hashes = yield* applicationHashes(
             scalingDefaults(news),
             news.affinities,
             configuration,
@@ -1509,7 +1520,7 @@ export const LiveContainerProvider = () =>
             hash: {
               image: imageHash,
               digest: published.digest,
-              configuration: configurationHash,
+              ...hashes,
             },
             dev,
           };
@@ -1629,7 +1640,7 @@ export const LiveContainerProvider = () =>
               session,
             });
             const configuration = desiredConfiguration(news, env, deploymentImageRef);
-            const configurationHash = yield* applicationConfigurationHash(
+            const hashes = yield* applicationHashes(
               scalingDefaults(news),
               news.affinities,
               configuration,
@@ -1662,7 +1673,7 @@ export const LiveContainerProvider = () =>
               hash: {
                 image: imageHash,
                 digest: imageDigest,
-                configuration: configurationHash,
+                ...hashes,
               },
               dev,
             };
@@ -1690,17 +1701,9 @@ export const LiveContainerProvider = () =>
           // then create. `createApplication` itself tolerates concurrent
           // creates by adopting an existing application with the same
           // name or namespace.
-          const published = yield* buildAndPushImage(
-            id,
-            news,
-            build,
-            imageRef,
-            imageHash,
-            undefined,
-            session,
-          );
+          const published = yield* buildAndPushImage(id, news, build, imageRef, imageHash, session);
           const configuration = desiredConfiguration(news, env, published.imageRef);
-          const configurationHash = yield* applicationConfigurationHash(
+          const hashes = yield* applicationHashes(
             scalingDefaults(news),
             news.affinities,
             configuration,
@@ -1719,7 +1722,7 @@ export const LiveContainerProvider = () =>
             hash: {
               image: imageHash,
               digest: published.digest,
-              configuration: configurationHash,
+              ...hashes,
             },
             dev,
           };

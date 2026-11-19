@@ -41,12 +41,13 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const { pulled, built, context, warm } = yield* stack.deploy(
         Effect.gen(function* () {
-          const pulled = yield* Daytona.Snapshot("Pulled", {
+          const Pulled = Daytona.Snapshot("Pulled", {
             image: "node:22-bookworm-slim",
             cpu: 1,
             memory: 1,
             disk: 3,
           });
+          const pulled = yield* Pulled;
           const built = yield* Daytona.Snapshot("Built", {
             dockerfile: {
               content: "FROM node:22-bookworm-slim\nRUN echo built > /etc/alchemy-marker\n",
@@ -63,7 +64,8 @@ test.provider.skipIf(!!process.env.FAST)(
             disk: 3,
           });
           const warm = yield* Daytona.Snapshot("Warm", {
-            from: pulled,
+            // The declaration itself, not the yielded snapshot: it resolves when Warm is yielded.
+            from: Pulled,
             // A plain node image has no /home/daytona.
             run: [
               "mkdir -p /opt/alchemy && echo warm > /opt/alchemy/marker",

@@ -54,6 +54,9 @@
       "path": "./submodules/distilled/packages/hetzner/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/digitalocean/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/iceberg/tsconfig.json"
     },
     {
@@ -127,6 +130,9 @@
       "path": "./packages/infisical/tsconfig.json"
     },
     {
+      "path": "./packages/1password/tsconfig.json"
+    },
+    {
       "path": "./packages/turso/tsconfig.json"
     },
     {
@@ -163,6 +169,9 @@
       "path": "./packages/hetzner/tsconfig.json"
     },
     {
+      "path": "./packages/digitalocean/tsconfig.json"
+    },
+    {
       "path": "./packages/railway/tsconfig.json"
     },
     {
@@ -185,6 +194,9 @@
     },
     {
       "path": "./packages/domain/tsconfig.json"
+    },
+    {
+      "path": "./packages/domain/test/types/tsconfig.json"
     },
     {
       "path": "./packages/docker/tsconfig.json"
@@ -291,6 +303,9 @@
     },
     {
       "path": "./examples/aws-ecs/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-ecs-sandboxes/tsconfig.json"
     },
     {
       "path": "./examples/aws-eks/tsconfig.json"
@@ -522,6 +537,9 @@
     },
     {
       "path": "./examples/hetzner-app/tsconfig.json"
+    },
+    {
+      "path": "./examples/digitalocean-app/tsconfig.json"
     },
     {
       "path": "./examples/hetzner-website-vite/tsconfig.json"

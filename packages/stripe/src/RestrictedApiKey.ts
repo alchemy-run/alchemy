@@ -35,6 +35,7 @@ export type StripePermission =
   | "customers_write"
   | "entitlements_read"
   | "entitlements_write"
+  | "events_read"
   | "files_read"
   | "files_write"
   | "issuing_read"

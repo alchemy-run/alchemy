@@ -80,10 +80,7 @@ const sanitize = (hostname: string) => hostname.replaceAll(/[^a-zA-Z0-9-]/g, "-"
  * the SaaS zone. A no-op at runtime and for Workers running locally under
  * `alchemy dev` (the local Worker ignores `domain`).
  */
-export const transformWorkerDomainProps = (
-  id: string,
-  props: Props | undefined,
-): Effect.Effect<Props | undefined, never, any> =>
+export const transformWorkerDomainProps = (id: string, props: Props | undefined) =>
   Effect.gen(function* () {
     // `Platform` hands a bare-tag forward reference (no props yet) to the
     // hook as `{}`. Keep it `undefined` so `Plan.make` still fails fast

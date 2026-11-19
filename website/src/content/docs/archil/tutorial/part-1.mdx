@@ -1,6 +1,6 @@
 ---
-title: "Part 1: Your First Stack"
-description: Install Alchemy, create a Stack with an Archil disk, and deploy it.
+title: "Part 1: Set Up a Sandbox"
+description: Install Alchemy, and declare an Archil sandbox that clones a repository onto its disk at deploy time.
 sidebar:
   order: 1
 ---
@@ -9,86 +9,59 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 
 export const pkgs = `alchemy@latest @alchemy.run/archil@latest effect @effect/platform-node`;
 
-Install Alchemy, declare an Archil disk, and deploy it.
+Build an API that gives agents sandboxes. The slow setup runs once, when you deploy: a sandbox with a repository cloned onto its disk. While the app runs, every sandbox is a fork of it, already set up.
+
+The finished code is in [`examples/archil-sandbox`](https://github.com/alchemy-run/alchemy/tree/main/examples/archil-sandbox).
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) or Node.js 24.11.1+
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
 - An Archil API key in an Alchemy profile ([Setup](/archil/setup))
 
 ## Create a project
 
 <PackageManagers init dir="my-app" />
 
-## Install dependencies
-
 <PackageManagers add={pkgs} />
+
+## Declare the sandbox
+
+```typescript title="src/Golden.ts"
+import * as Archil from "@alchemy.run/archil";
+
+export const Golden = Archil.Sandbox("Golden", {
+  run: ["git clone --depth 1 https://github.com/sindresorhus/is /work/is"],
+});
+```
+
+A sandbox is a Firecracker microVM whose root filesystem is a disk of its own. At deploy, Alchemy creates `Golden` and runs the `run` commands in it, in order. A command that exits non-zero fails the deploy.
 
 ## Create the Stack
 
-Every Alchemy program starts with a `Stack`:
-
-```typescript
-// alchemy.run.ts
+```typescript title="alchemy.run.ts"
 import * as Archil from "@alchemy.run/archil";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
+import { Golden } from "./src/Golden.ts";
 
 export default Alchemy.Stack(
-  "MyApp",
+  "ArchilSandboxExample",
   { providers: Archil.providers(), state: Alchemy.localState() },
-  Effect.gen(function* () {}),
+  Effect.gen(function* () {
+    const golden = yield* Golden;
+    return { sandbox: golden.name };
+  }),
 );
 ```
 
 `Archil.providers()` reads your key from your Alchemy profile.
-`Alchemy.localState()` keeps deploy state in `.alchemy/` next to your
-code; [Part 5](/archil/tutorial/part-5) moves it somewhere CI can read.
-
-## Declare a disk
-
-Declare resources in their own module so programs can import them:
-
-```typescript
-// src/Storage.ts
-import * as Archil from "@alchemy.run/archil";
-
-export const Files = Archil.Disk("Files", {});
-```
-
-Alchemy names the disk from the stack, stage and logical id.
-
-## Add it to the Stack
-
-Yield the disk and return its id:
-
-```diff lang="typescript"
-// alchemy.run.ts
-import * as Archil from "@alchemy.run/archil";
-import * as Alchemy from "alchemy";
-import * as Effect from "effect/Effect";
-+import { Files } from "./src/Storage.ts";
-
-export default Alchemy.Stack(
-  "MyApp",
-  { providers: Archil.providers(), state: Alchemy.localState() },
--  Effect.gen(function* () {}),
-+  Effect.gen(function* () {
-+    const files = yield* Files;
-+    return { diskId: files.diskId };
-+  }),
-);
-```
 
 ## Deploy
 
 <PackageManagers run="alchemy deploy" />
 
-The output prints `diskId`, a `dsk-…` id. The disk shows up under
-**Disks** in the [Archil console](https://console.archil.com).
+`Golden` shows up under **Sandboxes** in the [Archil console](https://console.archil.com), with the repository in `/work/is`. A deploy that leaves the commands unchanged leaves it alone. When it's idle, it pauses.
 
-## Recap
+## Next
 
-You have a Stack with one Archil disk. In
-[Part 2](/archil/tutorial/part-2) you'll run a program that reads and
-writes files on it.
+[Part 2](/archil/tutorial/part-2) forks it while the app runs.

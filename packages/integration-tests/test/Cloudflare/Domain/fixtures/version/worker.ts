@@ -1,4 +1,4 @@
-import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -44,9 +44,9 @@ export const bankWorker = (
         if (route === "deposit" || route === "withdraw") {
           const command =
             route === "deposit"
-              ? new Deposit({ amount: Number(amount) })
-              : new Withdraw({ amount: Number(amount) });
-          yield* accounts.send(id!, command);
+              ? new Deposit({ id: id!, amount: Number(amount) })
+              : new Withdraw({ id: id!, amount: Number(amount) });
+          yield* accounts.send(command);
           return yield* HttpServerResponse.json(yield* accounts.get(id!));
         }
         return HttpServerResponse.text("Not Found", { status: 404 });

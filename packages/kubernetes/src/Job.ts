@@ -116,6 +116,14 @@ export interface JobPropsBase extends PlatformProps {
    */
   architecture?: "amd64" | "arm64";
   /**
+   * Kubernetes `RuntimeClass` the pods run under. On EKS, `isolated-sandbox`
+   * runs each pod in its own Nitro Sandbox, a lightweight VM isolated by the
+   * AWS Nitro hypervisor, and `confidential-sandbox` also hides the pod's
+   * memory from the node. EKS Auto Mode needs no other setup. Any other
+   * RuntimeClass on the cluster (gVisor, Kata) works too.
+   */
+  runtimeClassName?: "isolated-sandbox" | "confidential-sandbox" | (string & {});
+  /**
    * Deep-partial Kubernetes Pod template merged into the synthesized
    * template (objects merge recursively; arrays and primitives replace) —
    * a literal object in the shape of `PodTemplateSpec`, e.g.
@@ -432,17 +440,19 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Plat
         get: <T>(key: string) => Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
         run: (effect: Effect.Effect<void, never, any>) =>
           Effect.sync(() => {
+            // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- host programs keep their own requirements; the generated entry satisfies them
             runners.push(effect);
           }),
         serve: ((_handler, options) =>
           Effect.sync(() => {
             const run = options?.shape?.run;
             if (Effect.isEffect(run)) {
-              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `run` is a user program; the host runner surfaces its failures
+              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- `run` is a user program; the host runner surfaces its failures and satisfies its requirements
               runners.push(run as Effect.Effect<void, never, any>);
             }
           })) as HostRuntimeContext["serve"],
         exports: Effect.sync(() => ({
+          // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- host programs keep their own requirements; the generated entry satisfies them
           program: Effect.all(runners, { concurrency: "unbounded" }).pipe(Effect.asVoid),
         })),
       };
@@ -623,6 +633,7 @@ export const JobProvider = () =>
               metadata: { labels },
               spec: {
                 serviceAccountName,
+                ...(news.runtimeClassName ? { runtimeClassName: news.runtimeClassName } : {}),
                 restartPolicy: news.restartPolicy ?? "Never",
                 containers: [
                   {

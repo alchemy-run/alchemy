@@ -1,5 +1,3 @@
-/** @effect-diagnostics anyUnknownInErrorContext:off */
-
 /**
  * The Lambda Function code-bundling machinery, extracted from the live
  * provider closure so it is reusable outside `FunctionProvider` — the floci

@@ -1,3 +1,4 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Hetzner from "@alchemy.run/hetzner";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -5,14 +6,20 @@ import * as servers from "@distilled.cloud/hetzner/servers";
 import * as volumes from "@distilled.cloud/hetzner/volumes";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
 import Api from "./fixtures/api.ts";
 import { Data, MARKER } from "./fixtures/shared.ts";
+import TracedApi from "./fixtures/traced.ts";
 import Worker from "./fixtures/worker.ts";
 import { hetznerPrimaryIps } from "./limit.ts";
 
-const { test } = Test.make({ limit: hetznerPrimaryIps, providers: Hetzner.providers() });
+const { test } = Test.make({
+  limit: hetznerPrimaryIps,
+  providers: Layer.mergeAll(Hetzner.providers(), Cloudflare.providers()),
+});
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -90,5 +97,43 @@ test.provider(
       "live",
     ],
     timeout: 180_000,
+  },
+);
+
+test.provider(
+  "a Service program exports spans to the bound OTLP destination",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The traced program binds the collector url at deploy, so it deploys first.
+      const collector = yield* stack.deploy(OtelCollector());
+      const api = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            return yield* TracedApi;
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      expect(yield* doWork(api.url!, "hetzner")).toBe("did work hetzner");
+      const traces = yield* waitForWorkSpan(collector.url!, "hetzner");
+      expect(traces).toContain("work:hetzner");
+      expect(traces).toContain("hetzner-service-e2e");
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(api.serverId)).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:hetzner",
+      "provider:hetzner:server",
+      "provider:hetzner:service",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 300_000,
   },
 );

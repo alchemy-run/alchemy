@@ -4,6 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import { declarable } from "./internal/Declared.ts";
 import {
   currentOrganizationId,
   movesOrganization,
@@ -79,7 +80,9 @@ export type OrganizationSettings = Resource<
  * @resource
  * @product Organization
  */
-export const OrganizationSettings = Resource<OrganizationSettings>("Daytona.OrganizationSettings");
+export const OrganizationSettings = declarable<OrganizationSettings>()(
+  Resource<OrganizationSettings>("Daytona.OrganizationSettings"),
+);
 
 const seconds = (d: Duration.Input | null) =>
   d === null ? null : Math.round(Duration.toSeconds(d));

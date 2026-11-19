@@ -419,16 +419,21 @@ const findDatabaseByLogicalId = Effect.fn(function* (
   );
 });
 
+export class PrismaDatabaseLogicalIdTaken extends Data.TaggedError("PrismaDatabaseLogicalIdTaken")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 const logicalIdTaken = (
   logicalId: string,
   branchId: string | null,
   projectId: string,
   cause: unknown,
 ) =>
-  new Error(
-    `Prisma database logical ID '${logicalId}' is already used by another database on branch '${branchId}' in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other database.`,
-    { cause },
-  );
+  new PrismaDatabaseLogicalIdTaken({
+    message: `Prisma database logical ID '${logicalId}' is already used by another database on branch '${branchId}' in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other database.`,
+    cause,
+  });
 
 class GeneratedDatabaseNotVisible extends Data.TaggedError("GeneratedDatabaseNotVisible")<{
   readonly message: string;
@@ -866,9 +871,7 @@ const ProviderLive = () =>
                       ? undefined
                       : yield* findDatabaseByLogicalId(projectId, createLogicalId, createAttach);
                   if (taken) {
-                    return yield* Effect.fail(
-                      logicalIdTaken(logicalId, taken.branchId, projectId, conflict),
-                    );
+                    return yield* logicalIdTaken(logicalId, taken.branchId, projectId, conflict);
                   }
                   if (news.logicalId !== undefined) {
                     return yield* new DatabaseConflict({

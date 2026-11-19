@@ -16,11 +16,12 @@
  * Every building block is `Domain.<Noun>(...)`, and its types live on the
  * same name: `Domain.Event.Any`, `Domain.Aggregate.StateOf<typeof Account>`.
  * Stories (given / when / then specifications) are in `@alchemy.run/domain/Story`;
- * the Cloudflare platform is in `@alchemy.run/cloudflare/Domain`.
+ * the Cloudflare platform is in `@alchemy.run/domain/Cloudflare`.
  */
 import * as AggregateModule from "./Aggregate.ts";
 import * as ApiModule from "./Api.ts";
 import * as CommandModule from "./Command.ts";
+import * as DecisionModule from "./Decision.ts";
 import * as EventModule from "./Event.ts";
 import * as ExternalSystemModule from "./ExternalSystem.ts";
 import type * as KeyModule from "./Key.ts";
@@ -58,6 +59,8 @@ export declare namespace Command {
 }
 /** A request to change one aggregate. See {@link CommandModule.make}. */
 export const Command = CommandModule.make;
+/** When the commands of a client answer, unless a call says otherwise. See {@link CommandModule.DefaultConsistency}. */
+export const DefaultConsistency = CommandModule.DefaultConsistency;
 
 export declare namespace Rejection {
   /** Any Rejection class. */
@@ -89,7 +92,7 @@ export declare namespace Aggregate {
   /** The instance type of a class: `InstanceOf<typeof NotOwner>` is `NotOwner`. */
   export type InstanceOf<C> = AggregateModule.InstanceOf<C>;
   /** Options for `MyAggregate.predict`. */
-  export type PredictOptions<Id = string, R = never> = AggregateModule.PredictOptions<Id, R>;
+  export type PredictOptions<R = never> = AggregateModule.PredictOptions<R>;
   /** What `MyAggregate.predict` gives: accepted with events and state, rejected, or unpredictable. */
   export type Prediction<State, Ev, Rej, Id = string> = AggregateModule.Prediction<
     State,
@@ -109,6 +112,21 @@ export type AlreadyCancelled = AggregateModule.AlreadyCancelled;
 /** No command was scheduled with that id. */
 export const NotScheduled = AggregateModule.NotScheduled;
 export type NotScheduled = AggregateModule.NotScheduled;
+
+export declare namespace Decision {
+  /** Any Decision class. */
+  export type Any = DecisionModule.Any;
+  /** One aggregate instance a decision read: its state, and `record`. */
+  export type Read<A extends AggregateModule.Any> = DecisionModule.Read<A>;
+  /** An event recorded on an instance a decision read. */
+  export type Recorded<E = unknown> = DecisionModule.Recorded<E>;
+  /** What an accepted command returns: every stream it committed to, its events and reply. */
+  export type Receipt<Ev = unknown, Reply = unknown> = DecisionModule.Receipt<Ev, Reply>;
+  /** One stream a decision committed to, and its version after. */
+  export type Commit = DecisionModule.Commit;
+}
+/** A command decided across several aggregates, atomically. See {@link DecisionModule.make}. */
+export const Decision = DecisionModule.make;
 
 /**
  * What keys a view, policy, projection or stream: an aggregate (one instance
@@ -246,6 +264,10 @@ export declare namespace Api {
   export type ViewClient<V extends ViewModule.Any> = ApiModule.ViewClient<V>;
   export type StreamClient<S extends StreamModule.Any> = ApiModule.StreamClient<S>;
   export type QueryClient<Q extends QueryModule.Any> = ApiModule.QueryClient<Q>;
+  /** A paged query's `pages` and `entries` Streams. */
+  export type PagedQueryClient<Q extends QueryModule.Any> = ApiModule.PagedQueryClient<Q>;
+  /** How a client asks a query: `atLeast`, `after`, `take` and the call's headers. */
+  export type QueryOptions = ApiModule.QueryOptions;
   /** Everything a query can fail with. */
   export type QueryError<Q extends QueryModule.Any> = ApiModule.QueryError<Q>;
   /** Everything a read can fail with. */
