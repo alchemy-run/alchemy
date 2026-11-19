@@ -1,0 +1,121 @@
+---
+title: What the prover reads
+description: The TypeScript, the Effect helpers and the schemas that Verify reads as logic, and what happens to code outside that set.
+---
+
+`Verify` proves a rule by reading your `decide`, `evolve`, `keyOf` and rules as logic. It reads a subset of TypeScript. Code outside it is never guessed at: the report names the file, the line and what it met, and the rule is not proved.
+
+```text
+Not read
+  Label.aggregate.ts:23  reads .startsWith of a string
+```
+
+A handler has to be a plain function of what it is given: the state, the command and the context. It can call other functions in your own files, which are read the same way. A function from a package is read only if it is listed under [Library functions](#library-functions).
+
+## Statements
+
+Read: `const` and `let`, assignment to a local variable, `+=` and the other compound assignments, `++` and `--`, `if` and `else`, `switch`, `return`, block statements, and function declarations.
+
+Loops are read: `for`, `for…of`, `for…in`, `while` and `do…while`, with `break` and `continue`. A loop has to end after a number of turns the prover can count, so a loop over a list from the state or a command is tried for short lists only (see [Lists](#lists)).
+
+Not read: `try`, `catch` and `throw`, `class`, `async` and `await`, `for await`, labels, and generators other than `Effect.gen` and `Effect.fn`.
+
+## Expressions
+
+Read:
+
+- Arithmetic on whole numbers: `+`, `-`, `*`, `/`, `%`, and the comparisons `<`, `<=`, `>`, `>=`.
+- `===` and `!==`. `==` and `!=` are read only against `null`.
+- `&&`, `||`, `??`, `!`, the conditional `a ? b : c`, and optional chaining `a?.b`.
+- `typeof` and `in`.
+- Object and array literals, spread in both, and property access by a name or by a key the prover can see.
+- Destructuring of objects and arrays, with defaults and rest patterns.
+- Arrow functions and function expressions, and calls to them.
+- Template literals, and `+` on strings.
+- `new` on an event, a rejection or a command.
+- TypeScript's `as`, `satisfies` and `!`, which change nothing at run time.
+
+Not read: bitwise operators, `instanceof`, regular expressions, `delete`, and a property read by a key that depends on an input.
+
+## Numbers
+
+A whole number is exact, and a `bigint` is exact with no limit. A number is assumed to stay within ±2^53, which the report lists under what it assumes.
+
+A division is read where its result is exact: through `Math.floor`, `Math.ceil` or `Math.trunc`, or compared with a whole number. `Math.abs`, `Math.max` and `Math.min` are read too.
+
+Arithmetic on numbers that may not be whole is not proved. A solver counts exactly and JavaScript rounds, so `0.1 + 0.2 === 0.3` is true to one and false to the other. Keep money in whole cents.
+
+## Strings
+
+A string is compared with `===`, joined with `+` or a template literal, and has a `length`. That is all: `startsWith`, `includes`, `slice`, `toLowerCase` and the other string methods are not read.
+
+## Lists
+
+An array the code builds has a known length, and everything is read on it: an index, `length`, `at`, `slice`, `concat`, `includes`, and the methods that take a function, `map`, `filter`, `flatMap`, `find`, `findIndex`, `some`, `every`, `forEach` and `reduce`. `push` is read on an array the code made, not on one it was given.
+
+A list that comes from the state or a command has no known length, so it is tried with every length up to two items more than its schema asks for. A rule that passes that way is `Checked`, not `Proved`, and the report says how long the lists were.
+
+`Object.keys`, `Object.values` and `Object.entries` are read on an object whose keys are known.
+
+## Schemas
+
+The state, each command's input and each request context start as any value their schema allows. These are read:
+
+- `Schema.String`, `Schema.Number`, `Schema.Int`, `Schema.BigInt` and `Schema.Boolean`.
+- `Schema.Literal` and `Schema.Literals`, `Schema.Null` and `Schema.Undefined`.
+- `Schema.Struct` and `Schema.TaggedStruct`, with optional fields.
+- `Schema.Union`, `Schema.NullOr` and the others built on it. A proof starts from each member in turn.
+- `Schema.Array`, tried as described under [Lists](#lists).
+- `Schema.Option`, started as `none` and as `some`.
+- `Schema.DateTimeUtc`.
+- A branded schema, read as what it brands.
+
+Checks on a number are read: `isInt`, `isFinite`, `isGreaterThan`, `isGreaterThanOrEqualTo`, `isLessThan`, `isLessThanOrEqualTo`, `isBetween`, and `isMultipleOf` a whole number. On a string or a list, `isMinLength` and `isMaxLength` are read.
+
+A check the prover does not read is not assumed and not dropped in silence. The report lists it under "Schema checks not proved kept", with the command that writes the field.
+
+A `Schema.Record`, and any other schema not listed, is a value the prover cannot see into. Code that only passes it along is still read. Code that looks inside it is not.
+
+## Library functions
+
+A call to a package is read when it is one of these.
+
+- **`effect/Effect`:** `gen`, `fn`, `fnUntraced`, `succeed`, `fail`, `sync`, `void`, `map`, `flatMap`, `andThen`, `tap`, `asVoid`, `orDie`, `catchTag`, `provideService`, `annotateCurrentSpan`, `log` and the other log levels.
+- **`effect/Match`:** `value`, `type`, `when`, `not`, `whenOr`, `whenAnd`, `tag`, `tags`, `tagsExhaustive`, `discriminator`, `discriminators`, `discriminatorsExhaustive`, `valueTags`, `typeTags`, `withReturnType`, `orElse`, `orElseAbsurd`, `exhaustive`, `option`, and the patterns `any` and `defined`.
+- **`effect/Option`:** `some`, `none`, `fromNullishOr`, `fromNullOr`, `fromUndefinedOr`, `isSome`, `isNone`, `match`, `map`, `flatMap`, `filter`, `exists`, `getOrElse`, `getOrUndefined`, `getOrNull`, `orElse`.
+- **`effect/Array`:** `map`, `filter`, `flatMap`, `some`, `every`, `findFirst`, `reduce`, `append`, `prepend`, `appendAll`, `length`, `head`, `last`, `get`, `isArrayEmpty`, `isArrayNonEmpty` and their readonly forms.
+- **`effect/Record`:** `get`, `has`, `set`, `remove`, `map`, `keys`, `values`, `size`, `isEmptyRecord`, `isEmptyReadonlyRecord`.
+- **`effect/Struct`:** `omit`, `pick`.
+- **`effect/Optic`:** `id`, `modify`, `replace`, and an optic's `key` and `tag`.
+- **`effect/DateTime`:** `toEpochMillis`, `formatIsoDate`, `formatIsoDateUtc`.
+- **`effect/Function`:** `pipe`, and `.pipe` on an effect, an option and a matcher.
+- **`Math`:** `floor`, `ceil`, `trunc`, `abs`, `max`, `min`.
+- **`Object`:** `keys`, `values`, `entries`.
+
+Inside `Effect.gen` and `Effect.fn`, `yield*` is read on an effect, on a rejection (which rejects the command) and on a request context (which gives any value its schema allows).
+
+## What a handler is given
+
+`decide` is read with its three arguments: the state, the command, and the context with `id`, `now`, `commandId`, `stream` and `version`. `now` is any time, so a rule that depends on the clock is proved for every time. `evolve` is read with the state, the event and its envelope.
+
+A request context a handler yields is any value its schema allows. Middleware is not run, so a rule is proved for every caller, including ones your middleware would turn away.
+
+## When code is not read
+
+A rule whose command meets unread code is not proved, and the verification fails. The line in the report says what to change:
+
+```text
+Not read
+  Label.aggregate.ts:23  reads .startsWith of a string
+```
+
+Rewrite the line with what is read, or move what cannot be read out of the handler: compute it where the command is built and pass the result in as a field. What `decide` then checks is the field, which the prover reads.
+
+A policy's or a saga's handler is read the same way when the model is searched. One the search cannot follow fails the check until it is allowed by name:
+
+```typescript
+Verify.model(Bank, {
+  apis: [CustomerApi],
+  allow: { skipped: ["FraudReview"] },
+});
+```

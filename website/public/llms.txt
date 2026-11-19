@@ -1243,10 +1243,10 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Domain](https://alchemy.run/domain) — A domain-driven design framework for Effect. Model your business as commands, aggregates, decisions, events, views, projections and policies, test it in memory, and run it on Durable Objects on Cloudflare, Rivet or Effect Cluster.
 - [What is Domain-Driven Design?](https://alchemy.run/domain/what-is-ddd) — The concepts of Domain-Driven Design, event sourcing and CQRS, and how they fit together to model a business.
 - [Project layout](https://alchemy.run/domain/project-layout) — How to lay out an @alchemy.run/domain project. One file per building block, named after its noun and its kind; folders per subdomain; a pure domain package, a server package that hosts it, and a foldkit web package, wired in one stack.
-- [Part 1: Model an account](https://alchemy.run/domain/tutorial/part-1) — Declare events, commands and rejections, decide them in an aggregate, and check it with stories.
+- [Part 1: Model an account](https://alchemy.run/domain/tutorial/part-1) — Declare events, commands and rejections, decide them in an aggregate, check it with stories, and prove a rule about it.
 - [Part 2: Read it with a view](https://alchemy.run/domain/tutorial/part-2) — Show each account's balance and a statement of every movement, kept up to date as events arrive.
 - [Part 3: React with a policy](https://alchemy.run/domain/tutorial/part-3) — Register customers, and open a main account for each one with a policy.
-- [Part 4: Expose an Api](https://alchemy.run/domain/tutorial/part-4) — Authenticate requests, let customers act only on their own accounts, and expose the bank through a typed Api.
+- [Part 4: Expose an Api](https://alchemy.run/domain/tutorial/part-4) — Authenticate requests, let customers act only on their own accounts, expose the bank through a typed Api, and verify the whole bank.
 - [Part 5: Deploy to Cloudflare](https://alchemy.run/domain/tutorial/part-5) — Host the bank on Durable Objects behind a Worker, run it locally, deploy it, and watch a balance change live.
 - [Part 6: Build the UI with foldkit](https://alchemy.run/domain/tutorial/part-6) — A browser app that signs in with a cookie, opens an account, deposits, and watches its balance live.
 - [Part 7: Observe it](https://alchemy.run/domain/tutorial/part-7) — Send the bank's traces and logs to Axiom, follow a deposit through every Durable Object it reaches, and trace clicks from the browser.
@@ -1272,6 +1272,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Story](https://alchemy.run/domain/story) — A specification you can run. Given some history, when a command is sent, then these events are recorded.
 - [Testing a model](https://alchemy.run/domain/testing-models) — Test your model's rules, views, policies and deadlines with stories that run it in memory.
 - [Verifying a model](https://alchemy.run/domain/verifying-models) — Write down what must always be true of your model, and have it proved, or searched for a sequence of commands that breaks it.
+- [What the prover reads](https://alchemy.run/domain/verifiable-code) — The TypeScript, the Effect helpers and the schemas that Verify reads as logic, and what happens to code outside that set.
 - [Testing an Api](https://alchemy.run/domain/testing-apis) — Test what each client may do and see, in process, over HTTP, and against a real deployment.
 - [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api) — Publish an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
 - [CLI](https://alchemy.run/domain/cli) — Run an Api's calls from a terminal, as a person or an agent, against the deployed Api.
