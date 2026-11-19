@@ -38,6 +38,7 @@ packages:
   - packages/*
   - examples/*
   - examples/cloudflare-domain/packages/*
+  - examples/cloudflare-domain-board/packages/*
   - examples/cluster-domain/packages/*
   - examples/cloudflare-website-service-bindings/apps/*
   - examples/monorepo-single-stack/*

@@ -1,0 +1,9 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/domain" },
+    { "path": "./packages/server" },
+    { "path": "./packages/cli" },
+    { "path": "./tsconfig.stack.json" }
+  ]
+}

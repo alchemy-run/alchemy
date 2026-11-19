@@ -1,0 +1,24 @@
+{
+  "name": "@board/cli",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "examples/cloudflare-domain-board/packages/cli"
+  },
+  "bin": {
+    "board": "./src/bin.ts"
+  },
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@alchemy.run/domain": "workspace:*",
+    "@board/domain": "workspace:*",
+    "@effect/platform-bun": "catalog:",
+    "effect": "catalog:"
+  }
+}

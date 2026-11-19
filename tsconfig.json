@@ -356,6 +356,9 @@
       "path": "./examples/cloudflare-domain/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-domain-board/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-static-site/tsconfig.json"
     },
     {
