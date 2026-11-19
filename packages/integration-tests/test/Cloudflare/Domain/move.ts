@@ -76,6 +76,28 @@ export const migrationWorkflow = Effect.fn(function* (scriptName: string) {
   return (binding as { readonly workflowName: string }).workflowName;
 });
 
+/** How many objects the Worker's migration runs moved, from their complete instances. */
+export const movedBy = Effect.fn(function* (scriptName: string) {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const workflowName = yield* migrationWorkflow(scriptName);
+  const instances = yield* workflows.listInstances
+    .items({ accountId, workflowName, status: "complete" })
+    .pipe(Stream.runCollect);
+  let moved = 0;
+  for (const instance of instances) {
+    // Each deploy's run reports how many objects it moved.
+    if (!instance.id.startsWith("mg-run-")) continue;
+    const { output } = yield* workflows.getInstance({
+      accountId,
+      workflowName,
+      instanceId: instance.id,
+    });
+    const parsed = typeof output === "string" ? JSON.parse(output) : output;
+    moved += (parsed as { progress?: { instances?: number } } | null)?.progress?.instances ?? 0;
+  }
+  return moved;
+});
+
 /**
  * Record a complete pass over each class from long ago, as if the move had
  * started earlier: with the passes the deploys ran, the next upload deletes
