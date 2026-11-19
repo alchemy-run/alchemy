@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 import { AccountId } from "../Account/Account.id.ts";
 import { Actor } from "../Actor.ts";
 import { MfaChallenge } from "../MfaChallenge.middleware.ts";
-import { Cents } from "../Money.ts";
+import { Amount, Cents } from "../Money.ts";
 import { Session } from "../Session.middleware.ts";
 import { TransferId } from "./Transfer.id.ts";
 
@@ -31,7 +31,7 @@ export class TransferRequested extends Domain.Event("TransferRequested", {
  */
 export class RequestTransfer extends Domain.Command("RequestTransfer", {
   middleware: [Session, MfaChallenge],
-  input: { transferId: TransferId, from: AccountId, to: AccountId, amount: Cents },
+  input: { transferId: TransferId, from: AccountId, to: AccountId, amount: Amount },
   events: [TransferRequested],
   rejects: [AlreadyRequested, SameAccount],
 }) {}
