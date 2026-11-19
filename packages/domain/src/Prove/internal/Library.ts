@@ -13,6 +13,8 @@ export interface Host {
   readonly settle: (value: V, site: Site) => Eval<V>;
   /** Whether a value is truthy on this path. */
   readonly decide: (value: V, site: Site) => Eval<boolean>;
+  /** Whether two values are `===`, as a value: known, or a condition of the inputs. */
+  readonly equal: (a: V, b: V, site: Site) => Eval<V>;
   /** A list with its items, when the value is one. */
   readonly force: (value: V) => V;
   /** An array's method that takes a function, such as `map`. */
@@ -341,7 +343,334 @@ export const make = (host: Host) => {
     return value;
   });
 
+  /** One case of a matcher: whether it takes a value, and what it gives for one it takes. */
+  interface Case {
+    readonly takes: (input: V, site: Site) => Eval<boolean>;
+    readonly handler: V;
+  }
+  /** A matcher being built: `Match.value(x)` has the value, `Match.type()` gets it when called. */
+  interface Matcher {
+    readonly subject: V | undefined;
+    readonly cases: ReadonlyArray<Case>;
+  }
+  const matcher = (state: Matcher): V => Value.obj({}, { kind: "Matcher", cls: state });
+  const matcherOf = (value: V | undefined): Matcher | undefined =>
+    value?._tag === "Obj" && value.brand?.kind === "Matcher"
+      ? (value.brand.cls as Matcher)
+      : undefined;
+
+  /** Whether a pattern of `Match.when` takes a value: a predicate, a literal, or an object of patterns. */
+  const takes = (pattern: V, input: V, site: Site): Eval<boolean> =>
+    Effect.gen(function* () {
+      if (pattern._tag === "Fn" || pattern._tag === "Native" || pattern._tag === "Lib")
+        return yield* host.decide(yield* host.call(pattern, [input], site), site);
+      if (pattern._tag === "Obj" && pattern.brand === undefined) {
+        if (input._tag !== "Obj") return false;
+        for (const [key, part] of Object.entries(pattern.fields))
+          if (!(yield* takes(part, input.fields[key] ?? Value.undef, site))) return false;
+        return true;
+      }
+      return yield* host.decide(yield* host.equal(input, pattern, site), site);
+    });
+
+  /** Whether the field a matcher discriminates on is one of `values`. */
+  const tagged =
+    (field: string, values: ReadonlyArray<V>): Case["takes"] =>
+    (input, site) =>
+      Effect.gen(function* () {
+        if (input._tag !== "Obj") return false;
+        const tag = input.fields[field] ?? Value.undef;
+        for (const value of values)
+          if (yield* host.decide(yield* host.equal(tag, value, site), site)) return true;
+        return false;
+      });
+
+  /** A step of a matcher's pipe that adds cases: `Match.tag("A", f)` and the like. */
+  const adding =
+    (
+      name: string,
+      cases: (args: ReadonlyArray<V>, site: Site) => Eval<ReadonlyArray<Case>>,
+    ): Model =>
+    (args, site) =>
+      cases(args, site).pipe(
+        Effect.map((added) =>
+          native(name, ([self], at) => {
+            const state = matcherOf(self);
+            return state
+              ? Effect.succeed(matcher({ ...state, cases: [...state.cases, ...added] }))
+              : wrongArguments(at, name);
+          }),
+        ),
+      );
+
+  /** The last argument is the handler; the ones before it are what it is for. */
+  const handled = (args: ReadonlyArray<V>): readonly [ReadonlyArray<V>, V] | undefined => {
+    const handler = args.at(-1);
+    return handler && args.length >= 2 ? [args.slice(0, -1), handler] : undefined;
+  };
+
+  /** One case for each key of an object of handlers, on the field a matcher discriminates on. */
+  const byField = (field: string, handlers: V | undefined): ReadonlyArray<Case> | undefined =>
+    handlers?._tag === "Obj"
+      ? Object.entries(handlers.fields).map(([tag, handler]) => ({
+          takes: tagged(field, [Value.str(tag)]),
+          handler,
+        }))
+      : undefined;
+
+  /** Run a matcher on a value: the first case that takes it, or `otherwise`. */
+  const matched = (
+    state: Matcher,
+    input: V,
+    otherwise: (input: V, site: Site) => Eval<V>,
+    wrap: (result: V) => V,
+    site: Site,
+  ): Eval<V> =>
+    Effect.gen(function* () {
+      for (const one of state.cases)
+        if (yield* one.takes(input, site))
+          return wrap(yield* host.call(one.handler, [input], site));
+      return yield* otherwise(input, site);
+    });
+
+  /** The end of a matcher's pipe: the result for `Match.value`, a function for `Match.type`. */
+  const finished = (
+    name: string,
+    state: Matcher | undefined,
+    otherwise: (input: V, site: Site) => Eval<V>,
+    wrap: (result: V) => V,
+    site: Site,
+  ): Eval<V> =>
+    !state
+      ? wrongArguments(site, name)
+      : state.subject
+        ? matched(state, state.subject, otherwise, wrap, site)
+        : Effect.succeed(
+            native(name, ([input], at) =>
+              input ? matched(state, input, otherwise, wrap, at) : wrongArguments(at, name),
+            ),
+          );
+
+  /** No case takes the value, where the code says one always does. */
+  const fellThrough =
+    (name: string) =>
+    (_: V, site: Site): Eval<V> =>
+      Effect.fail(Value.notTranslated(site, `${name} meets a value none of its cases takes`));
+
+  const same = (result: V): V => result;
+
+  /** `Match.tagsExhaustive(handlers)` and the like: cases, and the end of the pipe. */
+  const exhaustively =
+    (name: string, cases: (args: ReadonlyArray<V>) => ReadonlyArray<Case> | undefined): Model =>
+    (args, site) => {
+      const added = cases(args);
+      return added
+        ? Effect.succeed(
+            native(name, ([self], at) => {
+              const state = matcherOf(self);
+              return finished(
+                name,
+                state && { ...state, cases: [...state.cases, ...added] },
+                fellThrough(name),
+                same,
+                at,
+              );
+            }),
+          )
+        : wrongArguments(site, name);
+    };
+
+  const matchModels: Readonly<Record<string, Model>> = {
+    "effect/Match:value": ([subject], site) =>
+      subject
+        ? Effect.succeed(matcher({ subject, cases: [] }))
+        : wrongArguments(site, "Match.value"),
+    "effect/Match:type": () => Effect.succeed(matcher({ subject: undefined, cases: [] })),
+    // It only narrows the type of what the cases return.
+    "effect/Match:withReturnType": () =>
+      Effect.succeed(
+        native("Match.withReturnType", ([self], at) =>
+          matcherOf(self) && self
+            ? Effect.succeed(self)
+            : wrongArguments(at, "Match.withReturnType"),
+        ),
+      ),
+    "effect/Match:when": adding("Match.when", ([pattern, handler], site) =>
+      pattern && handler
+        ? Effect.succeed([{ takes: (input, at) => takes(pattern, input, at), handler }])
+        : wrongArguments(site, "Match.when"),
+    ),
+    "effect/Match:not": adding("Match.not", ([pattern, handler], site) =>
+      pattern && handler
+        ? Effect.succeed([
+            {
+              takes: (input, at) => Effect.map(takes(pattern, input, at), (taken) => !taken),
+              handler,
+            },
+          ])
+        : wrongArguments(site, "Match.not"),
+    ),
+    "effect/Match:whenOr": adding("Match.whenOr", (args, site) => {
+      const parts = handled(args);
+      return parts
+        ? Effect.succeed([
+            {
+              takes: Effect.fnUntraced(function* (input: V, at: Site) {
+                for (const pattern of parts[0]) if (yield* takes(pattern, input, at)) return true;
+                return false;
+              }),
+              handler: parts[1],
+            },
+          ])
+        : wrongArguments(site, "Match.whenOr");
+    }),
+    "effect/Match:whenAnd": adding("Match.whenAnd", (args, site) => {
+      const parts = handled(args);
+      return parts
+        ? Effect.succeed([
+            {
+              takes: Effect.fnUntraced(function* (input: V, at: Site) {
+                for (const pattern of parts[0])
+                  if (!(yield* takes(pattern, input, at))) return false;
+                return true;
+              }),
+              handler: parts[1],
+            },
+          ])
+        : wrongArguments(site, "Match.whenAnd");
+    }),
+    "effect/Match:tag": adding("Match.tag", (args, site) => {
+      const parts = handled(args);
+      return parts
+        ? Effect.succeed([{ takes: tagged("_tag", parts[0]), handler: parts[1] }])
+        : wrongArguments(site, "Match.tag");
+    }),
+    "effect/Match:tags": adding("Match.tags", ([handlers], site) => {
+      const cases = byField("_tag", handlers);
+      return cases ? Effect.succeed(cases) : wrongArguments(site, "Match.tags");
+    }),
+    "effect/Match:tagsExhaustive": exhaustively("Match.tagsExhaustive", ([handlers]) =>
+      byField("_tag", handlers),
+    ),
+    // `Match.discriminator("kind")("a", "b", f)`: the same, on a field the code names.
+    "effect/Match:discriminator": ([field], site) => {
+      const name = str(field);
+      return name === undefined
+        ? wrongArguments(site, "Match.discriminator")
+        : Effect.succeed(
+            native(
+              "Match.discriminator",
+              adding("Match.discriminator", (args, at) => {
+                const parts = handled(args);
+                return parts
+                  ? Effect.succeed([{ takes: tagged(name, parts[0]), handler: parts[1] }])
+                  : wrongArguments(at, "Match.discriminator");
+              }),
+            ),
+          );
+    },
+    "effect/Match:discriminators": ([field], site) => {
+      const name = str(field);
+      return name === undefined
+        ? wrongArguments(site, "Match.discriminators")
+        : Effect.succeed(
+            native(
+              "Match.discriminators",
+              adding("Match.discriminators", ([handlers], at) => {
+                const cases = byField(name, handlers);
+                return cases ? Effect.succeed(cases) : wrongArguments(at, "Match.discriminators");
+              }),
+            ),
+          );
+    },
+    "effect/Match:discriminatorsExhaustive": ([field], site) => {
+      const name = str(field);
+      return name === undefined
+        ? wrongArguments(site, "Match.discriminatorsExhaustive")
+        : Effect.succeed(
+            native(
+              "Match.discriminatorsExhaustive",
+              exhaustively("Match.discriminatorsExhaustive", ([handlers]) =>
+                byField(name, handlers),
+              ),
+            ),
+          );
+    },
+    // `Match.valueTags(value, handlers)`, or `Match.valueTags(handlers)` then the value.
+    "effect/Match:valueTags": (args, site) => {
+      const [first, second] = args;
+      const run = (input: V, handlers: V | undefined, at: Site) => {
+        const cases = byField("_tag", handlers);
+        return cases
+          ? matched({ subject: input, cases }, input, fellThrough("Match.valueTags"), same, at)
+          : wrongArguments(at, "Match.valueTags");
+      };
+      if (args.length >= 2 && first) return run(first, second, site);
+      return first
+        ? Effect.succeed(
+            native("Match.valueTags", ([input], at) =>
+              input ? run(input, first, at) : wrongArguments(at, "Match.valueTags"),
+            ),
+          )
+        : wrongArguments(site, "Match.valueTags");
+    },
+    "effect/Match:typeTags": () =>
+      Effect.succeed(
+        native("Match.typeTags", ([handlers], site) => {
+          const cases = byField("_tag", handlers);
+          return cases
+            ? Effect.succeed(
+                native("Match.typeTags", ([input], at) =>
+                  input
+                    ? matched(
+                        { subject: input, cases },
+                        input,
+                        fellThrough("Match.typeTags"),
+                        same,
+                        at,
+                      )
+                    : wrongArguments(at, "Match.typeTags"),
+                ),
+              )
+            : wrongArguments(site, "Match.typeTags");
+        }),
+      ),
+    // What a pattern can be besides a literal: `Match.when(Match.defined, f)`.
+    "effect/Match:any": () => Effect.succeed(Value.bool(true)),
+    "effect/Match:defined": ([input]) =>
+      Effect.succeed(
+        Value.bool(input !== undefined && input._tag !== "Null" && input._tag !== "Undef"),
+      ),
+    "effect/Match:exhaustive": ([self], site) =>
+      finished("Match.exhaustive", matcherOf(self), fellThrough("Match.exhaustive"), same, site),
+    "effect/Match:orElseAbsurd": ([self], site) =>
+      finished(
+        "Match.orElseAbsurd",
+        matcherOf(self),
+        fellThrough("Match.orElseAbsurd"),
+        same,
+        site,
+      ),
+    "effect/Match:orElse": ([otherwise], site) =>
+      otherwise
+        ? Effect.succeed(
+            native("Match.orElse", ([self], at) =>
+              finished(
+                "Match.orElse",
+                matcherOf(self),
+                (input, from) => host.call(otherwise, [input], from),
+                same,
+                at,
+              ),
+            ),
+          )
+        : wrongArguments(site, "Match.orElse"),
+    "effect/Match:option": ([self], site) =>
+      finished("Match.option", matcherOf(self), () => Effect.succeed(Value.none), Value.some, site),
+  };
+
   const models: Readonly<Record<string, Model>> = {
+    ...matchModels,
     "effect/pipe:": piped,
     "effect/Function:pipe": piped,
     "effect/Option:some": ([value]) => Effect.succeed(Value.some(value ?? Value.undef)),

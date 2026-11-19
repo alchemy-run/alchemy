@@ -54,8 +54,10 @@ export interface Brand {
    * `Option`: an `effect/Option`, whose `_tag` is `Some` or `None`.
    * `Recorded`: an event a decision recorded on an instance it read, whose
    * `cls` is that instance's place among the ones read.
+   * `Matcher`: an `effect/Match` matcher being built, whose `cls` is the
+   * value it matches and the cases it has so far.
    */
-  readonly kind: "Event" | "Rejection" | "Command" | "Option" | "Recorded";
+  readonly kind: "Event" | "Rejection" | "Command" | "Option" | "Recorded" | "Matcher";
   readonly cls: unknown;
 }
 

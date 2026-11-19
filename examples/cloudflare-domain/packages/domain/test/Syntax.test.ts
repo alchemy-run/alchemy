@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { Basket } from "./fixtures/Basket.aggregate.ts";
 import { Label } from "./fixtures/Label.aggregate.ts";
+import { Locker } from "./fixtures/Locker.aggregate.ts";
 import { Quota } from "./fixtures/Quota.aggregate.ts";
 import { Sheet } from "./fixtures/Sheet.aggregate.ts";
 import { Stack } from "./fixtures/Stack.aggregate.ts";
@@ -203,6 +204,35 @@ it.effect(
         _tag: "NotTranslated",
         reason: expect.stringContaining("pushes onto an array it was given"),
       });
+    }).pipe(Effect.provide(NodeServices.layer)),
+  60_000,
+);
+
+it.effect(
+  "handlers and rules written with effect/Match are read as branches on what they match",
+  () =>
+    Effect.gen(function* () {
+      const report = yield* Prove.report(Locker, source("Locker"));
+      const negative = verdictsOf(report, "NeverNegative");
+      // `Match.type` used as a function, `Match.valueTags`, an object pattern with a predicate.
+      expect(negative.Open).toEqual({ _tag: "Proved" });
+      expect(negative.Store).toEqual({ _tag: "Proved" });
+      expect(negative.Take).toEqual({ _tag: "Proved" });
+      expect(negative.Seal).toEqual({ _tag: "Proved" });
+      // The command that never asks is found, and the real `Match` code breaks the rule on it.
+      expect(negative.Grab).toMatchObject({ _tag: "Violated" });
+      if (negative.Grab?._tag !== "Violated") return;
+      const { state, after } = negative.Grab.counterexample as {
+        readonly state: { readonly _tag: string; readonly held: number };
+        readonly after: { readonly held: number };
+      };
+      expect(state._tag).toBe("Open");
+      expect(after.held).toBeLessThan(0);
+      // A rule that matches on the state before: no command changes a sealed locker.
+      const sealed = verdictsOf(report, "ASealedLockerKeepsWhatItHolds");
+      expect(Object.values(sealed).every((verdict) => verdict._tag === "Proved")).toBe(true);
+      // Every command that can run was read: none stopped at code the prover has no model for.
+      expect(report.commands.every((command) => command.schema._tag === "Proved")).toBe(true);
     }).pipe(Effect.provide(NodeServices.layer)),
   60_000,
 );

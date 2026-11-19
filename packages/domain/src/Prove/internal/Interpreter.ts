@@ -382,6 +382,12 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     call: (fn, args, site) => call(fn, args, site),
     settle: (value, site) => settle(value, site),
     decide: (value, site) => decide(value, site),
+    equal: (a, b, site) => {
+      const equal = same(a, b);
+      return equal === undefined
+        ? fail(site, "compares values the prover does not model")
+        : Effect.succeed(fromTruth(equal));
+    },
     force: (value) => forced(value),
     array: (name, items, fn, initial, site) => arrayMethods[name]!(items, fn, initial, site),
   });
@@ -533,7 +539,11 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     switch (value._tag) {
       case "Obj":
         // `option.pipe(Option.map(f))`: each function applied to what the one before gave.
-        if (key === "pipe" && value.brand?.kind === "Option" && !value.fields.pipe)
+        if (
+          key === "pipe" &&
+          (value.brand?.kind === "Option" || value.brand?.kind === "Matcher") &&
+          !value.fields.pipe
+        )
           return {
             _tag: "Native",
             name: "pipe",
