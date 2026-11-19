@@ -109,6 +109,12 @@ const api = yield* AWS.Lambda.WebFunction("Api", { main: "./src/server.ts" });
 // deploy: api.url = https://<id>.<shard>.lambda-web.<region>.on.aws
 ```
 
+Saving a file hot-swaps a Web Function's code too, in about a
+second plus the server's start-up. The dev session rebuilds,
+creates a revision with only the code replaced and moves the
+endpoint to it, so the next request starts a fresh environment of
+the new revision.
+
 The same stack deploys unchanged: `alchemy deploy` runs
 `vite build` and serves the output from S3 through CloudFront. For
 SSR frameworks, `server.environment` is delivered to the dev

@@ -30,14 +30,11 @@ import { Assets, ensureLambdaWebCodeAccess } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyDocument, PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
-import {
-  LambdaLiveTailError,
-  type FunctionBuildOptions,
-  type FunctionZipProps,
-} from "./Function.ts";
-import { makeFunctionBundler, type FunctionBundleOptions } from "./FunctionBundle.ts";
+import { LambdaLiveTailError, type FunctionBuildOptions } from "./Function.ts";
+import { makeFunctionBundler } from "./FunctionBundle.ts";
 import type { NetworkConnectorProps } from "./NetworkConnector.ts";
 import { createConnector, getConnector, syncConnector } from "./NetworkConnectorLifecycle.ts";
+import { toWebFunctionZipProps, webFunctionBundleOptions } from "./WebFunctionBundle.ts";
 import {
   connectorOfRevision,
   deleteConnectorAndRole,
@@ -599,23 +596,8 @@ export const WebFunction: Platform<
   },
 });
 
-/** Generated entry for Effect web functions. */
-const effectEntry = (importPath: string) => `
-import { bootstrap } from "@alchemy.run/aws/Bootstrap/LambdaWeb";
-import entrypoint from ${JSON.stringify(importPath)};
-
-bootstrap(entrypoint);
-`;
-
 const mainBasename = (main: string) =>
   main.slice(Math.max(main.lastIndexOf("/"), main.lastIndexOf("\\")) + 1);
-
-/** Only the Effect form gets a generated entry; async servers ship as-is. */
-const bundleOptions: FunctionBundleOptions = { entry: effectEntry };
-
-/** The bundler reads the Event Function zip props; Web Functions run on Arm64. */
-const toZipProps = (props: WebFunctionProps): FunctionZipProps =>
-  ({ ...props, architecture: "arm64" }) as FunctionZipProps;
 
 const toTimeoutSeconds = (timeout: Duration.Duration | undefined): number => {
   if (timeout === undefined) return DEFAULT_TIMEOUT_SECONDS;
@@ -647,7 +629,7 @@ export const WebFunctionProvider = () =>
       };
 
       const bundle = (id: string, props: WebFunctionProps) =>
-        bundleCode(id, toZipProps(props), bundleOptions);
+        bundleCode(id, toWebFunctionZipProps(props), webFunctionBundleOptions);
 
       const createNames = Effect.fn(function* (id: string, functionName: string | undefined) {
         return {

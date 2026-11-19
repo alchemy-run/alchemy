@@ -4,6 +4,7 @@
  * INTERNAL — the shared skeleton for `alchemy dev` AWS providers that deploy
  * into the floci emulator and keep a long-lived watch loop hot-swapping the
  * resource on file change ([Lambda FlociFunctionProvider](../Lambda/FlociFunctionProvider.ts),
+ * [Lambda FlociWebFunctionProvider](../Lambda/FlociWebFunctionProvider.ts),
  * [ECS FlociTaskProvider](../ECS/FlociTaskProvider.ts),
  * [ECS FlociServiceProvider](../ECS/FlociServiceProvider.ts)).
  *
@@ -126,6 +127,12 @@ export interface DevWatchContext<Props, Attrs> {
   readonly rerunReconcileIfStale: (
     isStale: (current: Attrs) => Effect.Effect<boolean, unknown, any>,
   ) => Effect.Effect<Attrs, unknown>;
+  /**
+   * Runs `effect` under the per-id lock, so a watcher that converges the
+   * emulator itself never interleaves with an engine reconcile or delete.
+   * Inside it, {@link currentAttrs} are those of the latest reconcile.
+   */
+  readonly withLock: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
 }
 
 /**
@@ -428,6 +435,7 @@ export const makeDevWatchProvider = <
                 return yield* rerun;
               }),
             ) as Effect.Effect<Attrs, unknown>,
+          withLock: withLock(input.id),
         };
         const fiber = yield* spec.startWatch(ctx).pipe(
           Effect.provide(services),
