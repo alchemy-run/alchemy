@@ -138,6 +138,13 @@ export interface CustomDomain extends Resource<
  * API cannot replace a live domain atomically. Create a second resource,
  * verify DNS and TLS, cut traffic over, and then remove the old resource.
  *
+ * Prisma records a custom domain as a RoutingUrl, and has done so for every
+ * custom domain since its backfill ran on 2026-11-17. Once it has, to replace
+ * a CustomDomain with a `Prisma.RoutingUrl` for the same hostname, keep the
+ * CustomDomain with `RemovalPolicy.retain()`, or remove it in an earlier
+ * deploy. The RoutingUrl takes over the row the CustomDomain made, and the
+ * CustomDomain's delete would remove that row.
+ *
  * ### Creating a Custom Domain
  * **Example:** Attach a hostname to an app
  * ```typescript
@@ -330,7 +337,7 @@ const ProviderLive = () =>
           if (!domain) {
             yield* waitForAuthoritativeRecord(
               { type: "CNAME", name: hostname },
-              { margin: "if-unseen" },
+              { margin: "if-unseen", nameservers: "parent" },
             );
           }
           const reconciled = domain

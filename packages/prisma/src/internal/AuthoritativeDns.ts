@@ -4,25 +4,153 @@ import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 
-/** The record Prisma is about to look up. */
+/** A record Prisma is about to look up. */
 export type ExpectedRecord =
   | { readonly type: "CNAME"; readonly name: string; readonly value?: string }
-  | { readonly type: "TXT"; readonly name: string; readonly value: string }
-  /** A or AAAA answers that include an address of `target`, as CNAME flattening, ALIAS and ANAME give. */
-  | { readonly type: "ADDRESS"; readonly name: string; readonly target: string };
+  | { readonly type: "TXT"; readonly name: string; readonly value: string };
+
+/** The platform's `dnsPointsAtSwitchboard` condition for `name`. */
+export interface ExpectedSwitchboardDns {
+  readonly name: string;
+  /** The regional switchboard, such as `switchboard.cdg.prisma.build`. */
+  readonly switchboard: string;
+}
 
 /**
- * `seen`: every authoritative nameserver returns the record. `absent`: one
- * answered without it. `unknown`: none could be found or reached.
+ * `seen`: every authoritative nameserver shows it. `absent`: one answered
+ * without it. `unknown`: no authoritative nameserver was found, or one could
+ * not be asked and none answered without it.
  */
 export type RecordVisibility = "seen" | "absent" | "unknown";
 
-class DnsQueryFailed extends Data.TaggedError("DnsQueryFailed")<{
+/** What the authoritative nameservers show for `dnsPointsAtSwitchboard`. */
+export interface SwitchboardDnsVisibility {
+  /** A CNAME to the switchboard, or A or AAAA answers that include a switchboard address. */
+  readonly visibility: RecordVisibility;
+  /** A CNAME to the switchboard, alone. */
+  readonly cname: RecordVisibility;
+}
+
+/**
+ * Where the search for a name's authoritative nameservers starts. `parent`
+ * asks for the NS records of the name's parent, then its parent, and so on.
+ * `name` asks for the name's own NS records first, so a zone apex such as
+ * `example.com` finds its zone, and skips that step when the name has a
+ * CNAME, because the recursive lookup would follow it into the target's zone.
+ */
+export type NameserverSearch = "parent" | "name";
+
+export interface WaitOptions {
+  /**
+   * `if-unseen` skips the margin when the first check already sees the
+   * record, i.e. it was published before this deploy reached it.
+   */
+  readonly margin: "always" | "if-unseen";
+  readonly nameservers: NameserverSearch;
+}
+
+type AuthoritativeQuery = "CNAME" | "TXT" | "A" | "AAAA";
+
+/** A DNS query failed. `ENODATA` and `ENOTFOUND` mean no such record. */
+export class DnsQueryFailed extends Data.TaggedError("DnsQueryFailed")<{
   readonly code: string | undefined;
 }> {}
 
-/** Resolver error codes for an answer that does not hold the record. */
+const queryFailed = (error: unknown) =>
+  new DnsQueryFailed({
+    code:
+      Predicate.hasProperty(error, "code") && typeof error.code === "string"
+        ? error.code
+        : undefined,
+  });
+
+/** The DNS queries the checks send: `node:dns/promises` outside tests. */
+export interface DnsLookups {
+  /** Asks this machine's resolver. */
+  readonly recursive: (
+    type: "NS" | "CNAME" | "A" | "AAAA",
+    name: string,
+  ) => Effect.Effect<ReadonlyArray<string>, DnsQueryFailed>;
+  /** Asks `server` alone. A TXT record's chunks come joined. */
+  readonly authoritative: (
+    server: string,
+    type: AuthoritativeQuery,
+    name: string,
+  ) => Effect.Effect<ReadonlyArray<string>, DnsQueryFailed>;
+}
+
+const nodeDns = Effect.tryPromise({
+  try: () => import("node:dns/promises"),
+  catch: queryFailed,
+});
+
+const nodeDnsLookups: DnsLookups = {
+  recursive: (type, name) =>
+    nodeDns.pipe(
+      Effect.flatMap((dns) =>
+        Effect.tryPromise({
+          try: () =>
+            type === "NS"
+              ? dns.resolveNs(name)
+              : type === "CNAME"
+                ? dns.resolveCname(name)
+                : type === "A"
+                  ? dns.resolve4(name)
+                  : dns.resolve6(name),
+          catch: queryFailed,
+        }),
+      ),
+    ),
+  authoritative: (server, type, name) =>
+    Effect.gen(function* () {
+      const dns = yield* nodeDns;
+      const resolver = yield* Effect.try({
+        try: () => {
+          const instance = new dns.Resolver();
+          instance.setServers([server]);
+          return instance;
+        },
+        catch: queryFailed,
+      });
+      return yield* Effect.tryPromise({
+        try: () =>
+          type === "TXT"
+            ? resolver.resolveTxt(name).then((records) => records.map((chunks) => chunks.join("")))
+            : type === "CNAME"
+              ? resolver.resolveCname(name)
+              : type === "A"
+                ? resolver.resolve4(name)
+                : resolver.resolve6(name),
+        catch: queryFailed,
+      }).pipe(
+        // A timed-out query keeps retrying in c-ares unless cancelled.
+        Effect.onInterrupt(() => Effect.sync(() => resolver.cancel())),
+      );
+    }),
+};
+
+export const DnsLookups = Context.Reference<DnsLookups>("@alchemy.run/prisma/DnsLookups", {
+  defaultValue: () => nodeDnsLookups,
+});
+
 const NEGATIVE_ANSWERS = new Set(["ENODATA", "ENOTFOUND"]);
+
+/** The answers, `[]` for no such record, or `undefined` when the lookup failed. */
+const answersOf = (query: Effect.Effect<ReadonlyArray<string>, DnsQueryFailed>) =>
+  query.pipe(
+    Effect.catchIf(
+      (error) => error.code !== undefined && NEGATIVE_ANSWERS.has(error.code),
+      () => Effect.succeed([] as ReadonlyArray<string>),
+    ),
+    Effect.timeout("3 seconds"),
+    Effect.orElseSucceed(() => undefined),
+  );
+
+const recursiveAnswers = (dns: DnsLookups, type: "NS" | "CNAME" | "A" | "AAAA", name: string) =>
+  answersOf(dns.recursive(type, name));
+
+const sameName = (a: string, b: string) =>
+  a.replace(/\.$/, "").toLowerCase() === b.replace(/\.$/, "").toLowerCase();
 
 const combine = (answers: ReadonlyArray<RecordVisibility>): RecordVisibility =>
   answers.every((answer) => answer === "seen")
@@ -31,129 +159,138 @@ const combine = (answers: ReadonlyArray<RecordVisibility>): RecordVisibility =>
       ? "absent"
       : "unknown";
 
+const authoritativeServers = (dns: DnsLookups, name: string, search: NameserverSearch) =>
+  Effect.gen(function* () {
+    const labels = name.split(".");
+    const hasCname =
+      search === "name" && ((yield* recursiveAnswers(dns, "CNAME", name)) ?? []).length > 0;
+    const first = search === "name" && !hasCname ? 0 : 1;
+    for (let i = first; i < labels.length - 1; i++) {
+      const names = (yield* recursiveAnswers(dns, "NS", labels.slice(i).join("."))) ?? [];
+      const addresses = yield* Effect.forEach(
+        names,
+        (server) => recursiveAnswers(dns, "A", server),
+        { concurrency: "unbounded" },
+      );
+      const servers = addresses.flatMap((found) => found ?? []);
+      if (servers.length > 0) return servers;
+    }
+    return [];
+  });
+
 /**
  * Prisma checks a domain's records through a caching resolver: a lookup that
  * races a just-published record caches NXDOMAIN for the zone's SOA minimum
  * (30 minutes on Cloudflare), failing every retry. Wait (bounded) while
  * the authoritative nameservers answer without the record, then add a margin
  * for anycast edges we cannot see once every one returns it.
- *
- * `margin: "if-unseen"` skips the margin when the first check already sees
- * the record, i.e. it was published before this deploy reached it.
  */
-export const waitForAuthoritativeRecord = (
-  record: ExpectedRecord,
-  options: { readonly margin: "always" | "if-unseen" },
-): Effect.Effect<RecordVisibility> =>
+const waitUntilVisible = <A>(
+  check: Effect.Effect<A>,
+  visibilityOf: (answer: A) => RecordVisibility,
+  margin: WaitOptions["margin"],
+) =>
   Effect.gen(function* () {
-    const dns = yield* Effect.tryPromise(() => import("node:dns/promises")).pipe(
-      Effect.orElseSucceed(() => undefined),
-    );
-    if (dns === undefined || typeof dns.Resolver !== "function") return "unknown";
-    const labels = record.name.split(".");
-    let servers: string[] = [];
-    for (let i = 0; i < labels.length - 1 && servers.length === 0; i++) {
-      const names = yield* Effect.tryPromise(() => dns.resolveNs(labels.slice(i).join("."))).pipe(
-        Effect.orElseSucceed(() => [] as string[]),
-      );
-      const addresses = yield* Effect.forEach(
-        names,
-        (name) =>
-          Effect.tryPromise(() => dns.resolve4(name)).pipe(
-            Effect.orElseSucceed(() => [] as string[]),
-          ),
-        { concurrency: "unbounded" },
-      );
-      servers = addresses.flat();
-    }
-    if (servers.length === 0) return "unknown";
-    const targetAddresses =
-      record.type === "ADDRESS"
-        ? new Set(
-            (yield* Effect.forEach(
-              [() => dns.resolve4(record.target), () => dns.resolve6(record.target)],
-              (query) => Effect.tryPromise(query).pipe(Effect.orElseSucceed(() => [] as string[])),
-            )).flat(),
-          )
-        : new Set<string>();
-    if (record.type === "ADDRESS" && targetAddresses.size === 0) return "unknown";
-    const answerOf = (server: string) =>
-      Effect.gen(function* () {
-        const resolver = yield* Effect.sync(() => {
-          const instance = new dns.Resolver();
-          instance.setServers([server]);
-          return instance;
-        });
-        const lookup = (query: () => Promise<ReadonlyArray<unknown>>) =>
-          Effect.tryPromise({
-            try: query,
-            catch: (error) =>
-              new DnsQueryFailed({
-                code:
-                  Predicate.hasProperty(error, "code") && typeof error.code === "string"
-                    ? error.code
-                    : undefined,
-              }),
-          }).pipe(
-            // A timed-out query keeps retrying in c-ares unless cancelled.
-            Effect.onInterrupt(() => Effect.sync(() => resolver.cancel())),
-          );
-        const addressesOf = (query: () => Promise<ReadonlyArray<unknown>>) =>
-          lookup(query).pipe(
-            Effect.catchIf(
-              (error) => error.code !== undefined && NEGATIVE_ANSWERS.has(error.code),
-              () => Effect.succeed([] as ReadonlyArray<unknown>),
-            ),
-          );
-        const found =
-          record.type === "ADDRESS"
-            ? [
-                ...(yield* addressesOf(() => resolver.resolve4(record.name))),
-                ...(yield* addressesOf(() => resolver.resolve6(record.name))),
-              ].some((address) => typeof address === "string" && targetAddresses.has(address))
-            : record.type === "CNAME"
-              ? (yield* lookup(() => resolver.resolveCname(record.name))).some(
-                  (target) =>
-                    record.value === undefined ||
-                    (typeof target === "string" &&
-                      target.replace(/\.$/, "").toLowerCase() === record.value.toLowerCase()),
-                )
-              : (yield* lookup(() => resolver.resolveTxt(record.name))).some(
-                  (chunks) => Array.isArray(chunks) && chunks.join("") === record.value,
-                );
-        return found ? ("seen" as const) : ("absent" as const);
-      }).pipe(
-        Effect.catchTag("DnsQueryFailed", (error) =>
-          Effect.succeed(
-            error.code !== undefined && NEGATIVE_ANSWERS.has(error.code)
-              ? ("absent" as const)
-              : ("unknown" as const),
-          ),
-        ),
-        Effect.timeout("3 seconds"),
-        Effect.orElseSucceed(() => "unknown" as const),
-      );
-    const check = Effect.forEach(servers, answerOf, { concurrency: "unbounded" }).pipe(
-      Effect.map(combine),
-    );
     const first = yield* check;
-    if (first === "seen" && options.margin === "if-unseen") return first;
-    const visibility =
-      first === "absent"
+    if (visibilityOf(first) === "seen" && margin === "if-unseen") return first;
+    const last =
+      visibilityOf(first) === "absent"
         ? yield* check.pipe(
             Effect.repeat({
               schedule: Schedule.spaced("3 seconds"),
-              until: (answer) => answer !== "absent",
+              until: (answer) => visibilityOf(answer) !== "absent",
               times: 20,
             }),
           )
         : first;
-    if (visibility === "seen") yield* Effect.sleep("10 seconds");
-    return visibility;
+    if (visibilityOf(last) === "seen") yield* Effect.sleep("10 seconds");
+    return last;
   });
 
-/** The authoritative check `Prisma.DomainOwnership` runs before it creates anything. */
+/** Wait until every authoritative nameserver for `record.name` returns the record. */
+export const waitForAuthoritativeRecord = (
+  record: ExpectedRecord,
+  options: WaitOptions,
+): Effect.Effect<RecordVisibility> =>
+  Effect.gen(function* () {
+    const dns = yield* DnsLookups;
+    const servers = yield* authoritativeServers(dns, record.name, options.nameservers);
+    if (servers.length === 0) return "unknown";
+    const matches = (answer: string) =>
+      record.type === "TXT"
+        ? answer === record.value
+        : record.value === undefined || sameName(answer, record.value);
+    const answerOf = (server: string) =>
+      answersOf(dns.authoritative(server, record.type, record.name)).pipe(
+        Effect.map((answers): RecordVisibility =>
+          answers === undefined ? "unknown" : answers.some(matches) ? "seen" : "absent",
+        ),
+      );
+    const check = Effect.forEach(servers, answerOf, { concurrency: "unbounded" }).pipe(
+      Effect.map(combine),
+    );
+    return yield* waitUntilVisible(check, (visibility) => visibility, options.margin);
+  });
+
+/**
+ * Wait until every authoritative nameserver for `expected.name` shows it
+ * pointing at the switchboard: a CNAME to it, or A or AAAA answers that
+ * include an address this machine resolves the switchboard to.
+ */
+export const waitForSwitchboardDns = (
+  expected: ExpectedSwitchboardDns,
+  options: WaitOptions,
+): Effect.Effect<SwitchboardDnsVisibility> =>
+  Effect.gen(function* () {
+    const unknown = { visibility: "unknown", cname: "unknown" } as const;
+    const dns = yield* DnsLookups;
+    const servers = yield* authoritativeServers(dns, expected.name, options.nameservers);
+    if (servers.length === 0) return unknown;
+    const switchboardAddresses = new Set(
+      (yield* Effect.forEach(
+        ["A", "AAAA"] as const,
+        (type) => recursiveAnswers(dns, type, expected.switchboard),
+        { concurrency: "unbounded" },
+      )).flatMap((found) => found ?? []),
+    );
+    const answerOf = (server: string) =>
+      Effect.forEach(
+        ["CNAME", "A", "AAAA"] as const,
+        (type) => answersOf(dns.authoritative(server, type, expected.name)),
+        { concurrency: "unbounded" },
+      ).pipe(
+        Effect.map(([cnames, ipv4, ipv6]): SwitchboardDnsVisibility => {
+          const cnameSeen = cnames?.some((target) => sameName(target, expected.switchboard));
+          const cname = cnames === undefined ? "unknown" : cnameSeen ? "seen" : "absent";
+          const addressSeen = [ipv4, ipv6].some((addresses) =>
+            addresses?.some((address) => switchboardAddresses.has(address)),
+          );
+          const unanswered =
+            switchboardAddresses.size === 0 ||
+            [cnames, ipv4, ipv6].some((answers) => answers === undefined);
+          return {
+            cname,
+            visibility: cnameSeen || addressSeen ? "seen" : unanswered ? "unknown" : "absent",
+          };
+        }),
+      );
+    const check = Effect.forEach(servers, answerOf, { concurrency: "unbounded" }).pipe(
+      Effect.map((answers): SwitchboardDnsVisibility => ({
+        visibility: combine(answers.map((answer) => answer.visibility)),
+        cname: combine(answers.map((answer) => answer.cname)),
+      })),
+    );
+    return yield* waitUntilVisible(check, (answer) => answer.visibility, options.margin);
+  });
+
+/** The record check `Prisma.DomainOwnership` runs; tests replace it. */
 export const AuthoritativeRecordCheck = Context.Reference<typeof waitForAuthoritativeRecord>(
   "@alchemy.run/prisma/AuthoritativeRecordCheck",
   { defaultValue: () => waitForAuthoritativeRecord },
+);
+
+/** The `dnsPointsAtSwitchboard` check `Prisma.RoutingUrl` runs; tests replace it. */
+export const SwitchboardDnsCheck = Context.Reference<typeof waitForSwitchboardDns>(
+  "@alchemy.run/prisma/SwitchboardDnsCheck",
+  { defaultValue: () => waitForSwitchboardDns },
 );

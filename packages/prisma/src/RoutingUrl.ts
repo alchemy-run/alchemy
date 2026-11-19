@@ -18,7 +18,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { App } from "./App.ts";
 import type { Compute } from "./Compute.ts";
-import { AuthoritativeRecordCheck, type RecordVisibility } from "./internal/AuthoritativeDns.ts";
+import { SwitchboardDnsCheck } from "./internal/AuthoritativeDns.ts";
 import { attrOrString, devId, devProvider } from "./internal/DevStub.ts";
 import { concreteIdOf, isPrismaDevId } from "./internal/Refs.ts";
 import { switchboardTarget } from "./internal/Switchboard.ts";
@@ -59,8 +59,9 @@ export class RoutingUrlServiceOnAnotherBranch extends Data.TaggedError(
 
 /**
  * A serving RoutingUrl's hostname change was refused before anything changed,
- * because the new hostname could not serve yet. Publish `records`, then
- * redeploy.
+ * because the new hostname could not be shown to serve yet. Publish `records`,
+ * then redeploy. When `switchboardDns` is `unknown`, this machine could not
+ * check the new hostname's DNS, and publishing `records` may not be enough.
  */
 export class RoutingUrlHostnameChangeRefused extends Data.TaggedError(
   "RoutingUrlHostnameChangeRefused",
@@ -68,12 +69,21 @@ export class RoutingUrlHostnameChangeRefused extends Data.TaggedError(
   readonly message: string;
   readonly from: string;
   readonly to: string;
+  /**
+   * Records still to publish. A hostname that cannot have a CNAME, such as a
+   * zone apex, can publish its `CNAME` as an ALIAS, ANAME or flattened CNAME.
+   */
   readonly records: ReadonlyArray<{
-    /** `ALIAS` means an ALIAS, ANAME or flattened CNAME, for an apex hostname. */
-    readonly type: "TXT" | "CNAME" | "ALIAS";
+    readonly type: "TXT" | "CNAME";
     readonly name: string;
     readonly value: string;
   }>;
+  /**
+   * Whether every authoritative nameserver for the new hostname shows it
+   * pointing at the regional switchboard: `seen`, `absent`, or `unknown` when
+   * it could not be checked from this machine.
+   */
+  readonly switchboardDns: "seen" | "absent" | "unknown";
 }> {}
 
 export class RoutingUrlOperationFailed extends Data.TaggedError("RoutingUrlOperationFailed")<{
@@ -148,18 +158,21 @@ export interface RoutingUrl extends Resource<
  * proves; destroying the RoutingUrl leaves that domain ownership in place.
  *
  * Changing the hostname of an `active` RoutingUrl is refused, before anything
- * changes, until the new hostname has a verified domain ownership and its
- * `CNAME` to the regional switchboard at every authoritative nameserver. An
- * apex hostname such as `example.com` passes instead with an ALIAS, ANAME or
- * flattened `CNAME` whose A or AAAA answers include a switchboard address.
- * The check does not see a RoutingUrl in another
- * workspace that holds the new hostname; the change then goes through and
- * the new hostname stays `pending` behind `heldBy`.
+ * changes, until the new hostname has a verified domain ownership and every
+ * authoritative nameserver for it answers with either a `CNAME` to the
+ * regional switchboard or A or AAAA records that include a switchboard
+ * address. Any hostname passes with either; the address form is what an
+ * ALIAS, ANAME or flattened `CNAME` gives a zone apex such as `example.com`.
+ * The check does not see a RoutingUrl in another workspace that holds the new
+ * hostname; the change then goes through and the new hostname stays `pending`
+ * behind `heldBy`.
  *
- * To replace a `Prisma.CustomDomain` with a `Prisma.RoutingUrl` for the same
- * hostname, keep the CustomDomain with `RemovalPolicy.retain()`, or remove it
- * in an earlier deploy. The RoutingUrl takes over the row the CustomDomain
- * made, and the CustomDomain's delete would remove that row.
+ * Prisma records a custom domain as a RoutingUrl, and has done so for every
+ * custom domain since its backfill ran on 2026-11-17. Once it has, to replace
+ * a `Prisma.CustomDomain` with a `Prisma.RoutingUrl` for the same hostname,
+ * keep the CustomDomain with `RemovalPolicy.retain()`, or remove it in an
+ * earlier deploy. The RoutingUrl takes over the row the CustomDomain made, and
+ * the CustomDomain's delete would remove that row.
  *
  * Don't also declare a `Prisma.DomainOwnership` for the same exact hostname:
  * it takes over the domain ownership Prisma created for the RoutingUrl and
@@ -283,23 +296,11 @@ const wildcardOf = (hostname: string) => {
   return labels.length >= 3 ? `*.${labels.slice(1).join(".")}` : undefined;
 };
 
-/** A hostname of two labels, such as `example.com`, which cannot have a CNAME. */
-const isApex = (hostname: string) => hostname.split(".").length === 2;
-
-const describeRecord = (record: RoutingUrlHostnameChangeRefused["records"][number]) =>
-  record.type === "ALIAS"
-    ? `an ALIAS, ANAME or flattened CNAME ${record.name} = ${record.value}`
-    : `${record.type} ${record.name} = ${record.value}`;
-
-/** A CNAME, or A/AAAA answers that include a switchboard address, routes the hostname. */
-const combineRouting = (cname: RecordVisibility, address: RecordVisibility): RecordVisibility =>
-  address === "seen" ? "seen" : cname === "unknown" || address === "unknown" ? "unknown" : "absent";
-
 const ProviderLive = () =>
   Provider.effect(
     RoutingUrl,
     Effect.gen(function* () {
-      const checkRecord = yield* AuthoritativeRecordCheck;
+      const checkSwitchboardDns = yield* SwitchboardDnsCheck;
 
       /** Refuse a hostname change the new hostname cannot serve yet. */
       const ensureCanServe = (service: Service, from: string, to: string) =>
@@ -313,51 +314,37 @@ const ProviderLive = () =>
           );
           const owned = ownerships.flat().some((ownership) => ownership.status === "verified");
           const target = switchboardTarget(service.appEndpointDomain);
-          const cname = yield* checkRecord(
-            { type: "CNAME", name: to, value: target },
-            { margin: "if-unseen" },
+          const dns = yield* checkSwitchboardDns(
+            { name: to, switchboard: target },
+            { margin: "if-unseen", nameservers: "name" },
           );
-          const routing =
-            cname === "seen"
-              ? cname
-              : combineRouting(
-                  cname,
-                  yield* checkRecord(
-                    { type: "ADDRESS", name: to, target },
-                    { margin: "if-unseen" },
-                  ),
-                );
-          if (owned && routing === "seen") return;
+          if (owned && dns.visibility === "seen") return;
           const verification = owned
             ? undefined
             : (yield* getWorkspaceDomainOwnershipsVerification({ workspaceId, domain: to })).data;
+          const cnameMissing = dns.visibility !== "seen" && dns.cname === "absent";
           const records = [
             ...(verification
               ? [{ type: "TXT" as const, name: verification.name, value: verification.value }]
               : []),
-            ...(routing === "absent"
-              ? [
-                  {
-                    type: isApex(to) ? ("ALIAS" as const) : ("CNAME" as const),
-                    name: to,
-                    value: target,
-                  },
-                ]
-              : []),
+            ...(cnameMissing ? [{ type: "CNAME" as const, name: to, value: target }] : []),
           ];
+          const unchecked =
+            dns.visibility !== "unknown"
+              ? ""
+              : cnameMissing
+                ? ` '${to}' has no CNAME to ${target}, and whether its A or AAAA records include a switchboard address could not be checked from this machine.`
+                : ` Whether '${to}' points at ${target} could not be checked from this machine.`;
           const publish =
             records.length === 0
-              ? ""
-              : ` Publish ${records.map(describeRecord).join(" and ")}, then redeploy.`;
-          const unchecked =
-            routing === "unknown"
-              ? ` Whether '${to}' points at ${target} could not be checked from this machine: no authoritative nameserver for it could be found or reached. Redeploy from a machine that can reach them.`
-              : "";
+              ? " Redeploy once it can be checked."
+              : ` Publish ${records.map((record) => `${record.type} ${record.name} = ${record.value}`).join(" and ")}, then redeploy.${cnameMissing ? ` A hostname that cannot have a CNAME, such as a zone apex, can use an ALIAS, ANAME or flattened CNAME instead.` : ""}`;
           return yield* new RoutingUrlHostnameChangeRefused({
             from,
             to,
             records,
-            message: `Prisma RoutingUrl '${from}' is serving, and '${to}' cannot be shown to serve yet.${publish}${unchecked}`,
+            switchboardDns: dns.visibility,
+            message: `Prisma RoutingUrl '${from}' is serving, and '${to}' cannot be shown to serve yet.${unchecked}${publish}`,
           });
         });
 

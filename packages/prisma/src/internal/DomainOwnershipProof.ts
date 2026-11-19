@@ -232,7 +232,7 @@ const ProviderLive = () =>
           // lookup decides.
           const visibility = yield* checkRecord(
             { type: "TXT", name: record.name, value: record.value },
-            { margin: "always" },
+            { margin: "always", nameservers: "parent" },
           );
           if (visibility === "absent") {
             return yield* ownershipRequired(

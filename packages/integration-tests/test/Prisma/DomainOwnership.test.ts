@@ -8,6 +8,7 @@ import * as Result from "effect/Result";
 import {
   AuthoritativeRecordCheck,
   type RecordVisibility,
+  type WaitOptions,
 } from "../../../prisma/src/internal/AuthoritativeDns.ts";
 import type { ProjectReference } from "../../../prisma/src/internal/DomainOwnership.ts";
 import {
@@ -59,12 +60,19 @@ interface CloudState {
   verifiesAs: Status;
   /** A row the list route does not show yet, as if it appeared mid-deploy. */
   unlisted: WireOwnership | undefined;
+  /** The options the record check was last called with. */
+  checkedWith: WaitOptions | undefined;
 }
 
 /** One workspace's domain ownerships, served over the Management API routes. */
 const makeOwnershipCloud = () => {
   const rows = new Map<string, WireOwnership>();
-  const state: CloudState = { visibility: "absent", verifiesAs: "verified", unlisted: undefined };
+  const state: CloudState = {
+    visibility: "absent",
+    verifiesAs: "verified",
+    unlisted: undefined,
+    checkedWith: undefined,
+  };
   const fake: FakeManagementApi = makeFakeManagementApi((request) => {
     const path = request.pathname;
     if (path === "/v1/workspaces/ws-1/domain-ownerships/verification") {
@@ -104,7 +112,12 @@ const makeOwnershipCloud = () => {
   const reset = (options: Partial<CloudState> = {}, ...initial: WireOwnership[]) => {
     rows.clear();
     for (const row of initial) rows.set(row.id, row);
-    Object.assign(state, { visibility: "absent", verifiesAs: "verified", unlisted: undefined });
+    Object.assign(state, {
+      visibility: "absent",
+      verifiesAs: "verified",
+      unlisted: undefined,
+      checkedWith: undefined,
+    });
     Object.assign(state, options);
     fake.captured.length = 0;
   };
@@ -123,7 +136,12 @@ const testFor = (cloud: OwnershipCloud, adopt = false) =>
     providers: Layer.effect(TestPrismaProviders, Provider.collection([DomainOwnershipProof])).pipe(
       Layer.provideMerge(DomainOwnershipProofProvider()),
       Layer.provide(
-        Layer.succeed(AuthoritativeRecordCheck, () => Effect.succeed(cloud.state.visibility)),
+        Layer.succeed(AuthoritativeRecordCheck, (_record, options) =>
+          Effect.sync(() => {
+            cloud.state.checkedWith = options;
+            return cloud.state.visibility;
+          }),
+        ),
       ),
       Layer.provide(
         Layer.succeed(AlchemyContext, { dotAlchemy: ".alchemy-test", dev: false, adopt: false }),
@@ -181,6 +199,7 @@ testFor(created).test.provider(
 
       expect(proved.domainOwnershipId).toBe("do-created");
       expect(proved.status).toBe("verified");
+      expect(created.state.checkedWith).toEqual({ margin: "always", nameservers: "parent" });
       expect(created.routes()).toContain(CREATE);
       expect(created.routes()).toContain("POST /v1/domain-ownerships/do-created/verify");
 
