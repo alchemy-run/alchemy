@@ -50,10 +50,12 @@ export const makeEntrypointLayer = (tag: any, entrypoint: any): Layer.Layer<any>
  * `ALCHEMY_PHASE` always reads `"runtime"`.
  *
  * Process hosts provide {@link RuntimeConfigProviderLive}. A host whose env is
- * an object of bindings (a Worker) passes `ConfigProvider.fromUnknown(env)`.
+ * an object of bindings (a Worker) passes `ConfigProvider.fromUnknown(env,
+ * { preserveEmptyStrings: true })`. Keep `preserveEmptyStrings`: `""` is a
+ * value someone set, not a missing one.
  */
 export const runtimeConfigProvider = (
-  source: ConfigProvider.ConfigProvider = ConfigProvider.fromEnv(),
+  source: ConfigProvider.ConfigProvider = ConfigProvider.fromEnv({ preserveEmptyStrings: true }),
 ): ConfigProvider.ConfigProvider =>
   ConfigProvider.make((path) => {
     const key = sanitizeKey(path.join("_"));
@@ -76,8 +78,8 @@ export const runtimeConfigProvider = (
 /**
  * {@link runtimeConfigProvider} over `process.env`. Every process-based
  * runtime host (Lambda, containers, VMs, sandboxes) provides this Layer.
- * `process.env` is read when the Layer builds, so env a host sets before
- * its first event is seen.
+ * `process.env` is snapshotted when the Layer builds (the first event);
+ * variables set after that are not seen.
  */
 export const RuntimeConfigProviderLive = ConfigProvider.layer(
   Effect.sync(() => runtimeConfigProvider()),

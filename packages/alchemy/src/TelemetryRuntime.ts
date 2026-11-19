@@ -55,8 +55,8 @@ const readPackedValue = (key: string): Effect.Effect<unknown> =>
 /**
  * `service.name` fallback chain for the default exporter: `layerOtlp`'s
  * `serviceName`, the standard OTEL variable, then the physical
- * Function/Worker name, then the stack name. `OtlpResource.fromConfig` dies without a service name, so the
- * chain must always produce one.
+ * Function/Worker name, then the stack name. `OtlpResource.fromConfig`
+ * dies without a service name, so the chain must always produce one.
  */
 const defaultServiceName = Effect.gen(function* () {
   return (

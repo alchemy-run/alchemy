@@ -142,7 +142,9 @@ export const getSharedBuild = (
           Layer.provideMerge(
             Layer.succeed(
               ConfigProvider.ConfigProvider,
-              runtimeConfigProvider(ConfigProvider.fromUnknown(env)),
+              runtimeConfigProvider(
+                ConfigProvider.fromUnknown(env, { preserveEmptyStrings: true }),
+              ),
             ),
           ),
           Layer.provideMerge(Layer.succeed(WorkerEnvironment, env)),

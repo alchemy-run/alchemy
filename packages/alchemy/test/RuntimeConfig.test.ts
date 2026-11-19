@@ -69,9 +69,11 @@ const readAll = <A>(config: (key: string) => Config.Config<A>, env: Record<strin
 
 const providers = (env: Record<string, string>) => ({
   // workerd: the env object (`ConfigProvider.fromUnknown`)
-  fromUnknown: runtimeConfigProvider(ConfigProvider.fromUnknown(env)),
+  fromUnknown: runtimeConfigProvider(
+    ConfigProvider.fromUnknown(env, { preserveEmptyStrings: true }),
+  ),
   // Node hosts: `process.env` (`ConfigProvider.fromEnv`)
-  fromEnv: runtimeConfigProvider(ConfigProvider.fromEnv({ env })),
+  fromEnv: runtimeConfigProvider(ConfigProvider.fromEnv({ env, preserveEmptyStrings: true })),
 });
 
 describe("runtimeConfigProvider", { tags: ["unit", "local"] }, () => {
@@ -99,6 +101,18 @@ describe("runtimeConfigProvider", { tags: ["unit", "local"] }, () => {
           Effect.provideService(ConfigProvider.ConfigProvider, provider),
         );
         expect(read).toEqual(verbatim);
+      }),
+    );
+  }
+
+  for (const [name, provider] of Object.entries(providers({ EMPTY: "" }))) {
+    it.effect(`${name}: an empty string is a value, not a missing one`, () =>
+      Effect.gen(function* () {
+        const value = yield* Config.String("EMPTY").pipe(
+          Config.withDefault("fallback"),
+          Effect.provideService(ConfigProvider.ConfigProvider, provider),
+        );
+        expect(value).toBe("");
       }),
     );
   }

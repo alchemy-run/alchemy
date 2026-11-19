@@ -9,5 +9,7 @@ import cloudflare_workers from "./cloudflare_workers.ts";
  */
 export const WorkerConfigProvider = () =>
   cloudflare_workers.pipe(
-    Effect.map(({ env }) => runtimeConfigProvider(ConfigProvider.fromUnknown(env))),
+    Effect.map(({ env }) =>
+      runtimeConfigProvider(ConfigProvider.fromUnknown(env, { preserveEmptyStrings: true })),
+    ),
   );
