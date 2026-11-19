@@ -10915,6 +10915,9 @@ importers:
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../neon
+      '@alchemy.run/opencode':
+        specifier: workspace:*
+        version: link:../opencode
       '@alchemy.run/pi':
         specifier: workspace:*
         version: link:../pi
@@ -11423,6 +11426,28 @@ importers:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-dev.20261105.1
+
+  packages/opencode:
+    dependencies:
+      '@alchemy.run/ai':
+        specifier: workspace:*
+        version: link:../ai
+    devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../cloudflare
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
       effect:
         specifier: 4.1.4
         version: 4.1.4

@@ -151,6 +151,9 @@
       "path": "./packages/pi/tsconfig.json"
     },
     {
+      "path": "./packages/opencode/tsconfig.json"
+    },
+    {
       "path": "./packages/rivet/tsconfig.json"
     },
     {

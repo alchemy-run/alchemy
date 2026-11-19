@@ -1,5 +1,7 @@
 import { Sandbox } from "@alchemy.run/ai/Sandbox";
 import {
+  callTool,
+  parametersJsonSchema,
   ToolCall,
   toolKind,
   type AnyTool as AiTool_,
@@ -11,7 +13,6 @@ import {
 } from "@alchemy.run/ai/Tool";
 import type { JsonValue } from "@earendil-works/chord";
 import type {
-  JsonObject,
   ToolExecutionApi,
   ToolExecutionResult,
   ToolRegistration,
@@ -20,7 +21,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { Tool as AiTool } from "effect/ai";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import * as Effect from "effect/Effect";
+import type * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import { makeSandbox } from "./Env.ts";
@@ -102,17 +103,10 @@ export type RunTool = <A, E>(
   signal: AbortSignal | undefined,
 ) => Promise<Exit.Exit<A, E>>;
 
-const textOf = (value: unknown): string =>
-  value === undefined ? "done" : typeof value === "string" ? value : JSON.stringify(value);
-
-const errorFields = (error: { readonly _tag: string }): JsonObject =>
-  JSON.parse(JSON.stringify(error)) as JsonObject;
-
 /**
  * Compile a tool and its handler into the Pi registration the harness
- * installs: arguments decoded with `parameters`, the result encoded with
- * `success` (Pi's `structuredOutput`), a declared failure turned into an
- * error result that keeps its `_tag`.
+ * installs. The call itself runs as on every harness (`callTool`); its
+ * result becomes Pi's output and `structuredOutput`.
  */
 export const toRegistration = (
   name: string,
@@ -120,16 +114,12 @@ export const toRegistration = (
   handler: ToolHandler<ToolSpec>,
   run: RunTool,
 ): ToolRegistration => {
-  const decode = Schema.decodeUnknownEffect(spec.parameters as Schema.Codec<unknown, unknown>);
   // A tool that returns nothing has no value for a program to read.
   const returns = spec.success.ast._tag !== "Void";
-  const encode = returns
-    ? Schema.encodeUnknownEffect(spec.success as Schema.Codec<unknown, unknown>)
-    : undefined;
   return {
     name,
     description: spec.description,
-    parameters: jsonSchemaOf(spec.parameters),
+    parameters: parametersJsonSchema(spec),
     ...(returns ? { structuredOutputSchema: jsonSchemaOf(spec.success) } : {}),
     ...(spec.replay ? { replay: spec.replay } : {}),
     execute: async (args, api, context): Promise<ToolExecutionResult> => {
@@ -137,40 +127,15 @@ export const toRegistration = (
         conversationId: String(api.conversationId),
         callId: api.callId,
       }).pipe(Context.add(Sandbox, makeSandbox(requireEnv(api.env))));
-      const exit = await run(
-        decode(args).pipe(
-          Effect.orDie,
-          Effect.flatMap((parameters) => handler(parameters)),
-          Effect.flatMap((value) =>
-            encode ? encode(value).pipe(Effect.orDie) : Effect.succeed(value),
-          ),
-        ),
-        services,
-        context.abortSignal,
-      );
-      if (Exit.isSuccess(exit)) {
-        const value = exit.value as JsonValue | undefined;
-        return {
-          output: [{ type: "text", text: textOf(value) }],
-          ...(returns ? { structuredOutput: (value ?? null) as JsonValue } : {}),
-        };
-      }
-      const failure = exit.cause.reasons.find(Cause.isFailReason);
-      if (failure !== undefined) {
-        const error = failure.error as { readonly _tag: string; readonly message?: string };
-        return {
-          isError: true,
-          output: [
-            {
-              type: "text",
-              text: `${error._tag}${error.message ? `: ${error.message}` : ""} ${JSON.stringify(errorFields(error))}`,
-            },
-          ],
-          ...(returns ? { structuredOutput: errorFields(error) } : {}),
-        };
-      }
+      const exit = await run(callTool(spec, handler, args), services, context.abortSignal);
       // A defect or interruption: Pi turns a throw into the model's error result.
-      throw new Error(messageOf(exit.cause.pipe(Cause.squash)));
+      if (!Exit.isSuccess(exit)) throw new Error(messageOf(exit.cause.pipe(Cause.squash)));
+      const result = exit.value;
+      return {
+        ...(result.isError ? { isError: true } : {}),
+        output: [{ type: "text", text: result.text }],
+        ...(returns ? { structuredOutput: result.structured as JsonValue } : {}),
+      };
     },
   } as ToolRegistration;
 };

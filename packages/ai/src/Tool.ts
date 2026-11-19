@@ -1,8 +1,11 @@
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { Tool as AiTool } from "effect/ai";
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
-import type * as Schema from "effect/Schema";
+import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import type { Sandbox, Sandboxes } from "./Sandbox.ts";
 
@@ -244,3 +247,69 @@ export const Tool = ((...args: ReadonlyArray<unknown>): unknown => {
     };
   };
 }) as ToolConstructor;
+
+/** What one tool call gave: what the model reads, and the value behind it. */
+export interface ToolResult {
+  /** What the model reads: the value as JSON, or the failure's `_tag`, message and fields. */
+  readonly text: string;
+  /** The encoded `success` value, or a declared failure's fields. Absent for `Schema.Void`. */
+  readonly structured?: unknown;
+  /** The handler failed with the tool's declared `failure`. */
+  readonly isError: boolean;
+}
+
+/** A tool's `parameters` as the JSON Schema a model is given. */
+export const parametersJsonSchema = (spec: ToolSpec): object =>
+  AiTool.getJsonSchemaFromSchema(spec.parameters) as object;
+
+/**
+ * Run one call of a tool the way every harness does: arguments decoded with
+ * `parameters`, the result encoded with `success`, a declared failure turned
+ * into an error result that keeps its `_tag` and fields. Arguments that do
+ * not decode, and defects, die: the harness tells the model in its own way.
+ *
+ * @internal
+ */
+export const callTool = (
+  spec: ToolSpec,
+  handler: ToolHandler<ToolSpec>,
+  args: unknown,
+): Effect.Effect<ToolResult, never, ToolServices> => {
+  const returns = spec.success.ast._tag !== "Void";
+  return Schema.decodeUnknownEffect(spec.parameters as Schema.Codec<unknown, unknown>)(args).pipe(
+    Effect.orDie,
+    Effect.flatMap((parameters) => handler(parameters)),
+    Effect.flatMap((value) =>
+      returns
+        ? Schema.encodeUnknownEffect(spec.success as Schema.Codec<unknown, unknown>)(value).pipe(
+            Effect.orDie,
+          )
+        : Effect.succeed(undefined),
+    ),
+    Effect.exit,
+    Effect.flatMap((exit): Effect.Effect<ToolResult> => {
+      if (Exit.isSuccess(exit)) {
+        const value = exit.value;
+        return Effect.succeed({
+          text:
+            value === undefined
+              ? "done"
+              : typeof value === "string"
+                ? value
+                : JSON.stringify(value),
+          ...(returns ? { structured: value ?? null } : {}),
+          isError: false,
+        });
+      }
+      const failure = exit.cause.reasons.find(Cause.isFailReason);
+      if (failure === undefined) return Effect.failCause(exit.cause as Cause.Cause<never>);
+      const error = failure.error as { readonly _tag: string; readonly message?: string };
+      const fields = JSON.parse(JSON.stringify(error)) as Record<string, unknown>;
+      return Effect.succeed({
+        text: `${error._tag}${error.message ? `: ${error.message}` : ""} ${JSON.stringify(fields)}`,
+        ...(returns ? { structured: fields } : {}),
+        isError: true,
+      });
+    }),
+  );
+};

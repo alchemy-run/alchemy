@@ -49,6 +49,7 @@ function providersSidebarEntry() {
       { label: "Archil", link: "/archil" },
       { label: "Boat", link: "/boat" },
       { label: "Pi", link: "/pi" },
+      { label: "OpenCode", link: "/opencode" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },

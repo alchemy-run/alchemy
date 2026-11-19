@@ -2,7 +2,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as SandboxApi from "alchemy/Sandbox";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
 import type * as Stream from "effect/Stream";
 
@@ -86,7 +86,17 @@ export interface SandboxHandle {
   exec(
     command: SandboxApi.Command,
     options?: any,
-  ): Effect.Effect<{ readonly exitCode: number | undefined }, unknown, RuntimeContext>;
+  ): Effect.Effect<
+    {
+      readonly exitCode: number | undefined;
+      readonly stdout?: string;
+      readonly stderr?: string;
+      /** Daytona prints both streams as one. */
+      readonly result?: string;
+    },
+    unknown,
+    RuntimeContext
+  >;
   start(
     command: SandboxApi.Command,
     options?: any,
@@ -192,3 +202,99 @@ export class Sandboxes extends Context.Service<
     readonly remove: (key: string) => Effect.Effect<unknown, unknown, RuntimeContext>;
   }
 >()("AI.Sandboxes") {}
+
+/** Bytes per write command: its base64 stays far below the 128 KiB Linux allows one argument. */
+const WRITE_BYTES = 30 * 1024;
+
+const toBase64 = (bytes: Uint8Array) => {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+};
+
+const messageOf = (cause: unknown): string =>
+  cause !== null && typeof cause === "object" && "message" in cause
+    ? String((cause as { message: unknown }).message)
+    : String(cause);
+
+/**
+ * A platform's sandbox handle as the `AI.Sandbox` a tool call uses, built
+ * from the one call every platform has: a command run to completion. Files
+ * travel as base64, so they survive a platform that carries output as text.
+ *
+ * A harness that has its own way into the sandbox (Pi's daemon) provides
+ * `AI.Sandbox` from that instead.
+ *
+ * @internal
+ */
+export const sandboxOf = (handle: SandboxHandle): Sandbox["Service"] => {
+  const run = (
+    operation: string,
+    command: SandboxApi.Command,
+    options?: ExecOptions,
+    path?: string,
+  ) =>
+    handle
+      .exec(command, {
+        ...(options?.cwd !== undefined ? { cwd: options.cwd } : {}),
+        ...(options?.env !== undefined ? { env: options.env } : {}),
+        ...(options?.timeout !== undefined ? { timeout: options.timeout } : {}),
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) =>
+            new SandboxError({
+              operation,
+              code: "unknown",
+              message: messageOf(cause),
+              ...(path !== undefined ? { path } : {}),
+            }),
+        ),
+        Effect.map((result) => ({
+          exitCode: result.exitCode ?? 0,
+          stdout: result.stdout ?? result.result ?? "",
+          stderr: result.stderr ?? "",
+        })),
+      ) as Effect.Effect<ExecResult, SandboxError>;
+  const file = (operation: string, path: string, script: string, ...args: ReadonlyArray<string>) =>
+    Effect.flatMap(
+      run(operation, ["sh", "-c", script, path, ...args], undefined, path),
+      (result) =>
+        result.exitCode === 0
+          ? Effect.succeed(result.stdout)
+          : Effect.fail(
+              new SandboxError({
+                operation,
+                code: "unknown",
+                message: result.stderr.trim() || `exited ${result.exitCode}`,
+                path,
+              }),
+            ),
+    );
+  const readFile = (operation: string, path: string) =>
+    Effect.map(file(operation, path, `base64 <"$0" | tr -d '\\n'`), (text) =>
+      Uint8Array.from(atob(text.trim()), (char) => char.charCodeAt(0)),
+    );
+  return {
+    exec: (command, options) =>
+      run("exec", typeof command === "string" ? command : (command as SandboxApi.Command), options),
+    readFile: (path) => readFile("readFile", path),
+    readTextFile: (path) =>
+      Effect.map(readFile("readTextFile", path), (bytes) => new TextDecoder().decode(bytes)),
+    writeFile: (path, content) =>
+      Effect.gen(function* () {
+        const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
+        yield* file("writeFile", path, `mkdir -p "$(dirname "$0")" && : >"$0"`);
+        for (let offset = 0; offset < bytes.length; offset += WRITE_BYTES) {
+          yield* file(
+            "writeFile",
+            path,
+            `printf %s "$1" | base64 -d >>"$0"`,
+            toBase64(bytes.subarray(offset, offset + WRITE_BYTES)),
+          );
+        }
+      }),
+  };
+};
