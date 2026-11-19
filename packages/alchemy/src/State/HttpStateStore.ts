@@ -10,7 +10,12 @@ import * as Schema from "effect/Schema";
 import { profileCommandHint } from "../Util/interactive.ts";
 import { StateApi, StateStoreFailure } from "./HttpStateApi.ts";
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
-import { StateStoreError, type PersistedState, type StateService } from "./State.ts";
+import {
+  markStoredInOldForm,
+  StateStoreError,
+  type PersistedState,
+  type StateService,
+} from "./State.ts";
 import { stateCodec } from "./StateEncryption.ts";
 
 /**
@@ -108,10 +113,12 @@ export const makeHttpStateStore = ({ url, authToken, transformClient, id }: Http
               s == null
                 ? Effect.undefined
                 : codec.decodeJson<ResourceState>(request, s, `state '${request.fqn}'`).pipe(
-                    // Seal a secret still in plaintext, or open a sealed one
-                    // while turning encryption off.
-                    Effect.tap((value) =>
-                      codec.staleJson(s) ? service.set({ ...request, value }) : Effect.void,
+                    // A secret still in plaintext, or a sealed one while
+                    // turning encryption off. Not written back here: this
+                    // store holds no lock, and other stacks and plans read
+                    // it too. The stage's next deploy commits it.
+                    Effect.map((value) =>
+                      codec.staleJson(s) ? markStoredInOldForm(value) : value,
                     ),
                   ),
             ),

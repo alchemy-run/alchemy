@@ -8,11 +8,17 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import { apply } from "@/Apply";
+import { provideFreshArtifactStore } from "@/Artifacts";
+import * as Plan from "@/Plan";
+import { make as makeStack } from "@/Stack";
+import { Stage } from "@/Stage";
 import { makeBucketState, type BucketObjects } from "@/State/BucketState.ts";
-import { LOCAL_STORE_FORMAT_FILE, makeLocalState } from "@/State/LocalState.ts";
+import { LOCAL_STORE_FORMAT_FILE, localState, makeLocalState } from "@/State/LocalState.ts";
 import { StateStoreError } from "@/State/State.ts";
 import { encodeState, reviveState } from "@/State/StateEncoding.ts";
 import {
+  isSealed,
   makeSealingCodec,
   plainCodec,
   SEALED_PREFIX,
@@ -25,6 +31,7 @@ import {
 import { STATE_STORE_FORMAT, STORE_FORMAT_FILE } from "@/State/StoreFormat.ts";
 import { initialCwd } from "@/Util/Node.ts";
 import { PlatformServices } from "@/Util/PlatformServices";
+import { TestLayers, TestResource } from "../test.resources.ts";
 
 /**
  * A keyring that wraps data keys under one in-memory master key, binding
@@ -585,8 +592,12 @@ describe("local state with StateEncryption", { tags: ["unit", "local"] }, () => 
       }
 
       const off = yield* withEncryption({ ...keyring, decryptOnly: true });
+      const sealed = yield* fs.readFileString(file);
       const read = (yield* off.get({ ...local, fqn: "Database" })) as unknown as typeof record;
       expect(Redacted.value(read.props.password)).toBe("hunter2");
+      // A read leaves the file as it was: the stage's next deploy rewrites it.
+      expect(yield* fs.readFileString(file)).toBe(sealed);
+      yield* off.set({ ...local, fqn: "Database", value: read as never });
       expect(yield* fs.readFileString(file)).toBe(JSON.stringify(encodeState(record), null, 2));
       yield* off.deleteStack({ stack: local.stack });
     }).pipe(Effect.provide(PlatformServices)),
@@ -644,6 +655,80 @@ describe("local state with StateEncryption", { tags: ["unit", "local"] }, () => 
         recursive: true,
       });
       expect(stored.attr.version).toBe(2);
+    }).pipe(Effect.provide(PlatformServices)),
+  );
+});
+
+/**
+ * Deploy `effect` as stack `name` over the local store, with `encryption`
+ * provided to the store when given.
+ */
+const deployLocal = (
+  name: string,
+  effect: Effect.Effect<unknown, unknown, any>,
+  encryption?: StateEncryptionService,
+) =>
+  (effect as Effect.Effect<unknown, unknown, never>).pipe(
+    makeStack({
+      name,
+      providers: TestLayers() as Layer.Layer<any, never, any>,
+      state: localState().pipe(
+        Layer.provide(
+          encryption === undefined
+            ? PlatformServices
+            : Layer.merge(PlatformServices, Layer.succeed(StateEncryption, encryption)),
+        ),
+      ),
+    }),
+    Effect.flatMap((compiled) =>
+      Plan.make(compiled).pipe(
+        Effect.flatMap((plan) => apply(plan)),
+        Effect.provide(compiled.services),
+      ),
+    ),
+    Effect.provide(Layer.succeed(Stage, "test")),
+    provideFreshArtifactStore,
+  ) as unknown as Effect.Effect<unknown, unknown, never>;
+
+describe("deploying with StateEncryption", { tags: ["unit", "local"] }, () => {
+  // HttpStateStore.ts and LocalState.ts hold no lock, so a read never writes
+  // back a record in the old form: the stage's deploy commits it, even when
+  // the resource is unchanged.
+  it.effect("an unchanged resource is sealed, and opened again with disable", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { keyring } = memoryKeyring();
+      const name = "state-encryption-deploy-test";
+      const file = path.join(initialCwd, ".alchemy", "state", name, "test", "A.json");
+      const program = TestResource("A", { string: "x", redacted: Redacted.make("hunter2") });
+      yield* fs.remove(path.join(initialCwd, ".alchemy", "state", name), {
+        recursive: true,
+        force: true,
+      });
+
+      yield* deployLocal(name, program);
+      expect(yield* fs.readFileString(file)).toContain("hunter2");
+
+      yield* deployLocal(name, program, keyring);
+      const sealed = yield* fs.readFileString(file);
+      expect(sealed.startsWith(`${SEALED_PREFIX}memory:`)).toBe(true);
+      expect(sealed).not.toContain("hunter2");
+
+      // A deploy that finds nothing to convert writes nothing.
+      yield* deployLocal(name, program, keyring);
+      expect(yield* fs.readFileString(file)).toBe(sealed);
+
+      yield* deployLocal(name, program, { ...keyring, decryptOnly: true });
+      const opened = yield* fs.readFileString(file);
+      expect(isSealed(opened)).toBe(false);
+      expect(opened).toContain("hunter2");
+
+      yield* deployLocal(name, Effect.void);
+      yield* fs.remove(path.join(initialCwd, ".alchemy", "state", name), {
+        recursive: true,
+        force: true,
+      });
     }).pipe(Effect.provide(PlatformServices)),
   );
 });

@@ -87,7 +87,7 @@ export interface StateEncryptionService {
   ) => Effect.Effect<Uint8Array, StateStoreError>;
   /**
    * Turn encryption off: write every secret in plaintext again, and open the
-   * ones this implementation sealed as each stage loads. Deploy every stage
+   * ones this implementation sealed as each stage deploys. Deploy every stage
    * this way, then remove the layer.
    */
   readonly decryptOnly?: boolean;
@@ -132,7 +132,9 @@ export interface StateCodec {
   /**
    * Whether stored text should be written again: it holds a secret in
    * plaintext and this codec encrypts, or it is sealed and this codec is
-   * turning encryption off. Stores rewrite such a record when they load it.
+   * turning encryption off. A store that holds the stage's lock rewrites
+   * such a record when it loads it; one that doesn't marks it, and the
+   * stage's deploy commits it.
    */
   readonly stale: (text: string) => boolean;
   /** {@link StateCodec.stale} for a stored JSON value. */
@@ -331,6 +333,13 @@ const keyedCache = <A>() => {
 
 const scopeKey = (scope: SealingScope) => `${scope.stack}\u0000${scope.stage}`;
 
+/**
+ * Just the stack and stage of `scope`. Stores pass their whole request, and a
+ * service that binds its scope to the key, as KMS binds an encryption
+ * context, could otherwise never reopen a key it minted for another record.
+ */
+const stageOf = ({ stack, stage }: SealingScope): SealingScope => ({ stack, stage });
+
 const VALID_ID = /^[a-z0-9][a-z0-9-]*$/;
 
 /**
@@ -351,7 +360,7 @@ export const makeSealingCodec = (encryption: StateEncryptionService): StateCodec
   const dataKey = (scope: SealingScope) =>
     dataKeys.get(
       scopeKey(scope),
-      encryption.generate(scope).pipe(
+      encryption.generate(stageOf(scope)).pipe(
         // Records this store writes decode without asking the service.
         Effect.tap((key) =>
           Effect.sync(() =>
@@ -371,7 +380,7 @@ export const makeSealingCodec = (encryption: StateEncryptionService): StateCodec
         )
       : unwrapped.get(
           `${scopeKey(scope)}\u0000${header.key}`,
-          encryption.unwrap(header.key, scope),
+          encryption.unwrap(header.key, stageOf(scope)),
         );
 
   /** `encoded` with every secret sealed, and the header to store with it. */
@@ -450,8 +459,9 @@ export const makeSealingCodec = (encryption: StateEncryptionService): StateCodec
       if (off || !holdsSecret(encoded)) return encoded;
       const { header, body } = yield* seal(scope, encoded);
       // A record keeps its top-level fields, so a store can still read its
-      // status; any other value is carried in the header.
-      return isRecord(body)
+      // status; any other value is carried in the header, as is a record
+      // with a field of the header's name.
+      return isRecord(body) && !Object.hasOwn(body, SEALED_RECORD_MARKER)
         ? { ...body, [SEALED_RECORD_MARKER]: header }
         : { [SEALED_RECORD_MARKER]: { ...header, value: body } };
     }),

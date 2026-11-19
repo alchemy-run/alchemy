@@ -97,7 +97,9 @@ describe("passphraseEncryption", { tags: ["unit", "local"] }, () => {
       expect(sealed).not.toContain("hunter2");
 
       const off = yield* store(true);
-      yield* off.get({ ...local, fqn: "Db" });
+      const read = yield* off.get({ ...local, fqn: "Db" });
+      expect(yield* fs.readFileString(file)).toBe(sealed);
+      yield* off.set({ ...local, fqn: "Db", value: read as never });
       expect(yield* fs.readFileString(file)).toBe(JSON.stringify(encodeState(record), null, 2));
       yield* off.deleteStack({ stack: local.stack });
     }).pipe(Effect.provide(PlatformServices)),

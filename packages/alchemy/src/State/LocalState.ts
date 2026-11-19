@@ -10,7 +10,7 @@ import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { writeFileAtomic } from "../Util/AtomicFile.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
-import { State, StateStoreError, type StateService } from "./State.ts";
+import { markStoredInOldForm, State, StateStoreError, type StateService } from "./State.ts";
 import { type SealingScope, stateCodec } from "./StateEncryption.ts";
 import { checkStoreFormat, currentStoreFormat, parseStoreFormat } from "./StoreFormat.ts";
 
@@ -154,20 +154,16 @@ export const makeLocalState = () =>
 
     /**
      * Read a state file. One the codec calls stale (a secret in plaintext
-     * while encrypting, or sealed while turning encryption off) is written
-     * again.
+     * while encrypting, or sealed while turning encryption off) is marked,
+     * not written back: this store holds no lock, and other stacks and plans
+     * read it too. The stage's next deploy commits it.
      */
-    const readState = Effect.fn(function* <T>(scope: SealingScope, file: string, rewrite = true) {
+    const readState = Effect.fn(function* <T>(scope: SealingScope, file: string) {
       yield* checkFormat;
       const contents = yield* fs.readFileString(file).pipe(recover);
       if (contents === undefined) return undefined;
       const value = yield* parseState<T>(scope, file, contents);
-      if (rewrite && value !== undefined && codec.stale(contents)) {
-        yield* stampFormat;
-        const text = yield* codec.encode(scope, value, 2);
-        yield* writeAtomic(file, text).pipe(recover);
-      }
-      return value;
+      return codec.stale(contents) ? markStoredInOldForm(value) : value;
     });
 
     const state: StateService = {
@@ -260,9 +256,7 @@ export const makeLocalState = () =>
               .map((file) => decodeFqn(file.replace(/\.json$/, ""))),
           ),
         ),
-      // Other stacks read an output without the stage's lock, and its own
-      // deploy writes it again anyway, so it isn't rewritten here.
-      getOutput: (request) => readState(request, outputFile(request), false),
+      getOutput: (request) => readState(request, outputFile(request)),
       setOutput: (request) =>
         stampFormat.pipe(
           Effect.andThen(codec.encode(request, request.value, 2)),
