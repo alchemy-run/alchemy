@@ -511,4 +511,59 @@ describe("local state with StateEncryption", { tags: ["unit", "local"] }, () => 
       yield* off.deleteStack({ stack: local.stack });
     }).pipe(Effect.provide(PlatformServices)),
   );
+
+  // LocalState.ts readState: a stale file is written back after the read it
+  // decoded, whatever was written in between.
+  it.effect("a converting read does not overwrite a newer write", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const { keyring } = memoryKeyring();
+      const local = { stack: "local-state-encryption-race-test", stage: "test" };
+      const file = path.join(
+        initialCwd,
+        ".alchemy",
+        "state",
+        local.stack,
+        local.stage,
+        "Database.json",
+      );
+      const atVersion = (version: number) => ({
+        status: "created",
+        attr: { version, password: Redacted.make("hunter2") },
+      });
+      yield* fs.makeDirectory(path.dirname(file), { recursive: true });
+      // v1 holds its secret in plaintext, as before encryption.
+      yield* fs.writeFileString(file, JSON.stringify(encodeState(atVersion(1)), null, 2));
+
+      // A deploy of the stage writes v2 just after the reader reads v1.
+      let deployed = false;
+      const racingFs: FileSystem.FileSystem = {
+        ...fs,
+        readFileString: (target, encoding) =>
+          fs.readFileString(target, encoding).pipe(
+            Effect.tap(() => {
+              if (target !== file || deployed) return Effect.void;
+              deployed = true;
+              return fs.writeFileString(file, JSON.stringify(encodeState(atVersion(2)), null, 2));
+            }),
+          ),
+      };
+      const reader = yield* makeLocalState().pipe(
+        Effect.provide(Layer.succeed(StateEncryption, keyring)),
+        Effect.provideService(FileSystem.FileSystem, racingFs),
+      );
+      yield* reader.get({ ...local, fqn: "Database" });
+
+      const stored = yield* makeSealingCodec(keyring).decode<ReturnType<typeof atVersion>>(
+        local,
+        yield* fs.readFileString(file),
+        "record",
+      );
+      yield* fs.remove(path.join(initialCwd, ".alchemy", "state", local.stack), {
+        recursive: true,
+      });
+      expect(stored.attr.version).toBe(2);
+    }).pipe(Effect.provide(PlatformServices)),
+  );
 });
