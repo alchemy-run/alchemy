@@ -1085,6 +1085,7 @@ const SECTIONS: Section[] = [
         "domain/story",
         "domain/testing-models",
         "domain/verifying-models",
+        "domain/verifiable-code",
         "domain/testing-apis",
         "domain/http-api",
         "domain/cli",
