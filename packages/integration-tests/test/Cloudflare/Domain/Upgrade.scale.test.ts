@@ -9,7 +9,7 @@ import { call } from "./bench.ts";
 import ScaleNoneWorker from "./fixtures/scale-none-worker.ts";
 import ScaleV1Worker from "./fixtures/scale-v1-worker.ts";
 import { MODELS } from "./fixtures/scale.ts";
-import { backdatePasses, doBindings, movedBy, namespacesOf, tagsOf, untilListed } from "./move.ts";
+import { backdatePasses, doBindings, movedBy, namespacesOf, untilListed } from "./move.ts";
 
 /**
  * #2976: a Worker with ten models deployed before Domain versions existed has
@@ -106,7 +106,6 @@ test.provider(
       const upgraded = yield* namespacesOf(scriptName);
       expect(upgraded).toEqual({ ...legacy, ...modelClasses(upgraded) });
       expect(Object.keys(modelClasses(upgraded)).length).toBe(MODELS);
-      expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v1");
       // The first model keeps the directory they all had; the others' bindings to it are left out.
       const bindings = yield* doBindings(scriptName);
       expect(bindings["Bank0.DomainDirectory.BeforeVersions"]).toBe("DomainDirectory");

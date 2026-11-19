@@ -9,7 +9,6 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { getWorkerTags } from "../Utils/Worker.ts";
 import { call } from "./bench.ts";
 
 /** What the Domain upgrade and move suites read from Cloudflare. */
@@ -75,33 +74,6 @@ export const migrationWorkflow = Effect.fn(function* (scriptName: string) {
   );
   expect(binding).toBeDefined();
   return (binding as { readonly workflowName: string }).workflowName;
-});
-
-/** How many objects the Worker's migration runs moved, from their complete instances. */
-export const movedBy = Effect.fn(function* (scriptName: string) {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  const workflowName = yield* migrationWorkflow(scriptName);
-  const instances = yield* workflows.listInstances
-    .items({ accountId, workflowName, status: "complete" })
-    .pipe(Stream.runCollect);
-  let moved = 0;
-  for (const instance of instances) {
-    // Each deploy's run reports how many objects it moved.
-    if (!instance.id.startsWith("mg-run-")) continue;
-    const { output } = yield* workflows.getInstance({
-      accountId,
-      workflowName,
-      instanceId: instance.id,
-    });
-    const parsed = typeof output === "string" ? JSON.parse(output) : output;
-    moved += (parsed as { progress?: { instances?: number } } | null)?.progress?.instances ?? 0;
-  }
-  return moved;
-});
-
-export const tagsOf = Effect.fn(function* (scriptName: string) {
-  const { accountId } = yield* yield* CloudflareEnvironment;
-  return yield* getWorkerTags(scriptName, accountId);
 });
 
 /**

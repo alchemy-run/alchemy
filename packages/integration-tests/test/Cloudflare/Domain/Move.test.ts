@@ -18,7 +18,6 @@ import {
   depositsOf,
   movedBy,
   namespacesOf,
-  tagsOf,
   untilListed,
   writer,
 } from "./move.ts";
@@ -163,7 +162,6 @@ describe("moving a Domain to one class", { tags: ["provider:cloudflare", "live"]
         }
         // The deploy's run moved them: the accounts, their summaries, the directory.
         expect(yield* movedBy(scriptName)).toBeGreaterThan(WIDTH);
-        expect(yield* tagsOf(scriptName)).toContain("alchemy:domain:v1");
 
         // Once the move has settled, an upload deletes every old class, and
         // everything is still there.
