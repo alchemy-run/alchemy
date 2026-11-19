@@ -7,6 +7,11 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import {
+  AuthoritativeRecordCheck,
+  type ExpectedRecord,
+  type WaitOptions,
+} from "../../../prisma/src/internal/AuthoritativeDns.ts";
+import {
   data,
   makeFakeManagementApi,
   page,
@@ -46,11 +51,21 @@ const fake = makeFakeManagementApi((request) => {
   return unhandled(request);
 });
 
+const checked: Array<[ExpectedRecord, WaitOptions]> = [];
+
 class TestPrismaProviders extends Provider.ProviderCollection<TestPrismaProviders>()("Prisma") {}
 
 const { test } = Test.make({
   providers: Layer.effect(TestPrismaProviders, Provider.collection([CustomDomain])).pipe(
     Layer.provideMerge(CustomDomainProvider()),
+    Layer.provide(
+      Layer.succeed(AuthoritativeRecordCheck, (record, options) =>
+        Effect.sync(() => {
+          checked.push([record, options]);
+          return "unknown" as const;
+        }),
+      ),
+    ),
     Layer.provide(
       Layer.succeed(AlchemyContext, { dotAlchemy: ".alchemy-test", dev: false, adopt: false }),
     ),
@@ -64,6 +79,7 @@ test.provider(
     Effect.gen(function* () {
       registered = false;
       fake.captured.length = 0;
+      checked.length = 0;
       yield* stack.destroy();
       const domain = CustomDomain("Domain", { app: "service-1", hostname: raced.hostname });
 
@@ -73,6 +89,12 @@ test.provider(
         expect(String(raceResult.failure)).toContain("explicit adoption");
       }
       expect(routesOf(fake.captured)).toContain("POST /v1/services/service-1/domains");
+      expect(checked).toEqual([
+        [
+          { type: "CNAME", name: raced.hostname },
+          { margin: "if-unseen", nameservers: "parent" },
+        ],
+      ]);
 
       const redeploy = yield* stack.deploy(domain).pipe(Effect.result);
       expect(Result.isFailure(redeploy)).toBe(true);

@@ -14,7 +14,6 @@ import { createUrlCheck, getUrl } from "@distilled.cloud/prisma/management";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
@@ -25,7 +24,7 @@ import {
   type ExpectedSwitchboardDns,
   SwitchboardDnsCheck,
   type SwitchboardDnsVisibility,
-  type WaitOptions,
+  type SwitchboardWaitOptions,
 } from "../../../prisma/src/internal/AuthoritativeDns.ts";
 import { switchboardTarget } from "../../../prisma/src/internal/Switchboard.ts";
 import { cloneFixture } from "../Cloudflare/Utils/Fixture.ts";
@@ -126,7 +125,7 @@ interface CloudState {
   /** What the authoritative nameservers show for the new hostname's switchboard DNS. */
   dns: SwitchboardDnsVisibility;
   /** What the switchboard DNS check was asked. */
-  checked: Array<[ExpectedSwitchboardDns, WaitOptions]>;
+  checked: Array<[ExpectedSwitchboardDns, SwitchboardWaitOptions]>;
   /** Status of the workspace's domain ownership for the new hostname, if any. */
   ownership: "verified" | "unverified" | undefined;
   /** Whether that domain ownership is for the exact hostname or its wildcard. */
@@ -408,7 +407,7 @@ testFor(refusedChange).test.provider(
       expect(refusedChange.state.checked).toEqual([
         [
           { name: "new.example.com", switchboard: SWITCHBOARD },
-          { margin: "if-unseen", nameservers: "name" },
+          { margin: "if-unseen", nameservers: "name", attempts: "once" },
         ],
       ]);
       expect(PATCHES(refusedChange)).toEqual([]);
@@ -434,6 +433,9 @@ testFor(allowedChange).test.provider(
 
       expect(url.hostname).toBe("new.example.com");
       expect(PATCHES(allowedChange)).toEqual(["PATCH /v1/urls/url-1"]);
+      expect(allowedChange.state.checked.map(([, options]) => options.attempts)).toEqual([
+        "until-seen",
+      ]);
 
       yield* stack.destroy();
     }),
@@ -661,9 +663,19 @@ live.test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
 
 const ZONE = "alchemy-test-2.us";
 
-class RoutingUrlNotActive extends Data.TaggedError("RoutingUrlNotActive")<{
-  readonly firstUnmetCondition: string | null;
-}> {}
+/** Asks Prisma to check the RoutingUrl until it is `active`, at most 5 minutes. */
+const checkUntilActive = (id: string) =>
+  createUrlCheck({ id }).pipe(
+    Effect.map(({ data }) => data),
+    Effect.tap((data) =>
+      Effect.logInfo(`RoutingUrl ${data.status}; first unmet: ${data.firstUnmetCondition}`),
+    ),
+    Effect.repeat({
+      schedule: Schedule.spaced("10 seconds"),
+      until: (data) => data.status === "active",
+      times: 30,
+    }),
+  );
 
 const liveDns = Test.make({
   providers: Layer.mergeAll(Prisma.providers(), Cloudflare.providers()),
@@ -732,21 +744,7 @@ liveDns.test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true
         });
 
       const { site, url } = yield* stack.deploy(urlStack(first));
-      yield* createUrlCheck({ id: url.routingUrlId }).pipe(
-        Effect.flatMap(({ data }) =>
-          data.status === "active"
-            ? Effect.void
-            : Effect.fail(
-                new RoutingUrlNotActive({ firstUnmetCondition: data.firstUnmetCondition }),
-              ),
-        ),
-        Effect.tapError((error) => Effect.logInfo("RoutingUrl pending", error)),
-        Effect.retry({
-          while: (error) => error._tag === "RoutingUrlNotActive",
-          schedule: Schedule.spaced("10 seconds"),
-          times: 30,
-        }),
-      );
+      expect((yield* checkUntilActive(url.routingUrlId)).status).toBe("active");
 
       const refused = yield* refusalOf(stack.deploy(urlStack(second)));
       expect(refused?.switchboardDns).toBe("absent");
@@ -758,6 +756,9 @@ liveDns.test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true
       const moved = yield* stack.deploy(urlStack(second, addresses));
       expect(moved.url.hostname).toBe(second);
       expect((yield* getUrl({ id: url.routingUrlId })).data.hostname).toBe(second);
+      const serving = yield* checkUntilActive(url.routingUrlId);
+      expect(serving.firstUnmetCondition).not.toBe("dnsPointsAtSwitchboard");
+      expect(serving.status).toBe("active");
 
       yield* stack.destroy();
       expect(

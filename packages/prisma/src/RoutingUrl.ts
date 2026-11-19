@@ -160,9 +160,11 @@ export interface RoutingUrl extends Resource<
  * Changing the hostname of an `active` RoutingUrl is refused, before anything
  * changes, until the new hostname has a verified domain ownership and every
  * authoritative nameserver for it answers with either a `CNAME` to the
- * regional switchboard or A or AAAA records that include a switchboard
- * address. Any hostname passes with either; the address form is what an
- * ALIAS, ANAME or flattened `CNAME` gives a zone apex such as `example.com`.
+ * regional switchboard or, with no `CNAME`, A or AAAA records that include a
+ * switchboard address. Any hostname passes with either; the address form is
+ * what an ALIAS, ANAME or flattened `CNAME` gives a zone apex such as
+ * `example.com`. A refused change asks only once whether the DNS is in place
+ * when the domain ownership is not verified yet, so it fails without waiting.
  * The check does not see a RoutingUrl in another workspace that holds the new
  * hostname; the change then goes through and the new hostname stays `pending`
  * behind `heldBy`.
@@ -316,7 +318,7 @@ const ProviderLive = () =>
           const target = switchboardTarget(service.appEndpointDomain);
           const dns = yield* checkSwitchboardDns(
             { name: to, switchboard: target },
-            { margin: "if-unseen", nameservers: "name" },
+            { margin: "if-unseen", nameservers: "name", attempts: owned ? "until-seen" : "once" },
           );
           if (owned && dns.visibility === "seen") return;
           const verification = owned

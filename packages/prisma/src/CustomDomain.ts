@@ -18,7 +18,7 @@ import * as Schedule from "effect/Schedule";
 import type { App } from "./App.ts";
 import type { Compute } from "./Compute.ts";
 import type { DomainOwnership } from "./DomainOwnership.ts";
-import { waitForAuthoritativeRecord } from "./internal/AuthoritativeDns.ts";
+import { AuthoritativeRecordCheck } from "./internal/AuthoritativeDns.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
 import { ownershipRequiredOf, withoutRetriedCreate } from "./internal/DomainOwnership.ts";
 import { PrismaPaginationError } from "./internal/Pagination.ts";
@@ -257,6 +257,7 @@ const ProviderLive = () =>
   Provider.effect(
     CustomDomain,
     Effect.gen(function* () {
+      const checkRecord = yield* AuthoritativeRecordCheck;
       return {
         stables: ["customDomainId"],
         list: Effect.fn(function* () {
@@ -335,7 +336,7 @@ const ProviderLive = () =>
             return yield* adoptionRequiredError(hostname, appId, "already exists");
           }
           if (!domain) {
-            yield* waitForAuthoritativeRecord(
+            yield* checkRecord(
               { type: "CNAME", name: hostname },
               { margin: "if-unseen", nameservers: "parent" },
             );
