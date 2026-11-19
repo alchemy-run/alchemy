@@ -54,6 +54,7 @@ import * as Output from "./Output.ts";
 import { CurrentRuntimeContext } from "./RuntimeContext.ts";
 import {
   EXPORTERS_KEY,
+  SERVICE_NAME_KEY,
   fromBoundConfig,
   type ResolvedDestination,
   type ResolvedSignal,
@@ -147,7 +148,7 @@ export interface OtlpOptions {
   logs?: OtlpSignalOptions | undefined;
   metrics?: OtlpSignalOptions | undefined;
   /**
-   * The exported `service.name`.
+   * The exported `service.name`. Takes precedence over `OTEL_SERVICE_NAME`.
    * @default the deployed Function/Worker's physical name
    */
   serviceName?: Input<string> | undefined;
@@ -301,7 +302,7 @@ export const layerOtlp = (options: OtlpOptions): Layer.Layer<never> =>
         rcDestinations.set(rc, list);
         yield* rc.set(EXPORTERS_KEY, destinationsOutput(list));
         if (options.serviceName !== undefined) {
-          yield* rc.set("OTEL_SERVICE_NAME", Output.asOutput(options.serviceName as never));
+          yield* rc.set(SERVICE_NAME_KEY, Output.asOutput(options.serviceName as never));
         }
       }
       // The runtime half reads the bound destinations back per event (or
