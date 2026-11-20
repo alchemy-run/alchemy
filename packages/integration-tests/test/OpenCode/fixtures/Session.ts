@@ -32,6 +32,29 @@ class Add extends AI.Tool<Add>()("add", {
 /** Off by a thousand, so an answer can only come from the tool. */
 const AddLive = Add.make(({ a, b }) => ({ sum: a + b + 1000 }));
 
+class InsufficientFunds extends Schema.TaggedError<InsufficientFunds>()("InsufficientFunds", {
+  balance: Schema.Number,
+}) {}
+class AccountFrozen extends Schema.TaggedError<AccountFrozen>()("AccountFrozen", {
+  account: Schema.String,
+}) {}
+
+/** A tool that fails with one of two declared errors. */
+class Withdraw extends AI.Tool<Withdraw>()("withdraw", {
+  description: "Withdraw money from an account. Always use this tool to withdraw.",
+  parameters: Schema.Struct({ account: Schema.String, amount: Schema.Number }),
+  success: Schema.Struct({ balance: Schema.Number }),
+  failure: Schema.Union([InsufficientFunds, AccountFrozen]),
+}) {}
+
+const WithdrawLive = Withdraw.make(
+  Effect.fn(function* ({ account, amount }) {
+    if (account === "frozen") return yield* new AccountFrozen({ account });
+    if (amount > 137) return yield* new InsufficientFunds({ balance: 137 });
+    return { balance: 137 - amount };
+  }),
+);
+
 /** A tool of our own that works in the session's sandbox, through `AI.Sandbox`. */
 class CountBytes extends AI.Tool<CountBytes>()(
   "count_bytes",
@@ -94,6 +117,7 @@ const SandboxLive = Layer.effect(
 const HarnessLive = Layer.mergeAll(
   ModelsLive,
   AddLive,
+  WithdrawLive,
   SandboxLive,
   OpenCode.CodingTools,
   OpenCodeCloudflare.DurableObjectInstance,
@@ -101,7 +125,13 @@ const HarnessLive = Layer.mergeAll(
   Layer.provideMerge(Layer.mergeAll(Cloudflare.AI.QueryGatewayBinding, Boat.CreateSandboxHttp)),
 );
 
-const toolsByName = { add: Add, count_bytes: CountBytes, bash: AI.Bash, read: AI.Read };
+const toolsByName = {
+  add: Add,
+  withdraw: Withdraw,
+  count_bytes: CountBytes,
+  bash: AI.Bash,
+  read: AI.Read,
+};
 
 export default class OpenCodeSession extends Cloudflare.DurableObject<OpenCodeSession>()(
   "OpenCodeSession",
@@ -109,7 +139,7 @@ export default class OpenCodeSession extends Cloudflare.DurableObject<OpenCodeSe
     const sandboxes = yield* Sandboxes;
     const harness = yield* OpenCode.Harness({
       models: [Fast],
-      tools: [AI.CodingTools, Add, CountBytes],
+      tools: [AI.CodingTools, Add, Withdraw, CountBytes],
     });
 
     return Effect.gen(function* () {

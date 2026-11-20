@@ -106,6 +106,21 @@ test(
       });
       expect((yield* used("alchemy_count_bytes")).at(-1)?.output).toContain("17");
 
+      // A declared failure reaches the model as the tool's error, with its tag and fields.
+      yield* call(`/${name}/prompt`, {
+        text: 'Use the alchemy_withdraw tool to withdraw 500 from the account "checking". Then use it again to withdraw 5 from the account "frozen".',
+        tools: ["withdraw"],
+        requestId: "withdraw",
+      });
+      const withdrawals = ((yield* call(`/${name}/tools`)) as ReadonlyArray<ToolUse>).filter(
+        (use) => use.tool === "alchemy_withdraw",
+      );
+      const reported = withdrawals.map((use) => `${use.status}: ${use.output}`).join("\n");
+      expect(reported).toContain('{"_tag":"InsufficientFunds","balance":137}');
+      expect(reported).toContain('{"_tag":"AccountFrozen","account":"frozen"}');
+      // Neither call counts as completed.
+      expect(yield* used("alchemy_withdraw")).toEqual([]);
+
       // Suspending stops the sandbox, and suspending it again changes nothing.
       yield* call(`/${name}/suspend`, {});
       yield* call(`/${name}/suspend`, {});
