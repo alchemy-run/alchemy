@@ -1413,8 +1413,14 @@ export const providers = () =>
           // against a floci function ARN fails with ResourceNotFoundException.
           flociDual(Lambda.Permission, () => Lambda.PermissionProvider()),
           // Requires the alchemy floci fork ≥ 2.4.0-alchemy.1, which serves
-          // the Web Function API (web functions, revisions, endpoints).
-          flociDual(Lambda.WebFunction, () => Lambda.WebFunctionProvider()),
+          // the Web Function API (web functions, revisions, endpoints). Dual:
+          // floci-emulated (RPC-sidecar-hosted, hot-reloading) in dev — see
+          // FlociWebFunctionProvider.
+          ProviderLayer.dual(Lambda.WebFunction, {
+            live: () => Lambda.WebFunctionProvider(),
+            local: () => Lambda.FlociWebFunctionProvider(),
+            dataPlane: flociServices,
+          }),
           flociDual(Lambda.WebFunctionEndpoint, () => Lambda.WebFunctionEndpointProvider()),
           flociDual(Lambda.WebFunctionPermission, () => Lambda.WebFunctionPermissionProvider()),
           flociDual(Logs.Destination, () => Logs.DestinationProvider()),

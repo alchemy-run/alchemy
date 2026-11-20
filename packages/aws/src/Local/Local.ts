@@ -15,10 +15,12 @@ import { FlociServiceProvider } from "../ECS/FlociServiceProvider.ts";
 import { FlociTaskProvider } from "../ECS/FlociTaskProvider.ts";
 import { FlociFunctionProvider } from "../Lambda/FlociFunctionProvider.ts";
 import { FlociMicrovmImageProvider } from "../Lambda/FlociMicrovmImageProvider.ts";
+import { FlociWebFunctionProvider } from "../Lambda/FlociWebFunctionProvider.ts";
 
 export default Layer.mergeAll(
   FlociFunctionProvider(),
   FlociMicrovmImageProvider(),
+  FlociWebFunctionProvider(),
   FlociTaskProvider(),
   FlociServiceProvider(),
 ).pipe(
