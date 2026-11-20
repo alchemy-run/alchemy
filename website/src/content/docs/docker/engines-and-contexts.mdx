@@ -89,6 +89,14 @@ const remote = yield* Docker.Context("remote", {
 
 Docker stores the context, endpoint included, as plain text under `~/.docker/contexts`, so keep secrets out of it.
 
+## Plan from a fresh CI runner
+
+When you pass a **managed** `Docker.Context` resource to another Docker resource, Alchemy also persists its endpoint declaration in the Stack state. If your deployment runner and CI runner share that state, the CI runner can reach the Engine through Docker's `--host` and TLS flags **without** importing or recreating the named context in its own `~/.docker/contexts`. Plans can report `noop` for unchanged networks and containers, while still detecting real deletions or replacements on the remote Engine.
+
+The endpoint declaration includes host and certificate **file paths**, not credentials or private-key contents. Each runner still needs its own SSH identity or readable TLS files at the declared paths, network access to the Engine, and access to the same Alchemy state backend. Rotating client certificate paths for the same Engine refreshes the stored connection without replacing the Engine's resources.
+
+Passing a plain context name or a `Docker.Context.lookup()` reference is different: those select a Docker CLI context already configured on the current runner. Legacy state that records only an SSH or local-socket endpoint can also be used without a local context, but legacy TLS state cannot recover certificate paths that were never persisted.
+
 ## Use an existing context
 
 `Docker.Context.lookup` references a context someone else created. Alchemy reads it and never changes or removes it:

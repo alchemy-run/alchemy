@@ -3,7 +3,12 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { PlatformError } from "effect/PlatformError";
-import { Docker, dockerContextName } from "./Docker.ts";
+import {
+  Docker,
+  dockerContextTarget,
+  sameDockerContextConnection,
+  sameDockerContextTarget,
+} from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 import {
   type ImageRegistry,
@@ -137,7 +142,7 @@ export const RemoteImageProvider = () =>
     RemoteImage,
     Effect.gen(function* () {
       const docker = yield* Docker;
-      const inspectImage = (ref: string, context: string | undefined) =>
+      const inspectImage = (ref: string, context: Docker.Target | undefined) =>
         docker.image
           .inspect(ref, context)
           .pipe(Effect.catchIf(isMissingImageError, () => Effect.undefined));
@@ -145,7 +150,7 @@ export const RemoteImageProvider = () =>
       return RemoteImage.Provider.of({
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ olds, output }) {
-          const context = dockerContextName(olds.context);
+          const context = dockerContextTarget(olds.context);
           const ref = output?.imageRef ?? targetImageRef(olds);
           return yield* inspectImage(ref, context).pipe(
             Effect.map((image) =>
@@ -166,15 +171,21 @@ export const RemoteImageProvider = () =>
         diff: Effect.fn(function* ({ output, news, olds }) {
           if (!isResolved(news)) return undefined;
           if (
-            dockerContextName(olds.context) !== dockerContextName(news.context) ||
+            !sameDockerContextTarget(olds.context, news.context) ||
             !output ||
             news.alwaysPull !== false ||
             output.imageRef !== targetImageRef(news)
           ) {
             return { action: "update" };
           }
-          const source = yield* inspectImage(remoteImageRef(news), dockerContextName(news.context));
-          const target = yield* inspectImage(targetImageRef(news), dockerContextName(news.context));
+          const source = yield* inspectImage(
+            remoteImageRef(news),
+            dockerContextTarget(news.context),
+          );
+          const target = yield* inspectImage(
+            targetImageRef(news),
+            dockerContextTarget(news.context),
+          );
           if (
             !source ||
             !target ||
@@ -183,9 +194,12 @@ export const RemoteImageProvider = () =>
           ) {
             return { action: "update" };
           }
+          if (!sameDockerContextConnection(olds.context, news.context)) {
+            return { action: "update" };
+          }
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
-          const context = dockerContextName(news.context);
+          const context = dockerContextTarget(news.context);
           const sourceRef = remoteImageRef(news);
           let source: Docker.Image | undefined;
           if (news.alwaysPull === false) {

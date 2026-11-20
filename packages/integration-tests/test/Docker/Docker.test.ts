@@ -330,6 +330,81 @@ describe("Docker.run failure output", (it) => {
       }),
     { tags: ["provider:docker", "local"] },
   );
+
+  it.effect(
+    "classifies remote volume inspect's 'get name: no such volume' without hiding transport errors",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-volume-errors-" });
+        const executable = path.join(dir, "docker-stub");
+        const writeError = (message: string) =>
+          fs.writeFileString(
+            executable,
+            `#!/bin/sh\nprintf '%s\\n' ${JSON.stringify(message)} >&2\nexit 1\n`,
+          );
+        yield* writeError("get missing-remote-volume: no such volume");
+        yield* fs.chmod(executable, 0o755);
+        const target = { host: "ssh://remote-engine" };
+        const runInspect = Effect.gen(function* () {
+          const docker = yield* Docker;
+          return yield* docker.volume.inspect("missing-remote-volume", target).pipe(Effect.flip);
+        }).pipe(
+          Effect.provide(dockerLive({ bin: executable })),
+          Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+        );
+
+        const missing = yield* runInspect;
+        expect(missing.reason._tag).toBe("NotFound");
+
+        yield* writeError("ssh: connection failed: no such volume");
+        const connection = yield* runInspect;
+        expect(connection.reason._tag).not.toBe("NotFound");
+      }),
+    { tags: ["provider:docker", "local"] },
+  );
+});
+
+describe("Docker CLI JSON decoding", (it) => {
+  it.effect(
+    "returns typed InvalidData errors for malformed inspect and swarm responses",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-json-" });
+        const executable = path.join(root, "docker-stub");
+        yield* fs.writeFileString(executable, "#!/bin/sh\nprintf '{invalid-json\\n'\n");
+        yield* fs.chmod(executable, 0o755);
+
+        yield* Effect.gen(function* () {
+          const docker = yield* Docker;
+          const inspect = yield* docker.volume.inspect("not-important").pipe(Effect.flip);
+          expect(inspect.reason._tag).toBe("InvalidData");
+
+          const swarm = yield* docker.swarm.info().pipe(Effect.flip);
+          expect(swarm.reason._tag).toBe("InvalidData");
+
+          const service = yield* docker.service.inspect("not-important");
+          expect(service.stdout).toBe("{invalid-json");
+
+          // The low-level service inspector must honor its declared
+          // CommandOutput contract, even though Docker prints a JSON array.
+          const json = '[{"ID":"service-1","Spec":{"Name":"example"}}]';
+          yield* fs.writeFileString(executable, `#!/bin/sh\nprintf '%s\\n' '${json}'\n`);
+          const inspected = yield* docker.service.inspect("service-1");
+          expect(inspected.stdout).toBe(json);
+          expect(inspected.stderr).toBe("");
+          expect(Number(inspected.exitCode)).toBe(0);
+          expect("ID" in inspected).toBe(false);
+        }).pipe(
+          Effect.provide(dockerLive({ bin: executable })),
+          Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
+        );
+      }),
+    { tags: ["unit", "provider:docker", "local"] },
+  );
 });
 
 describe("Docker.image", (it) => {

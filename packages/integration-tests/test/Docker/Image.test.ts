@@ -1,5 +1,5 @@
 import * as Docker from "@alchemy.run/docker";
-import { DockerEnvironment } from "@alchemy.run/docker/Docker";
+import { DockerEnvironment, dockerContextTarget } from "@alchemy.run/docker/Docker";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { inMemoryState, State } from "alchemy/State";
@@ -43,7 +43,7 @@ describe(
       }),
     );
 
-    test.provider("plans an image whose context is missing from the local docker", (stack) =>
+    test.provider("plans a remote image without a local Docker context", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
         const fs = yield* FileSystem.FileSystem;
@@ -80,16 +80,78 @@ describe(
         yield* docker.context.remove(first.context.name, true);
 
         const plan = yield* stack.plan(program);
-        expect(plan.resources["machine-local-context"]).toMatchObject({ action: "update" });
-        expect(plan.resources["machine-local-image"]).toMatchObject({ action: "update" });
+        expect(plan.resources["machine-local-context"]).toMatchObject({ action: "noop" });
+        expect(plan.resources["machine-local-image"]).toMatchObject({ action: "noop" });
 
         const second = yield* stack.deploy(program);
         expect(second.image.imageRef).toBe(first.image.imageRef);
-        const live = yield* docker.context.inspect(first.context.name);
-        expect(live.Name).toBe(first.context.name);
+        const live = yield* docker.image.inspect(
+          second.image.imageRef,
+          dockerContextTarget(second.context),
+        );
+        expect(live.Id).toBe(second.image.imageId);
+        const missing = yield* docker.context.inspect(first.context.name).pipe(Effect.flip);
+        expect(missing.reason._tag).toBe("NotFound");
 
         yield* stack.destroy();
       }),
+    );
+
+    test.provider(
+      "publishes through a managed endpoint without recreating its CI context",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          const registry = yield* authenticatedRegistry();
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const root = yield* fs.makeTempDirectoryScoped({
+            prefix: "alchemy-docker-portable-push-",
+          });
+          yield* fs.writeFileString(
+            path.join(root, "Dockerfile"),
+            "FROM scratch\nLABEL alchemy.test=portable-push\n",
+          );
+          const endpoint = (yield* docker.run([
+            "context",
+            "inspect",
+            "--format",
+            "{{.Endpoints.docker.Host}}",
+          ])).stdout.trim();
+          const program = Effect.gen(function* () {
+            const context = yield* Docker.Context("portable-push-context", {
+              docker: `host=${endpoint}`,
+            });
+            const image = yield* Docker.Image("portable-push-image", {
+              name: `${registry.host}/alchemy-portable-push`,
+              tag: "v1",
+              context,
+              registry: registry.credentials,
+              build: { context: root },
+            });
+            return { context, image };
+          });
+
+          yield* stack.destroy();
+          const first = yield* stack.deploy(program);
+          yield* Effect.addFinalizer(() =>
+            docker.context.remove(first.context.name, true).pipe(Effect.ignore),
+          );
+          yield* docker.context.remove(first.context.name, true);
+
+          const plan = yield* stack.plan(program);
+          expect(plan.resources["portable-push-context"]).toMatchObject({ action: "noop" });
+          expect(plan.resources["portable-push-image"]).toMatchObject({ action: "noop" });
+
+          const second = yield* stack.deploy(program);
+          expect(second.image.repoDigest).toContain(
+            `${registry.host}/alchemy-portable-push@sha256:`,
+          );
+          expect(second.image.imageRef).toBe(first.image.imageRef);
+          const missing = yield* docker.context.inspect(first.context.name).pipe(Effect.flip);
+          expect(missing.reason._tag).toBe("NotFound");
+          yield* stack.destroy();
+        }),
     );
 
     test.provider("builds a tiny Dockerfile with an auto-generated name", (stack) =>

@@ -9,7 +9,13 @@ import * as Equal from "effect/Equal";
 import * as Net from "effect/net";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
-import { Docker, dockerEngineContextName, dockerPhysicalName } from "./Docker.ts";
+import {
+  Docker,
+  dockerEngineTarget,
+  sameDockerEngineConnection,
+  sameDockerEngineTarget,
+  dockerPhysicalName,
+} from "./Docker.ts";
 import type { Providers } from "./Providers.ts";
 
 /** Address allocation settings for one Docker network subnet. */
@@ -263,7 +269,7 @@ export const NetworkProvider = () =>
         }),
 
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
-          const context = dockerEngineContextName(olds?.context);
+          const context = dockerEngineTarget(olds?.context);
           const name = yield* networkName(id, olds, instanceId);
           const info = yield* docker.network
             .inspect(name, context)
@@ -281,7 +287,7 @@ export const NetworkProvider = () =>
         diff: Effect.fn(function* ({ id, output, instanceId, news, olds }) {
           if (!isResolved(news) || !output) return undefined;
           const args = yield* makeNetworkArgs(id, news, instanceId);
-          if (dockerEngineContextName(olds?.context) !== dockerEngineContextName(news?.context)) {
+          if (!sameDockerEngineTarget(olds?.context, news?.context)) {
             return { action: "replace", deleteFirst: true };
           }
           // Auto-generated names are engine-owned: the deployed name stays
@@ -312,7 +318,7 @@ export const NetworkProvider = () =>
           // network still exists. Another actor can delete it and reuse the
           // name, so check the Docker ID even when props have not changed.
           const current = yield* docker.network
-            .inspect(output.name, dockerEngineContextName(olds?.context))
+            .inspect(output.name, dockerEngineTarget(olds?.context))
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
           if (current && current.Id !== output.id) {
             return yield* new OwnedBySomeoneElse({
@@ -328,9 +334,14 @@ export const NetworkProvider = () =>
           // Reconcile can recreate a missing network. An update avoids
           // deleting a generation that has already disappeared.
           if (!current) return { action: "update" };
+          // A noop retains old state props. Refresh client credentials in
+          // state without replacing an otherwise unchanged Docker network.
+          if (!sameDockerEngineConnection(olds?.context, news?.context)) {
+            return { action: "update" };
+          }
         }),
         reconcile: Effect.fn(function* ({ output, id, instanceId, news }) {
-          const context = dockerEngineContextName(news?.context);
+          const context = dockerEngineTarget(news?.context);
           const args = yield* makeNetworkArgs(id, news, instanceId);
           if (output) {
             const refreshed = yield* docker.network.inspect(output.id, context).pipe(
@@ -349,7 +360,7 @@ export const NetworkProvider = () =>
         }),
         delete: Effect.fn(({ olds, output }) =>
           docker.network
-            .remove(output.id, dockerEngineContextName(olds?.context))
+            .remove(output.id, dockerEngineTarget(olds?.context))
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void)),
         ),
       });

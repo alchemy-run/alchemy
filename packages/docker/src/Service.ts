@@ -14,11 +14,18 @@ import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
-import type { PlatformError } from "effect/PlatformError";
+import { PlatformError, SystemError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import type * as rolldown from "rolldown";
-import { Docker, dockerEngineContextName, dockerPhysicalName } from "./Docker.ts";
+import {
+  Docker,
+  dockerEngineTarget,
+  dockerTargetArgs,
+  dockerTargetIdentity,
+  dockerPhysicalName,
+} from "./Docker.ts";
 import { healthcheckCommand, isHealthcheckDisabled } from "./HealthcheckCommand.ts";
 import type { Providers } from "./Providers.ts";
 import { makeServiceImage } from "./ServiceImage.ts";
@@ -59,6 +66,9 @@ export interface ServicePropsBase extends PlatformProps {
   endpointMode?: "vip" | "dnsrr";
   /**
    * Desired number of service replicas.
+   * Must be a non-negative integer. Invalid values fail with
+   * `DockerServiceInvalidConfiguration` in the typed Effect error channel,
+   * before creating or modifying a Docker service.
    *
    * @default 1
    */
@@ -282,7 +292,7 @@ export interface Service extends Resource<
     /** Swarm service name. */
     name: string;
     /** Docker context the service is deployed to. */
-    context?: string;
+    context?: Docker.Target;
     /** Image reference the service runs. */
     image: string;
     /** Desired number of replicas. */
@@ -541,47 +551,75 @@ export class DockerServiceUpdateFailed extends Data.TaggedError("DockerServiceUp
   }
 }
 
-type ServiceInspect = {
-  ID: string;
-  CreatedAt?: string;
-  UpdatedAt?: string;
-  UpdateStatus?: {
-    State?: string;
-    Message?: string;
-  };
-  Spec: {
-    Name: string;
-    Labels?: Record<string, string> | null;
-    TaskTemplate?: {
-      ContainerSpec?: {
-        Image?: string;
-        Env?: string[] | null;
-        Mounts?: Array<{ Target?: string }> | null;
-        Secrets?: Array<{ SecretName?: string }> | null;
-        Configs?: Array<{ ConfigName?: string }> | null;
-      };
-      Networks?: Array<{ Target?: string }>;
-      Placement?: {
-        Constraints?: string[];
-      };
-    };
-    Mode?: {
-      Replicated?: {
-        Replicas?: number;
-      };
-      Global?: Record<string, never>;
-    };
-    EndpointSpec?: {
-      Mode?: "vip" | "dnsrr";
-      Ports?: Array<{
-        PublishedPort?: number;
-        TargetPort?: number;
-        Protocol?: "tcp" | "udp";
-        PublishMode?: "ingress" | "host";
-      }>;
-    };
-  };
-};
+/** Invalid service options or an existing Docker service mode that Alchemy cannot manage. */
+export class DockerServiceInvalidConfiguration extends Data.TaggedError(
+  "DockerServiceInvalidConfiguration",
+)<{ readonly message: string }> {}
+
+// Docker CLI JSON is an external boundary. Decode the service shape once,
+// deriving its TypeScript contract from the same schema rather than casting.
+const ServiceInspectSchema = Schema.Struct({
+  ID: Schema.String,
+  CreatedAt: Schema.optional(Schema.String),
+  UpdatedAt: Schema.optional(Schema.String),
+  UpdateStatus: Schema.Struct({
+    State: Schema.optional(Schema.String),
+    Message: Schema.optional(Schema.String),
+  }).pipe(Schema.optional),
+  Spec: Schema.Struct({
+    Name: Schema.String,
+    Labels: Schema.Record(Schema.String, Schema.String).pipe(Schema.NullOr, Schema.optional),
+    TaskTemplate: Schema.Struct({
+      ContainerSpec: Schema.Struct({
+        Image: Schema.optional(Schema.String),
+        Env: Schema.Array(Schema.String).pipe(Schema.NullOr, Schema.optional),
+        Mounts: Schema.Array(Schema.Struct({ Target: Schema.optional(Schema.String) })).pipe(
+          Schema.NullOr,
+          Schema.optional,
+        ),
+        Secrets: Schema.Array(Schema.Struct({ SecretName: Schema.optional(Schema.String) })).pipe(
+          Schema.NullOr,
+          Schema.optional,
+        ),
+        Configs: Schema.Array(Schema.Struct({ ConfigName: Schema.optional(Schema.String) })).pipe(
+          Schema.NullOr,
+          Schema.optional,
+        ),
+      }).pipe(Schema.optional),
+      Networks: Schema.Array(Schema.Struct({ Target: Schema.optional(Schema.String) })).pipe(
+        Schema.optional,
+      ),
+      Placement: Schema.Struct({
+        Constraints: Schema.Array(Schema.String).pipe(Schema.optional),
+      }).pipe(Schema.optional),
+    }).pipe(Schema.optional),
+    Mode: Schema.Struct({
+      Replicated: Schema.Struct({ Replicas: Schema.optional(Schema.Number) }).pipe(Schema.optional),
+      Global: Schema.Record(Schema.String, Schema.Unknown).pipe(Schema.optional),
+    }).pipe(Schema.optional),
+    EndpointSpec: Schema.Struct({
+      Mode: Schema.Union([Schema.Literal("vip"), Schema.Literal("dnsrr")]).pipe(Schema.optional),
+      Ports: Schema.Array(
+        Schema.Struct({
+          PublishedPort: Schema.optional(Schema.Number),
+          TargetPort: Schema.optional(Schema.Number),
+          Protocol: Schema.Union([Schema.Literal("tcp"), Schema.Literal("udp")]).pipe(
+            Schema.optional,
+          ),
+          PublishMode: Schema.Union([Schema.Literal("ingress"), Schema.Literal("host")]).pipe(
+            Schema.optional,
+          ),
+        }),
+      ).pipe(Schema.optional),
+    }).pipe(Schema.optional),
+  }),
+});
+type ServiceInspect = typeof ServiceInspectSchema.Type;
+
+const decodeServiceInspect = Schema.NonEmptyArray(ServiceInspectSchema).pipe(
+  Schema.fromJsonString,
+  Schema.decodeEffect,
+);
 
 export const ServiceProvider = () =>
   Provider.effect(
@@ -599,9 +637,25 @@ export const ServiceProvider = () =>
         ALCHEMY_PHASE: "runtime",
       };
 
-      const inspect = (id: string, context?: string) =>
+      const inspect = (id: string, context?: Docker.Target) =>
         docker.service.inspect(id, context).pipe(
-          Effect.map((result) => normalizeServiceInspect(result)),
+          Effect.flatMap(({ stdout }) =>
+            decodeServiceInspect(stdout).pipe(
+              Effect.map(([service]) => service),
+              Effect.mapError(
+                () =>
+                  new PlatformError(
+                    new SystemError({
+                      _tag: "InvalidData",
+                      module: "Docker",
+                      method: "service.inspect",
+                      description:
+                        "Docker service inspect returned malformed JSON or an empty result.",
+                    }),
+                  ),
+              ),
+            ),
+          ),
           Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
         );
 
@@ -614,7 +668,7 @@ export const ServiceProvider = () =>
         id: string,
         props: ServiceProps,
         name: string,
-        context: string | undefined,
+        context: Docker.Target | undefined,
         session: { note: (message: string) => Effect.Effect<void> },
       ) {
         if (isBundledService(props)) {
@@ -637,10 +691,10 @@ export const ServiceProvider = () =>
         list: () => Effect.succeed([]),
         read: Effect.fn(function* ({ id, instanceId, olds, output }) {
           const name = yield* servicePhysicalName(id, olds, instanceId);
-          const context = dockerEngineContextName(olds?.context);
+          const context = dockerEngineTarget(olds?.context);
           const live = yield* inspect(name, context);
           if (!live) return undefined;
-          ensureReplicatedMode(live);
+          yield* ensureReplicatedMode(live);
           const attrs = toServiceAttributes(live, context, output?.code);
           if (output) return attrs;
           const owned = yield* hasAlchemyTags(id, live.Spec.Labels ?? undefined);
@@ -651,11 +705,18 @@ export const ServiceProvider = () =>
 
           const oldDesired = yield* normalizeDesired(id, olds, instanceId);
           const newDesired = yield* normalizeDesired(id, news, instanceId);
+          const oldComparable = comparableService(oldDesired);
+          const newComparable = comparableService(newDesired);
 
-          if (!Equal.equals(oldDesired, newDesired)) {
-            return requiresReplacement(oldDesired, newDesired)
+          if (!Equal.equals(oldComparable, newComparable)) {
+            return requiresReplacement(oldComparable, newComparable)
               ? { action: "replace" as const, deleteFirst: true }
               : { action: "update" as const };
+          }
+          // The endpoint has not moved, but the client credentials did.
+          // Reconcile refreshes the stored target without a task rollout.
+          if (!Equal.equals(oldDesired.context, newDesired.context)) {
+            return { action: "update" as const };
           }
 
           // Bundled program: the image identity is the content hash — a code
@@ -684,12 +745,12 @@ export const ServiceProvider = () =>
           if (output && olds) {
             const oldDesired = yield* normalizeDesired(id, olds, instanceId);
             if (
-              deepEqual(oldDesired, desired) &&
+              deepEqual(comparableService(oldDesired), comparableService(desired)) &&
               (resolved.codeHash === undefined || resolved.codeHash === output.code?.hash)
             ) {
               const current = yield* inspect(output.id, desired.context);
               if (current) {
-                ensureReplicatedMode(current);
+                yield* ensureReplicatedMode(current);
                 return toServiceAttributes(current, desired.context, code);
               }
             }
@@ -698,7 +759,7 @@ export const ServiceProvider = () =>
           if (output) {
             const current = yield* inspect(output.id, desired.context);
             if (current) {
-              ensureReplicatedMode(current);
+              yield* ensureReplicatedMode(current);
               const internalTags = yield* createInternalTags(id);
               const allDesiredLabels = { ...internalTags, ...desired.labels };
               const currentLabels = current.Spec.Labels ?? {};
@@ -848,7 +909,7 @@ export const ServiceProvider = () =>
 
           const existingByName = yield* inspect(desired.name, desired.context);
           if (existingByName) {
-            ensureReplicatedMode(existingByName);
+            yield* ensureReplicatedMode(existingByName);
             return toServiceAttributes(existingByName, desired.context, code);
           }
 
@@ -909,7 +970,7 @@ export const ServiceProvider = () =>
         delete: Effect.fn(({ output }) =>
           docker
             .run([
-              ...(output.context ? ["--context", output.context] : []),
+              ...dockerTargetArgs(output.context),
               "service",
               "scale",
               "--detach=false",
@@ -944,42 +1005,54 @@ const servicePhysicalName = (
   instanceId: string,
 ) => dockerPhysicalName(id, props, instanceId, 63);
 
-const normalizeDesired = (id: string, props: ServiceProps, instanceId: string) =>
-  servicePhysicalName(id, props, instanceId).pipe(
-    Effect.map((name) => ({
-      name,
-      context: dockerEngineContextName(props.context),
-      // The bundled form's image identity is its content hash (compared
-      // separately in diff) — the `image` prop is only the environment base
-      // there, and it participates in the hash.
-      image: isBundledService(props) ? undefined : normalizeImageRef(props.image),
-      command: props.command ?? [],
-      args: props.args ?? [],
-      environment: {
-        ...normalizeEnvironment(props.environment),
-        ...normalizeBoundEnv(props.env),
-      },
-      networks: normalizeNetworks(props.networks),
-      ports: normalizePorts(props.ports),
-      endpointMode: props.endpointMode ?? "vip",
-      replicas: normalizeReplicas(props.replicas),
-      constraints: [...(props.constraints ?? []), ...(props.placement?.constraints ?? [])],
-      maxReplicasPerNode: props.placement?.maxReplicasPerNode,
-      preferences: props.placement?.preferences ?? [],
-      updateConfig: props.updateConfig,
-      rollbackConfig: props.rollbackConfig,
-      restartPolicy: props.restartPolicy,
-      healthcheck: props.healthcheck,
-      stopGracePeriod: props.stopGracePeriod,
-      volumes: props.volumes ?? [],
-      secrets: props.secrets ?? [],
-      configs: props.configs ?? [],
-      readOnlyRootFs: props.readOnlyRootFs ?? false,
-      labels: props.labels ?? {},
-    })),
-  );
+const normalizeDesired = Effect.fn("Docker.Service.normalizeDesired")(function* (
+  id: string,
+  props: ServiceProps,
+  instanceId: string,
+) {
+  const name = yield* servicePhysicalName(id, props, instanceId);
+  const replicas = yield* normalizeReplicas(props.replicas);
+  return {
+    name,
+    context: dockerEngineTarget(props.context),
+    // The bundled form's image identity is its content hash (compared
+    // separately in diff) — the `image` prop is only the environment base
+    // there, and it participates in the hash.
+    image: isBundledService(props) ? undefined : normalizeImageRef(props.image),
+    command: props.command ?? [],
+    args: props.args ?? [],
+    environment: {
+      ...normalizeEnvironment(props.environment),
+      ...normalizeBoundEnv(props.env),
+    },
+    networks: normalizeNetworks(props.networks),
+    ports: normalizePorts(props.ports),
+    endpointMode: props.endpointMode ?? "vip",
+    replicas,
+    constraints: [...(props.constraints ?? []), ...(props.placement?.constraints ?? [])],
+    maxReplicasPerNode: props.placement?.maxReplicasPerNode,
+    preferences: props.placement?.preferences ?? [],
+    updateConfig: props.updateConfig,
+    rollbackConfig: props.rollbackConfig,
+    restartPolicy: props.restartPolicy,
+    healthcheck: props.healthcheck,
+    stopGracePeriod: props.stopGracePeriod,
+    volumes: props.volumes ?? [],
+    secrets: props.secrets ?? [],
+    configs: props.configs ?? [],
+    readOnlyRootFs: props.readOnlyRootFs ?? false,
+    labels: props.labels ?? {},
+  };
+});
 
 type DesiredService = Effect.Success<ReturnType<typeof normalizeDesired>>;
+
+// Client-side TLS credentials are not part of a Swarm service's physical
+// identity. Rotating certificate paths must not replace or roll out tasks.
+const comparableService = (desired: DesiredService) => ({
+  ...desired,
+  context: dockerTargetIdentity(desired.context),
+});
 
 /**
  * Fields `docker service update` changes in place. Swarm rolls the tasks
@@ -1073,13 +1146,16 @@ const normalizePorts = (ports: Service.PortMapping[] | undefined): Service.PortM
     mode: port.mode ?? "ingress",
   }));
 
-const normalizeReplicas = (replicas: number | undefined): number => {
-  const value = replicas ?? 1;
-  if (!Number.isInteger(value) || value < 0) {
-    throw new Error("Service.replicas must be an integer >= 0");
-  }
-  return value;
-};
+const ReplicaCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+const normalizeReplicas = (replicas: number | undefined) =>
+  Schema.decodeEffect(ReplicaCount)(replicas ?? 1).pipe(
+    Effect.mapError(
+      () =>
+        new DockerServiceInvalidConfiguration({
+          message: "Service.replicas must be an integer >= 0",
+        }),
+    ),
+  );
 
 const normalizeNetworks = (
   networks: Array<string | Service.NetworkAttachment> | undefined,
@@ -1117,7 +1193,7 @@ const formatPublish = (port: Service.PortMapping): string =>
 
 const toServiceAttributes = (
   service: ServiceInspect,
-  context?: string,
+  context?: Docker.Target,
   code?: { hash: string },
 ): Service["Attributes"] => ({
   id: service.ID,
@@ -1148,36 +1224,19 @@ const toServiceAttributes = (
   code,
 });
 
-const ensureReplicatedMode = (service: ServiceInspect): void => {
-  if (service.Spec.Mode?.Global !== undefined) {
-    throw new Error(
-      `Docker.Service only supports replicated services. Service "${service.Spec.Name}" is global.`,
-    );
-  }
-};
-
-const parseInspectArray = <T>(json: string): T => {
-  const parsed = JSON.parse(json) as T[];
-  if (parsed.length === 0) {
-    throw new Error("docker inspect returned no objects");
-  }
-  return parsed[0]!;
-};
-
-const normalizeServiceInspect = (value: unknown): ServiceInspect => {
-  if (typeof value === "object" && value !== null && "stdout" in value) {
-    const stdout = (value as { stdout?: unknown }).stdout;
-    if (typeof stdout === "string") {
-      return parseInspectArray<ServiceInspect>(stdout);
-    }
-  }
-  return value as ServiceInspect;
-};
+const ensureReplicatedMode = (service: ServiceInspect) =>
+  service.Spec.Mode?.Global === undefined
+    ? Effect.void
+    : Effect.fail(
+        new DockerServiceInvalidConfiguration({
+          message: `Docker.Service only supports replicated services. Service "${service.Spec.Name}" is global.`,
+        }),
+      );
 
 const inspectOrDie = <T, E>(
-  inspect: (nameOrId: string, context?: string) => Effect.Effect<T | undefined, E>,
+  inspect: (nameOrId: string, context?: Docker.Target) => Effect.Effect<T | undefined, E>,
   nameOrId: string,
-  context?: string,
+  context?: Docker.Target,
 ) =>
   inspect(nameOrId, context).pipe(
     Effect.flatMap((value) =>
@@ -1188,7 +1247,7 @@ const inspectOrDie = <T, E>(
 const waitForServiceContainersReleased = (
   docker: Docker["Service"],
   serviceId: string,
-  context?: string,
+  context?: Docker.Target,
 ): Effect.Effect<void, PlatformError> => {
   const maxAttempts = 10;
   const noContainers = Symbol.for("Docker.Service.NoContainers");
@@ -1214,13 +1273,7 @@ const waitForServiceContainersReleased = (
             containerIds,
             (containerId) =>
               docker
-                .run([
-                  ...(context ? ["--context", context] : []),
-                  "container",
-                  "rm",
-                  "-f",
-                  containerId,
-                ])
+                .run([...dockerTargetArgs(context), "container", "rm", "-f", containerId])
                 .pipe(Effect.catchCause(() => Effect.void)),
             { concurrency: "unbounded" },
           ).pipe(Effect.as(undefined)),
@@ -1231,11 +1284,11 @@ const waitForServiceContainersReleased = (
 const listServiceContainerIds = (
   docker: Docker["Service"],
   serviceId: string,
-  context?: string,
+  context?: Docker.Target,
 ): Effect.Effect<string[], PlatformError> =>
   docker
     .run([
-      ...(context ? ["--context", context] : []),
+      ...dockerTargetArgs(context),
       "ps",
       "-a",
       "--filter",

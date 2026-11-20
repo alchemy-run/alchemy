@@ -63,11 +63,7 @@ export const Database = (
         Providers
       >;
       const network = yield* Docker.Network(`${id}Network`, { driver: "overlay", ...context });
-      const volumeContext = Docker.dockerEngineContextName(props.context);
-      const data = yield* Docker.Volume(
-        `${id}Data`,
-        volumeContext === undefined ? {} : { context: volumeContext },
-      );
+      const data = yield* Docker.Volume(`${id}Data`, context);
       const alias = "cluster-db";
       const db = yield* Docker.Service(`${id}Postgres`, {
         image: props.image ?? DEFAULT_POSTGRES_IMAGE,
