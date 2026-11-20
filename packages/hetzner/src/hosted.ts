@@ -538,7 +538,10 @@ WantedBy=multi-user.target
       ].join("\n"),
     );
     yield* input.ssh.scp(input.archive, `${appDir}/bundle.zip`);
-    yield* input.ssh.scp(new TextEncoder().encode(systemdEnvFile(input.env)), `${appDir}/env`);
+    yield* input.ssh.scp(
+      new TextEncoder().encode(yield* systemdEnvFile(input.env)),
+      `${appDir}/env`,
+    );
     yield* input.ssh.scp(
       new TextEncoder().encode(renderUnit(input.unitName, appDir, input.entryRel ?? "index.mjs")),
       `/etc/systemd/system/${input.unitName}.service`,
@@ -588,7 +591,7 @@ Requires=docker.service
 Type=simple
 ExecStartPre=-/usr/bin/docker rm -f ${unitName}
 EnvironmentFile=-${appDir}/env
-ExecStart=/usr/bin/docker run --rm --name ${unitName} --network host $${DOCKER_ENV} ${unitName}:alchemy
+ExecStart=/usr/bin/docker run --rm --name ${unitName} --network host $${DOCKER_ENV} alchemy-${unitName}:latest
 ExecStop=/usr/bin/docker stop ${unitName}
 Restart=always
 RestartSec=5
@@ -629,7 +632,10 @@ WantedBy=multi-user.target
       ].join("\n"),
     );
     yield* input.ssh.scp(input.archive, `${appDir}/image.tar`);
-    yield* input.ssh.scp(new TextEncoder().encode(containerEnvFile(input.env)), `${appDir}/env`);
+    yield* input.ssh.scp(
+      new TextEncoder().encode(yield* containerEnvFile(input.env)),
+      `${appDir}/env`,
+    );
     yield* input.ssh.scp(
       new TextEncoder().encode(renderImageUnit(input.unitName, appDir)),
       `/etc/systemd/system/${input.unitName}.service`,
@@ -638,7 +644,6 @@ WantedBy=multi-user.target
       [
         `set -euo pipefail`,
         loadImageArchiveScript(`${appDir}/image.tar`),
-        `docker tag "$IMAGE" ${input.unitName}:alchemy`,
         `systemctl daemon-reload`,
         `systemctl enable ${input.unitName}.service`,
         `systemctl restart ${input.unitName}.service`,

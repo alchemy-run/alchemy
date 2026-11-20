@@ -158,7 +158,7 @@ export interface InstanceProps extends PlatformProps {
   /**
    * Additional environment variables for the hosted process. systemd loads
    * them, so keys must be shell-style names (`[A-Za-z_][A-Za-z0-9_]*`);
-   * others are left out.
+   * another fails the deploy.
    */
   env?: Record<string, any>;
   /**
@@ -795,12 +795,11 @@ export const InstanceProvider = () =>
             !isResolved(raw.userData) || !deepEqual(raw.userData, olds.userData);
           const hostModeChanged =
             Boolean(olds.main || olds.context) !== Boolean(raw.main || raw.context);
-          // User data installs a container's unit once, so a unit change
-          // needs a new instance.
+          // User data installs the unit once, so a different container unit
+          // (or a switch between program and container) needs a new instance.
           const containerUnitChanged =
-            raw.context !== undefined &&
             output?.code !== undefined &&
-            output.code.unit !== CONTAINER_UNIT_VERSION;
+            output.code.unit !== (raw.context !== undefined ? CONTAINER_UNIT_VERSION : undefined);
           if (
             hostModeChanged ||
             containerUnitChanged ||

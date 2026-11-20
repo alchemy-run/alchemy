@@ -71,7 +71,7 @@ export interface ServiceProps extends PlatformProps {
   /**
    * Additional environment variables for the hosted process. Merged after
    * binding-injected `env`. systemd loads them, so keys must be shell-style
-   * names (`[A-Za-z_][A-Za-z0-9_]*`); others are left out.
+   * names (`[A-Za-z_][A-Za-z0-9_]*`); another fails the deploy.
    */
   env?: Record<string, any>;
   /**

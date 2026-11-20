@@ -193,6 +193,14 @@ export const createEc2HostRuntimeContext = createHostRuntimeContext;
  */
 export const CONTAINER_UNIT_VERSION = 2;
 
+/**
+ * The unit's setup step, run with an empty environment: `EnvironmentFile=`
+ * applies to every command, and the app's env (a `PATH`, AWS credentials)
+ * must not change how setup reaches S3 and Docker.
+ */
+const setupCommand = (unitName: string) =>
+  `/usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/root /usr/local/bin/${unitName}-setup.sh`;
+
 export const createEc2HostedSupport = ({
   stackName,
   stage,
@@ -419,7 +427,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${appDir}
-ExecStartPre=/usr/local/bin/${unitName}-setup.sh
+ExecStartPre=${setupCommand(unitName)}
 EnvironmentFile=-${appDir}/env
 # --no-install: the uploaded bundle is self-contained; bun must never fall
 # into its auto-install path (which hangs startup on network package
@@ -485,7 +493,6 @@ set -e
 aws s3 cp "s3://${bucket}/${bundleKey}" "${appDir}/image.tar" --region "${region}"
 aws s3 cp "s3://${bucket}/${envKey}" "${appDir}/env" --region "${region}"
 ${loadImageArchiveScript(`${appDir}/image.tar`)}
-docker tag "$IMAGE" ${unitName}:alchemy
 docker rm -f ${unitName} >/dev/null 2>&1 || true
 SETUP_EOF
 chmod +x /usr/local/bin/${unitName}-setup.sh
@@ -498,9 +505,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStartPre=/usr/local/bin/${unitName}-setup.sh
+ExecStartPre=${setupCommand(unitName)}
 EnvironmentFile=-${appDir}/env
-ExecStart=/usr/bin/docker run --rm --name ${unitName} --network host $${DOCKER_ENV} ${unitName}:alchemy
+ExecStart=/usr/bin/docker run --rm --name ${unitName} --network host $${DOCKER_ENV} alchemy-${unitName}:latest
 ExecStop=/usr/bin/docker stop ${unitName}
 Restart=always
 RestartSec=5
@@ -716,7 +723,7 @@ systemctl enable --now ${unitName}.service
       Key: bundleKey,
       CopySource: `${yield* assets.bucketName}/${uploadedAssetKey}`,
     });
-    const envFile = image ? containerEnvFile(env) : systemdEnvFile(env);
+    const envFile = yield* image ? containerEnvFile(env) : systemdEnvFile(env);
     yield* s3.putObject({
       Bucket: yield* assets.bucketName,
       Key: envKey,

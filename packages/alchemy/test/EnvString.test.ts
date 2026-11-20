@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { envString, envStrings, packEnvValue } from "@/RuntimeContext.ts";
 import { containerEnvFile, systemdEnvFile } from "@/Util/envFile.ts";
@@ -36,21 +37,36 @@ describe("envString", { tags: ["unit"] }, () => {
 });
 
 describe("systemdEnvFile", { tags: ["unit"] }, () => {
-  it("double-quotes each value and escapes the characters systemd unescapes", () => {
-    expect(systemdEnvFile({ B: "it's", A: "a\nb", C: Redacted.make("s"), D: 1, E: 'q"\\$`' })).toBe(
-      ['A="a\nb"', 'B="it\'s"', 'C="s"', 'D="1"', 'E="q\\"\\\\\\$\\`"'].join("\n"),
-    );
-  });
+  it.effect("double-quotes each value and escapes the characters systemd unescapes", () =>
+    Effect.gen(function* () {
+      expect(
+        yield* systemdEnvFile({ B: "it's", A: "a\nb", C: Redacted.make("s"), D: 1, E: 'q"\\$`' }),
+      ).toBe(['A="a\nb"', 'B="it\'s"', 'C="s"', 'D="1"', 'E="q\\"\\\\\\$\\`"'].join("\n"));
+    }),
+  );
 
-  it("leaves out keys systemd can't hold", () => {
-    expect(systemdEnvFile({ "MY.KEY": "x", "K-2": "y", "A B": "z", OK_1: "w" })).toBe('OK_1="w"');
-  });
+  it.effect("fails on a key systemd can't hold instead of dropping it", () =>
+    Effect.gen(function* () {
+      const error = yield* systemdEnvFile({ "discovery.type": "single-node" }).pipe(Effect.flip);
+      expect(error._tag).toBe("InvalidEnvKey");
+      expect(error.key).toBe("discovery.type");
+    }),
+  );
 });
 
 describe("containerEnvFile", { tags: ["unit"] }, () => {
-  it("lists -e NAME for each key, for docker run to copy from systemd's env", () => {
-    expect(containerEnvFile({ B: "b", A: "a\nb", "MY.KEY": "x" })).toBe(
-      ['A="a\nb"', 'B="b"', 'ALCHEMY_DOCKER_ENV="-e A -e B"'].join("\n"),
-    );
-  });
+  it.effect("lists -e NAME for each key, for docker run to copy from systemd's env", () =>
+    Effect.gen(function* () {
+      expect(yield* containerEnvFile({ B: "b", A: "a\nb" })).toBe(
+        ['A="a\nb"', 'B="b"', 'ALCHEMY_DOCKER_ENV="-e A -e B"'].join("\n"),
+      );
+    }),
+  );
+
+  it.effect("reserves the key it lists the -e arguments in", () =>
+    Effect.gen(function* () {
+      const error = yield* containerEnvFile({ ALCHEMY_DOCKER_ENV: "x" }).pipe(Effect.flip);
+      expect(error.key).toBe("ALCHEMY_DOCKER_ENV");
+    }),
+  );
 });
