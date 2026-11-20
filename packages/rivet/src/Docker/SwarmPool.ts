@@ -65,7 +65,8 @@ export const SwarmPool = (
           }).pipe(
             Effect.flatMap((image) =>
               Docker.Service(`${id}Nodes`, {
-                image: image.imageRef,
+                // The image itself, not its tag: a rebuild rolls the nodes.
+                image,
                 replicas: options.replicas ?? 1,
                 networks: [{ name: network.name }],
                 env: pool.env,
