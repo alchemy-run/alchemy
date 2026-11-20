@@ -21,12 +21,12 @@ import { AuthoritativeRecordCheck } from "./AuthoritativeDns.ts";
 import { DEV_TIMESTAMP, devId, devProvider } from "./DevStub.ts";
 import {
   DomainOwnershipOperationFailed,
-  normalizeDomain,
   PrismaDomainOwnershipRequired,
   type ProjectReference,
   resolveWorkspaceId,
   withoutRetriedCreate,
 } from "./DomainOwnership.ts";
+import { normalizeHostname } from "./Hostname.ts";
 import { PrismaPaginationError } from "./Pagination.ts";
 import { isInputObject, isPrismaDevId } from "./Refs.ts";
 
@@ -105,7 +105,7 @@ const listOwnerships = (workspaceId: string, domain?: string) =>
 const findOwnership = (workspaceId: string, domain: string) =>
   listOwnerships(workspaceId, domain).pipe(
     Effect.map((ownerships) =>
-      ownerships.find((ownership) => normalizeDomain(ownership.domain) === domain),
+      ownerships.find((ownership) => normalizeHostname(ownership.domain) === domain),
     ),
   );
 
@@ -187,7 +187,7 @@ const ProviderLive = () =>
           if (!output || !isInputObject(news) || typeof news.domain !== "string") {
             return undefined;
           }
-          return normalizeDomain(news.domain) === normalizeDomain(output.domain)
+          return normalizeHostname(news.domain) === normalizeHostname(output.domain)
             ? undefined
             : ({ action: "replace" } as const);
         }),
@@ -200,7 +200,7 @@ const ProviderLive = () =>
           if (recorded) return attrsFrom(recorded);
           if (typeof olds?.domain !== "string") return undefined;
           const workspaceId = yield* resolveWorkspaceId(olds.project);
-          const existing = yield* findOwnership(workspaceId, normalizeDomain(olds.domain));
+          const existing = yield* findOwnership(workspaceId, normalizeHostname(olds.domain));
           if (!existing) return undefined;
           // An unverified domain ownership grants nothing, so taking it over
           // takes nothing from anyone. A verified or expiring one may keep
@@ -211,13 +211,13 @@ const ProviderLive = () =>
         }),
         reconcile: Effect.fn(function* ({ news, output }) {
           const workspaceId = yield* resolveWorkspaceId(news.project);
-          const domain = normalizeDomain(news.domain);
+          const domain = normalizeHostname(news.domain);
           const domainOwnershipId = isPrismaDevId(output?.domainOwnershipId)
             ? undefined
             : output?.domainOwnershipId;
           const recorded = domainOwnershipId ? yield* getOwnership(domainOwnershipId) : undefined;
           const found =
-            recorded && normalizeDomain(recorded.domain) === domain
+            recorded && normalizeHostname(recorded.domain) === domain
               ? recorded
               : yield* findOwnership(workspaceId, domain);
           const existing =
@@ -244,7 +244,7 @@ const ProviderLive = () =>
             );
           }
           const ownership = existing ?? (yield* createOwnership(workspaceId, domain));
-          if (normalizeDomain(ownership.domain) !== domain) {
+          if (normalizeHostname(ownership.domain) !== domain) {
             return yield* new DomainOwnershipOperationFailed({
               message: `Prisma recorded ownership of '${ownership.domain}', not the requested '${domain}'.`,
             });

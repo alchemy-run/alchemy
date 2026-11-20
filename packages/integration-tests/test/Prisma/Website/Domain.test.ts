@@ -5,6 +5,7 @@ import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as Prisma from "@alchemy.run/prisma";
 import type { Compute } from "@alchemy.run/prisma/Compute";
 import { CustomDomain } from "@alchemy.run/prisma/CustomDomain";
+import { RoutingUrl } from "@alchemy.run/prisma/RoutingUrl";
 import type { WebsiteDomain } from "@alchemy.run/prisma/Website/FrameworkSite";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -226,6 +227,58 @@ testFor(siteChange).test.provider(
 
       yield* stack.destroy();
       expect(siteChange.zone.records).toEqual([]);
+    }),
+  { tags: unitTags },
+);
+
+const aliasDropped = makeUrlCloud();
+testFor(aliasDropped).test.provider(
+  "a later release that stops declaring the alias keeps the CNAME published",
+  (stack) =>
+    Effect.gen(function* () {
+      aliasDropped.reset();
+      yield* stack.destroy();
+      yield* stack.deploy(siteDomain({ name: SITE_HOST, dns: TEST_DNS }));
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const app = yield* AppRef("App", {});
+          return yield* RoutingUrl(WEBSITE_ROUTING_URL_ID, {
+            app: app.appId,
+            hostname: SITE_HOST,
+            dns: TEST_DNS,
+          }).pipe(Namespace.push("Site"));
+        }),
+      );
+
+      expect(byName(aliasDropped.zone.records)).toEqual(byName(recordsFor(SITE_HOST)));
+      expect(aliasDropped.zone.removed).toEqual([]);
+
+      yield* stack.destroy();
+      expect(aliasDropped.zone.records).toEqual([]);
+    }),
+  { tags: unitTags },
+);
+
+const proxied = makeUrlCloud();
+testFor(proxied).test.provider(
+  "a site publishes its records DNS-only when the DNS host is set to proxy aliases",
+  (stack) =>
+    Effect.gen(function* () {
+      proxied.reset();
+      yield* stack.destroy();
+
+      yield* stack.deploy(
+        siteDomain({ name: SITE_HOST, dns: { ...TEST_DNS, options: { proxied: true } } }),
+      );
+
+      expect(proxied.zone.options.map(({ method }) => method).sort()).toEqual(["alias", "records"]);
+      // `records` is always DNS-only by the adapter contract; the alias is
+      // declared without `proxied`.
+      const alias = proxied.zone.options.find(({ method }) => method === "alias");
+      expect(alias?.options?.proxied).toBe(undefined);
+
+      yield* stack.destroy();
     }),
   { tags: unitTags },
 );

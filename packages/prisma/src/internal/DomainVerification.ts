@@ -5,7 +5,8 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { devProvider } from "./DevStub.ts";
-import { type ProjectReference, normalizeDomain, resolveWorkspaceId } from "./DomainOwnership.ts";
+import { type ProjectReference, resolveWorkspaceId } from "./DomainOwnership.ts";
+import { normalizeHostname } from "./Hostname.ts";
 
 export interface DomainVerificationProps {
   /** Project (or project ID) whose workspace proves ownership. */
@@ -48,7 +49,7 @@ const ProviderLive = () =>
         }),
         reconcile: Effect.fn(function* ({ news }) {
           const workspaceId = yield* resolveWorkspaceId(news.project);
-          const domain = normalizeDomain(news.domain);
+          const domain = normalizeHostname(news.domain);
           const record = yield* getWorkspaceDomainOwnershipsVerification({ workspaceId, domain });
           return {
             workspaceId,

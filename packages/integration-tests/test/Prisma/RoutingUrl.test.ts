@@ -34,8 +34,8 @@ import {
   type RecordVisibility,
   SwitchboardDnsCheck,
   type SwitchboardDnsVisibility,
-  type SwitchboardWaitOptions,
-  type WaitOptions,
+  type SwitchboardCheckOptions,
+  type CheckOptions,
 } from "../../../prisma/src/internal/AuthoritativeDns.ts";
 import { switchboardTarget } from "../../../prisma/src/internal/Switchboard.ts";
 import { cloneFixture } from "../Cloudflare/Utils/Fixture.ts";
@@ -184,7 +184,17 @@ testFor(dnsChange).test.provider(
       expect(dnsChange.state.txtChecked).toEqual([
         { type: "TXT", name: "_prisma-verification.new.example.com", value: TXT.value },
       ]);
-      expect(dnsChange.state.txtAttempts).toEqual(["until-seen"]);
+      expect(dnsChange.state.txtOptions).toEqual([
+        {
+          margin: "if-unseen",
+          nameservers: "name",
+          serversOf: "new.example.com",
+          attempts: "until-seen",
+        },
+      ]);
+      expect(dnsChange.state.checked.map(([, options]) => options)).toEqual([
+        { margin: "if-unseen", nameservers: "name", attempts: "until-seen" },
+      ]);
       expect(dnsChange.state.checked.map(([expected]) => expected.name)).toEqual([
         "new.example.com",
       ]);
@@ -307,14 +317,34 @@ testFor(appOutput).test.provider(
 
 const unpublishable = makeUrlCloud();
 testFor(unpublishable).test.provider(
-  "with dns, refuses a wildcard or an app with no endpoint before publishing anything",
+  "with dns, refuses a hostname it cannot publish, an app with no endpoint or on no Branch before publishing anything",
   (stack) =>
     Effect.gen(function* () {
       unpublishable.reset();
       yield* stack.destroy();
 
-      const wildcard = yield* failureOf(stack.deploy(dnsStack("*.example.com")));
-      expect(wildcard).toContain("RoutingUrlInvalidHostname");
+      for (const hostname of ["*.example.com", "api.example.com/path", "a__b.example.com"]) {
+        expect(yield* failureOf(stack.deploy(dnsStack(hostname)))).toContain(
+          "RoutingUrlInvalidHostname",
+        );
+      }
+
+      const outputHostname = yield* failureOf(
+        stack.deploy(
+          Effect.gen(function* () {
+            const app = yield* AppRef("App", {});
+            return yield* RoutingUrl("Url", { app: "svc-1", hostname: app.appId, dns: TEST_DNS });
+          }),
+        ),
+      );
+      expect(outputHostname).toContain("RoutingUrlInvalidProps");
+
+      const branchless = yield* failureOf(
+        stack.deploy(
+          RoutingUrl("Url", { app: "svc-no-branch", hostname: HOSTNAME, dns: TEST_DNS }),
+        ),
+      );
+      expect(branchless).toContain("RoutingUrlServiceNotOnABranch");
 
       const endpointless = yield* failureOf(
         stack.deploy(
@@ -326,6 +356,48 @@ testFor(unpublishable).test.provider(
 
       expect(unpublishable.zone.publishes).toBe(0);
       expect(unpublishable.routes().some((route) => route.startsWith("POST"))).toBe(false);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const noBranch = makeUrlCloud();
+testFor(noBranch).test.provider(
+  "refuses a service on no Branch before asking Prisma to create the RoutingUrl",
+  (stack) =>
+    Effect.gen(function* () {
+      noBranch.reset();
+      yield* stack.destroy();
+
+      const { errors } = yield* failuresOf(
+        stack.deploy(RoutingUrl("Url", { app: "svc-no-branch", hostname: HOSTNAME })),
+      );
+
+      expect(errors.some((error) => error instanceof RoutingUrlServiceNotOnABranch)).toBe(true);
+      expect(noBranch.routes().some((route) => route.startsWith("POST"))).toBe(false);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const serviceChange = makeUrlCloud();
+testFor(serviceChange).test.provider(
+  "moves a row to another service with a PATCH of the service alone",
+  (stack) =>
+    Effect.gen(function* () {
+      serviceChange.reset({}, routingUrl("url-1", { status: "active" }));
+      yield* stack.destroy();
+      yield* stack.deploy(urlStack());
+
+      serviceChange.fake.captured.length = 0;
+      const url = yield* stack.deploy(RoutingUrl("Url", { app: "svc-2", hostname: HOSTNAME }));
+
+      expect(url.serviceId).toBe("svc-2");
+      const patch = serviceChange.fake.captured.find((request) => request.method === "PATCH");
+      expect(patch?.bodyJson).toEqual({ serviceId: "svc-2" });
+      expect(serviceChange.state.checked).toEqual([]);
 
       yield* stack.destroy();
     }),
@@ -732,6 +804,18 @@ const refusalCases: ReadonlyArray<{
     status: 422,
     code: "service-on-another-branch",
     expected: RoutingUrlServiceOnAnotherBranch,
+  },
+  {
+    operation: "update",
+    status: 409,
+    code: "some-new-conflict",
+    expected: RoutingUrlOperationFailed,
+  },
+  {
+    operation: "update",
+    status: 422,
+    code: "validation-error",
+    expected: RoutingUrlOperationFailed,
   },
 ];
 

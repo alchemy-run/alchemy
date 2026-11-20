@@ -33,21 +33,24 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { AuthoritativeRecordCheck, SwitchboardDnsCheck } from "./internal/AuthoritativeDns.ts";
 import { attrOrString, devId, devProvider } from "./internal/DevStub.ts";
+import { isPlainHostname, normalizeHostname } from "./internal/Hostname.ts";
 import { concreteIdOf, isPrismaDevId } from "./internal/Refs.ts";
 import {
   type AppReference,
   appIdValue,
-  normalizeHostname,
-  publishedRecordsId,
-  requiredRecords,
+  hasLogicalId,
+  notOnABranch,
   resolveServiceId,
   RoutingUrlOperationFailed,
+} from "./internal/RoutingUrl.ts";
+import {
+  publishedRecordsId,
+  requiredRecords,
   RoutingUrlRequiredRecords,
   RoutingUrlRequiredRecordsProvider,
 } from "./internal/RoutingUrlRequiredRecords.ts";
-import { isManagedByRoutingUrl } from "./internal/RoutingUrlTakeover.ts";
 
-export { RoutingUrlOperationFailed } from "./internal/RoutingUrlRequiredRecords.ts";
+export { RoutingUrlOperationFailed, RoutingUrlServiceNotOnABranch } from "./internal/RoutingUrl.ts";
 import { switchboardTarget } from "./internal/Switchboard.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -70,24 +73,23 @@ export class RoutingUrlHostnameTaken extends Data.TaggedError("RoutingUrlHostnam
   readonly routingUrlId: string;
 }> {}
 
-/** Prisma refused the hostname, e.g. a wildcard or an IP address. */
-export class RoutingUrlInvalidHostname extends Data.TaggedError("RoutingUrlInvalidHostname")<{
+/** The props cannot be used as given, e.g. `dns` with a hostname that is not a plain string. */
+export class RoutingUrlInvalidProps extends Data.TaggedError("RoutingUrlInvalidProps")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
 /**
- * The service is on no Branch, so it cannot serve a RoutingUrl. Attach the
- * app to a Branch, then redeploy.
+ * The hostname cannot be served by a RoutingUrl: Prisma refused it, or `dns`
+ * is set and it is a wildcard or not dot-separated labels of letters, digits
+ * and hyphens.
  */
-export class RoutingUrlServiceNotOnABranch extends Data.TaggedError(
-  "RoutingUrlServiceNotOnABranch",
-)<{
+export class RoutingUrlInvalidHostname extends Data.TaggedError("RoutingUrlInvalidHostname")<{
   readonly message: string;
   readonly cause?: unknown;
 }> {}
 
-/** The new service is on another Branch than the RoutingUrl. */
+/** The new service is on a different Branch from the RoutingUrl. */
 export class RoutingUrlServiceOnAnotherBranch extends Data.TaggedError(
   "RoutingUrlServiceOnAnotherBranch",
 )<{
@@ -145,7 +147,8 @@ export interface RoutingUrlProps {
   /**
    * Identity of the RoutingUrl on its Branch. A RoutingUrl found on the
    * Branch with this `logicalId` is this resource's.
-   * @default the resource's fully qualified name
+   * @default the resource's fully qualified name: `Site/Url` for
+   * `Prisma.RoutingUrl("Url", …)` inside a `Prisma.Website` named `Site`
    */
   logicalId?: Input<string>;
   /**
@@ -284,7 +287,7 @@ export const RoutingUrl = (id: string, props: RoutingUrlProps) =>
     if (dns === undefined || !(yield* publishesDns)) return yield* RoutingUrlRow(id, rowProps);
     const requested = props.hostname;
     if (typeof requested !== "string") {
-      return yield* new RoutingUrlInvalidHostname({
+      return yield* new RoutingUrlInvalidProps({
         message: `With dns, the hostname of RoutingUrl '${id}' must be a plain string: its DNS records are kept per hostname.`,
       });
     }
@@ -292,6 +295,11 @@ export const RoutingUrl = (id: string, props: RoutingUrlProps) =>
     if (hostname.startsWith("*.")) {
       return yield* new RoutingUrlInvalidHostname({
         message: `'${requested}' is a wildcard, which a RoutingUrl cannot serve; nothing was published.`,
+      });
+    }
+    if (!isPlainHostname(hostname)) {
+      return yield* new RoutingUrlInvalidHostname({
+        message: `'${requested}' is not a hostname such as api.example.com: use dot-separated labels of letters, digits and hyphens. Nothing was published.`,
       });
     }
     const required = yield* requiredRecords(id, props.app, hostname);
@@ -358,7 +366,11 @@ const getRoutingUrl = (id: string) =>
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
-/** The row with `logicalId`, else one Prisma's backfill made: same service and hostname, no `logicalId`. */
+/**
+ * The row with `logicalId`, else a row with no `logicalId` for the same
+ * service and hostname, whoever made it: Prisma's backfill, the Console or a
+ * custom domain.
+ */
 const ownRow = (
   urls: ReadonlyArray<ApiRoutingUrl>,
   serviceId: string,
@@ -368,16 +380,10 @@ const ownRow = (
   urls.find((url) => url.logicalId === logicalId) ??
   urls.find(
     (url) =>
-      !isManagedByRoutingUrl(url) &&
+      !hasLogicalId(url) &&
       url.serviceId === serviceId &&
       normalizeHostname(url.hostname) === hostname,
   );
-
-const notOnABranch = (serviceId: string, cause?: unknown) =>
-  new RoutingUrlServiceNotOnABranch({
-    message: `Prisma service '${serviceId}' is not on a Branch, so it cannot serve a RoutingUrl. Attach the app to a Branch, for example with branchId or branchGitName on the App or Compute, then redeploy.`,
-    cause,
-  });
 
 /** Prisma's refusals of a RoutingUrl create or update, told apart by their error code. */
 const refusals = (hostname: string, logicalId: string, serviceId: string) => ({
@@ -507,7 +513,11 @@ const ProviderLive = () =>
           if (stored) return attrsFrom(stored);
           const serviceId = concreteIdOf(appIdValue(olds?.app));
           if (serviceId === undefined || typeof olds?.hostname !== "string") return undefined;
-          const service = yield* serviceOf(serviceId);
+          // A service on no Branch can have no RoutingUrl to find.
+          const service = yield* serviceOf(serviceId).pipe(
+            Effect.catchTag("RoutingUrlServiceNotOnABranch", () => Effect.undefined),
+          );
+          if (service === undefined) return undefined;
           const found = ownRow(
             yield* branchUrls(service),
             serviceId,

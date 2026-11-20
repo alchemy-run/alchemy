@@ -50,7 +50,8 @@ const publishVerificationRecord = (
 
 /**
  * Proof that a Prisma workspace owns a wildcard domain, so every
- * `Prisma.RoutingUrl` under it serves without a `TXT` record of its own.
+ * `Prisma.RoutingUrl` under it can serve without a `TXT` record of its own. A
+ * RoutingUrl with `dns` still publishes its own `TXT`, which does no harm.
  *
  * A RoutingUrl needs no domain ownership declared: Prisma creates one for its
  * exact hostname. Declare this resource to prove a wildcard such as

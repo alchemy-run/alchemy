@@ -8,7 +8,7 @@ import * as Result from "effect/Result";
 import {
   AuthoritativeRecordCheck,
   type RecordVisibility,
-  type WaitOptions,
+  type CheckOptions,
 } from "../../../prisma/src/internal/AuthoritativeDns.ts";
 import type { ProjectReference } from "../../../prisma/src/internal/DomainOwnership.ts";
 import {
@@ -61,7 +61,7 @@ interface CloudState {
   /** A row the list route does not show yet, as if it appeared mid-deploy. */
   unlisted: WireOwnership | undefined;
   /** The options the record check was last called with. */
-  checkedWith: WaitOptions | undefined;
+  checkedWith: CheckOptions | undefined;
 }
 
 /** One workspace's domain ownerships, served over the Management API routes. */

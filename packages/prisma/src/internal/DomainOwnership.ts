@@ -79,7 +79,6 @@ export const resolveWorkspaceId = (project: ProjectReference) =>
   });
 
 /** Hostnames compare without case or a trailing dot. */
-export const normalizeDomain = (domain: string) => domain.trim().replace(/\.$/, "").toLowerCase();
 
 /**
  * A create whose response was lost and is retried answers 200 for the row

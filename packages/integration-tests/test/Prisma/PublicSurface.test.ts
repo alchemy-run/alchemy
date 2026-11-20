@@ -130,6 +130,7 @@ const publicExports = [
   "RoutingUrlQuotaExceeded",
   "RoutingUrlLogicalIdTaken",
   "RoutingUrlHostnameTaken",
+  "RoutingUrlInvalidProps",
   "RoutingUrlInvalidHostname",
   "RoutingUrlServiceNotOnABranch",
   "RoutingUrlServiceOnAnotherBranch",

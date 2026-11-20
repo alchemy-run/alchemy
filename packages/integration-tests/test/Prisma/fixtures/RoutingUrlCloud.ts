@@ -15,8 +15,8 @@ import {
   type RecordVisibility,
   SwitchboardDnsCheck,
   type SwitchboardDnsVisibility,
-  type SwitchboardWaitOptions,
-  type WaitOptions,
+  type SwitchboardCheckOptions,
+  type CheckOptions,
 } from "../../../../prisma/src/internal/AuthoritativeDns.ts";
 import {
   data,
@@ -49,7 +49,7 @@ export const service = (id: string) => ({
   name: id,
   region: { id: "us-east-1", name: "us-east-1" },
   projectId: "proj-1",
-  branchId: "br-1",
+  branchId: id === "svc-no-branch" ? null : "br-1",
   latestDeploymentId: null,
   appEndpointDomain: id === "svc-no-endpoint" ? "" : `${id}.us-east-1.prisma.build`,
   createdAt: WIRE_CREATED_AT,
@@ -155,7 +155,7 @@ export interface CloudState {
   /** What the authoritative nameservers show for the new hostname's switchboard DNS. */
   dns: SwitchboardDnsVisibility;
   /** What the switchboard DNS check was asked. */
-  checked: Array<[ExpectedSwitchboardDns, SwitchboardWaitOptions]>;
+  checked: Array<[ExpectedSwitchboardDns, SwitchboardCheckOptions]>;
   /** Status of the workspace's domain ownership for the new hostname, if any. */
   ownership: "verified" | "unverified" | undefined;
   /** Whether that domain ownership is for the exact hostname or its wildcard. */
@@ -169,7 +169,9 @@ export interface CloudState {
   /** The TXT records the ownership check was asked about. */
   txtChecked: ExpectedRecord[];
   /** Whether each TXT check waited for the record. */
-  txtAttempts: Array<WaitOptions["attempts"]>;
+  txtAttempts: Array<CheckOptions["attempts"]>;
+  /** The options each TXT check was called with. */
+  txtOptions: CheckOptions[];
   /** The DNS host's records when Prisma received a PATCH. */
   zoneAtPatch: DNS.DnsRecord[] | undefined;
 }
@@ -181,6 +183,8 @@ export interface Zone {
   removed: DNS.DnsRecord[];
   /** How many times the DNS host was asked to publish. */
   publishes: number;
+  /** The host options each alias and record set was declared with. */
+  options: Array<{ method: "alias" | "records"; options: DNS.DnsZone["options"] }>;
 }
 
 export const sameRecord = (a: DNS.DnsRecord) => (b: DNS.DnsRecord) =>
@@ -189,7 +193,7 @@ export const sameRecord = (a: DNS.DnsRecord) => (b: DNS.DnsRecord) =>
 export const makeUrlCloud = () => {
   const rows = new Map<string, WireRoutingUrl>();
   const domains = new Map<string, WireCustomDomain>();
-  const zone: Zone = { records: [], removed: [], publishes: 0 };
+  const zone: Zone = { records: [], removed: [], publishes: 0, options: [] };
   const state: CloudState = {
     dns: { visibility: "absent", cname: "absent" },
     checked: [],
@@ -200,6 +204,7 @@ export const makeUrlCloud = () => {
     txt: undefined,
     txtChecked: [],
     txtAttempts: [],
+    txtOptions: [],
     zoneAtPatch: undefined,
   };
   let next = 0;
@@ -328,7 +333,7 @@ export const makeUrlCloud = () => {
     rows.clear();
     domains.clear();
     next = 0;
-    Object.assign(zone, { records: [], removed: [], publishes: 0 });
+    Object.assign(zone, { records: [], removed: [], publishes: 0, options: [] });
     for (const row of initial) rows.set(row.id, row);
     Object.assign(
       state,
@@ -342,6 +347,7 @@ export const makeUrlCloud = () => {
         txt: undefined,
         txtChecked: [],
         txtAttempts: [],
+        txtOptions: [],
         zoneAtPatch: undefined,
       },
       options,
@@ -452,12 +458,19 @@ export const testDns = (zone: Zone) =>
         }),
     }),
     DNS.adapterLayer<Provider.Provider<DnsRecords> | Provider.Provider<DnsAlias>>(TEST_DNS.type, {
-      alias: (id, { name, target }) =>
+      alias: (id, { name, target, options }) =>
         "hostname" in target && target.hostname !== undefined
-          ? DnsAlias(`${id}-CNAME`, { name, value: target.hostname })
+          ? Effect.suspend(() => {
+              zone.options.push({ method: "alias", options });
+              return DnsAlias(`${id}-CNAME`, { name, value: target.hostname });
+            })
           : Effect.die("unexpected address alias"),
       aliasSet: () => Effect.die("unexpected aliasSet"),
-      records: (id, { records }) => DnsRecords(id, { records }),
+      records: (id, { records, options }) =>
+        Effect.suspend(() => {
+          zone.options.push({ method: "records", options });
+          return DnsRecords(id, { records });
+        }),
     }),
   );
 
@@ -481,6 +494,7 @@ export const testFor = (cloud: UrlCloud, options: { dev?: boolean } = {}) =>
           Effect.sync(() => {
             cloud.state.txtChecked.push(expected);
             cloud.state.txtAttempts.push(options.attempts);
+            cloud.state.txtOptions.push(options);
             return cloud.txtSeen(expected);
           }),
         ),

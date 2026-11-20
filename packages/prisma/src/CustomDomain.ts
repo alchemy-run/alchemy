@@ -22,9 +22,10 @@ import type { DomainOwnership } from "./DomainOwnership.ts";
 import { AuthoritativeRecordCheck } from "./internal/AuthoritativeDns.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
 import { ownershipRequiredOf, withoutRetriedCreate } from "./internal/DomainOwnership.ts";
+import { normalizeHostname, sameHostname } from "./internal/Hostname.ts";
 import { PrismaPaginationError } from "./internal/Pagination.ts";
 import { concreteIdOf, concreteIdsChanged, isInputObject, isPrismaDevId } from "./internal/Refs.ts";
-import { hostnameManagedByRoutingUrl } from "./internal/RoutingUrlTakeover.ts";
+import { hostnameHasLogicalId } from "./internal/RoutingUrl.ts";
 import type { Providers } from "./Providers.ts";
 
 /** A custom domain as the Management API returns it. */
@@ -129,12 +130,11 @@ export interface CustomDomain extends Resource<
  * Prisma verifies the hostname's `CNAME` to the app's regional switchboard
  * (`switchboard.{region}.prisma.build`, listed in `dnsRecords`) when the
  * domain is created, so publish it first. Prisma also requires the workspace
- * to own the hostname (`Prisma.DomainOwnership`, exact or wildcard); until it
- * does, the deploy fails with `PrismaDomainOwnershipRequired`, whose
- * `recordName` and `recordValue` name the record to publish. Creation then
- * starts asynchronous
- * certificate provisioning; inspect `status`, `foundryStatus`, and
- * `failureReason` before routing production traffic.
+ * to own the hostname; until it does, the deploy fails with
+ * `PrismaDomainOwnershipRequired`, whose `recordName` and `recordValue` name
+ * the record to publish. Creation then starts asynchronous certificate
+ * provisioning; inspect `status`, `foundryStatus`, and `failureReason` before
+ * routing production traffic.
  *
  * App and hostname changes are intentionally rejected because the Management
  * API cannot replace a live domain atomically. Create a second resource,
@@ -153,21 +153,6 @@ export interface CustomDomain extends Resource<
  * const domain = yield* Prisma.CustomDomain("api-domain", {
  *   app: api.appId,
  *   hostname: "api.example.com",
- * });
- * ```
- *
- * ### Proving Ownership of a Hostname
- * **Example:** Attach hostnames under a wildcard the workspace owns
- * ```typescript
- * const ownership = yield* Prisma.DomainOwnership("example.com", {
- *   project,
- *   domain: "*.example.com",
- *   dns: Cloudflare.DNS.Adapter(),
- * });
- * const domain = yield* Prisma.CustomDomain("api-domain", {
- *   app: api,
- *   hostname: "api.example.com",
- *   ownership,
  * });
  * ```
  *
@@ -192,11 +177,6 @@ const attrsFrom = (domain: ApiCustomDomain): CustomDomain["Attributes"] => ({
   createdAt: domain.createdAt,
   updatedAt: domain.updatedAt,
 });
-
-const normalizeHostname = (hostname: string) => hostname.trim().replace(/\.$/, "").toLowerCase();
-
-const sameHostname = (left: string, right: string) =>
-  normalizeHostname(left) === normalizeHostname(right);
 
 export class PrismaCustomDomainAdoptionRequired extends Data.TaggedError(
   "PrismaCustomDomainAdoptionRequired",
@@ -404,7 +384,7 @@ const ProviderLive = () =>
           // Alchemy deletes removed resources after every create and update, so a
           // RoutingUrl that took this row over in the same deploy has already
           // written its logicalId.
-          if (hostnameManagedByRoutingUrl(urls, output.hostname)) return;
+          if (hostnameHasLogicalId(urls, output.hostname)) return;
           yield* deleteDomain({ domainId: customDomainId }).pipe(
             Effect.catchTag("NotFound", () => Effect.void),
           );

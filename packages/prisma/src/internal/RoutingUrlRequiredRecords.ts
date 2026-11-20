@@ -8,34 +8,16 @@ import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import type { App } from "../App.ts";
-import type { Compute } from "../Compute.ts";
 import type { Providers } from "../Providers.ts";
+import { normalizeHostname } from "./Hostname.ts";
+import {
+  type AppReference,
+  notOnABranch,
+  resolveServiceId,
+  RoutingUrlOperationFailed,
+} from "./RoutingUrl.ts";
 import { switchboardTarget } from "./Switchboard.ts";
-
-export class RoutingUrlOperationFailed extends Data.TaggedError("RoutingUrlOperationFailed")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
-
-export type AppReference = string | App | Compute;
-
-export const normalizeHostname = (hostname: string) =>
-  hostname.trim().replace(/\.$/, "").toLowerCase();
-
-export const appIdValue = (app: AppReference | undefined) =>
-  typeof app === "string" ? app : app?.appId;
-
-export const resolveServiceId = (app: AppReference) => {
-  const value = appIdValue(app);
-  return typeof value === "string"
-    ? Effect.succeed(value)
-    : Effect.fail(
-        new RoutingUrlOperationFailed({ message: "Unable to resolve the Prisma app id." }),
-      );
-};
 
 export interface RoutingUrlRequiredRecordsProps {
   /** App ID or Compute output whose service the hostname serves. */
@@ -49,9 +31,10 @@ export interface RoutingUrlRequiredRecordsProps {
  * the workspace's verification value and the `CNAME` to the app's regional
  * switchboard, read from Prisma. A RoutingUrl's `records` lists only those
  * still to publish, so it cannot drive a DNS host. It reads the same
- * verification endpoint as `Prisma.DomainVerification`, and also the app's
- * switchboard, from inside the provider so an app id from any source works.
- * It creates nothing in Prisma, so deleting it does nothing.
+ * verification endpoint `Prisma.DomainOwnership` reads, and the app's
+ * switchboard, during the deploy, so `app` can be another resource's output.
+ * It refuses a service on no Branch before anything is published. It creates
+ * nothing in Prisma, so deleting it does nothing.
  */
 export interface RoutingUrlRequiredRecords extends Resource<
   "Prisma.RoutingUrlRequiredRecords",
@@ -98,6 +81,7 @@ export const RoutingUrlRequiredRecordsProvider = () =>
         reconcile: Effect.fn(function* ({ news }) {
           const serviceId = yield* resolveServiceId(news.app);
           const service = (yield* getService({ serviceId })).data;
+          if (service.branchId === null) return yield* notOnABranch(serviceId);
           if (!service.appEndpointDomain) {
             return yield* new RoutingUrlOperationFailed({
               message: `Prisma app '${serviceId}' has no endpoint domain, so '${news.hostname}' has no switchboard to point at; nothing was published.`,

@@ -41,7 +41,7 @@ export interface SwitchboardDnsVisibility {
  */
 export type NameserverSearch = "parent" | "name";
 
-export interface WaitOptions {
+export interface CheckOptions {
   /**
    * `if-unseen` skips the margin when the first check already sees the
    * record, i.e. it was published before this deploy reached it.
@@ -54,7 +54,7 @@ export interface WaitOptions {
   readonly serversOf?: string;
 }
 
-export interface SwitchboardWaitOptions extends WaitOptions {
+export interface SwitchboardCheckOptions extends CheckOptions {
   readonly attempts: "until-seen" | "once";
 }
 
@@ -224,8 +224,8 @@ const authoritativeServers = (dns: DnsLookups, name: string, search: NameserverS
 const waitUntilVisible = <A>(
   check: Effect.Effect<A>,
   visibilityOf: (answer: A) => RecordVisibility,
-  margin: WaitOptions["margin"],
-  attempts: SwitchboardWaitOptions["attempts"] = "until-seen",
+  margin: CheckOptions["margin"],
+  attempts: SwitchboardCheckOptions["attempts"] = "until-seen",
 ) =>
   Effect.gen(function* () {
     const first = yield* check;
@@ -245,10 +245,13 @@ const waitUntilVisible = <A>(
     return last;
   });
 
-/** Wait until every authoritative nameserver for `record.name` returns the record. */
+/**
+ * Whether every authoritative nameserver for `record.name` returns the record,
+ * waiting for it when `attempts` is `until-seen`.
+ */
 export const checkAuthoritativeRecord = (
   record: ExpectedRecord,
-  options: WaitOptions,
+  options: CheckOptions,
 ): Effect.Effect<RecordVisibility> =>
   Effect.gen(function* () {
     const dns = yield* DnsLookups;
@@ -280,13 +283,14 @@ export const checkAuthoritativeRecord = (
   });
 
 /**
- * Wait until every authoritative nameserver for `expected.name` shows it
+ * Whether every authoritative nameserver for `expected.name` shows it
  * pointing at the switchboard: a CNAME to it, or, with no CNAME, A or AAAA
- * answers that include an address of the switchboard.
+ * answers that include an address of the switchboard. Waits for it when
+ * `attempts` is `until-seen`.
  */
 export const checkSwitchboardDns = (
   expected: ExpectedSwitchboardDns,
-  options: SwitchboardWaitOptions,
+  options: SwitchboardCheckOptions,
 ): Effect.Effect<SwitchboardDnsVisibility> =>
   Effect.gen(function* () {
     const unknown = { visibility: "unknown", cname: "unknown" } as const;

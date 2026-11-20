@@ -5,9 +5,14 @@ import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import type { ResourceLike } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { Compute } from "../Compute.ts";
-import { RoutingUrl, type RoutingUrlInvalidHostname } from "../RoutingUrl.ts";
+import {
+  RoutingUrl,
+  type RoutingUrlInvalidHostname,
+  type RoutingUrlInvalidProps,
+} from "../RoutingUrl.ts";
 import type { WebsiteDomain } from "../Website/FrameworkSite.ts";
-import { cnameTarget, normalizeHostname, requiredRecords } from "./RoutingUrlRequiredRecords.ts";
+import { normalizeHostname } from "./Hostname.ts";
+import { cnameTarget, requiredRecords } from "./RoutingUrlRequiredRecords.ts";
 
 /** Id of the RoutingUrl a site declares for its custom hostname. */
 export const WEBSITE_ROUTING_URL_ID = "Url";
@@ -18,11 +23,20 @@ export const RELEASED_ALIAS_ID = "DomainAlias";
 /** Id of the custom domain resource releases before RoutingUrl declared for a site. */
 export const RELEASED_CUSTOM_DOMAIN_ID = "Domain";
 
-/** A hostname a RoutingUrl cannot serve is invalid configuration, raised while the stack is built, as `DNS.resolve` does. */
+/**
+ * A site's hostname that a RoutingUrl cannot take is a mistake in the site's
+ * configuration, so it stops the deploy as a defect while the stack is built,
+ * as `DNS.resolve` does for a bad DNS configuration.
+ */
 const invalidConfiguration = <A, R>(
-  effect: Effect.Effect<A, RoutingUrlInvalidHostname, R>,
+  effect: Effect.Effect<A, RoutingUrlInvalidHostname | RoutingUrlInvalidProps, R>,
 ): Effect.Effect<A, never, R> =>
-  effect.pipe(Effect.catchTag("RoutingUrlInvalidHostname", (error) => Effect.die(error)));
+  effect.pipe(
+    Effect.catchTags({
+      RoutingUrlInvalidHostname: (error) => Effect.die(error),
+      RoutingUrlInvalidProps: (error) => Effect.die(error),
+    }),
+  );
 
 /** The site's custom hostname: a RoutingUrl, with its records published through `domain.dns`. */
 export const websiteDomain = Effect.fn(function* (domain: WebsiteDomain, compute: Compute) {
@@ -44,6 +58,9 @@ export const websiteDomain = Effect.fn(function* (domain: WebsiteDomain, compute
   // Sites deployed before this release published their CNAME through this
   // alias, so it stays declared to keep that record through their upgrade,
   // and can be removed once they have all redeployed with this release.
+  // Adopted, because on Cloudflare the record set has already published this
+  // CNAME and the alias would otherwise refuse it as someone else's; retained,
+  // so only the record set ever deletes the CNAME.
   const { proxied: _proxied, ...options } = dns.options ?? {};
   yield* (yield* DNS.resolve({ ...dns, options }))
     .alias(RELEASED_ALIAS_ID, {

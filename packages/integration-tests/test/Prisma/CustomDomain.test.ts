@@ -9,7 +9,7 @@ import * as Result from "effect/Result";
 import {
   AuthoritativeRecordCheck,
   type ExpectedRecord,
-  type WaitOptions,
+  type CheckOptions,
 } from "../../../prisma/src/internal/AuthoritativeDns.ts";
 import {
   data,
@@ -51,7 +51,7 @@ const fake = makeFakeManagementApi((request) => {
   return unhandled(request);
 });
 
-const checked: Array<[ExpectedRecord, WaitOptions]> = [];
+const checked: Array<[ExpectedRecord, CheckOptions]> = [];
 
 class TestPrismaProviders extends Provider.ProviderCollection<TestPrismaProviders>()("Prisma") {}
 
