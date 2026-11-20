@@ -3,9 +3,34 @@ title: Backend
 description: Run one self-hosted Convex backend on AWS, with its own network, buckets and TLS.
 ---
 
+import Tree from "../../../../components/diagrams/Tree.astro";
+
 `Convex.Backend` runs the open-source Convex backend as one Fargate task behind a load balancer. Import it from `@alchemy.run/convex/aws`, whose `providers()` already include AWS.
 
 You need a Route 53 hosted zone for the domain in the same account. Deploying needs no Docker: Alchemy computes the admin key itself, and the task pulls the image from its registry.
+
+<Tree
+  nodes={[
+    { id: "zone", label: "example.com", type: "Route 53 zone", dashed: true, icon: "globe", areas: ["cloud", "site"], phoneAreas: ["cloud", "site"] },
+    { id: "cloud", label: "cloud.example.com", type: "client API", parent: "zone", icon: "link" },
+    { id: "site", label: "site.example.com", type: "HTTP actions", parent: "zone", icon: "link" },
+    { id: "vpc", label: "Network", type: "VPC", dashed: true, icon: "network", areas: ["alb alb", "task db"], phoneAreas: ["alb", "task", "db"], colGap: 3 },
+    { id: "alb", label: "LoadBalancer", type: "ALB · TLS", parent: "vpc", icon: "split" },
+    { id: "task", label: "Backend", type: "Fargate task", parent: "vpc", tone: "accent", icon: "server" },
+    { id: "db", label: "Database", type: "RDS Postgres", parent: "vpc", icon: "brand:postgresql" },
+    { id: "buckets", label: "5 buckets", type: "S3 · files, modules, …", icon: "archive" },
+  ]}
+  areas={["zone vpc", "buckets vpc"]}
+  phoneAreas={["zone", "vpc", "buckets"]}
+  colGap={3.5}
+  links={[
+    { from: "zone", to: "alb", label: "points at" },
+    { from: "alb", to: "task", label: "forwards" },
+    { from: "task", to: "db", label: "stores" },
+    { from: "task", to: "buckets", label: "files" },
+  ]}
+  caption="Both hosts point at the load balancer, which ends TLS and forwards to the backend's one Fargate task. The task keeps documents in its database and files, pushed modules and exports in S3."
+/>
 
 ## Deploy a backend
 

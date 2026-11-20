@@ -1715,17 +1715,24 @@ export default defineConfig({
           label: "Convex",
           items: [
             { label: "Overview", link: "/convex" },
+            { label: "What is Convex?", link: "/convex/what-is-convex" },
             { label: "Setup", link: "/convex/setup" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "convex/tutorial" } }],
             },
             {
+              label: "Accounts & access",
+              items: [
+                { label: "Teams and tokens", link: "/convex/teams-and-tokens" },
+                { label: "Deploy keys", link: "/convex/deployments/deploy-keys" },
+              ],
+            },
+            {
               label: "Deployments",
               items: [
                 { label: "Projects", link: "/convex/deployments/projects" },
                 { label: "Deployments", link: "/convex/deployments/deployments" },
-                { label: "Deploy keys", link: "/convex/deployments/deploy-keys" },
                 { label: "Custom domains", link: "/convex/deployments/custom-domains" },
                 { label: "Canonical URLs", link: "/convex/deployments/canonical-urls" },
                 { label: "Usage limits", link: "/convex/deployments/usage-limits" },
@@ -1734,14 +1741,15 @@ export default defineConfig({
             {
               label: "Functions",
               items: [
-                { label: "Push functions", link: "/convex/functions/functions" },
+                { label: "Tables", link: "/convex/functions/tables" },
                 {
-                  label: "Write functions with Effect",
-                  link: "/convex/functions/effect-functions",
+                  label: "Queries, mutations and actions",
+                  link: "/convex/functions/queries-mutations-actions",
                 },
+                { label: "Push functions", link: "/convex/functions/functions" },
                 { label: "Environment variables", link: "/convex/functions/environment-variables" },
-                { label: "Connect", link: "/convex/functions/connect" },
                 { label: "Calling functions", link: "/convex/functions/calling-functions" },
+                { label: "Connect", link: "/convex/functions/connect" },
               ],
             },
             {

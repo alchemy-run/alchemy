@@ -5,17 +5,19 @@ sidebar:
   order: 2
 ---
 
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
 You have a deployment with functions in it. Now add a Worker that calls them.
 
 ## Bind a query
 
-```typescript
-// src/Api.ts
+```typescript title="src/Api.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Convex from "@alchemy.run/convex";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Backend } from "./Backend.ts";
+import { ListMessages } from "./messages.ts";
 
 export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
@@ -25,14 +27,14 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
     return {
       fetch: Effect.gen(function* () {
-        return yield* HttpServerResponse.json(yield* list("messages:list"));
+        return yield* HttpServerResponse.json(yield* list(ListMessages, {}));
       }).pipe(Effect.orDie),
     };
   }).pipe(Effect.provide(Convex.RunQueryHttp)),
 ) {}
 ```
 
-`Convex.RunQuery` grants nothing: the Worker gets the deployment's URL, and public functions need no credentials.
+`list` takes the declaration from part 1, so its arguments and result are typed. `Convex.RunQuery` grants nothing: the Worker gets the deployment's URL, and public functions need no credentials.
 
 ## Bind a mutation
 
@@ -40,6 +42,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
 // src/Api.ts
 +import { HttpServerRequest } from "effect/http/HttpServerRequest";
 +import * as Layer from "effect/Layer";
+-import { ListMessages } from "./messages.ts";
++import { AddMessage, ListMessages } from "./messages.ts";
 
   Effect.gen(function* () {
     const list = yield* Convex.RunQuery(Backend);
@@ -49,9 +53,9 @@ export default class Api extends Cloudflare.Worker<Api>()(
       fetch: Effect.gen(function* () {
 +        const request = yield* HttpServerRequest;
 +        if (request.method === "POST") {
-+          yield* add("messages:add", { body: yield* request.text });
++          yield* add(AddMessage, { body: yield* request.text });
 +        }
-        return yield* HttpServerResponse.json(yield* list("messages:list"));
+        return yield* HttpServerResponse.json(yield* list(ListMessages, {}));
       }).pipe(Effect.orDie),
     };
 -  }).pipe(Effect.provide(Convex.RunQueryHttp)),
@@ -62,8 +66,7 @@ export default class Api extends Cloudflare.Worker<Api>()(
 
 ## Add the Worker to your Stack
 
-```typescript
-// alchemy.run.ts
+```typescript title="alchemy.run.ts"
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Convex from "@alchemy.run/convex";
 import * as Alchemy from "alchemy";
@@ -89,9 +92,7 @@ export default Alchemy.Stack(
 
 ## Deploy and try it
 
-```sh
-bun alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Post a message to the Worker's URL:
 

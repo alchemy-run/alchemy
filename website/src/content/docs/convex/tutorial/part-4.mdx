@@ -5,13 +5,13 @@ sidebar:
   order: 4
 ---
 
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
 A stage is a separate copy of your Stack. With Convex, each one gets its own data.
 
 ## Deploy a second stage
 
-```sh
-bun alchemy deploy --stage pr-42
-```
+<PackageManagers run="alchemy deploy --stage pr-42" />
 
 `type: "preview"` makes one deployment per stage, named after the stage. `pr-42` starts with no data.
 
@@ -43,6 +43,4 @@ A prod deployment has `deletionProtection` on, so `alchemy destroy` fails rather
 
 ## Remove a stage
 
-```sh
-bun alchemy destroy --stage pr-42
-```
+<PackageManagers run="alchemy destroy --stage pr-42" />

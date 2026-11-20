@@ -3,7 +3,21 @@ title: Deployments
 description: Create prod, dev and preview deployments, move them between projects, and pause them.
 ---
 
-A deployment is one database and set of functions.
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+A **deployment** is one running Convex backend: a database, the functions pushed to it, file storage and a scheduler. It belongs to a project, lives in one region, and has its own URL. Deployments share nothing, so two stages that each have one never see each other's data.
+
+There are three types. **Prod** holds your real data. **Dev** is one developer's copy. **Preview** is made for a branch or a pull request, and Convex removes it after a while.
+
+<Tree
+  nodes={[
+    { id: "project", label: "my-app", type: "project", icon: "folder", areas: ["prod sam pr"], colGap: 0.75 },
+    { id: "prod", label: "prod", type: "prod deployment", parent: "project", tone: "accent", icon: "server", specs: [["stage", "prod"], ["protected", "yes"]] },
+    { id: "sam", label: "dev_sam", type: "preview deployment", parent: "project", icon: "server", specs: [["stage", "dev_sam"], ["protected", "no"]] },
+    { id: "pr", label: "pr-42", type: "preview deployment", parent: "project", icon: "server", specs: [["stage", "pr-42"], ["protected", "no"]] },
+  ]}
+  caption="One Deployment resource gives every stage its own deployment. Prod is deletion-protected; each preview is named after its stage and has its own data."
+/>
 
 ## Create a deployment
 

@@ -130,6 +130,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Workflows: l("workflow"),
   Containers: l("container"),
   Observability: l("activity"),
+  "Self-hosted": l("server-cog"),
   Networking: l("globe"),
   Guides: l("map"),
   Resources: l("boxes"),
