@@ -23,6 +23,7 @@ const packages = [
   "axiom",
   "doppler",
   "infisical",
+  "1password",
   "turso",
   "convex",
   "e2b",

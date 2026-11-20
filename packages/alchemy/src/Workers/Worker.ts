@@ -26,7 +26,7 @@ import {
   type RpcErrorEnvelope,
   type RpcStreamEnvelope,
 } from "../Rpc.ts";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "../Runtime.ts";
+import { makeEntrypointLayer, runtimeConfigProvider } from "../Runtime.ts";
 import type { BaseRuntimeContext } from "../RuntimeContext.ts";
 import { Self } from "../Self.ts";
 import { StackContext } from "../StackContext.ts";
@@ -142,13 +142,8 @@ export const getSharedBuild = (
           Layer.provideMerge(
             Layer.succeed(
               ConfigProvider.ConfigProvider,
-              ConfigProvider.orElse(
-                ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-                // Auto-bound `Config` values arrive in `env` as
-                // `{"_tag":"Redacted","value":...}` markers; reify them so a
-                // `Config` re-read inside a request handler decodes the raw
-                // source value instead of the marker JSON.
-                reifyBoundConfigProvider(ConfigProvider.fromUnknown(env), env),
+              runtimeConfigProvider(
+                ConfigProvider.fromUnknown(env, { preserveEmptyStrings: true }),
               ),
             ),
           ),

@@ -8,7 +8,7 @@ import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import { type ServerHost } from "alchemy/Runtime/Process";
-import { packEnvValue } from "alchemy/RuntimeContext";
+import { envStrings } from "alchemy/RuntimeContext";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -956,9 +956,7 @@ export const FunctionProvider = () =>
         ...news.serviceConfig,
         serviceAccountEmail: serviceAccount,
         environmentVariables: {
-          ...Object.fromEntries(
-            Object.entries(runtimeEnv).map(([key, value]) => [key, packEnvValue(value)]),
-          ),
+          ...envStrings(runtimeEnv),
           ...news.serviceConfig?.environmentVariables,
         },
       };

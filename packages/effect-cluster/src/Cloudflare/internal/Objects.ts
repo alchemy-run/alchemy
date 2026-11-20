@@ -10,7 +10,11 @@
  */
 import * as Cloudflare from "@alchemy.run/cloudflare/Workers";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import { makeDurableObjectEngine, type ObjectImpl } from "alchemy/Workers/DurableObjectEngine";
+import {
+  makeDurableObjectEngine,
+  type ObjectImpl,
+  provideCallbacks,
+} from "alchemy/Workers/DurableObjectEngine";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
@@ -137,7 +141,9 @@ export const WorkflowObject = Cloudflare.DurableObject<Record<string, never>>()(
           new NotHosted({ message: `This Worker hosts no Cluster.Workflow '${className}'.` }),
         );
       }
-      const object = yield* impl.pipe(Effect.provideService(Cloudflare.DurableObjectState, state));
+      const object = yield* provideCallbacks(impl, Cloudflare.DurableObjectCallbacks).pipe(
+        Effect.provideService(Cloudflare.DurableObjectState, state),
+      );
       return (yield* object.pipe(
         Effect.provideService(Cloudflare.DurableObjectState, state),
       )) as Record<string, never>;

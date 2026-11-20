@@ -63,8 +63,9 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   "AWS Nitro": b("aws"),
   Prisma: b("prisma"),
   DigitalOcean: b("digitalocean"),
-  // Brand-colored prism for marketing surfaces.
+  // Brand-colored marks for marketing surfaces.
   PrismaColor: b("prisma-color"),
+  ModalColor: b("modal-color"),
   Axiom: b("axiom"),
   "Better Auth": b("betterauth"),
   GitHub: b("github"),

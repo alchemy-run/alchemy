@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import { Activity } from "effect/workflow";
+import { latencyAggregates, latencyViews } from "./latency-model.ts";
 
 export class Incremented extends Domain.Event("Incremented", { by: Schema.Int }) {}
 export class TooBig extends Domain.Rejection("TooBig", { max: Schema.Int }) {}
@@ -268,9 +269,9 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
 );
 
 export class Conformance extends Domain.Model("Conformance", {
-  aggregates: [Counter, Echo, Hold],
+  aggregates: [Counter, Echo, Hold, ...latencyAggregates],
   decisions: [Giving],
-  views: [CounterTotal, HiddenTotal],
+  views: [CounterTotal, HiddenTotal, ...latencyViews],
   projections: [TotalWriter],
   streams: [Recorded],
   policies: [StartMirror, HoldDeadline],
@@ -282,6 +283,13 @@ export class ConformanceApi extends Domain.Api("ConformanceApi", {
   model: Conformance,
   commands: ["Increment", "Explode", "Give"],
   views: ["CounterTotal", "HiddenTotal"],
+}) {}
+
+/** What the latency benchmark sends and reads: see `latency-model.ts`. */
+export class LatencyApi extends Domain.Api("LatencyApi", {
+  model: Conformance,
+  commands: ["Increment", "TickBare", "TickOne", "TickFour", "TickChain", "TickShared"],
+  views: ["CounterTotal", "OneView", "ChainSecond", "SharedByGroup"],
 }) {}
 
 /** The model's Layer, given the platform it runs on. */
