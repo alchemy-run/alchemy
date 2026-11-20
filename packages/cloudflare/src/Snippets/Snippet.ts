@@ -264,23 +264,25 @@ export const SnippetProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      yield* snippets
-        .deleteSnippet({
-          zoneId: output.zoneId,
-          snippetName: output.name,
-        })
-        // A snippet can only be deleted once no snippet rule references it.
-        // The engine deletes referencing `SnippetRules` first (dependency
-        // edge via `snippetName`), but the rule removal is eventually
-        // consistent — Cloudflare may still report `snippet is still used`
-        // for a short window. Bounded-retry that lag before giving up.
-        .pipe(
-          Effect.retry({
-            while: (e) => e._tag === "SnippetInUse",
-            schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
-          }),
-          Effect.catchTag("SnippetNotFound", () => Effect.void),
-        );
+      yield* (
+        snippets
+          .deleteSnippet({
+            zoneId: output.zoneId,
+            snippetName: output.name,
+          })
+          // A snippet can only be deleted once no snippet rule references it.
+          // The engine deletes referencing `SnippetRules` first (dependency
+          // edge via `snippetName`), but the rule removal is eventually
+          // consistent — Cloudflare may still report `snippet is still used`
+          // for a short window. Bounded-retry that lag before giving up.
+          .pipe(
+            Effect.retry({
+              while: (e) => e._tag === "SnippetInUse",
+              schedule: Schedule.max([Schedule.exponential("1 second"), Schedule.recurs(8)]),
+            }),
+            Effect.catchTag("SnippetNotFound", () => Effect.void),
+          )
+      );
     }),
   });
 

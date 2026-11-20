@@ -167,6 +167,15 @@ export interface Members<
   readonly eventually?: {
     readonly [name: string]: (model: Instances<A> & Keys<V> & Fed<J>) => boolean;
   };
+  /**
+   * What must be able to happen. Every other rule says what the model never
+   * does, and a model that refuses every command keeps them all. Each of
+   * these is named and given what an invariant is, and `Verify.model` looks
+   * for a sequence of commands that makes it true: it fails when none does.
+   */
+  readonly sometimes?: {
+    readonly [name: string]: (model: Instances<A> & Keys<V> & Fed<J>) => boolean;
+  };
 }
 
 /**
@@ -234,6 +243,8 @@ export interface ModelClass<
   readonly invariants: { readonly [name: string]: (model: never) => boolean };
   /** What holds once everything has run its course, by name. */
   readonly eventually: { readonly [name: string]: (model: never) => boolean };
+  /** What must be able to happen, by name. */
+  readonly sometimes: { readonly [name: string]: (model: never) => boolean };
   /** The model's relations, by name. */
   readonly relations: { readonly [name: string]: Relation.Any };
   readonly definitions: Kernel.Definitions;
@@ -436,6 +447,25 @@ type HandledBy<
  * );
  * ```
  *
+ * ### Checking the declaration
+ * Building the Layer checks the definitions first: a view consuming a source
+ * keyed by another aggregate without `keyOf`, a view with `state` but no
+ * `initial`, a policy listening for an event no source emits, a stream with
+ * two writers, a schema with no JSON form. It dies with a
+ * `Domain.DefinitionError` for each problem, all in one Cause, so a test
+ * that builds the Layer reports every one. Problems that depend on what a
+ * handler returns, such as `decide` returning an event its command does not
+ * declare, surface when the handler runs.
+ *
+ * **Example:** A unit test for the whole Model
+ * ```typescript
+ * import { it } from "@effect/vitest";
+ * import * as Layer from "effect/Layer";
+ * import { BankInMemory } from "./Bank.ts";
+ *
+ * it.effect("the model is well defined", () => Layer.build(BankInMemory));
+ * ```
+ *
  * ### Deciding across aggregates
  * List each `Domain.Decision` in `decisions`. Every command has one
  * implementation, an aggregate or a decision: a second is a type error on
@@ -512,6 +542,9 @@ export const make = <
     static readonly eventually = (members.eventually ?? {}) as {
       readonly [name: string]: (model: never) => boolean;
     };
+    static readonly sometimes = (members.sometimes ?? {}) as {
+      readonly [name: string]: (model: never) => boolean;
+    };
     static readonly relations = members.relations ?? {};
     static readonly aggregates = definitions.aggregates;
     static readonly decisions = decisions;
@@ -548,30 +581,6 @@ export const make = <
     ServableBy<A, V, S, Q, D>
   >;
 };
-
-/**
- * Check a Model's definitions without hosting it: every problem that would
- * otherwise fail its Layer's build, such as a view consuming a source keyed
- * by another aggregate without `keyOf`, a view with `state` but no
- * `initial`, a policy listening for an event no source emits, or a stream
- * with two writers. Returns all of them, in definition order; an empty
- * array means the Model is valid. Problems that depend on what a handler
- * returns, such as `decide` returning an event its command does not
- * declare, still surface when the handler runs.
- *
- * **Example:** A unit test for the whole Model
- * ```typescript
- * import * as Domain from "@alchemy.run/domain";
- * import { expect, it } from "vitest";
- * import { Bank } from "./Bank.model.ts";
- *
- * it("the model is well defined", () => {
- *   expect(Domain.verify(Bank)).toEqual([]);
- * });
- * ```
- */
-export const verify = (model: Any): ReadonlyArray<Kernel.DefinitionError> =>
-  Kernel.verify(model.definitions);
 
 /**
  * Trace one projection batch. A batch merges events from many commits, so it
@@ -767,6 +776,7 @@ const build = <A, E, R>(
           })),
         schedule: () => Effect.die(new Error(`${decision.decisionName} cannot be scheduled`)),
         unschedule: () => Effect.die(new Error(`${decision.decisionName} cannot be scheduled`)),
+        import: () => Effect.die(new Error(`${decision.decisionName} cannot import events`)),
         get: () => Effect.die(new Error(`${decision.decisionName} has no state`)),
       });
     }
@@ -1085,6 +1095,66 @@ const aggregateClient = (
         Effect.withSpan(`Domain.unschedule ${aggregate.aggregateName}`, {
           ...spanOptions(target),
           attributes: { ...spanOptions(target).attributes, "domain.command_id": commandId },
+        }),
+      ),
+    import: (target, events, options) =>
+      Effect.gen(function* () {
+        const id = Aggregate.targetId(target);
+        if (!store.import) {
+          return yield* Effect.die(
+            new Error(`The platform cannot import events into ${aggregate.aggregateName}`),
+          );
+        }
+        const expected = options.expectedVersion ?? 0;
+        const rows = events.map((row) =>
+          "_tag" in row
+            ? { event: row, at: null }
+            : { event: row.event, at: DateTime.toEpochMillis(row.at) },
+        );
+        const at = rows.map((row) => row.at);
+        const result = yield* store.import(
+          id,
+          yield* Effect.forEach(rows, (row) => kernel.encodeEvent(row.event)),
+          {
+            commandId: options.commandId,
+            expectedVersion: expected,
+            ...(at.some((ms) => ms !== null) ? { at } : {}),
+          },
+        );
+        if (result._tag === "UnexpectedVersion") {
+          return yield* new Aggregate.UnexpectedVersion({
+            aggregate: aggregate.aggregateName,
+            id,
+            commandId: options.commandId,
+            expected,
+            version: result.version,
+          });
+        }
+        if (result._tag === "OutOfOrder") {
+          return yield* new Aggregate.ImportOutOfOrder({
+            aggregate: aggregate.aggregateName,
+            id,
+            commandId: options.commandId,
+            index: result.index,
+            at: DateTime.makeUnsafe(result.at),
+            after: DateTime.makeUnsafe(result.after),
+          });
+        }
+        return {
+          stream: result.receipt.stream,
+          version: result.receipt.version,
+          events: yield* Effect.forEach(result.receipt.events, kernel.decodeEvent),
+          reply: undefined,
+          commits: [{ stream: result.receipt.stream, version: result.receipt.version }],
+        };
+      }).pipe(
+        Effect.withSpan(`Domain.import ${aggregate.aggregateName}`, {
+          ...spanOptions(target),
+          attributes: {
+            ...spanOptions(target).attributes,
+            "domain.command_id": options.commandId,
+            "domain.events": events.length,
+          },
         }),
       ),
     get: (target) =>

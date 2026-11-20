@@ -56,10 +56,7 @@ export const CreateSessionHttp = Layer.succeed(
             FetchHttpClient.layer,
           );
 
-    const call = <A, E>(
-      operation: string,
-      effect: Effect.Effect<A, E, DO.DigitalOceanOpContext>,
-    ) =>
+    const call = <A, E>(operation: string, effect: Effect.Effect<A, E, DO.DigitalOceanOpContext>) =>
       layer === undefined
         ? Effect.fail(new SessionError({ operation, cause: "not bound" }))
         : effect.pipe(

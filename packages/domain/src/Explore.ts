@@ -434,6 +434,12 @@ export const undone = (
         out.push(
           `${unruled.map((rule) => `${report.model}.${rule.name}`).join(", ")} ${unruled.length === 1 ? "was" : "were"} not looked at: no sequence that changed a state came to rest`,
         );
+      const unreached = report.sometimes.filter((rule) => !rule.reached);
+      // A search cut short says nothing of what it did not get to: that it was cut is said above.
+      if (unreached.length > 0 && !report.truncated)
+        out.push(
+          `${unreached.map((rule) => `${report.model}.${rule.name}`).join(", ")} ${unreached.length === 1 ? "is" : "are"} never reached: no sequence of up to ${report.depth} ${report.depth === 1 ? "command" : "commands"}${report.walks.count > 0 ? ", and no walk," : ""} gets there`,
+        );
       const unended = report.eventually.filter((rule) => rule.states === 0);
       if (unended.length > 0)
         out.push(
@@ -619,6 +625,18 @@ const renderModel = (report: ModelReport): string => {
     out.push(
       `✗ ${report.model}.${rule.name} does not hold in the end: nothing is left to react or come due after`,
       ...modelLines(rule.broken, "    "),
+    );
+  }
+  for (const rule of report.sometimes) {
+    if (!rule.reached) {
+      out.push(`✗ ${report.model}.${rule.name} is never reached`);
+      continue;
+    }
+    out.push(
+      `✓ ${report.model}.${rule.name} is reached`,
+      ...(rule.reached.length === 0
+        ? ["    in a model with nothing in it"]
+        : modelLines(rule.reached, "    ")),
     );
   }
   const ended = report.endings.filter((ending) => ending.story);

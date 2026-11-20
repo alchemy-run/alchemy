@@ -108,6 +108,11 @@ export class Bank extends Domain.Model("Bank", {
         (transfer) => transfer.state._tag === "Completed" || transfer.state._tag === "Failed",
       ),
   },
+  sometimes: {
+    /** The bank can be used: a customer can end up with money in an account. */
+    AnAccountHoldsMoney: (bank) =>
+      bank.Account.some((account) => account.state._tag === "Open" && account.state.balance > 0),
+  },
 }) {}
 
 /** Who may read each key: the `validate` of every guarded view and stream. */
