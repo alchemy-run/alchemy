@@ -157,11 +157,11 @@ export const decodeEnvelope = (json: EnvelopeJson): Aggregate.Envelope => ({
   correlationId: json.correlationId ?? json.commandId,
 });
 
-/** The structural attributes of a delivery a reaction handles. */
-/** The aggregate event a delivery derives from: its own, unless a view passed it on. */
-const rootOf = (delivery: Delivery): Root =>
+/** The aggregate event a delivery derives from: its own, unless a view passed it on. @internal */
+export const rootOf = (delivery: Delivery): Root =>
   delivery.root ?? { source: delivery.source, seq: delivery.seq };
 
+/** The structural attributes of a delivery a reaction handles. */
 const deliveryAttributes = (delivery: Delivery): Record<string, unknown> => ({
   "domain.source": delivery.source,
   "domain.seq": delivery.seq,

@@ -1597,8 +1597,11 @@ const enterGeneration = (meta: StreamMeta, generation: number): StreamMeta =>
         ...meta,
         generation,
         origin: [0, 0],
-        // Written before roots were recorded: a source's checkpoint is its root for an aggregate.
-        inherited: mergeCheckpoints(meta.inherited ?? {}, meta.roots ?? meta.checkpoints),
+        // An aggregate source's checkpoint is its root too, recorded before roots were.
+        inherited: mergeCheckpoints(
+          mergeCheckpoints(meta.inherited ?? {}, meta.checkpoints),
+          meta.roots ?? {},
+        ),
       }
     : meta;
 

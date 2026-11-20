@@ -902,7 +902,7 @@ const build = <A, E, R>(
                   checkpoints[delivery.source] ?? 0,
                   delivery.seq,
                 );
-                const root = delivery.root ?? { source: delivery.source, seq: delivery.seq };
+                const root = Kernel.rootOf(delivery);
                 roots[root.source] = Math.max(roots[root.source] ?? 0, root.seq);
               }
               const handled = { generation, checkpoints, roots };
