@@ -3,13 +3,16 @@
  * aggregate that rejects, a view, a projection fed by that view, a policy
  * that starts a saga, a saga that writes to another aggregate, a policy that
  * schedules and cancels a command, and a decision that commits across two
- * instances, plus a view that refuses every reader and a command that dies.
+ * instances, plus a view that refuses every reader, a view behind a
+ * middleware whose verdict runs out, and a command that dies.
  * Between them the platform hosts every kind of object, runs its workflow
  * engine and its durable timers, and commits atomically across instances.
  */
 import * as Domain from "@alchemy.run/domain";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import { Activity } from "effect/workflow";
 import { latencyAggregates, latencyViews } from "./latency-model.ts";
@@ -135,6 +138,42 @@ const HiddenTotalLive = HiddenTotal.toLayer(
     }),
   ),
 );
+
+export class Expired extends Domain.Rejection("Expired") {}
+
+/**
+ * A caller's ticket, as a session middleware checks its token: the
+ * `x-ticket` header says how long it holds. `until:<epoch ms>` expires then
+ * (a token's own expiry), and `for:<ms>` holds that long from each check (a
+ * session still signed in, checked again on every connect).
+ */
+export class Ticket extends RpcMiddleware.Service<Ticket>()("Conformance/Ticket", {
+  error: Expired,
+}) {}
+
+export const TicketLive = Layer.succeed(Ticket, (effect, { headers }) =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const [kind, value] = (headers["x-ticket"] ?? "").split(":");
+    const until = kind === "until" ? Number(value) : kind === "for" ? now + Number(value) : NaN;
+    if (!(until > now)) return yield* new Expired();
+    return yield* effect.pipe(Domain.validUntil(until));
+  }),
+);
+
+/** A counter's total for callers with a ticket. */
+export class TicketedTotal extends Domain.View("TicketedTotal", {
+  from: [Counter],
+  key: Counter,
+  middleware: [Ticket],
+  state: Schema.Struct({ total: Schema.Int }),
+  initial: { total: 0 },
+  evolve: {
+    Incremented: (view, event) => ({ total: view.total + event.by }),
+  },
+}) {}
+
+const TicketedTotalLive = TicketedTotal.toLayer(Effect.succeed(() => Effect.void));
 
 export class TotalRecorded extends Domain.Event("TotalRecorded", { total: Schema.Int }) {}
 
@@ -271,18 +310,18 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
 export class Conformance extends Domain.Model("Conformance", {
   aggregates: [Counter, Echo, Hold, ...latencyAggregates],
   decisions: [Giving],
-  views: [CounterTotal, HiddenTotal, ...latencyViews],
+  views: [CounterTotal, HiddenTotal, TicketedTotal, ...latencyViews],
   projections: [TotalWriter],
   streams: [Recorded],
   policies: [StartMirror, HoldDeadline],
   sagas: [MirrorFirst],
 }) {}
 
-/** The model's Api: its counter and view, served at the front's `/api`. */
+/** The model's Api: its counter and views, served at the front's `/api` (with {@link TicketLive}). */
 export class ConformanceApi extends Domain.Api("ConformanceApi", {
   model: Conformance,
   commands: ["Increment", "Explode", "Give"],
-  views: ["CounterTotal", "HiddenTotal"],
+  views: ["CounterTotal", "HiddenTotal", "TicketedTotal"],
 }) {}
 
 /** What the latency benchmark sends and reads: see `latency-model.ts`. */
@@ -299,6 +338,7 @@ export const ConformanceLive = Conformance.layer(
     MirrorFirstLive,
     HoldDeadlineLive,
     HiddenTotalLive,
+    TicketedTotalLive,
     TotalWriterLive,
   ),
 );
