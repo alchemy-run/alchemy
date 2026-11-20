@@ -20,6 +20,7 @@ import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as Types from "effect/Types";
@@ -45,7 +46,7 @@ import { ownedProjects, projectEnvironmentIds, type Project } from "./Project.ts
 import type { Providers } from "./Providers.ts";
 import { mintRpcToken, RPC_TOKEN_ENV } from "./rpc-token.ts";
 import { ensureServiceDomain, type ServiceDomainRecord } from "./ServiceDomain.ts";
-import { readServiceRegion, syncServiceRegion } from "./ServiceRegion.ts";
+import { readServicePlacement, syncServicePlacement } from "./ServiceRegion.ts";
 import { attachVolumeToService } from "./Volume.ts";
 
 const serviceFields = <E>(service: Query<RailwayService, E>) => ({
@@ -186,6 +187,13 @@ export interface FunctionProps<
    */
   region?: string;
   /**
+   * Number of replicas Railway runs, all in one region. Written to
+   * `deploy.multiRegionConfig` with `region`, or in the region the
+   * function is already in when `region` is omitted. Omit this and the
+   * current count is left alone. Must be a whole number of at least 1.
+   */
+  replicas?: number;
+  /**
    * Port published on the generated service domain. Passed as
    * `serviceDomainCreate.targetPort`. Omit to let Railway detect it.
    */
@@ -232,6 +240,12 @@ export type Function<Env extends Record<string, any> = Record<string, any>> = Re
      * `deploy.multiRegionConfig` has replicas in exactly one region.
      */
     region: string | undefined;
+    /**
+     * Replicas Railway places across regions
+     * (`deploy.multiRegionConfig`), falling back to the instance's
+     * `numReplicas` when the placement map is empty.
+     */
+    replicas: number | undefined;
     /** Port published on the generated service domain. */
     port: number | undefined;
     /**
@@ -854,6 +868,7 @@ const toAttrs = (input: {
   codeHash: string;
   rpcToken: string;
   region: string | undefined;
+  replicas: number | undefined;
 }): Function["Attributes"] => ({
   serviceId: input.service.id,
   name: input.service.name,
@@ -864,6 +879,7 @@ const toAttrs = (input: {
   cronSchedule: input.instance?.cronSchedule ?? undefined,
   sleepApplication: input.instance?.sleepApplication ?? undefined,
   region: input.region,
+  replicas: input.replicas ?? input.instance?.numReplicas ?? undefined,
   port: input.port ?? input.domain?.targetPort,
   dnsName: `${input.service.name}.railway.internal`,
   rpcToken: input.rpcToken,
@@ -982,15 +998,12 @@ export const FunctionProvider = () =>
             environmentId ?? environmentIdOf(olds?.project) ?? output?.environmentId ?? "";
           const instance =
             resolvedEnvId.length > 0 ? yield* getInstance(resolvedEnvId, found.id) : undefined;
-          const region =
-            resolvedEnvId.length > 0
-              ? yield* readServiceRegion({
-                  environmentId: resolvedEnvId,
-                  projectId: resolvedProjectId,
-                  serviceId: found.id,
-                  legacy: instance?.region,
-                })
-              : undefined;
+          const placement = yield* readServicePlacement({
+            environmentId: resolvedEnvId,
+            projectId: resolvedProjectId,
+            serviceId: found.id,
+            legacy: instance?.region,
+          });
           const attrs = toAttrs({
             service: found,
             instance,
@@ -1001,7 +1014,8 @@ export const FunctionProvider = () =>
             port: output?.port ?? olds?.port,
             codeHash: output?.code.hash ?? "",
             rpcToken: output?.rpcToken ?? "",
-            region,
+            region: Option.getOrUndefined(placement.region),
+            replicas: Option.getOrUndefined(placement.replicas),
           });
           if (output !== undefined) return attrs;
           return matchesAlchemyPhysicalName(found.name) ? attrs : Unowned(attrs);
@@ -1046,6 +1060,7 @@ export const FunctionProvider = () =>
                           codeHash: "",
                           rpcToken: "",
                           region: instance.region ?? undefined,
+                          replicas: undefined,
                         }),
                       ];
                     }),
@@ -1077,6 +1092,7 @@ export const FunctionProvider = () =>
             cronSchedule: undefined,
             sleepApplication: undefined,
             region: undefined,
+            replicas: undefined,
             port,
             dnsName: `${name}.railway.internal`,
             rpcToken: plainEnvValue(news.rpcToken) ?? "",
@@ -1192,16 +1208,20 @@ export const FunctionProvider = () =>
           // Pin `deploy.multiRegionConfig` before the build, then again after,
           // in case the deploy wrote the workspace default back.
           const serviceId = current.id;
-          const placeRegion = () =>
-            syncServiceRegion({
+          const placeRegion = (deferIfUnknown: boolean) =>
+            syncServicePlacement({
               environmentId,
               projectId,
               serviceId,
               region: props.region,
+              replicas: props.replicas,
               legacy: instance?.region,
               fallbackReplicas: instance?.numReplicas,
+              deferIfUnknown,
             });
-          let region = yield* placeRegion();
+          // A fresh function has no region until its first deploy, so the
+          // first call defers `replicas` and the one after the deploy applies it.
+          let placement = yield* placeRegion(true);
 
           const envChanged = yield* syncEnv({
             projectId,
@@ -1253,7 +1273,7 @@ export const FunctionProvider = () =>
             }
           }
 
-          region = yield* placeRegion();
+          placement = yield* placeRegion(false);
 
           return toAttrs({
             service: current,
@@ -1265,7 +1285,8 @@ export const FunctionProvider = () =>
             port,
             codeHash,
             rpcToken,
-            region,
+            region: Option.getOrUndefined(placement.region),
+            replicas: Option.getOrUndefined(placement.replicas),
           });
         }),
 
