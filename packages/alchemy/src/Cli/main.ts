@@ -213,7 +213,8 @@ const cli = Command.run(root, {
 const alchemyContext = AlchemyContextLive.pipe(
   Layer.provide(
     ConfigProvider.layer(
-      loadConfigProvider(Option.fromNullishOr(envFileArg(argv))).pipe(
+      Option.fromNullishOr(envFileArg(argv)).pipe(
+        loadConfigProvider,
         // A bad `--env-file` is reported by the command that reads it.
         Effect.orElseSucceed(() => ConfigProvider.fromEnv()),
       ),
