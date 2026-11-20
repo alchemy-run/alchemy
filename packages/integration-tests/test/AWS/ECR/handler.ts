@@ -209,7 +209,8 @@ export default EcrTestFunction.make(
         if (request.method === "GET" && pathname === "/layer") {
           const res = yield* getDownloadUrl({ layerDigest: param("digest") });
           return yield* HttpServerResponse.json({
-            hasUrl: (res.downloadUrl ?? "").startsWith("https://"),
+            // AWS answers https; an emulator answers the scheme its registry serves.
+            hasUrl: /^https?:\/\//.test(res.downloadUrl ?? ""),
             layerDigest: res.layerDigest,
           });
         }
