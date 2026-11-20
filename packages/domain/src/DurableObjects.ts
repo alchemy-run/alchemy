@@ -1376,6 +1376,9 @@ const aggregateObject = (
           const at = "at" in due ? due.at : (yield* Clock.currentTimeMillis) + due.afterMillis;
           yield* state.storage.put(`armed:${name}`, { commandId: meta.commandId, at });
           yield* state.storage.put(`scheduled:${name}`, token);
+          // An instance that has only scheduled a command holds data too: it keeps its
+          // key and is listed in the directory, like one that has committed.
+          yield* listAfterCommit(runtime.jobs, id);
           yield* timers.schedule(name, {
             at,
             payload: { id, command, meta, token, name },

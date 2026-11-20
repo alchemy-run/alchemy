@@ -272,6 +272,9 @@ test.provider(
       // a run that waits for its approval across the upgrade
       yield* call(url, "/saga/s-1/kim", "POST");
       yield* poll(url, "/saga/s-1", (body) => (body as any)._tag === "Running");
+      // An account that has only scheduled a command: it has no event, so that code
+      // listed it nowhere and it stored no key.
+      yield* call(url, "/Billing/later/a-7/tom", "POST");
 
       const legacy = yield* namespacesOf(scriptName);
       expect(Object.keys(legacy).sort()).toEqual([
@@ -288,6 +291,8 @@ test.provider(
         legacy["Billing.OwnersView"]!,
       ];
       yield* untilListed(written, (count) => count > 0);
+      // a-1 and a-7
+      yield* untilListed([legacy["Billing.AccountAggregate"]!], (count) => count > 1);
       // An account and its view row written seconds before the upgrade: Cloudflare
       // doesn't list them yet, the model's directory does.
       yield* call(url, "/Billing/open/a-9/zoe", "POST");
@@ -339,6 +344,8 @@ test.provider(
       // written just before the upgrade, and moved though its class is gone
       expect(yield* call(url, "/Billing/state/a-9")).toEqual({ owner: "zoe" });
       expect(yield* call(url, "/Billing/owners/a-9")).toEqual({ owner: "zoe" });
+      // the command scheduled before the upgrade moved with its account: it can be cancelled
+      expect(yield* call(url, "/Billing/cancel/a-7", "POST")).toEqual({ cancel: "Cancelled" });
       expect((yield* call(url, "/saga/s-1")) as any).toMatchObject({ _tag: "Running" });
       // the run started before the upgrade finishes after it
       yield* call(url, "/approve/s-1/lee", "POST");

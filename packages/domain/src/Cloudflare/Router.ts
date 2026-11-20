@@ -406,6 +406,29 @@ export const router = (
   });
 
 /**
+ * The key in a job an aggregate scheduled for itself (a scheduled command, or its
+ * wake-up while a decision holds it): each job's payload carries the instance's id.
+ */
+const scheduledKey = (raw: {
+  readonly sql: { exec: (query: string) => { toArray: () => ReadonlyArray<unknown> } };
+}): string | undefined => {
+  try {
+    const rows = raw.sql
+      .exec(
+        "SELECT payload FROM alchemy_alarm_callbacks WHERE callback IN ('domain:schedule', 'domain:settle') LIMIT 1",
+      )
+      .toArray() as ReadonlyArray<{ readonly payload?: unknown }>;
+    const payload = rows[0]?.payload;
+    if (typeof payload !== "string") return undefined;
+    const id = (JSON.parse(payload) as { readonly id?: unknown } | null)?.id;
+    return typeof id === "string" ? id : undefined;
+  } catch {
+    // No job was ever scheduled here: the table doesn't exist.
+    return undefined;
+  }
+};
+
+/**
  * A version 0 class while its objects move: it serves with the same code as
  * the new one, and logs its writes for the move once one begins. Once sealed,
  * every call goes to the new object of the same key.
@@ -422,8 +445,14 @@ export const legacyObject = (classes: Classes, route: string, impl: ObjectImpl):
     return Effect.gen(function* () {
       const instance = (yield* inner) as Record<string, unknown>;
       const key = Effect.gen(function* () {
-        // An object created before Durable Objects kept their names: the key it stored.
-        return state.id.name ?? (yield* Effect.promise(() => raw.get<string>(ID_KEY))) ?? undefined;
+        // Reached by its id, an object doesn't always know its name: the key it stored, or
+        // the one in a job it scheduled (an aggregate that only scheduled a command, on
+        // code from before it stored its key then).
+        return (
+          state.id.name ??
+          (yield* Effect.promise(() => raw.get<string>(ID_KEY))) ??
+          scheduledKey(raw)
+        );
       });
       const target = Effect.map(key, (name) =>
         name === undefined
