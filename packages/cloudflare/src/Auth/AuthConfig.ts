@@ -1,5 +1,6 @@
 import { AuthError } from "alchemy/Auth/AuthProvider";
 import { profileCommandHint } from "alchemy/Util/interactive";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
@@ -10,6 +11,7 @@ export const CloudflareAuthConfigSchema = Schema.Union([
     method: Schema.Literal("stored"),
     credentialType: Schema.Literal("apiToken"),
     apiToken: Schema.String,
+    expiresAt: Schema.optional(Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))),
     accountId: Schema.String,
   }),
   Schema.Struct({
@@ -40,6 +42,8 @@ export type CloudflareResolvedCredentials =
   | {
       type: "apiToken";
       apiToken: Redacted.Redacted<string>;
+      /** Epoch milliseconds; omitted for non-expiring tokens. */
+      expiresAt?: number;
       accountId: string;
       source: {
         type: CloudflareAuthConfig["method"] | "env";
@@ -109,3 +113,22 @@ export const validateAccountIdField = (v: string): string | undefined =>
   ACCOUNT_ID_PATTERN.test(v.trim())
     ? undefined
     : "Expected a 32-character hex account ID (Workers & Pages → Account details)";
+
+/** Shared by the API and environment caches. */
+export const cloudflareCredentialExpiresAt = (credentials: CloudflareResolvedCredentials) =>
+  credentials.type === "oauth"
+    ? credentials.expires
+    : credentials.type === "apiToken"
+      ? credentials.expiresAt
+      : undefined;
+
+/** A stale profile must fail closed rather than supplying an expired token repeatedly. */
+export const validateApiTokenExpiry = (expiresAt: number | undefined) =>
+  Effect.gen(function* () {
+    if (expiresAt === undefined) return;
+    const now = yield* Clock.currentTimeMillis;
+    if (!Number.isSafeInteger(expiresAt) || expiresAt <= now)
+      return yield* AuthError.make({
+        message: "Cloudflare API token is expired; replace the stored credential.",
+      });
+  });
