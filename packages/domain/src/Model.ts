@@ -567,10 +567,10 @@ export const make = <
  * Check a Model's definitions without hosting it: every problem that would
  * otherwise fail its Layer's build, such as a view consuming a source keyed
  * by another aggregate without `keyOf`, a view with `state` but no
- * `initial`, a policy listening for an event no source emits, or a stream
- * with two writers. Returns all of them, in definition order; an empty
- * array means the Model is valid. Problems that depend on what a handler
- * returns, such as `decide` returning an event its command does not
+ * `initial`, a policy listening for an event no source emits, a stream
+ * with two writers, or a schema with no JSON form. Returns all of them, in
+ * definition order; an empty array means the Model is valid. Problems that
+ * depend on what a handler returns, such as `decide` returning an event its command does not
  * declare, still surface when the handler runs.
  *
  * **Example:** A unit test for the whole Model

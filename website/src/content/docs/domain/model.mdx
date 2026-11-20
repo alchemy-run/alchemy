@@ -327,6 +327,8 @@ it("the model is well defined", () => {
 });
 ```
 
+A host stores and sends every value as JSON, so every schema in a state, command, event, reply or rejection needs a JSON form. One that has none, such as `Schema.instanceOf(Blob)`, fails the Layer build with `NoJsonForm` and its path (`Shelf.state.bySku[key]`), and an `initial` that doesn't come back the same from JSON fails it with `InitialNotJson`. `Schema.Unknown` and `Schema.Any` pass, because only a value can tell. To store a class of your own, annotate its schema with `toCodecJson`.
+
 Each problem is a `Domain.DefinitionError`. Its `reason` is a tagged error that says which problem it is, such as `MissingKeyOf` or `TwoWriters`, with the names involved as fields, and its message names the block and the fix. Mistakes that depend on what a handler returns, like `decide` returning an event its command doesn't declare, still fail when the handler runs.
 
 `Domain.verify` checks how the model is declared, not what it does. To check that it keeps its rules, whatever commands arrive, see [Verifying a model](/domain/verifying-models).

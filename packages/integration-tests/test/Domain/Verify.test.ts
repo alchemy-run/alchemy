@@ -2,10 +2,14 @@ import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as SchemaGetter from "effect/SchemaGetter";
 
 class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 class Deposit extends Domain.Command("Deposit", {
@@ -220,5 +224,224 @@ describe("Domain verify", { tags: ["unit", "local"] }, () => {
       }) {}
       expect(Account.aggregateName).toBe("Account");
     });
+  });
+});
+
+class Blob {
+  constructor(readonly bytes: number) {}
+}
+/** A schema with no JSON form: its values fail when they are encoded. */
+const NoJson = Schema.instanceOf(Blob);
+const noJsonForm = (path: string) =>
+  `${path} has no JSON form: use a Schema with one, or annotate it with toCodecJson`;
+
+class Tagged extends Domain.Rejection("Tagged", { blob: NoJson }) {}
+class Stored extends Domain.Event("Stored", { blob: NoJson }) {}
+class Store extends Domain.Command("Store", {
+  input: { shelf: Schema.String, blobs: Schema.Array(NoJson) },
+  events: [Stored],
+  rejects: [Tagged],
+  reply: { blob: NoJson },
+}) {}
+class Shelf extends Domain.Aggregate("Shelf", {
+  id: Schema.String,
+  state: Schema.Struct({
+    slot: Schema.Option(NoJson),
+    bySku: Schema.Record(Schema.String, NoJson),
+    spare: Schema.optional(NoJson),
+    pair: Schema.Tuple([Schema.String, Schema.Array(NoJson)]),
+    either: Schema.Union([Schema.Number, NoJson]),
+  }),
+  initial: { slot: Option.none(), bySku: {}, pair: ["a", []], either: 0 },
+  commands: [Store],
+  keyOf: (command) => command.shelf,
+  decide: { Store: () => [] },
+  evolve: { Stored: (s) => s },
+  reply: { Store: () => ({ blob: new Blob(1) }) },
+}) {}
+class Shelves extends Domain.Model("Shelves", { aggregates: [Shelf] }) {}
+
+describe("Domain.verify on JSON", { tags: ["unit", "local"] }, () => {
+  it("reports each schema with no JSON form, by path", () => {
+    expect(Domain.verify(Shelves).map((problem) => problem.message)).toEqual([
+      noJsonForm("Event Stored.blob"),
+      noJsonForm("Shelf.state.slot"),
+      noJsonForm("Shelf.state.bySku[key]"),
+      noJsonForm("Shelf.state.spare"),
+      noJsonForm("Shelf.state.pair[1][]"),
+      noJsonForm("Shelf.state.either"),
+      noJsonForm("Command Store.blobs[]"),
+      noJsonForm("Command Store.reply.blob"),
+      noJsonForm("Rejection Tagged.blob"),
+    ]);
+  });
+
+  it("gives each problem a tagged reason with its path", () => {
+    expect(Domain.verify(Shelves)[0]?.reason).toMatchObject({
+      _tag: "NoJsonForm",
+      path: "Event Stored.blob",
+    });
+  });
+
+  it("fails the model's Layer build on the first one", () => {
+    const exit = Effect.runSyncExit(
+      Layer.build(Shelves.layer(Layer.empty)).pipe(Effect.scoped, Effect.provide(InMemory)),
+    );
+    expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
+      _tag: "DefinitionError",
+      reason: { _tag: "NoJsonForm", path: "Event Stored.blob" },
+    });
+  });
+
+  it("reports a decision's command, reply and rejection", () => {
+    class Moved extends Domain.Event("Moved") {}
+    class Lost extends Domain.Rejection("Lost", { blob: NoJson }) {}
+    class Move extends Domain.Command("Move", {
+      input: { from: Schema.String, to: Schema.String, blob: NoJson },
+      events: [Moved],
+      rejects: [Lost],
+      reply: { blob: NoJson },
+    }) {}
+    class Bin extends Domain.Aggregate("Bin", {
+      id: Schema.String,
+      state: Schema.Struct({}),
+      initial: {},
+      commands: [],
+      events: [Moved],
+      decide: {},
+      evolve: { Moved: (s) => s },
+    }) {}
+    class MoveBlob extends Domain.Decision(Move, {
+      reads: { from: Bin, to: Bin },
+      keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
+      decide: ({ from }) => [from.record(new Moved())],
+      reply: () => ({ blob: new Blob(1) }),
+    }) {}
+    class Bins extends Domain.Model("Bins", { aggregates: [Bin], decisions: [MoveBlob] }) {}
+    expect(Domain.verify(Bins).map((problem) => problem.message)).toEqual([
+      noJsonForm("Command Move.blob"),
+      noJsonForm("Command Move.reply.blob"),
+      noJsonForm("Rejection Lost.blob"),
+    ]);
+  });
+
+  it("reports a view's state and events and a stream's entries", () => {
+    class Seen extends Domain.Event("Seen", { blob: NoJson }) {}
+    class Shown extends Domain.View("Shown", {
+      from: [Wallet],
+      key: Wallet,
+      state: Schema.Struct({ last: Schema.NullOr(NoJson) }),
+      initial: { last: null },
+      events: [Seen],
+      evolve: { Deposited: (s) => s },
+    }) {}
+    class Snap extends Domain.Event("Snap", { blob: NoJson }) {}
+    class Snaps extends Domain.Stream("Snaps", { key: Wallet, entries: [Snap] }) {}
+    class Snapper extends Domain.Projection("Snapper", {
+      from: [Wallet],
+      key: Wallet,
+      on: [Deposited],
+      writes: [Snaps],
+    }) {}
+    class Viewed extends Domain.Model("Viewed", {
+      aggregates: [Wallet],
+      views: [Shown],
+      projections: [Snapper],
+      streams: [Snaps],
+    }) {}
+    expect(Domain.verify(Viewed).map((problem) => problem.message)).toEqual([
+      noJsonForm("Event Seen.blob"),
+      noJsonForm("Event Snap.blob"),
+      noJsonForm("Shown.state.last"),
+    ]);
+  });
+
+  it("reports an initial state that does not survive JSON", () => {
+    const Loose = Schema.Struct({ value: Schema.Any });
+    class Lossy extends Domain.Aggregate("Lossy", {
+      id: Schema.String,
+      state: Loose,
+      initial: { value: () => 1 },
+      commands: [],
+      decide: {},
+      evolve: {},
+    }) {}
+    class Big extends Domain.View("Big", {
+      from: [Wallet],
+      key: Wallet,
+      state: Loose,
+      initial: { value: 1n },
+      evolve: { Deposited: (s) => s },
+    }) {}
+    class Lossless extends Domain.Model("Lossless", {
+      aggregates: [Wallet, Lossy],
+      views: [Big],
+    }) {}
+    expect(Domain.verify(Lossless).map((problem) => problem.reason)).toMatchObject([
+      { _tag: "InitialNotJson", owner: "Lossy" },
+      { _tag: "InitialNotJson", owner: "Big" },
+    ]);
+  });
+
+  it("reports a view's initial that does not match its state", () => {
+    class Counted extends Domain.View("Counted", {
+      from: [Wallet],
+      key: Wallet,
+      state: Schema.Struct({ count: Schema.Number }),
+      initial: Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Any }))({ count: "none" }),
+      evolve: { Deposited: (s) => s },
+    }) {}
+    class Counts extends Domain.Model("Counts", { aggregates: [Wallet], views: [Counted] }) {}
+    expect(Domain.verify(Counts).map((problem) => problem.message)).toEqual([
+      expect.stringContaining("Counted.initial does not match its state schema"),
+    ]);
+  });
+
+  it("passes every schema with a JSON form", () => {
+    interface Tree {
+      readonly kids: ReadonlyArray<Tree>;
+    }
+    const Tree: Schema.Codec<Tree> = Schema.Struct({
+      kids: Schema.Array(Schema.suspend(() => Tree)),
+    });
+    const Annotated = Schema.instanceOf(Blob, {
+      toCodecJson: () =>
+        Schema.link<Blob>()(Schema.Number, {
+          decode: SchemaGetter.transform((bytes: number) => new Blob(bytes)),
+          encode: SchemaGetter.transform((blob: Blob) => blob.bytes),
+        }),
+    });
+    class Fine extends Domain.Aggregate("Fine", {
+      id: Schema.String,
+      state: Schema.Struct({
+        anything: Schema.Unknown,
+        at: Schema.Date,
+        when: Schema.DateTimeUtc,
+        big: Schema.BigInt,
+        secret: Schema.Redacted(Schema.String),
+        maybe: Schema.Option(Schema.Number),
+        bytes: Schema.Uint8Array,
+        counts: Schema.ReadonlyMap(Schema.String, Schema.Number),
+        tree: Tree,
+        blob: Annotated,
+      }),
+      initial: {
+        anything: { a: 1 },
+        at: new Date(0),
+        when: DateTime.makeUnsafe(0),
+        big: 1n,
+        secret: Redacted.make("s"),
+        maybe: Option.some(1),
+        bytes: new Uint8Array([1]),
+        counts: new Map([["a", 1]]),
+        tree: { kids: [{ kids: [] }] },
+        blob: new Blob(1),
+      },
+      commands: [],
+      decide: {},
+      evolve: {},
+    }) {}
+    class FineModel extends Domain.Model("FineModel", { aggregates: [Fine] }) {}
+    expect(Domain.verify(FineModel)).toEqual([]);
   });
 });
