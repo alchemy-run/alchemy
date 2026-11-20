@@ -39,6 +39,24 @@ Starting a new environment is a **cold start**: Lambda loads your code and runs 
 
 So a Function scales with no capacity planning, and costs nothing while nothing calls it. In exchange, an invocation can run for at most 15 minutes, and memory, and the CPU that comes with it, is fixed per Function.
 
+## Keep an alias warm
+
+Lambda has two different capacity controls. **Reserved concurrency** limits how many invocations a Function may serve and reserves account capacity; it does not initialize execution environments. **Provisioned concurrency** is paid capacity for a published version or alias: AWS initializes a positive number of environments for that qualifier and keeps them ready for invocation. It never applies to `$LATEST`.
+
+Configure warm capacity on the Alias that owns the traffic target:
+
+```typescript title="alchemy.run.ts"
+const alias = yield* AWS.Lambda.Alias("Live", {
+  version,
+  aliasName: "live",
+  provisionedConcurrentExecutions: 4,
+});
+```
+
+Invoke the alias, not the unqualified Function or `$LATEST`, when you need the warm-capacity guarantee. The Function's `alias` convenience can route existing Function consumers through its managed alias; otherwise use the Alias output in the caller. Alias-owned capacity follows the alias as `version` changes, so there is one owner for the qualifier and no separate string-qualifier manager to reconcile.
+
+AWS reports allocation as `IN_PROGRESS`, `READY`, or `FAILED`; `READY` is the readiness gate and `FAILED` surfaces AWS's reason. Provisioned concurrency is billed while it exists, and the count must be positive. Removing a previously configured value removes that managed paid capacity; deleting the Alias releases it unless the Alias is retained. Do not configure an independent manager for the same function and qualifier. As with other untaggable qualifier-scoped Lambda settings such as `EventInvokeConfig`, ownership comes from the Alias declaration rather than AWS tags. The normal bounded polling and retry policies apply, and cancellation must re-observe server state on the next apply or destroy.
+
 ## Declare a Function
 
 A Function is a class. Its first argument is the id, its second the configuration, and its third the program it runs:

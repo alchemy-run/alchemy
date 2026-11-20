@@ -4,6 +4,7 @@ import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -26,6 +27,8 @@ export interface AliasProps {
    * Name of the alias. If omitted, a unique name is generated.
    */
   aliasName?: string;
+  /** Number of execution environments to keep initialized for this alias. */
+  provisionedConcurrentExecutions?: number;
   /**
    * Description of the alias.
    */
@@ -86,6 +89,8 @@ export interface Alias extends Resource<
      * detect out-of-band changes.
      */
     eventInvokeConfig?: ObservedEventInvokeConfig;
+    /** Requested provisioned concurrency for this alias, when configured. */
+    provisionedConcurrentExecutions?: number;
   },
   never,
   Providers,
@@ -102,6 +107,27 @@ export interface AliasLookup {
   /** The name of the existing alias. */
   aliasName: string;
 }
+
+export class InvalidAliasProps extends Data.TaggedError("InvalidAliasProps")<{
+  readonly message: string;
+}> {}
+
+export class AliasProvisionedConcurrencyFailed extends Data.TaggedError(
+  "AliasProvisionedConcurrencyFailed",
+)<{
+  readonly functionName: string;
+  readonly qualifier: string;
+  readonly reason?: string;
+}> {}
+
+export class AliasProvisionedConcurrencyNotReady extends Data.TaggedError(
+  "AliasProvisionedConcurrencyNotReady",
+)<{
+  readonly functionName: string;
+  readonly qualifier: string;
+  readonly status?: string;
+  readonly reason?: string;
+}> {}
 
 type ResolvedAliasProps = Input.ResolveProps<AliasProps>;
 
@@ -154,6 +180,17 @@ const resolvedProps = (props: AliasProps): ResolvedAliasProps =>
  * });
  * ```
  *
+ * ### Provisioned Concurrency
+ * **Example:** Keep an Alias Warm
+ * ```typescript
+ * const version = yield* Version("ProductionVersion", { function: fn });
+ * const alias = yield* Alias("ProductionAlias", {
+ *   version,
+ *   aliasName: "production",
+ *   provisionedConcurrentExecutions: 4,
+ * });
+ * ```
+ *
  * ### Looking up an existing alias
  * `Alias.lookup` references an alias Alchemy doesn't manage (created in the
  * console or by another stack), found by `functionName` and `aliasName`. It is read during
@@ -164,6 +201,8 @@ const resolvedProps = (props: AliasProps): ResolvedAliasProps =>
  * const live = AWS.Lambda.Alias.lookup({ functionName: "checkout", aliasName: "live" });
  * const aliasArn = live.aliasArn;
  * ```
+ *
+ * @resource
  */
 export const Alias = Resource<Alias>("AWS.Lambda.Alias");
 
@@ -177,6 +216,13 @@ const normalizeRoutingConfig = (
   );
   return Object.keys(weights).length > 0 ? { AdditionalVersionWeights: weights } : undefined;
 };
+
+const validateProvisionedConcurrentExecutions = (value: number | undefined) =>
+  value === undefined || (Number.isFinite(value) && Number.isInteger(value) && value >= 1)
+    ? undefined
+    : new InvalidAliasProps({
+        message: "provisionedConcurrentExecutions must be a positive integer",
+      });
 
 export const AliasProvider = () =>
   Provider.effect(
@@ -201,10 +247,122 @@ export const AliasProvider = () =>
           }),
         );
 
+      const getProvisionedConcurrency = (functionName: string, qualifier: string) =>
+        Lambda.getProvisionedConcurrencyConfig({
+          FunctionName: functionName,
+          Qualifier: qualifier,
+        }).pipe(
+          Effect.catchTag(
+            ["ProvisionedConcurrencyConfigNotFoundException", "ResourceNotFoundException"],
+            () => Effect.undefined,
+          ),
+        );
+
+      const waitForProvisionedConcurrency = Effect.fn(function* (
+        functionName: string,
+        qualifier: string,
+      ) {
+        const config = yield* getProvisionedConcurrency(functionName, qualifier).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (current) => current?.Status === "READY" || current?.Status === "FAILED",
+            times: 45,
+          }),
+        );
+        if (config?.Status === "FAILED") {
+          return yield* new AliasProvisionedConcurrencyFailed({
+            functionName,
+            qualifier,
+            reason: config.StatusReason,
+          });
+        }
+        if (config?.Status !== "READY") {
+          return yield* new AliasProvisionedConcurrencyNotReady({
+            functionName,
+            qualifier,
+            status: config?.Status,
+            reason: config?.StatusReason,
+          });
+        }
+        return config;
+      });
+
+      const waitForProvisionedConcurrencyAbsent = Effect.fn(function* (
+        functionName: string,
+        qualifier: string,
+      ) {
+        const config = yield* getProvisionedConcurrency(functionName, qualifier).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("1 second"),
+            until: (current) => current === undefined,
+            times: 45,
+          }),
+        );
+        if (config !== undefined) {
+          return yield* new AliasProvisionedConcurrencyNotReady({
+            functionName,
+            qualifier,
+            status: config.Status,
+            reason: config.StatusReason,
+          });
+        }
+        return config;
+      });
+
+      const syncProvisionedConcurrency = Effect.fn(function* (
+        functionName: string,
+        qualifier: string,
+        desired: number | undefined,
+        managed: boolean,
+        forceUpdate: boolean,
+      ) {
+        const observed = yield* getProvisionedConcurrency(functionName, qualifier);
+        if (desired === undefined) {
+          if (!managed || !observed) return observed;
+          yield* Lambda.deleteProvisionedConcurrencyConfig({
+            FunctionName: functionName,
+            Qualifier: qualifier,
+          }).pipe(
+            Effect.retry({
+              while: (error) => error._tag === "ResourceConflictException",
+              schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
+            }),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+          );
+          return yield* waitForProvisionedConcurrencyAbsent(functionName, qualifier);
+        }
+        if (
+          observed?.Status === "READY" &&
+          observed.RequestedProvisionedConcurrentExecutions === desired &&
+          !forceUpdate
+        ) {
+          return observed;
+        }
+        if (
+          observed?.Status === "IN_PROGRESS" &&
+          observed.RequestedProvisionedConcurrentExecutions === desired &&
+          !forceUpdate
+        ) {
+          return yield* waitForProvisionedConcurrency(functionName, qualifier);
+        }
+        yield* Lambda.putProvisionedConcurrencyConfig({
+          FunctionName: functionName,
+          Qualifier: qualifier,
+          ProvisionedConcurrentExecutions: desired,
+        }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "ResourceConflictException",
+            schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
+          }),
+        );
+        return yield* waitForProvisionedConcurrency(functionName, qualifier);
+      });
+
       const snapshotAlias = (
         functionName: string,
         alias: Lambda.AliasConfiguration,
         region: string,
+        provisionedConcurrency?: Lambda.GetProvisionedConcurrencyConfigResponse,
       ): Alias["Attributes"] | undefined => {
         if (!alias.AliasArn || !alias.Name || !alias.FunctionVersion) {
           return undefined;
@@ -218,6 +376,8 @@ export const AliasProvider = () =>
           description: alias.Description || undefined,
           routingConfig: normalizeRoutingConfig(alias.RoutingConfig),
           revisionId: alias.RevisionId,
+          provisionedConcurrentExecutions:
+            provisionedConcurrency?.RequestedProvisionedConcurrentExecutions,
         };
       };
 
@@ -227,6 +387,10 @@ export const AliasProvider = () =>
           if (!isResolved(news)) return;
           const resolvedOlds = resolvedProps(olds);
           const resolvedNews = resolvedProps(news);
+          const invalidConcurrency = validateProvisionedConcurrentExecutions(
+            resolvedNews.provisionedConcurrentExecutions,
+          );
+          if (invalidConcurrency) return yield* invalidConcurrency;
           // An interrupted create persists the Version reference as missing
           // (see stripUnresolved); there is no old function to compare.
           if (resolvedOlds.version === undefined) return;
@@ -245,7 +409,12 @@ export const AliasProvider = () =>
             FunctionName: functionName,
             Name: aliasName,
           }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
-          const attrs = alias ? snapshotAlias(functionName, alias, region) : undefined;
+          const provisionedConcurrency = alias
+            ? yield* getProvisionedConcurrency(functionName, aliasName)
+            : undefined;
+          const attrs = alias
+            ? snapshotAlias(functionName, alias, region, provisionedConcurrency)
+            : undefined;
           if (!attrs) return undefined;
           return {
             ...attrs,
@@ -267,7 +436,12 @@ export const AliasProvider = () =>
             FunctionName: functionName,
             Name: aliasName,
           }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
-          const attrs = alias ? snapshotAlias(functionName, alias, region) : undefined;
+          const provisionedConcurrency = alias
+            ? yield* getProvisionedConcurrency(functionName, alias.Name ?? aliasName)
+            : undefined;
+          const attrs = alias
+            ? snapshotAlias(functionName, alias, region, provisionedConcurrency)
+            : undefined;
           if (!attrs) return undefined;
           return {
             ...attrs,
@@ -292,11 +466,24 @@ export const AliasProvider = () =>
               (functionName) =>
                 Lambda.listAliases.items({ FunctionName: functionName }).pipe(
                   Stream.runCollect,
-                  Effect.map((chunk) =>
-                    Array.from(chunk).flatMap((alias) => {
-                      const attrs = snapshotAlias(functionName, alias, region);
-                      return attrs ? [attrs] : [];
-                    }),
+                  Effect.flatMap((chunk) =>
+                    Effect.forEach(Array.from(chunk), (alias) =>
+                      Effect.gen(function* () {
+                        const aliasName = alias.Name;
+                        if (aliasName === undefined) return undefined;
+                        const provisionedConcurrency = yield* getProvisionedConcurrency(
+                          functionName,
+                          aliasName,
+                        );
+                        const attrs = snapshotAlias(
+                          functionName,
+                          alias,
+                          region,
+                          provisionedConcurrency,
+                        );
+                        return attrs;
+                      }),
+                    ).pipe(Effect.map((items) => items.filter((item) => item !== undefined))),
                   ),
                   Effect.catchTag("ResourceNotFoundException", () =>
                     Effect.succeed([] as Alias["Attributes"][]),
@@ -306,8 +493,12 @@ export const AliasProvider = () =>
             );
             return aliases.flat();
           }),
-        reconcile: Effect.fn(function* ({ id, news, output, session }) {
+        reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           const resolvedNews = resolvedProps(news);
+          const invalidConcurrency = validateProvisionedConcurrentExecutions(
+            resolvedNews.provisionedConcurrentExecutions,
+          );
+          if (invalidConcurrency) return yield* invalidConcurrency;
           const functionName = resolvedNews.version.functionName;
           const functionVersion = resolvedNews.version.version;
           const { region } = yield* AWSEnvironment.current;
@@ -320,6 +511,7 @@ export const AliasProvider = () =>
           }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           let alias = yield* getAlias;
+          const aliasTargetChanged = alias?.FunctionVersion !== functionVersion;
 
           if (!alias) {
             alias = yield* Lambda.createAlias({
@@ -358,6 +550,19 @@ export const AliasProvider = () =>
             );
           }
 
+          const managed =
+            resolvedNews.provisionedConcurrentExecutions !== undefined ||
+            (olds !== undefined &&
+              isResolved(olds) &&
+              resolvedProps(olds).provisionedConcurrentExecutions !== undefined);
+          const provisionedConcurrency = yield* syncProvisionedConcurrency(
+            functionName,
+            attrs.aliasName,
+            resolvedNews.provisionedConcurrentExecutions,
+            managed,
+            aliasTargetChanged,
+          );
+
           yield* syncEventInvokeConfig({
             functionName,
             qualifier: attrs.aliasName,
@@ -368,10 +573,29 @@ export const AliasProvider = () =>
 
           return {
             ...attrs,
+            provisionedConcurrentExecutions:
+              provisionedConcurrency?.RequestedProvisionedConcurrentExecutions,
             eventInvokeConfig: yield* observeEventInvokeConfig(functionName, attrs.aliasName),
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ olds, output }) {
+          if (
+            olds !== undefined &&
+            isResolved(olds) &&
+            resolvedProps(olds).provisionedConcurrentExecutions !== undefined
+          ) {
+            yield* Lambda.deleteProvisionedConcurrencyConfig({
+              FunctionName: output.functionName,
+              Qualifier: output.aliasName,
+            }).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "ResourceConflictException",
+                schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(10)]),
+              }),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+            );
+            yield* waitForProvisionedConcurrencyAbsent(output.functionName, output.aliasName);
+          }
           // The alias-scoped async config does not die with the alias — clear
           // it first so a later alias of the same name starts clean.
           yield* syncEventInvokeConfig({
