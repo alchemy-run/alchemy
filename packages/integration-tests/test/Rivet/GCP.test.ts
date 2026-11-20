@@ -33,7 +33,7 @@ const program = (named: boolean) =>
     const front = yield* Front;
     const extra = yield* SecretManager.Secret("RustExtra", { value: "extra-value" });
     const account = named
-      ? (yield* IAM.ServiceAccount("RustNodes", { displayName: "Rivet Rust nodes" })).email
+      ? (yield* IAM.ServiceAccount("RustNodeAccount", { displayName: "Rivet Rust nodes" })).email
       : undefined;
     const actors = yield* RustActors().pipe(
       Effect.provide(
