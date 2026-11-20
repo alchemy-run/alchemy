@@ -3,7 +3,8 @@
  * platform's front over the conformance model. Every route is a GET that
  * answers JSON.
  *
- * - `/increment/:id?by=n` sends `Increment`; `{ accepted: total }` or `{ rejected: tag }`
+ * - `/increment/:id?by=n` sends `Increment`; `{ accepted: total }` or `{ rejected: tag }`;
+ *   `&command=c` sends it under the command id `c`
  * - `/again/:id?by=n` sends `Increment` twice under one command id
  * - `/give/:from?to=id&by=n&id=commandId` sends `Give`, decided across both counters;
  *   `{ accepted: total, commits }` or `{ rejected: tag }`
@@ -125,7 +126,9 @@ export const app = Effect.gen(function* () {
       case "ready":
         return HttpServerResponse.text("ok");
       case "increment":
-        return yield* HttpServerResponse.json(yield* increment());
+        return yield* HttpServerResponse.json(
+          yield* increment(url.searchParams.get("command") ?? undefined),
+        );
       case "again": {
         const first = yield* increment(`again-${id}`);
         const second = yield* increment(`again-${id}`);
