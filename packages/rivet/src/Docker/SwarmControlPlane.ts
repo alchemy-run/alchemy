@@ -9,7 +9,7 @@ import { Namespace } from "../Namespace.ts";
 import type { Providers as RivetProviders } from "../Providers.ts";
 
 /** The engine release `RivetDocker.SwarmControlPlane` runs by default. */
-export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
+export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.1.1";
 
 export interface SwarmControlPlaneProps {
   /**
@@ -19,7 +19,7 @@ export interface SwarmControlPlaneProps {
   port?: number;
   /**
    * Engine image.
-   * @default "rivetdev/engine:3.0.0"
+   * @default "rivetdev/engine:3.1.1"
    */
   image?: string;
   /**
@@ -83,6 +83,7 @@ export const SwarmControlPlane = (
         environment: {
           RIVET__AUTH__ADMIN_TOKEN: token.text,
           RIVET__STORAGE__LOG_DIRECTORY: "/var/lib/rivet",
+          RIVET__STORAGE__AUTO_PROVISION_PARTITIONS: "true",
           RIVET__OBJECT_STORAGE__PRIMARY__FILE_SYSTEM__PATH: "/var/lib/rivet/objects",
           RIVET__TELEMETRY__ENABLED: "false",
         },

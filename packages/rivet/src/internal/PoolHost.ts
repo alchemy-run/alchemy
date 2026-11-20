@@ -33,7 +33,7 @@ import type { Providers } from "../Providers.ts";
 import { stageRustProgram } from "./RustProgram.ts";
 
 /** The RivetKit release node images install. */
-export const RIVETKIT_VERSION = "3.0.0";
+export const RIVETKIT_VERSION = "3.1.1";
 
 /** A node image environment: bun with RivetKit installed. */
 export const NODE_DOCKERFILE = `FROM oven/bun:1
