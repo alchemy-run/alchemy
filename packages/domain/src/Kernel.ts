@@ -284,7 +284,8 @@ export interface Kernel {
 
 /**
  * Build the kernel for a set of definitions. Validates tags and routing, and
- * dies with a {@link DefinitionError} for the first problem.
+ * dies with a {@link DefinitionError} for every problem, in definition order:
+ * each one is a defect of the Cause.
  */
 export const make = (
   definitions: Definitions,
@@ -292,15 +293,10 @@ export const make = (
 ): Effect.Effect<Kernel> =>
   Effect.suspend(() => {
     const { kernel, problems } = collect(definitions, telemetry);
-    return problems.length > 0 ? Effect.die(problems[0]) : Effect.succeed(kernel);
+    return problems.length > 0
+      ? Effect.failCause(Cause.fromReasons(problems.map(Cause.makeDieReason)))
+      : Effect.succeed(kernel);
   });
-
-/**
- * Every problem {@link make} would die with, without building anything.
- * Empty when the definitions are valid.
- */
-export const verify = (definitions: Definitions): ReadonlyArray<DefinitionError> =>
-  collect(definitions, Telemetry.resolve(undefined)).problems;
 
 /**
  * Why an `initial` state does not come back the same from JSON text, if it
@@ -339,7 +335,7 @@ const collect = (definitions: Definitions, telemetry: Telemetry.Resolved) => {
 
 /**
  * Build the kernel. Each definition problem goes to `report`, and the build
- * goes on past it, so {@link verify} sees every problem.
+ * goes on past it, so {@link make} reports every problem.
  */
 const build = (
   definitions: Definitions,
