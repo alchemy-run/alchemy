@@ -35,8 +35,9 @@ const documentedResources = [
   "Bucket",
   "BucketAccessKey",
   "Compute",
-  "App",
-  "Deployment",
+  "ComputeArtifact",
+  "ComputeService",
+  "ComputeVersion",
   "Connection",
   "CustomDomain",
   "Database",
@@ -217,7 +218,7 @@ describe("Prisma source conventions", { tags: ["unit", "provider:prisma", "local
       const sourceRoot = path.resolve(import.meta.dirname, "../../../prisma/src");
       const program = yield* prismaSourceProject;
 
-      for (const resource of ["Compute", "Deployment"] as const) {
+      for (const resource of ["Compute", "ComputeVersion"] as const) {
         const sourceFile = yield* Effect.tryPromise(() =>
           program.getSourceFile(path.join(sourceRoot, `${resource}.ts`)),
         );

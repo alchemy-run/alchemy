@@ -30,11 +30,11 @@ test.provider(
       const initial = (yield* deploy()).site;
       expect(initial.url).toMatch(/^https:\/\//);
       const projectId = initial.compute!.projectId;
-      const appId = initial.compute!.appId;
+      const serviceId = initial.compute!.serviceId;
       yield* bodyContaining(`${initial.url}/client/route`, "Prisma Website fixture");
       yield* bodyContaining(`${initial.url}/health`, "ok");
       const unchanged = (yield* deploy()).site;
-      expect(unchanged.compute!.deploymentId).toBe(initial.compute!.deploymentId);
+      expect(unchanged.compute!.versionId).toBe(initial.compute!.versionId);
       const indexPath = path.join(rootDir, "index.html");
       const index = yield* fs.readFileString(indexPath);
       yield* fs.writeFileString(
@@ -42,15 +42,15 @@ test.provider(
         index.replaceAll("Prisma Website fixture", "Prisma Website updated"),
       );
       const updated = (yield* deploy("none")).site;
-      expect(updated.compute!.appId).toBe(appId);
+      expect(updated.compute!.serviceId).toBe(serviceId);
       expect(updated.compute!.projectId).toBe(projectId);
-      expect(updated.compute!.deploymentId).not.toBe(initial.compute!.deploymentId);
+      expect(updated.compute!.versionId).not.toBe(initial.compute!.versionId);
       yield* bodyContaining(`${updated.url}/`, "Prisma Website updated");
       const missing = yield* HttpClient.get(`${updated.url}/missing-client-route`);
       expect(missing.status).toBe(404);
       yield* stack.destroy();
       expect(
-        yield* getService({ serviceId: appId }).pipe(
+        yield* getService({ serviceId: serviceId }).pipe(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         ),

@@ -1,9 +1,9 @@
 import { PrismaApiError, type PrismaManagementClient } from "@alchemy.run/prisma/Client";
 import {
-  destroyApp,
-  destroyDeployment,
-  destroyProjectApps,
-  waitForDeploymentStatus,
+  destroyComputeService,
+  destroyComputeVersion,
+  destroyProjectComputeServices,
+  waitForComputeVersionStatus,
 } from "@alchemy.run/prisma/ComputeLifecycle";
 import { describe, expect, it } from "@alchemy.run/test";
 import { Retry, fromApiToken } from "@distilled.cloud/prisma";
@@ -105,7 +105,7 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const result = yield* waitForDeploymentStatus("deployment-1", "running", {
+        const result = yield* waitForComputeVersionStatus("deployment-1", "running", {
           pollIntervalMs: 1,
           timeoutSeconds: 10,
         });
@@ -120,7 +120,9 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const error = yield* waitForDeploymentStatus("deployment-1", "running").pipe(Effect.flip);
+        const error = yield* waitForComputeVersionStatus("deployment-1", "running").pipe(
+          Effect.flip,
+        );
         expect(error.message).toContain("deployment-1");
         expect(error.message).toContain("failed");
       }).pipe(provide(client));
@@ -132,7 +134,7 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const error = yield* waitForDeploymentStatus("deployment-1", "running", {
+        const error = yield* waitForComputeVersionStatus("deployment-1", "running", {
           timeoutSeconds: 0.01,
           pollIntervalMs: 1,
         }).pipe(Effect.flip);
@@ -157,7 +159,7 @@ describe(
 
       return Effect.gen(function* () {
         const startedAt = Date.now();
-        const error = yield* waitForDeploymentStatus("deployment-hung", "running", {
+        const error = yield* waitForComputeVersionStatus("deployment-hung", "running", {
           timeoutSeconds: 0.05,
           pollIntervalMs: 1,
         }).pipe(Effect.flip);
@@ -175,10 +177,10 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const timeoutError = yield* waitForDeploymentStatus("deployment-1", "running", {
+        const timeoutError = yield* waitForComputeVersionStatus("deployment-1", "running", {
           timeoutSeconds: 0,
         }).pipe(Effect.flip);
-        const intervalError = yield* waitForDeploymentStatus("deployment-1", "running", {
+        const intervalError = yield* waitForComputeVersionStatus("deployment-1", "running", {
           pollIntervalMs: Number.NaN,
         }).pipe(Effect.flip);
 
@@ -193,7 +195,9 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const error = yield* waitForDeploymentStatus("deployment-1", "running").pipe(Effect.flip);
+        const error = yield* waitForComputeVersionStatus("deployment-1", "running").pipe(
+          Effect.flip,
+        );
         // Over the wire the injected 404 decodes into the typed error.
         expect(error._tag).toBe("NotFound");
         expect(error.message).toBe("HTTP 404");
@@ -206,9 +210,9 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const result = yield* destroyDeployment("deployment-missing");
+        const result = yield* destroyComputeVersion("deployment-missing");
         expect(result).toEqual({
-          deploymentId: "deployment-missing",
+          versionId: "deployment-missing",
           previousStatus: undefined,
           stopped: false,
           deleted: true,
@@ -237,9 +241,9 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const result = yield* destroyDeployment("deployment-1");
+        const result = yield* destroyComputeVersion("deployment-1");
         expect(result).toMatchObject({
-          deploymentId: "deployment-1",
+          versionId: "deployment-1",
           previousStatus: "running",
           stopped: true,
           deleted: true,
@@ -269,7 +273,7 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const result = yield* destroyDeployment("deployment-1", {
+        const result = yield* destroyComputeVersion("deployment-1", {
           pollIntervalMs: 1,
         });
         expect(result).toMatchObject({
@@ -294,8 +298,9 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const error = yield* destroyDeployment("deployment-1").pipe(Effect.flip);
-        expect(error.message).toContain("DELETE /v1/deployments/deployment-1");
+        const error = yield* destroyComputeVersion("deployment-1").pipe(Effect.flip);
+        expect(error.message).toContain("version 'deployment-1' while it was in status 'stopped'");
+        expect(error.message).toContain("delete the version in the Prisma Console");
       }).pipe(provide(client));
     });
 
@@ -309,9 +314,8 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const error = yield* destroyDeployment("deployment-1").pipe(Effect.flip);
-        expect(error.message).toContain("Stopped Prisma deployments are expected to be deletable");
-        expect(error.message).toContain("DELETE /v1/deployments/deployment-1");
+        const error = yield* destroyComputeVersion("deployment-1").pipe(Effect.flip);
+        expect(error.message).toContain("A stopped version is expected to be deletable");
       }).pipe(
         provide(client),
         // Server-category errors are replayed by the default policy; this
@@ -331,8 +335,8 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const result = yield* destroyApp("app-1");
-        expect(result).toEqual({ appId: "app-1", appDeleted: true });
+        const result = yield* destroyComputeService("app-1");
+        expect(result).toEqual({ serviceId: "app-1", serviceDeleted: true });
         expect(calls).toEqual(["delete-app:app-1"]);
       }).pipe(provide(client));
     });
@@ -350,8 +354,8 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const result = yield* destroyApp("app-1");
-        expect(result.appDeleted).toBe(true);
+        const result = yield* destroyComputeService("app-1");
+        expect(result.serviceDeleted).toBe(true);
         expect(attempts).toBe(3);
       }).pipe(provide(client));
     });
@@ -362,9 +366,9 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        expect(yield* destroyApp("app-missing")).toEqual({
-          appId: "app-missing",
-          appDeleted: true,
+        expect(yield* destroyComputeService("app-missing")).toEqual({
+          serviceId: "app-missing",
+          serviceDeleted: true,
         });
       }).pipe(provide(client));
     });
@@ -380,7 +384,7 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const fiber = yield* destroyApp("app-1").pipe(Effect.flip, Effect.forkChild);
+        const fiber = yield* destroyComputeService("app-1").pipe(Effect.flip, Effect.forkChild);
         yield* TestClock.adjust("30 seconds");
         const error = yield* Fiber.join(fiber);
         // Over the wire the injected 409 decodes into the typed error.
@@ -409,10 +413,10 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const result = yield* destroyProjectApps("project-1");
+        const result = yield* destroyProjectComputeServices("project-1");
         expect(result).toEqual({
           projectId: "project-1",
-          deletedAppIds: ["app-1", "app-2"],
+          deletedServiceIds: ["app-1", "app-2"],
           projectDeleted: true,
         });
         expect(calls).toEqual([
@@ -432,9 +436,9 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        expect(yield* destroyProjectApps("project-1")).toEqual({
+        expect(yield* destroyProjectComputeServices("project-1")).toEqual({
           projectId: "project-1",
-          deletedAppIds: [],
+          deletedServiceIds: [],
           projectDeleted: true,
         });
       }).pipe(provide(client));
@@ -463,10 +467,10 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const result = yield* destroyProjectApps("project-1");
+        const result = yield* destroyProjectComputeServices("project-1");
         expect(result).toEqual({
           projectId: "project-1",
-          deletedAppIds: ["app-1"],
+          deletedServiceIds: ["app-1"],
           projectDeleted: true,
         });
         expect(calls).toEqual([
@@ -488,9 +492,9 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const result = yield* destroyProjectApps("project-1", { keepProject: true });
+        const result = yield* destroyProjectComputeServices("project-1", { keepProject: true });
         expect(result.projectDeleted).toBe(false);
-        expect(result.deletedAppIds).toEqual(["app-1"]);
+        expect(result.deletedServiceIds).toEqual(["app-1"]);
         expect(calls).toEqual(["delete-app:app-1"]);
       }).pipe(provide(client));
     });
@@ -509,8 +513,8 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const result = yield* destroyProjectApps("project-1", { keepProject: true });
-        expect(result.deletedAppIds).toHaveLength(101);
+        const result = yield* destroyProjectComputeServices("project-1", { keepProject: true });
+        expect(result.deletedServiceIds).toHaveLength(101);
         expect(deleted).toHaveLength(101);
       }).pipe(provide(client));
     });
@@ -523,10 +527,13 @@ describe(
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
-        const result = yield* destroyProjectApps("project-1", { keepApp: true, keepProject: true });
+        const result = yield* destroyProjectComputeServices("project-1", {
+          keepService: true,
+          keepProject: true,
+        });
         expect(result).toEqual({
           projectId: "project-1",
-          deletedAppIds: [],
+          deletedServiceIds: [],
           projectDeleted: false,
         });
       }).pipe(provide(client));
@@ -543,7 +550,7 @@ describe(
       );
 
       return Effect.gen(function* () {
-        const error = yield* destroyProjectApps("project-1").pipe(Effect.flip);
+        const error = yield* destroyProjectComputeServices("project-1").pipe(Effect.flip);
         expect(error).toBeInstanceOf(PrismaPaginationError);
         expect(error.message).toContain("hasMore was true without a non-empty nextCursor");
       }).pipe(Effect.provide(fake.layer));

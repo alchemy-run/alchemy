@@ -59,7 +59,7 @@ describe.concurrent("lookup", () => {
           Project: Prisma.Project.lookup({ projectId: "proj_zzzzzzzzzzzzzzzzzzzzzzzz" }),
           Database: Prisma.Database.lookup({ databaseId: "db_zzzzzzzzzzzzzzzzzzzzzzzz" }),
           Branch: Prisma.Branch.lookup({ branchId: "br_zzzzzzzzzzzzzzzzzzzzzzzz" }),
-          App: Prisma.App.lookup({ appId: "cps_zzzzzzzzzzzzzzzzzzzzzzzz" }),
+          App: Prisma.ComputeService.lookup({ serviceId: "cps_zzzzzzzzzzzzzzzzzzzzzzzz" }),
           Bucket: Prisma.Bucket.lookup({ bucketId: "bkt_zzzzzzzzzzzzzzzzzzzzzzzz" }),
         } as unknown as Record<string, Output.Output<unknown>>;
 

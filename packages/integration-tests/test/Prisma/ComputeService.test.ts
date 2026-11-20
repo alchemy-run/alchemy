@@ -19,7 +19,7 @@ const live = Test.make({ providers: Prisma.providers() });
 
 const liveTags = [
   "provider:prisma",
-  "provider:prisma:app",
+  "provider:prisma:computeservice",
   "provider:prisma:branch",
   "provider:prisma:project",
   "live",
@@ -39,17 +39,20 @@ const expectAppGone = (appId: string) =>
 const appStack = (props: { displayName?: string; logicalId?: string } = {}) =>
   Effect.gen(function* () {
     const project = yield* Prisma.Project("Project", { createDatabase: false });
-    const app = yield* Prisma.App("Web", { project, ...props });
+    const app = yield* Prisma.ComputeService("Web", { project, ...props });
     return { project, app };
   });
 
 live.test.provider(
-  "creates an App under its fqn logical ID and converges name and logical ID in place",
+  "creates a service under its fqn logical ID and converges name and logical ID in place",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(appStack());
-    yield* expectFound(Prisma.App.lookup({ appId: initial.app.appId }), initial.app);
+    yield* expectFound(
+      Prisma.ComputeService.lookup({ serviceId: initial.app.serviceId }),
+      initial.app,
+    );
     yield* expectFound(
       Prisma.Project.lookup({ projectId: initial.project.projectId }),
       initial.project,
@@ -66,76 +69,76 @@ live.test.provider(
       },
     );
     expect(initial.app.logicalId).toBe("Web");
-    const created = yield* observeApp(initial.app.appId);
+    const created = yield* observeApp(initial.app.serviceId);
     expect(created.projectId).toBe(initial.project.projectId);
     expect(created.name).toBe(initial.app.name);
     expect(created.logicalId).toBe("Web");
 
     const renamed = yield* stack.deploy(appStack({ displayName: "renamed-web" }));
-    expect(renamed.app.appId).toBe(initial.app.appId);
-    expect((yield* observeApp(initial.app.appId)).name).toBe("renamed-web");
+    expect(renamed.app.serviceId).toBe(initial.app.serviceId);
+    expect((yield* observeApp(initial.app.serviceId)).name).toBe("renamed-web");
 
     const overridden = yield* stack.deploy(
       appStack({ displayName: "renamed-web", logicalId: "web-override" }),
     );
-    expect(overridden.app.appId).toBe(initial.app.appId);
+    expect(overridden.app.serviceId).toBe(initial.app.serviceId);
     expect(overridden.app.logicalId).toBe("web-override");
-    expect((yield* observeApp(initial.app.appId)).logicalId).toBe("web-override");
+    expect((yield* observeApp(initial.app.serviceId)).logicalId).toBe("web-override");
 
     // Removing the override returns to the fqn.
     const reverted = yield* stack.deploy(appStack({ displayName: "renamed-web" }));
-    expect(reverted.app.appId).toBe(initial.app.appId);
-    expect((yield* observeApp(initial.app.appId)).logicalId).toBe("Web");
+    expect(reverted.app.serviceId).toBe(initial.app.serviceId);
+    expect((yield* observeApp(initial.app.serviceId)).logicalId).toBe("Web");
 
     const repeated = yield* stack.deploy(appStack({ displayName: "renamed-web" }));
-    expect(repeated.app.appId).toBe(initial.app.appId);
+    expect(repeated.app.serviceId).toBe(initial.app.serviceId);
 
     // Nuke enumerates Apps through the provider's list.
-    const listed = yield* (yield* Provider.findProvider(Prisma.App)).list!();
-    expect(listed.map((app) => app.appId)).toContain(initial.app.appId);
+    const listed = yield* (yield* Provider.findProvider(Prisma.ComputeService)).list!();
+    expect(listed.map((app) => app.serviceId)).toContain(initial.app.serviceId);
 
     yield* stack.destroy();
-    yield* expectAppGone(initial.app.appId);
+    yield* expectAppGone(initial.app.serviceId);
     yield* expectProjectGone(initial.project.projectId);
   }),
   { tags: liveTags, timeout: 180_000 },
 );
 
 live.test.provider(
-  "after lost state, adoption finds the App by its logical ID despite a Console rename",
+  "after lost state, adoption finds the service by its logical ID despite a Console rename",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(appStack());
-    yield* updateService({ serviceId: initial.app.appId, displayName: "renamed-in-console" });
+    yield* updateService({ serviceId: initial.app.serviceId, displayName: "renamed-in-console" });
     // Lost state also loses the instance ID, so nothing proves the App is ours.
     yield* forgetState(stack, "Web");
 
     const refused = yield* failureOf(stack.deploy(appStack()));
     expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
-    expect((yield* observeApp(initial.app.appId)).name).toBe("renamed-in-console");
+    expect((yield* observeApp(initial.app.serviceId)).name).toBe("renamed-in-console");
 
     const adopted = yield* stack.deploy(
       Effect.gen(function* () {
         const project = yield* Prisma.Project("Project", { createDatabase: false });
-        const app = yield* Prisma.App("Web", { project }).pipe(adopt(true));
+        const app = yield* Prisma.ComputeService("Web", { project }).pipe(adopt(true));
         return { project, app };
       }),
     );
-    expect(adopted.app.appId).toBe(initial.app.appId);
-    const observed = yield* observeApp(initial.app.appId);
+    expect(adopted.app.serviceId).toBe(initial.app.serviceId);
+    const observed = yield* observeApp(initial.app.serviceId);
     expect(observed.name).toBe(adopted.app.name);
     expect(observed.logicalId).toBe("Web");
 
     yield* stack.destroy();
-    yield* expectAppGone(initial.app.appId);
+    yield* expectAppGone(initial.app.serviceId);
     yield* expectProjectGone(initial.project.projectId);
   }),
   { tags: liveTags, timeout: 180_000 },
 );
 
 live.test.provider(
-  "recovers an interrupted App create as owned",
+  "recovers an interrupted service create as owned",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
@@ -144,77 +147,115 @@ live.test.provider(
     yield* markCreating(stack, "Web");
 
     const recovered = yield* stack.deploy(appStack());
-    expect(recovered.app.appId).toBe(initial.app.appId);
-    expect((yield* observeApp(initial.app.appId)).logicalId).toBe("Web");
+    expect(recovered.app.serviceId).toBe(initial.app.serviceId);
+    expect((yield* observeApp(initial.app.serviceId)).logicalId).toBe("Web");
 
     yield* stack.destroy();
-    yield* expectAppGone(initial.app.appId);
+    yield* expectAppGone(initial.app.serviceId);
     yield* expectProjectGone(initial.project.projectId);
   }),
   { tags: liveTags, timeout: 180_000 },
 );
 
 live.test.provider(
-  "a later declaration reusing a held logical ID does not take over the App",
+  "a later declaration reusing a held logical ID does not take over the service",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
     const resources = (withSecond: boolean) =>
       Effect.gen(function* () {
         const project = yield* Prisma.Project("Project", { createDatabase: false });
-        const first = yield* Prisma.App("First", { project, logicalId: "shared" });
+        const first = yield* Prisma.ComputeService("First", { project, logicalId: "shared" });
         const second = withSecond
-          ? yield* Prisma.App("Second", { project, logicalId: "shared" })
+          ? yield* Prisma.ComputeService("Second", { project, logicalId: "shared" })
           : undefined;
         return { project, first, second };
       });
 
     const initial = yield* stack.deploy(resources(false));
     const refused = yield* failureOf(stack.deploy(resources(true)));
-    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+    // Both declare the logical ID, so the plan refuses the pair before any write.
+    expect(
+      refused.errors.some(
+        (error) =>
+          typeof error === "object" &&
+          error !== null &&
+          "_tag" in error &&
+          error._tag === "PrismaComputeServiceLogicalIdTaken",
+      ),
+    ).toBe(true);
 
     // First's App survives a deploy that drops the failed declaration.
     yield* stack.deploy(resources(false));
-    expect((yield* observeApp(initial.first.appId)).logicalId).toBe("shared");
+    expect((yield* observeApp(initial.first.serviceId)).logicalId).toBe("shared");
 
     yield* stack.destroy();
-    yield* expectAppGone(initial.first.appId);
+    yield* expectAppGone(initial.first.serviceId);
     yield* expectProjectGone(initial.project.projectId);
   }),
   { tags: liveTags, timeout: 180_000 },
 );
 
 live.test.provider(
-  "sets the logical ID on an App deployed before logical IDs existed",
+  "a declaration whose logical ID a service on the platform holds does not take over that service",
+  Effect.fn(function* (stack: Test.ScratchStack) {
+    yield* stack.destroy();
+
+    const resources = (name: "First" | "Second") =>
+      Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const service = yield* Prisma.ComputeService(name, { project, logicalId: "shared" });
+        return { project, service };
+      });
+
+    const initial = yield* stack.deploy(resources("First"));
+    // The service stays on the platform with the logical ID, held by nothing
+    // in this stack, as if another stack had created it.
+    yield* forgetState(stack, "First");
+
+    const refused = yield* failureOf(stack.deploy(resources("Second")));
+    expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+    expect((yield* observeApp(initial.service.serviceId)).logicalId).toBe("shared");
+
+    yield* Prisma.destroyComputeService(initial.service.serviceId);
+    yield* expectAppGone(initial.service.serviceId);
+    yield* stack.destroy();
+    yield* expectProjectGone(initial.project.projectId);
+  }),
+  { tags: liveTags, timeout: 180_000 },
+);
+
+live.test.provider(
+  "sets the logical ID on a service deployed before logical IDs existed",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(appStack({ displayName: "legacy-web" }));
     // What an earlier provider version left behind: no logical ID in the
     // cloud or in the persisted attributes.
-    yield* updateService({ serviceId: initial.app.appId, logicalId: null });
+    yield* updateService({ serviceId: initial.app.serviceId, logicalId: null });
     yield* patchStateAttr(stack, "Web", { logicalId: null });
-    expect((yield* observeApp(initial.app.appId)).logicalId).toBeNull();
+    expect((yield* observeApp(initial.app.serviceId)).logicalId).toBeNull();
 
     const stamped = yield* stack.deploy(appStack({ displayName: "legacy-web" }));
-    expect(stamped.app.appId).toBe(initial.app.appId);
+    expect(stamped.app.serviceId).toBe(initial.app.serviceId);
     expect(stamped.app.logicalId).toBe("Web");
-    expect((yield* observeApp(initial.app.appId)).logicalId).toBe("Web");
+    expect((yield* observeApp(initial.app.serviceId)).logicalId).toBe("Web");
 
     yield* stack.destroy();
-    yield* expectAppGone(initial.app.appId);
+    yield* expectAppGone(initial.app.serviceId);
     yield* expectProjectGone(initial.project.projectId);
   }),
   { tags: liveTags, timeout: 180_000 },
 );
 
 live.test.provider(
-  "requires adoption for an App without a logical ID after lost state, then sets it",
+  "requires adoption for a service without a logical ID after lost state, then sets it",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
     const initial = yield* stack.deploy(appStack({ displayName: "legacy-web" }));
-    yield* updateService({ serviceId: initial.app.appId, logicalId: null });
+    yield* updateService({ serviceId: initial.app.serviceId, logicalId: null });
     yield* forgetState(stack, "Web");
 
     // Found only by display name, so it is not provably ours.
@@ -224,45 +265,49 @@ live.test.provider(
     const adopted = yield* stack.deploy(
       Effect.gen(function* () {
         const project = yield* Prisma.Project("Project", { createDatabase: false });
-        const app = yield* Prisma.App("Web", { project, displayName: "legacy-web" }).pipe(
-          adopt(true),
-        );
+        const app = yield* Prisma.ComputeService("Web", {
+          project,
+          displayName: "legacy-web",
+        }).pipe(adopt(true));
         return { project, app };
       }),
     );
-    expect(adopted.app.appId).toBe(initial.app.appId);
-    expect((yield* observeApp(initial.app.appId)).logicalId).toBe("Web");
+    expect(adopted.app.serviceId).toBe(initial.app.serviceId);
+    expect((yield* observeApp(initial.app.serviceId)).logicalId).toBe("Web");
 
     yield* stack.destroy();
-    yield* expectAppGone(initial.app.appId);
+    yield* expectAppGone(initial.app.serviceId);
     yield* expectProjectGone(initial.project.projectId);
   }),
   { tags: liveTags, timeout: 180_000 },
 );
 
 live.test.provider(
-  "rejects a logical ID that another App on the branch holds",
+  "rejects a logical ID that another service on the branch holds",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
     const resources = (secondLogicalId: string) =>
       Effect.gen(function* () {
         const project = yield* Prisma.Project("Project", { createDatabase: false });
-        const first = yield* Prisma.App("First", { project, logicalId: "shared" });
-        const second = yield* Prisma.App("Second", { project, logicalId: secondLogicalId });
+        const first = yield* Prisma.ComputeService("First", { project, logicalId: "shared" });
+        const second = yield* Prisma.ComputeService("Second", {
+          project,
+          logicalId: secondLogicalId,
+        });
         return { project, first, second };
       });
 
     const initial = yield* stack.deploy(resources("second"));
-    expect(initial.second.appId).not.toBe(initial.first.appId);
+    expect(initial.second.serviceId).not.toBe(initial.first.serviceId);
 
     const failure = yield* failureOf(stack.deploy(resources("shared")));
     expect(failure.text).toContain("logical ID 'shared'");
-    expect((yield* observeApp(initial.first.appId)).logicalId).toBe("shared");
+    expect((yield* observeApp(initial.first.serviceId)).logicalId).toBe("shared");
 
     yield* stack.destroy();
-    yield* expectAppGone(initial.first.appId);
-    yield* expectAppGone(initial.second.appId);
+    yield* expectAppGone(initial.first.serviceId);
+    yield* expectAppGone(initial.second.serviceId);
     yield* expectProjectGone(initial.project.projectId);
   }),
   { tags: liveTags, timeout: 180_000 },
@@ -280,25 +325,25 @@ live.test.provider(
           region: "eu-west-3",
         });
         const branch = yield* Prisma.Branch("Feature", { project, gitName: "feature/app" });
-        const app = yield* Prisma.App("Web", { project, branchGitName: branch.gitName });
+        const app = yield* Prisma.ComputeService("Web", { project, branchGitName: branch.gitName });
         return { project, branch, app };
       }),
     );
     expect(deployed.app.branchId).toBe(deployed.branch.branchId);
     expect(deployed.app.regionId).toBe("eu-west-3");
-    const observed = yield* observeApp(deployed.app.appId);
+    const observed = yield* observeApp(deployed.app.serviceId);
     expect(observed.branchId).toBe(deployed.branch.branchId);
     expect(observed.region.id).toBe("eu-west-3");
 
     yield* stack.destroy();
-    yield* expectAppGone(deployed.app.appId);
+    yield* expectAppGone(deployed.app.serviceId);
     yield* expectProjectGone(deployed.project.projectId);
   }),
   { tags: liveTags, timeout: 180_000 },
 );
 
 live.test.provider(
-  "refuses a region change and replaces the App when its project changes",
+  "refuses a region change and replaces the service when its project changes",
   Effect.fn(function* (stack: Test.ScratchStack) {
     yield* stack.destroy();
 
@@ -307,7 +352,7 @@ live.test.provider(
       Effect.gen(function* () {
         const first = yield* Prisma.Project("First", { createDatabase: false });
         const second = yield* Prisma.Project("Second", { createDatabase: false });
-        const app = yield* Prisma.App("Web", {
+        const app = yield* Prisma.ComputeService("Web", {
           project: target === "first" ? first : second,
           ...(regionId === undefined ? {} : { regionId }),
         });
@@ -318,16 +363,16 @@ live.test.provider(
     expect(initial.app.regionId).toBe("us-east-1");
 
     const moved = yield* failureOf(stack.deploy(resources("first", "eu-west-3")));
-    expect(moved.text).toContain("cannot atomically move an App");
-    expect((yield* observeApp(initial.app.appId)).region.id).toBe("us-east-1");
+    expect(moved.text).toContain("cannot atomically move a service");
+    expect((yield* observeApp(initial.app.serviceId)).region.id).toBe("us-east-1");
 
     const replaced = yield* stack.deploy(resources("second"));
-    expect(replaced.app.appId).not.toBe(initial.app.appId);
-    expect((yield* observeApp(replaced.app.appId)).projectId).toBe(initial.second.projectId);
-    yield* expectAppGone(initial.app.appId);
+    expect(replaced.app.serviceId).not.toBe(initial.app.serviceId);
+    expect((yield* observeApp(replaced.app.serviceId)).projectId).toBe(initial.second.projectId);
+    yield* expectAppGone(initial.app.serviceId);
 
     yield* stack.destroy();
-    yield* expectAppGone(replaced.app.appId);
+    yield* expectAppGone(replaced.app.serviceId);
     yield* expectProjectGone(initial.first.projectId);
     yield* expectProjectGone(initial.second.projectId);
   }),
@@ -345,7 +390,7 @@ live.test.provider(
         const next = promote
           ? yield* Prisma.Branch("Next", { project, gitName: "next", isDefault: true })
           : undefined;
-        const app = yield* Prisma.App("Web", { project });
+        const app = yield* Prisma.ComputeService("Web", { project });
         return { project, next, app };
       });
 
@@ -353,12 +398,12 @@ live.test.provider(
     // The promotion lands first; the next deploy sees the new default.
     yield* stack.deploy(resources(true));
     const followed = yield* stack.deploy(resources(true));
-    expect(followed.app.appId).toBe(initial.app.appId);
+    expect(followed.app.serviceId).toBe(initial.app.serviceId);
     expect(followed.app.branchId).toBe(followed.next!.branchId);
-    expect((yield* observeApp(initial.app.appId)).branchId).toBe(followed.next!.branchId);
+    expect((yield* observeApp(initial.app.serviceId)).branchId).toBe(followed.next!.branchId);
 
     yield* stack.destroy();
-    yield* expectAppGone(initial.app.appId);
+    yield* expectAppGone(initial.app.serviceId);
     yield* expectProjectGone(initial.project.projectId);
   }),
   { tags: liveTags, timeout: 180_000 },
@@ -373,7 +418,7 @@ live.test.provider(
       Effect.gen(function* () {
         const project = yield* Prisma.Project("Project", { createDatabase: false });
         const feature = yield* Prisma.Branch("Feature", { project, gitName: "feature/drift" });
-        const app = yield* Prisma.App("Web", {
+        const app = yield* Prisma.ComputeService("Web", {
           project,
           displayName: "web",
           ...(logicalId === undefined ? {} : { logicalId }),
@@ -384,22 +429,22 @@ live.test.provider(
     const initial = yield* stack.deploy(resources());
     const defaultBranchId = initial.app.branchId;
     yield* updateService({
-      serviceId: initial.app.appId,
+      serviceId: initial.app.serviceId,
       displayName: "drifted",
       branchId: initial.feature.branchId,
     });
 
     // Any update reconciles against observed state, not the persisted attributes.
     const repaired = yield* stack.deploy(resources("web-repaired"));
-    expect(repaired.app.appId).toBe(initial.app.appId);
-    const observed = yield* observeApp(initial.app.appId);
+    expect(repaired.app.serviceId).toBe(initial.app.serviceId);
+    const observed = yield* observeApp(initial.app.serviceId);
     expect(observed.name).toBe("web");
     expect(observed.branchId).toBe(defaultBranchId);
     expect(observed.logicalId).toBe("web-repaired");
 
-    yield* updateService({ serviceId: initial.app.appId, displayName: "drifted-again" });
+    yield* updateService({ serviceId: initial.app.serviceId, displayName: "drifted-again" });
     yield* stack.destroy();
-    yield* expectAppGone(initial.app.appId);
+    yield* expectAppGone(initial.app.serviceId);
     yield* expectProjectGone(initial.project.projectId);
   }),
   { tags: liveTags, timeout: 180_000 },

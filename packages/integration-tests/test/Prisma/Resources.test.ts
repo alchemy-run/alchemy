@@ -1,4 +1,3 @@
-import { App as PrismaApp, AppProvider } from "@alchemy.run/prisma/App";
 import { Branch as PrismaBranch, BranchProvider } from "@alchemy.run/prisma/Branch";
 import {
   PrismaApiError,
@@ -7,6 +6,14 @@ import {
 } from "@alchemy.run/prisma/Client";
 import type { PrismaManagementClient } from "@alchemy.run/prisma/Client";
 import { Compute as PrismaCompute } from "@alchemy.run/prisma/Compute";
+import {
+  ComputeService as PrismaApp,
+  ComputeServiceProvider,
+} from "@alchemy.run/prisma/ComputeService";
+import {
+  ComputeVersion as PrismaDeployment,
+  ComputeVersionProvider,
+} from "@alchemy.run/prisma/ComputeVersion";
 import { Connect, ConnectBinding, connectEnvKeys } from "@alchemy.run/prisma/Connect";
 import { Connection as PrismaConnection, ConnectionProvider } from "@alchemy.run/prisma/Connection";
 import {
@@ -14,7 +21,6 @@ import {
   CustomDomainProvider,
 } from "@alchemy.run/prisma/CustomDomain";
 import { Database as PrismaDatabase, DatabaseProvider } from "@alchemy.run/prisma/Database";
-import { Deployment as PrismaDeployment, DeploymentProvider } from "@alchemy.run/prisma/Deployment";
 import {
   EnvironmentVariable as PrismaEnvironmentVariable,
   EnvironmentVariableProvider,
@@ -407,6 +413,25 @@ const liveProviderContext = Layer.succeed(AlchemyContext, {
 // that does not declare them sees empty lists.
 const emptyList = () => Effect.succeed([]);
 
+// A service reads its Branch's role; a suite that declares no Branch reads a
+// production one.
+const productionBranch = (id: string) =>
+  Effect.succeed({
+    id,
+    type: "branch",
+    url: `https://api.prisma.test/v1/branches/${id}`,
+    gitName: id,
+    isDefault: true,
+    role: "production",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    project: {
+      id: "project-1",
+      url: "https://api.prisma.test/v1/projects/project-1",
+      name: "project-1",
+    },
+  });
+
 const dispatchManagement = (client: any, request: Captured): Response => {
   {
     const segments = request.pathname.split("/").filter((s) => s.length > 0);
@@ -590,7 +615,7 @@ const dispatchManagement = (client: any, request: Captured): Response => {
     }
 
     if (head === "branches" && id !== undefined) {
-      if (request.method === "GET") return call(client.getBranch, [id]);
+      if (request.method === "GET") return call(client.getBranch ?? productionBranch, [id]);
       if (request.method === "PATCH") return call(client.updateBranch, [id, body]);
       if (request.method === "DELETE") {
         return callVoid(client.deleteBranch, [id]);
@@ -610,8 +635,8 @@ const providerLayer = (client: PrismaManagementClient) =>
     DatabaseProvider(),
     ConnectionProvider(),
     BranchProvider(),
-    AppProvider(),
-    DeploymentProvider(),
+    ComputeServiceProvider(),
+    ComputeVersionProvider(),
     CustomDomainProvider(),
     EnvironmentVariableProvider(),
     SourceRepositoryProvider(),
@@ -831,7 +856,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
       return Effect.gen(function* () {
         const app = yield* PrismaCompute(
           "App",
-          { project: "project-1", appName: "api", main: "app.ts" },
+          { project: "project-1", serviceName: "api", main: "app.ts" },
           Effect.gen(function* () {
             yield* Connect(connection);
           }).pipe(Effect.provide(ConnectBinding)),
@@ -850,7 +875,10 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               ? undefined
               : (JSON.parse(value) as string);
 
-        expect(stack.bindings[app.FQN]).toBeUndefined();
+        // The only binding on the host is the one its children report through.
+        expect(stack.bindings[app.FQN]?.map((binding) => binding.sid)).toEqual([
+          "Prisma.Compute.Composition",
+        ]);
         expect(Object.keys(env)).toEqual(expect.arrayContaining(Object.values(keys)));
         expect(unpack(env[keys.connectionId])).toBe("connection-1");
         expect(unpack(env[keys.databaseId])).toBe("database-1");
@@ -905,12 +933,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -942,12 +970,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -1202,30 +1230,33 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
 
         expect(
           yield* versionProvider.diff!(
-            diffInput({ app: "service-1", start: false }, { app: "service-1", start: true }),
+            diffInput(
+              { service: "service-1", start: false },
+              { service: "service-1", start: true },
+            ),
           ),
         ).toEqual({ action: "update" });
         expect(
           yield* versionProvider.diff!(
             diffInput(
-              { app: "service-1", portMapping: { http: 3000 } },
-              { app: "service-1", portMapping: { http: 8080 } },
+              { service: "service-1", portMapping: { http: 3000 } },
+              { service: "service-1", portMapping: { http: 8080 } },
             ),
           ),
         ).toEqual({ action: "replace" });
         expect(
           yield* versionProvider.diff!(
             diffInput(
-              { app: "service-1", portMapping: { http: 3000 } },
-              { app: Output.asOutput("service-1"), portMapping: { http: 8080 } },
+              { service: "service-1", portMapping: { http: 3000 } },
+              { service: Output.asOutput("service-1"), portMapping: { http: 8080 } },
             ),
           ),
         ).toEqual({ action: "replace" });
         expect(
           yield* versionProvider.diff!(
             diffInput(
-              { app: "service-1", portMapping: { http: 3000 }, start: false },
-              { app: "service-1", portMapping: { http: 8080 }, start: Output.asOutput(false) },
+              { service: "service-1", portMapping: { http: 3000 }, start: false },
+              { service: "service-1", portMapping: { http: 8080 }, start: Output.asOutput(false) },
             ),
           ),
         ).toEqual({ action: "replace" });
@@ -1370,12 +1401,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -1573,15 +1604,15 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         const version = yield* versionProvider.read!(
           readInput(
             "Deployment",
-            { app: "service-1" },
+            { service: "service-1" },
             {
-              deploymentId: "version-1",
-              appId: "service-1",
+              versionId: "version-1",
+              serviceId: "service-1",
               foundryVersionId: "foundry-1",
               status: "new",
               previewDomain: null,
               uploadUrl: null,
-              appEndpointDomain: undefined,
+              serviceEndpointDomain: undefined,
               createdAt,
             },
           ),
@@ -1603,8 +1634,8 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         expect(database?.databaseId).toBe("database-1");
         expect(connection?.connectionId).toBe("connection-1");
         expect(branch?.branchId).toBe("branch-1");
-        expect(service?.appId).toBe("service-1");
-        expect(version?.deploymentId).toBe("version-1");
+        expect(service?.serviceId).toBe("service-1");
+        expect(version?.versionId).toBe("version-1");
         expect(version?.status).toBe("running");
         expect(env?.environmentVariableId).toBe("env-1");
         expect(env?.valueKid).toBe("kid-1");
@@ -1631,6 +1662,8 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           "GET /v1/services",
           "GET /v1/services",
           "GET /v1/projects/project-1/branches",
+          // The service reads its Branch, whose role is the class of its variables.
+          "GET /v1/branches/branch-1",
           "GET /v1/deployments/version-1",
           "GET /v1/services/service-1/deployments",
           "GET /v1/environment-variables",
@@ -1668,12 +1701,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -1759,8 +1792,8 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         yield* repoProvider.delete!(
           deleteInput("SourceRepository", { sourceRepositoryId: "repo-1" }),
         );
-        yield* serviceProvider.delete!(deleteInput("App", { appId: "service-1" }));
-        yield* versionProvider.delete!(deleteInput("Deployment", { deploymentId: "version-1" }));
+        yield* serviceProvider.delete!(deleteInput("App", { serviceId: "service-1" }));
+        yield* versionProvider.delete!(deleteInput("Deployment", { versionId: "version-1" }));
 
         expect(calls).toEqual([
           // Over the wire, query params arrive as strings.
@@ -1778,12 +1811,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -1833,12 +1866,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -1896,9 +1929,10 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         );
         const version = yield* versionProvider.reconcile(
           reconcileInput("Deployment", {
-            app: service.appId,
+            service: service.serviceId,
             portMapping: { http: 3000 },
             skipCodeUpload: true,
+            start: false,
           }),
         );
         const env = yield* envProvider.reconcile(
@@ -1923,10 +1957,10 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         expectJsonNotToContain(database, "postgres://direct", "postgres://pooled");
         expectJsonNotToContain(connection, "postgres://api-direct");
         expect(branch.branchId).toBe("branch-2");
-        expect(service.appId).toBe("service-1");
-        expect(version.deploymentId).toBe("version-1");
+        expect(service.serviceId).toBe("service-1");
+        expect(version.versionId).toBe("version-1");
         expect(env.environmentVariableId).toBe("env-1");
-        expect(Redacted.value(env.value)).toBe("secret");
+        expect(Redacted.value(env.value!)).toBe("secret");
         expectJsonNotToContain(env, "secret");
         expect(repo.sourceRepositoryId).toBe("repo-1");
 
@@ -1943,6 +1977,8 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           "GET /v1/projects/project-1/branches",
           "POST /v1/services",
           "GET /v1/projects/project-1/branches",
+          "GET /v1/branches/branch-1",
+          "GET /v1/services/service-1",
           "POST /v1/services/service-1/deployments",
           "GET /v1/deployments/version-1",
           "POST /v1/environment-variables",
@@ -1990,6 +2026,8 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
             },
           ],
           ["listBranches", { projectId: "project-1", query: { limit: "100" } }],
+          ["getBranch", "branch-1"],
+          ["getApp", "service-1"],
           [
             "createAppDeployment",
             { appId: "service-1", input: { portMapping: { http: 3000 }, skipCodeUpload: true } },
@@ -2029,12 +2067,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -2050,12 +2088,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
       return Effect.gen(function* () {
         const domainProvider = yield* PrismaCustomDomain.Provider;
         const domain = yield* domainProvider.reconcile(
-          reconcileInput("CustomDomain", { app: "service-1", hostname: "api.custom.test" }),
+          reconcileInput("CustomDomain", { service: "service-1", hostname: "api.custom.test" }),
         );
 
         expect(domain.customDomainId).toBe("domain-1");
         expect(domain.hostname).toBe("api.custom.test");
-        expect(domain.appId).toBe("service-1");
+        expect(domain.serviceId).toBe("service-1");
         expect(domain.foundryStatus).toBe("pending_dns");
         expect(domain.dnsRecords[0]?.type).toBe("CNAME");
         expect(calls).toEqual([
@@ -2066,12 +2104,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -2111,7 +2149,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         const domainProvider = yield* PrismaCustomDomain.Provider;
         const error = yield* domainProvider
           .reconcile(
-            reconcileInput("CustomDomain", { app: "service-1", hostname: "api.custom.test" }),
+            reconcileInput("CustomDomain", { service: "service-1", hostname: "api.custom.test" }),
           )
           .pipe(Effect.flip);
 
@@ -2121,12 +2159,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -2171,7 +2209,9 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
       return Effect.gen(function* () {
         const domainProvider = yield* Provider.findProvider(PrismaCustomDomain);
         const error = yield* domainProvider
-          .reconcile(reconcileInput("CustomDomain", { app: "service-1", hostname: raced.hostname }))
+          .reconcile(
+            reconcileInput("CustomDomain", { service: "service-1", hostname: raced.hostname }),
+          )
           .pipe(Effect.flip);
 
         expect(error.message).toContain("explicit adoption");
@@ -2181,7 +2221,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         ]);
 
         const observed = yield* domainProvider.read!(
-          readInput("CustomDomain", { app: "service-1", hostname: raced.hostname }),
+          readInput("CustomDomain", { service: "service-1", hostname: raced.hostname }),
         );
         expect(observed?.customDomainId).toBe(raced.id);
         expect(Unowned.is(observed!)).toBe(true);
@@ -2189,12 +2229,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -2240,7 +2280,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
       return Effect.gen(function* () {
         const domainProvider = yield* Provider.findProvider(PrismaCustomDomain);
         const domain = yield* domainProvider.read!(
-          readInput("CustomDomain", { app: "service-1", hostname: "API.CUSTOM.TEST." }),
+          readInput("CustomDomain", { service: "service-1", hostname: "API.CUSTOM.TEST." }),
         );
 
         expect(domain?.customDomainId).toBe("domain-1");
@@ -2251,12 +2291,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -2288,12 +2328,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
       return Effect.gen(function* () {
         const domainProvider = yield* PrismaCustomDomain.Provider;
         const domain = yield* domainProvider.reconcile(
-          reconcileInput("CustomDomain", { app: "service-1", hostname: "api.preview.test" }),
+          reconcileInput("CustomDomain", { service: "service-1", hostname: "api.preview.test" }),
         );
 
         expect(domain.customDomainId).toBe("domain-1");
         expect(domain.hostname).toBe("api.preview.test");
-        expect(domain.appId).toBe("service-1");
+        expect(domain.serviceId).toBe("service-1");
         expect(calls).toContainEqual([
           "createAppDomain",
           { appId: "service-1", input: { hostname: "api.preview.test" } },
@@ -2302,12 +2342,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -2320,7 +2360,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     () => {
       const calls: Call[] = [];
       let status = "new";
-      let latestDeploymentId: string | null = null;
+      const latestDeploymentId = "version-0";
       const client = {
         createAppDeployment: (appId: string, input: unknown) =>
           Effect.sync(() => {
@@ -2369,29 +2409,24 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               createdAt,
             };
           }),
-        promoteApp: (appId: string, { deploymentId }: { deploymentId: string }) =>
-          Effect.sync(() => {
-            calls.push(["promoteApp", { appId, deploymentId }]);
-            latestDeploymentId = deploymentId;
-            return { appEndpointDomain: "api.prisma.build" };
-          }),
       } as unknown as PrismaManagementClient;
 
       return Effect.gen(function* () {
         const provider = yield* PrismaDeployment.Provider;
         const output = yield* provider.reconcile(
           reconcileInput("Deployment", {
-            app: "service-1",
+            service: "service-1",
             skipCodeUpload: true,
             start: true,
-            promote: true,
+            verifyUrl: false,
           }),
         );
 
         expect(output.status).toBe("running");
         expect(output.previewDomain).toBe("version-1.preview.prisma.build");
-        expect(output.appEndpointDomain).toBe("api.prisma.build");
+        expect(output.url).toBe("https://version-1.preview.prisma.build");
         expect(calls).toEqual([
+          ["getApp", "service-1"],
           [
             "createAppDeployment",
             { appId: "service-1", input: { portMapping: undefined, skipCodeUpload: true } },
@@ -2399,8 +2434,6 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           ["getDeployment", "version-1"],
           ["startDeployment", "version-1"],
           ["getDeployment", "version-1"],
-          ["promoteApp", { appId: "service-1", deploymentId: "version-1" }],
-          ["getApp", "service-1"],
         ]);
       }).pipe(
         Effect.provide(providerLayer(client)),
@@ -2418,12 +2451,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -2528,12 +2561,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -2620,12 +2653,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -2698,12 +2731,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -2780,12 +2813,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -2852,12 +2885,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -2926,12 +2959,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -3216,13 +3249,15 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               branchId: "branch-1",
             },
             {
-              appId: "service-1",
+              serviceId: "service-1",
               name: "api",
               projectId: "project-1",
               regionId: "us-east-1",
               branchId: null,
-              latestDeploymentId: null,
-              appEndpointDomain: "service-1.prisma.build",
+              branchRole: null,
+              activeVersionId: null,
+              serviceEndpointDomain: "service-1.prisma.build",
+              url: "https://service-1.prisma.build",
               createdAt,
               logicalId: null,
             },
@@ -3268,7 +3303,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         expect(service.name).toBe("web");
         expect(service.branchId).toBe("branch-1");
         expect(env.valueKid).toBe("kid-new");
-        expect(Redacted.value(env.value)).toBe("new-secret");
+        expect(Redacted.value(env.value!)).toBe("new-secret");
         expectJsonNotToContain(env, "new-secret");
         expect(calls).toEqual([
           ["getDatabase", "database-1"],
@@ -3296,6 +3331,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
             },
           ],
           ["updateApp", { id: "service-1", input: { logicalId: "App" } }],
+          ["getBranch", "branch-1"],
           ["getEnvironmentVariable", "env-1"],
           ["updateEnvironmentVariable", { id: "env-1", input: { value: "new-secret" } }],
         ]);
@@ -3315,12 +3351,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -3435,13 +3471,15 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
               branchGitName: "main",
             },
             {
-              appId: "service-1",
+              serviceId: "service-1",
               name: "api",
               projectId: "project-1",
               regionId: "us-east-1",
               branchId: "branch-main",
-              latestDeploymentId: null,
-              appEndpointDomain: "service-1.prisma.build",
+              branchRole: "production",
+              activeVersionId: null,
+              serviceEndpointDomain: "service-1.prisma.build",
+              url: "https://service-1.prisma.build",
               createdAt,
               logicalId: null,
             },
@@ -3477,12 +3515,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -3557,12 +3595,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -3628,12 +3666,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -3707,12 +3745,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -3759,12 +3797,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -3803,12 +3841,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -3893,12 +3931,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -3983,12 +4021,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -4038,12 +4076,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -4491,11 +4529,17 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
           ["getDeployment", "version-1"],
           // Over the wire, an empty query arrives as an empty object.
           ["listAppDeployments", { appId: "service-1", query: {} }],
+          // The version is kept when its service serves it.
+          ["getApp", "service-1"],
           ["getDeployment", "version-1"],
           ["stopDeployment", "version-1"],
           ["getDeployment", "version-1"],
           ["deleteDeployment", "version-1"],
           ["getApp", "service-1"],
+          // The service's delete stops and deletes its versions first.
+          ["listAppDeployments", { appId: "service-1", query: {} }],
+          ["getDeployment", "version-1"],
+          ["deleteDeployment", "version-1"],
           ["deleteApp", "service-1"],
           ["getSourceRepository", "repo-1"],
           ["deleteSourceRepository", "repo-1"],
@@ -4529,12 +4573,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -4581,12 +4625,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -4630,12 +4674,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -4679,12 +4723,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -4728,12 +4772,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -4792,12 +4836,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -4853,12 +4897,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -4914,12 +4958,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -4975,12 +5019,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -5240,7 +5284,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         );
         expect(Redacted.value(connectionOut.password!)).toBe("rotated-password");
         expect(branchError.message).toContain("appeared after the adoption check");
-        expect(serviceError.message).toContain("not owned by this App resource");
+        expect(serviceError.message).toContain("not owned by this resource");
         expect(envError.message).toContain("appeared after the adoption check");
         expect(repoError.message).toContain("appeared after the adoption check");
         expect(
@@ -5323,12 +5367,12 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",

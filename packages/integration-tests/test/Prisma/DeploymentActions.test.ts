@@ -57,7 +57,7 @@ const clientBackedApi = (client: any) =>
 
 describe(
   "Prisma deployment actions",
-  { tags: ["unit", "provider:prisma", "provider:prisma:deployment", "local"] },
+  { tags: ["unit", "provider:prisma", "provider:prisma:computeversion", "local"] },
   () => {
     it.effect("does not hide a start conflict for an unuploaded version", () => {
       const error = conflict("start");

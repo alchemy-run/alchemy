@@ -94,19 +94,21 @@ const lifecycleResources = [
     ],
   },
   {
-    name: "App",
-    resource: Prisma.App,
+    name: "ComputeService",
+    resource: Prisma.ComputeService,
     routes: [
       "GET /v1/apps",
       "POST /v1/apps",
       "GET /v1/apps/{appId}",
       "PATCH /v1/apps/{appId}",
       "DELETE /v1/apps/{appId}",
+      "POST /v1/apps/{appId}/promote",
+      "POST /v1/apps/{appId}/rollback",
     ],
   },
   {
-    name: "Deployment",
-    resource: Prisma.Deployment,
+    name: "ComputeVersion",
+    resource: Prisma.ComputeVersion,
     routes: [
       "GET /v1/apps/{appId}/deployments",
       "POST /v1/apps/{appId}/deployments",
@@ -151,8 +153,6 @@ const lifecycleResources = [
 ] as const;
 
 const operationOnlyRoutes = [
-  "POST /v1/apps/{appId}/promote",
-  "POST /v1/apps/{appId}/rollback",
   "GET /v1/builds/{buildId}/logs",
   "POST /v1/projects/{id}/transfer",
   "GET /v1/databases/{databaseId}/backups",
@@ -191,14 +191,14 @@ describe("Prisma Management API coverage", { tags: ["unit", "provider:prisma", "
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:bucket",
         "provider:prisma:bucketaccesskey",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",
@@ -224,14 +224,14 @@ describe("Prisma Management API coverage", { tags: ["unit", "provider:prisma", "
     },
     {
       tags: [
-        "provider:prisma:app",
+        "provider:prisma:computeservice",
         "provider:prisma:branch",
         "provider:prisma:bucket",
         "provider:prisma:bucketaccesskey",
         "provider:prisma:connection",
         "provider:prisma:customdomain",
         "provider:prisma:database",
-        "provider:prisma:deployment",
+        "provider:prisma:computeversion",
         "provider:prisma:environmentvariable",
         "provider:prisma:project",
         "provider:prisma:sourcerepository",

@@ -49,7 +49,7 @@ test.provider(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         );
-        const appGone = yield* getService({ serviceId: app.appId }).pipe(
+        const appGone = yield* getService({ serviceId: app.serviceId }).pipe(
           Effect.as(false),
           Effect.catchTag("NotFound", () => Effect.succeed(true)),
         );

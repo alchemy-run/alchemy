@@ -1,10 +1,13 @@
 import { createRequire } from "node:module";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
+import { hashDirectory } from "alchemy/Command/Memo";
+import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { isPathWithin } from "alchemy/Util/isPathWithin";
 import { initialCwd } from "alchemy/Util/Node";
+import { sha256Object } from "alchemy/Util/sha256";
 import { loadFrontendCore } from "alchemy/Website/FrontendCore";
 import { packSiteExtraFiles } from "alchemy/Website/packExtraFiles";
 import * as Data from "effect/Data";
@@ -13,6 +16,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { createComputeArchive } from "../ComputeArchive.ts";
+import { resolveStoredPath, storeArtifact } from "../internal/ArtifactStore.ts";
 
 export class ArtifactOperationFailed extends Data.TaggedError("ArtifactOperationFailed")<{
   readonly message: string;
@@ -47,15 +51,28 @@ export interface WebsiteArtifact extends Resource<
   "Prisma.WebsiteArtifact",
   WebsiteArtifactProps,
   {
-    /** Private directory owned by this artifact resource. */
+    /** Private directory owned by this artifact resource, relative to the initial working directory. */
     directory: string;
-    /** Verified Compute tarball path. */
+    /** Verified Compute tarball path, relative to the initial working directory. */
     artifactPath: string;
     /** SHA-256 of the tarball uploaded by Compute. */
     hash: string;
+    /** SHA-256 of the inputs the tarball was staged from; unchanged inputs skip staging. */
+    inputHash?: string;
   }
 > {}
 
+/**
+ * The Compute artifact of a `Prisma.Website.*` site: its build output, traced
+ * runtime files and server entry, archived on this machine. It makes no
+ * Prisma API calls.
+ *
+ * It stages again only when the application root's files that git does not
+ * ignore, the nearest lockfile, the build output or the props change. The
+ * archive is named by its SHA-256 and its path is relative to the working
+ * directory the deploy started in, so an unchanged site keeps its version on
+ * a machine that never built it, such as a CI runner.
+ */
 export const WebsiteArtifact = Resource<WebsiteArtifact>("Prisma.WebsiteArtifact");
 
 const MAX_ENTRIES = 50_000;
@@ -91,7 +108,8 @@ export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactP
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const root = yield* fs.realPath(path.resolve(initialCwd, props.root));
-  const runtimeBase = process.cwd();
+  // `.alchemy` paths resolve against the directory the deploy started in.
+  const runtimeBase = initialCwd;
   const dotAlchemy = yield* dotAlchemyDirectory;
   const dist = yield* fs.realPath(path.resolve(initialCwd, props.distDir));
   const entry =
@@ -336,6 +354,34 @@ export const stageWebsiteArtifact = Effect.fn(function* (props: WebsiteArtifactP
   };
 });
 
+/**
+ * Hash what staging reads: the application root's files that git does not
+ * ignore, the nearest lockfile, every file of the build output, and the props.
+ * Traced runtime packages are covered by the lockfile.
+ */
+const websiteInputsHash = Effect.fn(function* (props: WebsiteArtifactProps) {
+  const path = yield* Path.Path;
+  const root = yield* hashDirectory({ cwd: path.resolve(initialCwd, props.root) });
+  const dist = yield* hashDirectory({
+    cwd: path.resolve(initialCwd, props.distDir),
+    memo: { include: ["**/*"], exclude: [".alchemy", "**/.alchemy"], lockfile: false },
+  });
+  // As passed, `root`, `distDir` and `serverEntry` may be absolute; relative
+  // to the initial working directory they hash the same in any checkout.
+  const relative = (value: string | undefined) =>
+    value === undefined ? undefined : path.relative(initialCwd, path.resolve(initialCwd, value));
+  return yield* sha256Object({
+    props: {
+      ...props,
+      root: relative(props.root),
+      distDir: relative(props.distDir),
+      serverEntry: relative(props.serverEntry),
+    },
+    root,
+    dist,
+  });
+});
+
 export const WebsiteArtifactProvider = () =>
   Provider.effect(
     WebsiteArtifact,
@@ -345,11 +391,31 @@ export const WebsiteArtifactProvider = () =>
       const dotAlchemy = yield* dotAlchemyDirectory;
       return {
         list: () => Effect.succeed([]),
-        // Traced dependencies can change independently of the framework's hash.
-        diff: () => Effect.succeed({ action: "update" as const }),
-        reconcile: Effect.fn(function* ({ id, news }) {
+        // A changed source, build output or lockfile restages the artifact;
+        // an unchanged one keeps `artifactPath`, so its version is not replaced.
+        diff: Effect.fn(function* ({ news, output }) {
+          // A missing archive is not a change: it is named by its SHA-256,
+          // so the version that uses it needs no upload.
+          if (!output?.inputHash || !isResolved(news)) return { action: "update" } as const;
+          return (yield* websiteInputsHash(news)) === output.inputHash
+            ? ({ action: "noop" } as const)
+            : ({ action: "update" } as const);
+        }),
+        reconcile: Effect.fn(function* ({ id, news, output }) {
+          const inputHash = yield* websiteInputsHash(news);
+          const storedArchive = output ? yield* resolveStoredPath(output.artifactPath) : undefined;
+          if (
+            output?.inputHash === inputHash &&
+            storedArchive !== undefined &&
+            (yield* fs.exists(storedArchive))
+          ) {
+            return output;
+          }
           const name = yield* createPhysicalName({ id, maxLength: 80 });
-          const directory = path.join(dotAlchemy, "prisma-websites", name);
+          const directory = path.relative(
+            initialCwd,
+            path.resolve(initialCwd, dotAlchemy, "prisma-websites", name),
+          );
           return yield* Effect.scoped(
             Effect.gen(function* () {
               const staged = yield* stageWebsiteArtifact(news);
@@ -357,24 +423,16 @@ export const WebsiteArtifactProvider = () =>
                 ...staged,
                 output: "file",
               });
-              return yield* Effect.gen(function* () {
-                yield* fs.makeDirectory(directory, { recursive: true });
-                const artifactPath = path.join(directory, `${archive.sha256}.tar.gz`);
-                yield* fs.copyFile(archive.path, artifactPath);
-                for (const old of yield* fs.readDirectory(directory)) {
-                  if (old !== path.basename(artifactPath) && /^[a-f0-9]{64}\.tar\.gz$/.test(old)) {
-                    yield* fs.remove(path.join(directory, old), {
-                      force: true,
-                    });
-                  }
-                }
-                return { directory, artifactPath, hash: archive.sha256 };
-              }).pipe(Effect.ensuring(archive.cleanup));
+              const artifactPath = yield* storeArtifact(directory, archive).pipe(
+                Effect.ensuring(archive.cleanup),
+              );
+              return { directory, artifactPath, hash: archive.sha256, inputHash };
             }),
           );
         }),
         delete: Effect.fn(function* ({ output }) {
-          yield* fs.remove(output.directory, { recursive: true, force: true });
+          const directory = yield* resolveStoredPath(output.directory);
+          yield* fs.remove(directory, { recursive: true, force: true });
         }),
       };
     }),

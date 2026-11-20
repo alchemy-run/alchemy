@@ -1,7 +1,7 @@
-import type { App } from "@alchemy.run/prisma/App";
 import { Branch as PrismaBranch, BranchProvider } from "@alchemy.run/prisma/Branch";
 import { PrismaApiError, PrismaClient } from "@alchemy.run/prisma/Client";
 import type { PrismaManagementClient } from "@alchemy.run/prisma/Client";
+import type { ComputeService } from "@alchemy.run/prisma/ComputeService";
 import {
   CustomDomain as PrismaCustomDomain,
   CustomDomainProvider,
@@ -1474,12 +1474,12 @@ customDomains.test.provider(
 
       const domain = yield* stack.deploy(
         PrismaCustomDomain("Domain", {
-          app: { appId: Output.asOutput("app-1") } as unknown as App,
+          service: { serviceId: Output.asOutput("app-1") } as unknown as ComputeService,
           hostname: "NEW.EXAMPLE.COM.",
         }),
       );
 
-      expect(domain.appId).toBe("app-1");
+      expect(domain.serviceId).toBe("app-1");
       expect(domain.hostname).toBe("new.example.com");
       expect(domain.foundryStatus).toBe("pending");
       expect(customDomainCalls).toContainEqual(["listAppDomains", "app-1"]);
@@ -1501,14 +1501,14 @@ customDomains.test.provider(
       const failed = yield* provider.read!({
         id: "Domain",
         instanceId: "00000000000000000000000000000000",
-        olds: { app: "app-1", hostname: "new.example.com" },
+        olds: { service: "app-1", hostname: "new.example.com" },
         output: replacement,
       } as never);
       const failedDiff = yield* provider.diff!({
         id: "Domain",
         instanceId: "00000000000000000000000000000000",
-        olds: { app: "app-1", hostname: "new.example.com" },
-        news: { app: "app-1", hostname: "new.example.com" },
+        olds: { service: "app-1", hostname: "new.example.com" },
+        news: { service: "app-1", hostname: "new.example.com" },
         output: failed,
         oldBindings: [],
         newBindings: [],
@@ -1517,8 +1517,8 @@ customDomains.test.provider(
       const activeDiff = yield* provider.diff!({
         id: "Domain",
         instanceId: "00000000000000000000000000000000",
-        olds: { app: "app-1", hostname: "new.example.com" },
-        news: { app: "app-1", hostname: "new.example.com" },
+        olds: { service: "app-1", hostname: "new.example.com" },
+        news: { service: "app-1", hostname: "new.example.com" },
         output: { ...replacement, status: "active" },
         oldBindings: [],
         newBindings: [],
@@ -1528,8 +1528,8 @@ customDomains.test.provider(
       const retried = yield* provider.reconcile({
         id: "Domain",
         instanceId: "00000000000000000000000000000000",
-        news: { app: "app-1", hostname: "new.example.com" },
-        olds: { app: "app-1", hostname: "new.example.com" },
+        news: { service: "app-1", hostname: "new.example.com" },
+        olds: { service: "app-1", hostname: "new.example.com" },
         output: failed,
         bindings: [],
       } as never);
@@ -1542,8 +1542,8 @@ customDomains.test.provider(
       const moveDiff = yield* provider.diff!({
         id: "Domain",
         instanceId: "00000000000000000000000000000000",
-        olds: { app: "app-1", hostname: "new.example.com" },
-        news: { app: "app-2", hostname: "new.example.com" },
+        olds: { service: "app-1", hostname: "new.example.com" },
+        news: { service: "app-2", hostname: "new.example.com" },
         output: retried,
         oldBindings: [],
         newBindings: [],
@@ -1555,8 +1555,8 @@ customDomains.test.provider(
       const hostnameDiff = yield* provider.diff!({
         id: "Domain",
         instanceId: "00000000000000000000000000000000",
-        olds: { app: "app-1", hostname: "new.example.com" },
-        news: { app: "app-1", hostname: "other.example.com" },
+        olds: { service: "app-1", hostname: "new.example.com" },
+        news: { service: "app-1", hostname: "other.example.com" },
         output: retried,
         oldBindings: [],
         newBindings: [],
@@ -1567,8 +1567,8 @@ customDomains.test.provider(
         .reconcile({
           id: "Domain",
           instanceId: "00000000000000000000000000000000",
-          news: { app: "app-2", hostname: "new.example.com" },
-          olds: { app: "app-1", hostname: "new.example.com" },
+          news: { service: "app-2", hostname: "new.example.com" },
+          olds: { service: "app-1", hostname: "new.example.com" },
           output: retried,
           bindings: [],
         } as never)
@@ -1581,7 +1581,7 @@ customDomains.test.provider(
     tags: [
       "unit",
       "provider:prisma",
-      "provider:prisma:app",
+      "provider:prisma:computeservice",
       "provider:prisma:customdomain",
       "local",
     ],

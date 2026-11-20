@@ -20,7 +20,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { extractConnectionSecrets } from "./Client.ts";
-import { destroyProjectApps } from "./ComputeLifecycle.ts";
+import { destroyProjectComputeServices } from "./ComputeLifecycle.ts";
 import {
   hasCanonicalConnectionSecrets,
   mergeConnectionSecrets,
@@ -718,7 +718,7 @@ const ProviderLive = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.projectId)) return;
-          yield* destroyProjectApps(output.projectId);
+          yield* destroyProjectComputeServices(output.projectId);
         }),
       };
     }),

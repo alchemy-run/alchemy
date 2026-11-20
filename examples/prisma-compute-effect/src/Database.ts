@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 
 export const region = "eu-west-3" as const;
 
-export const appNameConfig = Effect.gen(function* () {
+export const serviceNameConfig = Effect.gen(function* () {
   const stage = yield* Stage;
   return yield* Config.String("PRISMA_EFFECT_APP").pipe(
     Effect.orElseSucceed(() => `alchemy-prisma-compute-effect-${stage}`),

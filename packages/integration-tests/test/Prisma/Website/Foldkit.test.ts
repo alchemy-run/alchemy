@@ -36,11 +36,11 @@ describe.sequential(
             expect(site.url).toBeDefined();
             expect(site.compute).toBeDefined();
             const compute = site.compute!;
-            yield* getService({ serviceId: compute.appId });
+            yield* getService({ serviceId: compute.serviceId });
             yield* verifyFoldkitRendering(site.url!, mode);
             yield* verifyFoldkitBrowser(site.url!, mode);
             yield* stack.destroy();
-            const gone = yield* getService({ serviceId: compute.appId })
+            const gone = yield* getService({ serviceId: compute.serviceId })
               .pipe(
                 Effect.as(false),
                 Effect.catchTag("NotFound", () => Effect.succeed(true)),

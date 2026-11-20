@@ -1,6 +1,6 @@
 ---
 title: What is Prisma?
-description: The concepts behind Prisma's data platform — workspaces, projects, Prisma Postgres, connections, branches, Compute apps, deployments and buckets — and how @alchemy.run/prisma models each of them.
+description: The concepts behind Prisma's data platform — workspaces, projects, Prisma Postgres, connections, branches, Compute services and versions, and buckets — and how @alchemy.run/prisma models each of them.
 ---
 
 import Tree from "../../../components/diagrams/Tree.astro";
@@ -82,11 +82,11 @@ The app listens on `PORT`, which Compute sets. There's no Docker image and no re
 
 See [Apps](/prisma/compute/apps).
 
-## Deployments
+## Services and versions
 
-Each change to an app becomes a **deployment**. The new deployment starts next to the old one, must pass its **health check**, and only then takes traffic. If it fails after taking over, Alchemy restores the one before.
+A Compute app is a **service**, with a stable URL. Each change to its code or environment becomes a new **version** of the service, which the Management API calls a deployment. The new version starts next to the active one and must pass its **health check** on its own preview URL. Only then does the service serve it. If the stable URL then fails its check, Alchemy restores the version before. The replaced version is kept, scaled to zero, so the platform can roll back to it.
 
-See [Deployments](/prisma/compute/deployments).
+See [Services and versions](/prisma/compute/deployments).
 
 ## Buckets
 
