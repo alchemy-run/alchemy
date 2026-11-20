@@ -1,6 +1,7 @@
 import * as NodeFsPromises from "node:fs/promises";
 import * as NodePath from "node:path";
 import { fileURLToPath } from "node:url";
+import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Effect from "effect/Effect";
 import { describe, expect, it } from "vitest";
 import { hashInput, type MemoOptions } from "../InputHash.ts";
@@ -171,6 +172,24 @@ describe("hashInput tree", () => {
       await NodeFsPromises.writeFile(full, "x");
     }
     expect((await hash(app, [], memo)).hash).toBe(before.hash);
+  });
+
+  it("never hashes alchemy's runtime directory, moved by ALCHEMY_DIR or not", async () => {
+    const { app } = await makeMonorepo();
+    const runtime = NodePath.join(app, ".alchemy-ci");
+    const hashIn = () =>
+      run(
+        hashInput({ rootDir: app, outputDirs: ["dist"], memo: undefined, workspaces: [] }).pipe(
+          Effect.provideService(AlchemyContext, { dotAlchemy: runtime, dev: false, adopt: false }),
+        ),
+      );
+    const before = await hashIn();
+    for (const file of [".alchemy-ci/log/run.ndjson", ".alchemy/state/app.json"]) {
+      const full = NodePath.join(app, file);
+      await NodeFsPromises.mkdir(NodePath.dirname(full), { recursive: true });
+      await NodeFsPromises.writeFile(full, "x");
+    }
+    expect((await hashIn()).hash).toBe(before.hash);
   });
 });
 

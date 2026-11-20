@@ -7,6 +7,7 @@ import {
   type IgnoreRules,
   type WalkEntryType,
 } from "@alchemy.run/node-utils/ignore-rules";
+import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -279,10 +280,17 @@ export const hashInput = Effect.fn(function* (params: {
   const path = yield* Path.Path;
   // Dependency trees, VCS metadata, alchemy's state and the framework's own
   // build output (hashing it would make every build bust its memo).
+  // `ALCHEMY_DIR` can move alchemy's state under another name.
+  const dotAlchemy = path
+    .relative(params.rootDir, path.resolve(yield* dotAlchemyDirectory))
+    .replaceAll("\\", "/");
   const alwaysExclude = [
     "node_modules/",
     ".git/",
     "/.alchemy/",
+    ...(dotAlchemy && !dotAlchemy.startsWith("../") && !path.isAbsolute(dotAlchemy)
+      ? [`/${dotAlchemy}/`]
+      : []),
     ...params.outputDirs.map((dir) => `/${dir.replace(/^\.?\//, "").replace(/\/+$/, "")}/`),
   ];
   const relative = (dir: string) => path.relative(params.rootDir, dir).replaceAll("\\", "/");
