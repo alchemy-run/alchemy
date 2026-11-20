@@ -6,9 +6,7 @@ import { destroy as destroyStack } from "alchemy/Destroy";
 import * as Plan from "alchemy/Plan";
 import { Stage } from "alchemy/Stage";
 import { State, inMemoryState } from "alchemy/State";
-import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
@@ -652,7 +650,7 @@ describe.sequential(
     );
 
     test(
-      "recovers a missing application only with its recorded exact attachment",
+      "recovers a missing application attached to the namespace its Worker publishes",
       Effect.gen(function* () {
         const first = yield* stack;
         const namespaceId = first.app.durableObjects?.namespaceId;
@@ -713,17 +711,10 @@ describe.sequential(
             }),
           );
           expect(deleted).toBeUndefined();
-          for (const missing of [undefined, {}]) {
-            yield* corruptProjection(missing);
-            const failed = yield* deploy(AttachmentStack).pipe(Effect.exit);
-            assert(Exit.isFailure(failed));
-            expect(Cause.pretty(failed.cause)).toContain("unresolved Durable Object namespace");
-            const applications = yield* Containers.listContainerApplications({
-              accountId: first.app.accountId,
-            });
-            expect(applications.some((app) => app.name === first.app.applicationName)).toBe(false);
-          }
-          yield* corruptProjection({ namespaceId });
+          // State lost the attachment, but the Container waits for its
+          // Worker, which publishes the live namespace: the missing
+          // application is recreated attached to it, never unattached.
+          yield* corruptProjection(undefined);
           const recovered = yield* deploy(AttachmentStack);
           expect(recovered.worker.durableObjectNamespaces).toEqual(
             first.worker.durableObjectNamespaces,

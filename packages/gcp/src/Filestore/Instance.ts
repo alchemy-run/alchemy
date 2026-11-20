@@ -355,6 +355,18 @@ export type Instance = Resource<
  * manage by its identifiers, in the ambient project unless `project` names
  * another.
  */
+/**
+ * Deletion was refused because the Filestore instance has deletion protection on, set
+ * through `deletionProtectionEnabled` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class InstanceDeletionProtected extends Data.TaggedError(
+  "GCP.Filestore.InstanceDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
 export interface InstanceLookup {
   /**
    * Instance id (the `{instance}` segment of
@@ -1211,11 +1223,19 @@ export const InstanceProvider = () =>
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const existing = yield* getByName(output.name);
       if (existing === undefined) return;
 
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (existing.deletionProtectionEnabled === true) {
+        if (force !== true) {
+          return yield* new InstanceDeletionProtected({
+            resourceName: output.name,
+            message: `Filestore instance '${output.name}' has deletion protection on. Set \`deletionProtectionEnabled: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         const patched = yield* file
           .patchProjectsLocationsInstances({
             name: output.name,

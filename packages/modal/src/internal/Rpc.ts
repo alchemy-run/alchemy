@@ -54,6 +54,6 @@ export const createModalRuntimeContext =
           requireRpcCaller(callers, serveRpc(methods, fallback), fallback),
           options,
         );
-      }) as Effect.Effect<void, never, any>;
+      });
     return Object.assign(base, { serve });
   };

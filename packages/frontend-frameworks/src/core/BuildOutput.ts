@@ -40,6 +40,11 @@ export interface BuildOutput {
   clientDirectory: string | undefined;
   serverModules: Array<OutputFile> | undefined;
   externalWorkspaces: Set<string>;
+  /**
+   * The client's resolved Vite `base`, when the build was made for one. A
+   * root-relative base nests the uploaded asset paths under it.
+   */
+  assetBase?: string | undefined;
   /** Portable handler and asset configuration, independent of a listening Node server. */
   nodeServe?: NodeServeEntryOptions | undefined;
 }

@@ -16,9 +16,8 @@ export class OwnerChanged extends Domain.Event("OwnerChanged", {
 
 /** Reassign an account to another customer. */
 export class ChangeOwner extends Domain.Command("ChangeOwner", {
-  target: AccountId,
   middleware: [Session],
-  input: { customerId: CustomerId },
+  input: { accountId: AccountId, customerId: CustomerId },
   events: [OwnerChanged],
   rejects: [NotOpen, NotPermitted],
 }) {}

@@ -10,10 +10,10 @@ export interface BucketEventSourceProps {
   /** Byte-exact object-key prefix. */ prefix?: string;
   /** Enable future delivery. @default true */ enabled?: boolean;
 }
-export type BucketEventSourceService = <R = never>(
+export type BucketEventSourceService = <R = never, E = never>(
   bucket: Bucket,
   props: BucketEventSourceProps,
-  handler: (event: BucketEvent) => Effect.Effect<void, unknown, R>,
+  handler: (event: BucketEvent) => Effect.Effect<void, E, R>,
 ) => Effect.Effect<void, never, Exclude<R, RuntimeContext | Scope>>;
 /**
  * Subscribe a Neon Function to successful uploads in a same-branch bucket.
@@ -37,10 +37,10 @@ export interface BucketEventSource extends Binding.Service<
   "Neon.BucketEventSource",
   BucketEventSourceService
 > {
-  <R = never>(
+  <R = never, E = never>(
     bucket: Bucket,
     props: BucketEventSourceProps,
-    handler: (event: BucketEvent) => Effect.Effect<void, unknown, R>,
+    handler: (event: BucketEvent) => Effect.Effect<void, E, R>,
   ): Effect.Effect<void, never, BucketEventSource | Exclude<R, RuntimeContext | Scope>>;
 }
 export const BucketEventSource = Binding.Service<BucketEventSource>("Neon.BucketEventSource");

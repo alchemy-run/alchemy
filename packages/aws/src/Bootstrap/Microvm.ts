@@ -1,3 +1,4 @@
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
   entrypointLayer,
   resolveProgram,
@@ -56,6 +57,7 @@ export const bootstrapMicrovm = (
         Layer.provideMerge(stackConstant(options.stack.name, options.stack.stage)),
         Layer.provideMerge(runtime.httpServer),
         Layer.provideMerge(platform),
+        Layer.provideMerge(RuntimeConfigProviderLive),
         Layer.provideMerge(Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")),
       ),
     ),

@@ -29,6 +29,7 @@
     },
     { "path": "../../packages/cloudflare/tsconfig.json" },
     { "path": "../../packages/neon/tsconfig.json" },
-    { "path": "../../packages/prisma/tsconfig.json" }
+    { "path": "../../packages/prisma/tsconfig.json" },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
   ]
 }

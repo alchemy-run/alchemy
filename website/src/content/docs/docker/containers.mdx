@@ -1,0 +1,191 @@
+---
+title: Containers
+description: Run an image as a Docker.Container — start it, publish ports, pass secrets through its environment, health-check it, reach the host — and know which changes recreate it.
+---
+
+import Boundaries from "../../../components/diagrams/Boundaries.astro";
+
+A **container** is a running image: a process with its own filesystem, network and limits, isolated from the rest of the machine. Its filesystem is a thin writable layer over the image, gone when the container is removed. By default it can reach out to the network, but nothing outside can reach in until it **publishes** a port, which maps a port on the host to one inside the container.
+
+<Boundaries
+  nodes={[
+    { id: "psql", label: "psql", type: "your machine", col: 0, row: 0 },
+    { id: "pg", label: "postgres", type: ":5432 as host :15432", col: 1, row: 0, tone: "accent" },
+    { id: "worker", label: "worker", type: "no ports", col: 1, row: 1 },
+  ]}
+  zones={[
+    { id: "pgz", label: "container", nodes: ["pg"] },
+    { id: "wz", label: "container", nodes: ["worker"], labelAt: "right" },
+  ]}
+  links={[
+    { from: "psql", to: "pg", label: "localhost:15432" },
+    { from: "psql", to: "wz", kind: "blocked", label: "nothing published" },
+  ]}
+  caption="Only published ports are reachable from the host. Containers that talk to each other don't need published ports at all: they share a network instead."
+/>
+
+## Run a container
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Docker from "@alchemy.run/docker";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Docker.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const web = yield* Docker.Container("web", {
+      image: "nginx:alpine",
+      ports: [{ external: 8080, internal: 80 }],
+      start: true,
+    });
+
+    return { name: web.name, status: web.status };
+  }),
+);
+```
+
+`start: true` runs it. Without it, the container is created and left stopped. `image` takes a reference like `nginx:alpine`, or a [`Docker.Image`](/docker/build-images) or [`Docker.RemoteImage`](/docker/remote-images) resource. `command` replaces the image's default command.
+
+## Customize the process and namespaces
+
+These settings override what the image declares, or set up the process's namespaces:
+
+```typescript
+const job = yield* Docker.Container("job", {
+  image: "alpine:3.22",
+  platform: "linux/amd64",
+  entrypoint: "/bin/sh",
+  command: ["-c", "pwd && echo ready"],
+  workingDirectory: "/workspace",
+  ipcNamespace: "private",
+  sysctls: { "net.ipv4.ip_unprivileged_port_start": "1024" },
+  keepStdinOpen: true,
+  allocatePseudoTerminal: true,
+  start: true,
+});
+```
+
+`entrypoint` is the program and `command` its arguments. `platform` picks the image's architecture. `ipcNamespace` and `pidNamespace` share or isolate the container's IPC and process namespaces, and `sysctls` sets kernel parameters scoped to the container. Docker fixes all of these when it creates the container, so changing one replaces it.
+
+`hostname`, `dns`, `dnsSearch` and `dnsOptions` set how the container names itself and resolves others, and are fixed at creation too.
+
+## Publish ports
+
+Each mapping publishes one container port on the host:
+
+```typescript
+const api = yield* Docker.Container("api", {
+  image: "ghcr.io/acme/api:latest",
+  ports: [{ external: 0, internal: 3000 }],
+  start: true,
+});
+
+const hostPort = api.ports["3000/tcp"];
+```
+
+`external: 0` lets Docker choose a free host port, and `ports` reports the one it chose, keyed by container port and protocol. Add `protocol: "udp"` for UDP.
+
+## Pass secrets in the environment
+
+`environment` takes plain strings and `Redacted` values:
+
+```typescript
+const db = yield* Docker.Container("postgres", {
+  image: "postgres:18-alpine",
+  environment: {
+    POSTGRES_DB: "app",
+    POSTGRES_PASSWORD: yield* Config.Redacted("POSTGRES_PASSWORD"),
+  },
+  start: true,
+});
+```
+
+Only the variable names go on the `docker` command line, so a password never shows in a process listing or shell history. Docker itself stores the values, and `docker inspect` shows them to anyone with access to the engine. See [Secrets](/environments/secrets) for where `Config` values come from.
+
+Docker env files work too. Later files win, and `environment` wins over all of them:
+
+```typescript
+const app = yield* Docker.Container("app", {
+  image: "ghcr.io/acme/app:latest",
+  envFiles: ["./config/base.env", "./config/production.env"],
+  environment: { LOG_LEVEL: "info" },
+});
+```
+
+Editing an env file recreates the container on the next deploy. Alchemy keeps only a hash of the files, on the container's label, never their values.
+
+## Check its health
+
+```typescript
+const db = yield* Docker.Container("postgres", {
+  image: "postgres:18-alpine",
+  healthcheck: {
+    cmd: ["CMD-SHELL", "pg_isready -U postgres"],
+    interval: "5 seconds",
+    timeout: "5 seconds",
+    retries: 10,
+    startPeriod: "10 seconds",
+  },
+  restart: "unless-stopped",
+  start: true,
+});
+```
+
+Docker runs the check inside the container and marks it `healthy` or `unhealthy`. A string `cmd` runs in the container's shell, and `["NONE"]` turns off a check the image defines. `restart` decides whether Docker restarts the container when it exits or the engine restarts: `"no"`, `"always"`, `"on-failure"` or `"unless-stopped"`.
+
+## Reach a service on the host
+
+A container's `localhost` is the container itself. To reach something on your machine, like a database you run outside Docker, add Docker's `host-gateway` name:
+
+```typescript
+const api = yield* Docker.Container("api", {
+  image: "ghcr.io/acme/api:latest",
+  extraHosts: ["host.docker.internal:host-gateway"],
+  environment: { DATABASE_URL: "postgres://postgres@host.docker.internal:5432/app" },
+  start: true,
+});
+```
+
+On Linux the name resolves to the Docker bridge's gateway. A firewall that drops incoming traffic by default, as ufw does, then lets the name resolve but times out the connection. Allow the bridge subnet, for example `sudo ufw allow from 172.16.0.0/12`.
+
+## What a change does
+
+Docker can't change most of a container's settings once it exists, so changing the image, environment, ports, volumes, limits or almost any other prop **recreates** it. The old container is removed before the new one starts, so plan for a short gap, and keep data in a [Volume](/docker/volumes) so it survives.
+
+Two changes apply in place: `networks`, which connects and disconnects it, and `start`. A `Docker.Image` passed as `image` recreates the container whenever it's rebuilt, even under the same tag.
+
+## Read its state
+
+Each container's attributes, including `status` and `ports`, are outputs of the Stack. `Docker.inspectContainer` reads the same attributes fresh from the engine, for any container by name:
+
+```typescript
+const live = yield* Docker.inspectContainer("app-postgres");
+```
+
+## Use a container you didn't create
+
+A container with the same name that Alchemy didn't create stops the deploy, so a Stack never takes over someone else's by accident. To manage it from now on, adopt it:
+
+```typescript
+const db = yield* Docker.Container("postgres", {
+  name: "postgres",
+  image: "postgres:18-alpine",
+}).pipe(Alchemy.adopt(true));
+```
+
+To refer to one without managing it, look it up. Alchemy reads it and never changes or removes it:
+
+```typescript
+const db = Docker.Container.lookup({ name: "postgres" });
+```
+
+## Next
+
+- [Networks](/docker/networks) to connect containers by name.
+- [Volumes](/docker/volumes) for data that outlives a container.
+- [Limits & security](/docker/limits-and-security) to cap resources and drop privileges.

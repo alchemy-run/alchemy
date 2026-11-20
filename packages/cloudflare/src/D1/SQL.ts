@@ -71,13 +71,15 @@ export const D1 = Effect.fn(function* <E = never, R = never>(
   });
   const batch: D1Client.D1Client["batch"] = (statements) =>
     Effect.flatMap(connected, (real) => real.batch(statements));
-  return Object.assign(client, {
+  // Typed as `@effect/sql-d1` types its own client: D1 has no `updateValues`,
+  // which `D1Client` declares `never`.
+  return Object.assign(client as D1Client.D1Client & Sql.SqlClient, {
     [D1Client.TypeId]: D1Client.TypeId,
     // The options known at Construction phase. The binding (`db`) resolves
     // on the first statement of an execution.
     config: { ...config } as D1Client.D1ClientConfig,
     batch,
-  }) as D1Client.D1Client;
+  });
 });
 
 /**

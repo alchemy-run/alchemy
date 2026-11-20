@@ -1,6 +1,6 @@
 import { inlineSqlParams, MigrationError, type SqlExecutor } from "@alchemy.run/sql/Migrations";
 import * as Retry from "@distilled.cloud/cloudflare/Retry";
-import { isTransientError } from "@distilled.cloud/core/category";
+import { isTransient } from "alchemy/DeployRetry";
 import * as Effect from "effect/Effect";
 
 /**
@@ -64,7 +64,7 @@ export const makeD1MigrationExecutor = <E>(raw: D1SqlExecutor<E>): SqlExecutor =
           new MigrationError({
             message: `D1 migration batch failed: ${String(cause)}`,
             cause,
-            transient: isTransientError(cause),
+            transient: isTransient(cause),
           }),
       ),
     ),
