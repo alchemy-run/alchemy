@@ -28,8 +28,13 @@ the stack program. Run `alchemy deploy` afterwards to refresh them.
 | `0`  | No drift, or the drift was repaired                        |
 | `1`  | The check failed, e.g. a resource couldn't be read         |
 | `2`  | Drift was found and not repaired                           |
+| `3`  | No drift found, but an interrupted deploy left a resource unchecked; run `alchemy deploy` to recover it |
 
-A scheduled job can alert on `2` without parsing the plan.
+A scheduled job can alert on `2` and `3` without parsing the plan. A resource
+whose provider has no `read` (such as `Command.Build`) is listed as skipped
+but never fails the check. For per-resource detail, run with
+`--log-format json`: each skipped resource gets an `apply.resource.status`
+event with `status: "skipped"` and an `apply.resource.note` with the reason.
 
 ## Flags
 
