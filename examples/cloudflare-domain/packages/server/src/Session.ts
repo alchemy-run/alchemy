@@ -1,3 +1,4 @@
+import * as Domain from "@alchemy.run/domain";
 import { Actor, customer } from "@bank/domain/Actor";
 import { CurrentActor } from "@bank/domain/CurrentActor.context";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
@@ -64,12 +65,12 @@ export const signSession = Effect.fn(function* (actor: Actor) {
   return `${claims}.${Base64Url.encode(new Uint8Array(mac))}`;
 });
 
-/** The actor a token was signed for, if its signature checks out and it hasn't expired. */
+/** What a token says, if its signature checks out and it hasn't expired. */
 const verifySession = Effect.fn(function* (token: string) {
   const [claims, mac, ...rest] = token.split(".");
-  if (!claims || !mac || rest.length > 0) return Option.none<Actor>();
+  if (!claims || !mac || rest.length > 0) return Option.none<typeof Claims.Type>();
   const signature = Base64Url.decode(mac);
-  if (Result.isFailure(signature)) return Option.none<Actor>();
+  if (Result.isFailure(signature)) return Option.none<typeof Claims.Type>();
   const key = yield* hmacKey();
   // `verify` compares in constant time.
   const valid = yield* Effect.promise(() =>
@@ -81,10 +82,10 @@ const verifySession = Effect.fn(function* (token: string) {
     ),
   );
   const json = Base64Url.decodeString(claims);
-  if (!valid || Result.isFailure(json)) return Option.none<Actor>();
+  if (!valid || Result.isFailure(json)) return Option.none<typeof Claims.Type>();
   const decoded = yield* Schema.decodeEffect(Claims)(json.success).pipe(Effect.option);
   const now = yield* Clock.currentTimeMillis;
-  return Option.flatMap(decoded, (c) => (c.expires > now ? Option.some(c.actor) : Option.none()));
+  return Option.filter(decoded, (c) => c.expires > now);
 });
 
 /** The token a request carries: its session cookie (browsers), or `Authorization: Bearer` (scripts). */
@@ -99,24 +100,38 @@ const tokenOf = (headers: Headers.Headers): Option.Option<string> =>
       ),
   );
 
-/** Who a request is from, if it carries a valid session. */
-export const actorOf = Effect.fn(function* (headers: Headers.Headers) {
+/** The session a request carries, if it is valid: who, and until when. */
+const sessionOf = Effect.fn(function* (headers: Headers.Headers) {
   const token = tokenOf(headers);
-  return Option.isNone(token) ? Option.none<Actor>() : yield* verifySession(token.value);
+  return Option.isNone(token)
+    ? Option.none<typeof Claims.Type>()
+    : yield* verifySession(token.value);
 });
 
-/** The {@link Session} middleware: provides the request's actor, or fails with Unauthorized. */
+/** Who a request is from, if it carries a valid session. */
+export const actorOf = (headers: Headers.Headers) =>
+  Effect.map(
+    sessionOf(headers),
+    Option.map((session) => session.actor),
+  );
+
+/**
+ * The {@link Session} middleware: provides the request's actor, or fails with
+ * Unauthorized. Its verdict holds until the session expires, so a live read
+ * left open is judged again then.
+ */
 export const SessionLive = Layer.effect(
   Session,
   Effect.gen(function* () {
     const key = yield* SessionKey;
     return (effect, { headers }) =>
-      actorOf(headers).pipe(
+      sessionOf(headers).pipe(
         Effect.provideService(SessionKey, key),
         Effect.flatMap(
           Option.match({
             onNone: () => Effect.fail(new Unauthorized()),
-            onSome: (actor) => Effect.provideService(effect, CurrentActor, actor),
+            onSome: ({ actor, expires }) =>
+              effect.pipe(Effect.provideService(CurrentActor, actor), Domain.validUntil(expires)),
           }),
         ),
       );
