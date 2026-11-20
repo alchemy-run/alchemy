@@ -122,9 +122,7 @@ export const resolveCallbackSchedule = (
       options.timeZone === undefined
         ? { cron: options.cron! }
         : { cron: options.cron!, timeZone: options.timeZone };
-    const cron = yield* parseCron(recurrence).pipe(
-      Effect.mapError((cause) => invalid("Invalid cron schedule", cause)),
-    );
+    const cron = yield* parseCron(callback, "Invalid cron schedule", recurrence);
     return { at: Cron.next(cron, now).getTime(), recurrence };
   });
 
@@ -148,10 +146,7 @@ export const nextCallbackRun = (
         : scheduledAt + every * (Math.floor((now - scheduledAt) / every) + 1),
     );
   }
-  return parseCron(recurrence).pipe(
-    Effect.mapError(
-      (cause) => new CallbackError({ callback, message: "Invalid stored cron schedule", cause }),
-    ),
+  return parseCron(callback, "Invalid stored cron schedule", recurrence).pipe(
     Effect.map((cron) => Cron.next(cron, now).getTime()),
   );
 };
@@ -161,11 +156,23 @@ const durationMillis = (input: Duration.Input) => {
   return millis === undefined ? undefined : Duration.toMillis(millis);
 };
 
-const parseCron = (recurrence: { readonly cron: string; readonly timeZone?: string }) =>
+// `Cron.parse` returns a failure for a bad expression and throws for an
+// unknown time zone.
+const parseCron = (
+  callback: string,
+  message: string,
+  recurrence: { readonly cron: string; readonly timeZone?: string },
+): Effect.Effect<Cron.Cron, CallbackError> =>
   Effect.try({
     try: () => Cron.parse(recurrence.cron, recurrence.timeZone ?? "UTC"),
-    catch: (cause) => cause,
-  }).pipe(Effect.flatMap(Effect.fromResult));
+    catch: (cause) => new CallbackError({ callback, message, cause }),
+  }).pipe(
+    Effect.flatMap((result) =>
+      Effect.fromResult(result).pipe(
+        Effect.mapError((cause) => new CallbackError({ callback, message, cause })),
+      ),
+    ),
+  );
 
 /** Durable scheduling state, available without decoding the job's payload. */
 export interface CallbackStatus {
