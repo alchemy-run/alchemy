@@ -21,6 +21,7 @@ import {
   emptyStreamMeta,
   hostedModels,
   inRange,
+  outOfOrder,
   Platform,
   type Json,
   type ModelHost,
@@ -778,7 +779,12 @@ export const make = (
             lock.withPermits(1)(commit(id, command, meta));
           // Events decided elsewhere (seeded or imported): history to views, never to policies.
           // Callers hold `lock`.
-          const append = (id: string, events: ReadonlyArray<Json>, commandId: string) =>
+          const append = (
+            id: string,
+            events: ReadonlyArray<Json>,
+            commandId: string,
+            at?: ReadonlyArray<number | null>,
+          ) =>
             Effect.gen(function* () {
               const current = instance(id);
               const result = yield* kit.seed({
@@ -788,6 +794,7 @@ export const make = (
                 events,
                 commandId,
                 now: now(),
+                ...(at === undefined ? {} : { at }),
               });
               if (current.version === 0) yield* register({ source: kit.name, id });
               const live = yield* Backfill.routeCommit(
@@ -924,7 +931,14 @@ export const make = (
                     return { _tag: "Imported", receipt: duplicate.receipt } as const;
                   if (current.version !== meta.expectedVersion)
                     return { _tag: "UnexpectedVersion", version: current.version } as const;
-                  const receipt = yield* append(id, events, meta.commandId);
+                  const refused = outOfOrder(
+                    meta.at,
+                    events.length,
+                    current.events.at(-1)?.envelope.at ?? 0,
+                    now(),
+                  );
+                  if (refused) return refused;
+                  const receipt = yield* append(id, events, meta.commandId, meta.at);
                   current.receipts.set(meta.commandId, { _tag: "Accepted", receipt });
                   return { _tag: "Imported", receipt } as const;
                 }),
