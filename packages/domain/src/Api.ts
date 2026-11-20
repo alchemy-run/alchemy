@@ -1500,10 +1500,11 @@ const RECONNECTS = 8;
 /**
  * The WebSocket protocol for an Api client. Calls (commands, `get`, `list`)
  * go over HTTP like {@link protocolHttp}; every live read (`watch`,
- * `events`) opens its own WebSocket, which the Api hands to the object that
- * owns the key (on Cloudflare, its Durable Object). Each commit is pushed
- * down the socket, so nothing polls and the object hibernates in between. A
- * dropped socket reconnects and resumes after the last value it delivered.
+ * `events`) opens its own WebSocket, which the Api hands to the instance that
+ * owns the key (a Durable Object on Cloudflare, an actor on Rivet, an entity
+ * on Effect Cluster). Each commit is pushed down the socket, so nothing
+ * polls; on Cloudflare the object hibernates in between. A dropped socket
+ * reconnects and resumes after the last value it delivered.
  *
  * A browser cannot set headers on a WebSocket, and a URL ends up in logs,
  * so headers client middleware attaches apply to calls only. A live read
