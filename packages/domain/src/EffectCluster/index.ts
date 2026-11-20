@@ -62,6 +62,7 @@ import {
   type ObjectImpl,
   type ObjectSocket,
   ObjectState,
+  type ObjectStorage,
   type ObjectStateShape,
   parseMultiplexedName,
   SUBSCRIPTION_HEADER,
