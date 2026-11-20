@@ -117,8 +117,25 @@ export const Subscription = Schema.Struct({
   refused: Schema.optionalKey(Schema.Unknown),
   /** `events` only: set once the `CaughtUp` frame after the read's history was sent. */
   caughtUpSent: Schema.optionalKey(Schema.Boolean),
+  /**
+   * Epoch milliseconds until which the read's middleware vouched for the
+   * caller (see `Domain.setExpiry`). Once it passes, the platform closes the
+   * connection with {@link REAUTHORIZE_CLOSE_CODE} instead of sending more.
+   */
+  validUntil: Schema.optionalKey(Schema.Number),
 });
 export type Subscription = typeof Subscription.Type;
+
+/**
+ * The close code of a live read's connection whose middleware must run again.
+ * The client reconnects at once and resumes from its cursor, so the read's
+ * middleware judges the caller afresh.
+ */
+export const REAUTHORIZE_CLOSE_CODE = 4000;
+
+/** Whether a subscription must be judged again before anything more is sent. */
+export const mustReauthorize = (subscription: Subscription, now: number): boolean =>
+  subscription.validUntil !== undefined && now >= subscription.validUntil;
 
 /**
  * What to send a subscriber, from a kit's `push`.
