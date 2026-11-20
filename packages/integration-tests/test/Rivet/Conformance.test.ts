@@ -410,6 +410,7 @@ describe.skipIf(!!process.env.FAST)(
         interface AlarmState {
           runs: number;
           done: number;
+          node: string | null;
           alarm: number | null;
         }
         const get = <T>(path: string) =>
@@ -426,37 +427,18 @@ describe.skipIf(!!process.env.FAST)(
 
         yield* get("arm");
         // The handler's first run has started, and hangs.
-        expect(yield* stateUntil((state) => state.runs > 0)).toEqual({
-          runs: 1,
-          done: 0,
-          alarm: null,
-        });
-        // SIGKILL every node of the pool running it; Swarm starts new ones.
-        const services = yield* docker.run([
-          "service",
-          "ls",
-          "--quiet",
-          "--filter",
-          "label=alchemy::stack=RivetConformance",
-          "--filter",
-          "label=alchemy::id=AbandonedNodes",
-        ]);
-        const service = services.stdout.trim();
-        expect(service).not.toBe("");
-        const containers = yield* docker.run([
-          "ps",
-          "--quiet",
-          "--filter",
-          `label=com.docker.swarm.service.id=${service}`,
-        ]);
-        const ids = containers.stdout.split("\n").filter((id) => id.length > 0);
-        expect(ids.length).toBeGreaterThan(0);
-        yield* docker.run(["kill", ...ids]);
+        const running = yield* stateUntil((state) => state.runs > 0);
+        expect(running).toMatchObject({ runs: 1, done: 0, alarm: null });
+        expect(running.node).not.toBeNull();
+        // SIGKILL the node running it; Swarm starts another.
+        yield* docker.run(["kill", running.node!]);
         // The next activation runs the handler again, and it finishes once.
         yield* stateUntil((state) => state.done > 0);
         // Long enough for a duplicate run to show.
         yield* Effect.sleep("5 seconds");
-        expect(yield* get<AlarmState>("state")).toEqual({ runs: 2, done: 1, alarm: null });
+        const final = yield* get<AlarmState>("state");
+        expect(final).toMatchObject({ runs: 2, done: 1, alarm: null });
+        expect(final.node).not.toBe(running.node);
       }).pipe(Effect.provide(Docker.DockerLive)),
       { timeout: 240_000 },
     );
