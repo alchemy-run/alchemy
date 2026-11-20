@@ -51,7 +51,7 @@ export const deployStateStoreWorker = Effect.fn("state_store.deploy_worker")(fun
   accountId,
   scriptName,
   domain,
-  observability,
+  observability = { enabled: true, logs: { enabled: true, invocationLogs: true } },
 }: {
   accountId: string;
   scriptName: string;
@@ -146,10 +146,7 @@ export const deployStateStoreWorker = Effect.fn("state_store.deploy_worker")(fun
           storage: yield* observedStoreStorage(accountId, scriptName),
         },
       },
-      observability:
-        observability ??
-        (yield* observedStoreObservability(accountId, scriptName)) ??
-        DEFAULT_STORE_OBSERVABILITY,
+      observability,
     },
     files: bundle.files.map(
       (file) =>
@@ -459,44 +456,6 @@ const ensureSecret = Effect.fn(function* ({
   yield* waitForSecretActive({ accountId, storeId, secretId: secret.id }, "pending");
   return value;
 });
-
-/** A new store's observability, when none is given. */
-const DEFAULT_STORE_OBSERVABILITY: WorkerObservability = {
-  enabled: true,
-  logs: { enabled: true, invocationLogs: true },
-};
-
-type WithoutNulls<T> = T extends null
-  ? undefined
-  : T extends readonly unknown[]
-    ? T
-    : T extends object
-      ? { [K in keyof T]: WithoutNulls<T[K]> }
-      : T;
-
-const withoutNulls = <T>(value: T): WithoutNulls<T> =>
-  (value === null
-    ? undefined
-    : typeof value === "object" && !Array.isArray(value)
-      ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, withoutNulls(v)]))
-      : value) as WithoutNulls<T>;
-
-/**
- * The store Worker's live observability, so a redeploy keeps what was set
- * before (e.g. in the dashboard) instead of resetting it. `undefined` when
- * there is no Worker yet. Cloudflare omits a disabled configuration.
- */
-const observedStoreObservability = (accountId: string, scriptName: string) =>
-  workers.getScriptScriptAndVersionSetting({ accountId, scriptName }).pipe(
-    Effect.map(({ observability }): WorkerObservability | undefined => {
-      if (!observability) return { enabled: false };
-      const { issues, ...rest } = withoutNulls(observability);
-      return issues?.enabled === undefined
-        ? rest
-        : { ...rest, issues: { enabled: issues.enabled } };
-    }),
-    Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () => Effect.undefined),
-  );
 
 /** The `Store` class's storage backend as deployed; SQLite for a new store. */
 const observedStoreStorage = (accountId: string, scriptName: string) =>

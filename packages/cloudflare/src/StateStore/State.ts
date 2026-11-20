@@ -76,15 +76,7 @@ export type CloudflareStateOptions = {
    */
   readonly workerName?: string;
   /**
-   * The store Worker's observability settings, applied whenever Alchemy
-   * deploys or upgrades the store. Pass `{ enabled: false }` to turn Workers
-   * Logs off (`alchemy state logs` and `tail` then show nothing), or
-   * `{ enabled: true, logs: { enabled: true, invocationLogs: false } }` to
-   * keep logs without one line per state request. When omitted, a redeploy
-   * keeps the Worker's current settings, including ones changed in the
-   * dashboard; a new store gets the default. A store that is already up to
-   * date isn't redeployed just for this option: it applies on the next
-   * upgrade, so change a running store in the dashboard, where it is kept.
+   * The store Worker's observability settings.
    * @default { enabled: true, logs: { enabled: true, invocationLogs: true } }
    */
   readonly observability?: WorkerObservability;

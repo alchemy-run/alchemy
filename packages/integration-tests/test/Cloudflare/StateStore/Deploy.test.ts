@@ -210,46 +210,42 @@ test.provider(
   { tags, timeout: 300_000 },
 );
 
-/** The store Worker's observability as Cloudflare reports it. */
-const observability = (accountId: string, workerName: string) =>
-  workers
-    .getScriptScriptAndVersionSetting({ accountId, scriptName: workerName })
-    .pipe(Effect.map((settings) => settings.observability));
+/**
+ * Whether the store Worker's invocation logs are on, once Cloudflare reports
+ * `expected`. A just-replaced Worker's settings take a while to read back.
+ * Cloudflare omits a disabled configuration.
+ */
+const invocationLogs = (accountId: string, workerName: string, expected: boolean) =>
+  workers.getScriptScriptAndVersionSetting({ accountId, scriptName: workerName }).pipe(
+    Effect.map(
+      ({ observability }) =>
+        (observability?.enabled && observability.logs?.invocationLogs) ?? false,
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "WorkerNotFound" || e._tag === "WorkerHasNoVersions",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 15,
+    }),
+    Effect.repeat({
+      until: (on) => on === expected,
+      schedule: Schedule.spaced("2 seconds"),
+      times: 15,
+    }),
+  );
 
 test.provider(
-  "a store's observability defaults on, survives a redeploy, and follows the option when given",
+  "a store's observability follows the option, and the default without it",
   () =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const workerName = storeWorker("observability");
       yield* teardownStateStore({ workerName });
 
-      // A new store gets invocation logs.
-      yield* bootstrap({ workerName });
-      expect(yield* observability(accountId, workerName)).toMatchObject({
-        enabled: true,
-        logs: { enabled: true, invocationLogs: true },
-      });
+      yield* bootstrap({ workerName, observability: { enabled: false } });
+      expect(yield* invocationLogs(accountId, workerName, false)).toBe(false);
 
-      // A setting changed out of band (e.g. in the dashboard) survives a redeploy.
-      yield* workers.patchScriptSetting({
-        accountId,
-        scriptName: workerName,
-        observability: { enabled: true, logs: { enabled: true, invocationLogs: false } },
-      });
       yield* bootstrap({ workerName, force: true });
-      expect(yield* observability(accountId, workerName)).toMatchObject({
-        enabled: true,
-        logs: { enabled: true, invocationLogs: false },
-      });
-
-      // The option replaces it. Cloudflare omits a disabled configuration.
-      yield* bootstrap({ workerName, force: true, observability: { enabled: false } });
-      expect((yield* observability(accountId, workerName))?.enabled ?? false).toBe(false);
-
-      // And stays off through a redeploy without it.
-      yield* bootstrap({ workerName, force: true });
-      expect((yield* observability(accountId, workerName))?.enabled ?? false).toBe(false);
+      expect(yield* invocationLogs(accountId, workerName, true)).toBe(true);
 
       yield* teardownStateStore({ workerName });
       expect(yield* scriptExists(accountId, workerName)).toBe(false);
