@@ -105,3 +105,11 @@ jobs:
       - name: Publish packages
         if: steps.pack.outputs.package-count != '0'
         run: pnpm exec pkg publish
+
+      # Installs the tarballs just published in a new project outside the
+      # workspace and verifies a model there. Inside the workspace the package
+      # is source the test runner transforms, which hides what an installed
+      # package does. It does nothing when @alchemy.run/domain was not packed.
+      - name: Verify a model as a consumer of @alchemy.run/domain
+        if: steps.pack.outputs.package-count != '0'
+        run: node scripts/test-domain-consumer.ts

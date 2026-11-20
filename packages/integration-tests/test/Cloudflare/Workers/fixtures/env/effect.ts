@@ -7,6 +7,13 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import { jsonStrings, type JsonStringKey } from "../../../../JsonStrings.ts";
+
+// `Config.String` for every entry in `jsonStrings`.
+const readJsonStrings = <A>(map: (config: Config.Config<string>) => Config.Config<A>) =>
+  Object.fromEntries(
+    Object.keys(jsonStrings).map((key) => [key, map(Config.String(key))]),
+  ) as Record<JsonStringKey, Config.Config<A>>;
 
 /**
  * Effect-native Worker fixture that exercises every supported
@@ -37,13 +44,9 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
       // Config declared statically on `env` — Alchemy resolves at deploy
       // time and binds it as `secret_text` on the Worker.
       CONFIG_REDACTED: Config.Redacted("CONFIG_REDACTED"),
-      // Strings that `JSON.parse` would reinterpret (#2847) — they must
-      // still read back as strings.
-      JSON_FALSE: "false",
-      JSON_NUM: "42",
-      JSON_NULL: "null",
-      JSON_OBJ: '{"a":1}',
-      PLAIN: "my-queue",
+      // Strings that `JSON.parse` would reinterpret — they must still read
+      // back unchanged.
+      ...jsonStrings,
       // An `undefined` entry is no binding.
       UNSET: undefined,
     },
@@ -69,13 +72,13 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
     const configNested = yield* Config.String("HOST").pipe(Config.nested("CONFIG_NESTED"));
     // `env` strings that parse as JSON (#2847). Optional so plan passes:
     // these are bound from `env`, not from the deploy-time ConfigProvider.
-    const jsonStrings = yield* Config.all({
-      JSON_FALSE: Config.String("JSON_FALSE").pipe(Config.option),
+    // A JSON-looking value present at deploy time, so the Init interceptor
+    // binds it (as a Redacted marker) rather than it coming from `env`.
+    const boundLong = yield* Config.String("CONFIG_JSON_LONG").pipe(Config.option);
+    const initJsonStrings = yield* Config.all({
+      ...readJsonStrings((config) => config.pipe(Config.option)),
       JSON_FALSE_BOOL: Config.Boolean("JSON_FALSE").pipe(Config.option),
-      JSON_NUM: Config.String("JSON_NUM").pipe(Config.option),
-      JSON_NULL: Config.String("JSON_NULL").pipe(Config.option),
-      JSON_OBJ: Config.String("JSON_OBJ").pipe(Config.option),
-      PLAIN: Config.String("PLAIN").pipe(Config.option),
+      JSON_NUM_NUMBER: Config.Number("JSON_NUM").pipe(Config.option),
     });
 
     // What a binding does with an optional value: an Output that resolves to
@@ -112,27 +115,22 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
 
         if (pathname === "/json-strings") {
           const runtime = yield* Config.all({
-            JSON_FALSE: Config.String("JSON_FALSE"),
+            ...readJsonStrings((config) => config),
             JSON_FALSE_BOOL: Config.Boolean("JSON_FALSE"),
-            JSON_NUM: Config.String("JSON_NUM"),
-            JSON_NULL: Config.String("JSON_NULL"),
-            JSON_OBJ: Config.String("JSON_OBJ"),
-            PLAIN: Config.String("PLAIN"),
+            JSON_NUM_NUMBER: Config.Number("JSON_NUM"),
           });
           return yield* HttpServerResponse.json({
             init: Object.fromEntries(
-              Object.entries(jsonStrings).map(([k, v]: [string, Option.Option<unknown>]) => [
+              Object.entries(initJsonStrings).map(([k, v]: [string, Option.Option<unknown>]) => [
                 k,
                 Option.getOrNull(v),
               ]),
             ),
             runtime,
-            env: {
-              JSON_FALSE: env.JSON_FALSE,
-              JSON_NUM: env.JSON_NUM,
-              JSON_NULL: env.JSON_NULL,
-              JSON_OBJ: env.JSON_OBJ,
-              PLAIN: env.PLAIN,
+            env: Object.fromEntries(Object.keys(jsonStrings).map((key) => [key, env[key]])),
+            bound: {
+              init: Option.getOrNull(boundLong),
+              runtime: yield* Config.String("CONFIG_JSON_LONG"),
             },
           });
         }
@@ -172,7 +170,7 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
           // request time, deep inside a nested effect, where the env-backed
           // runtime ConfigProvider (not the Init interceptor) answers the
           // read. The bound values arrive in `env` as
-          // `{"_tag":"Redacted","value":...}` markers and must be reified
+          // `{"_tag":"Redacted","value":...}` markers and must be unwrapped
           // transparently: `Config.Number` must decode the raw source value,
           // not the marker JSON.
           const nested = yield* Effect.gen(function* () {
