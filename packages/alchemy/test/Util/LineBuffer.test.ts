@@ -1,4 +1,4 @@
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import { makeLineBuffer } from "@/Util/LineBuffer.ts";
 
 describe("makeLineBuffer", { tags: ["unit", "local"] }, () => {
