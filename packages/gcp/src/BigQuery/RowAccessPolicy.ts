@@ -389,10 +389,10 @@ export const RowAccessPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* bigquery
           .insertRowAccessPolicies({
+            ...toPolicyBody(env.project, datasetId, tableId, policyId, news, filter, true),
             projectId: env.project,
             datasetId,
             tableId,
-            body: toPolicyBody(env.project, datasetId, tableId, policyId, news, filter, true),
           })
           .pipe(
             Effect.catchTag("Conflict", () => getByRef(env.project, datasetId, tableId, policyId)),
@@ -408,20 +408,20 @@ export const RowAccessPolicyProvider = () =>
       if (!sameFilter(observedFilter, filter)) {
         current = yield* bigquery
           .updateRowAccessPolicies({
+            ...toPolicyBody(env.project, datasetId, tableId, policyId, news, filter, false),
             projectId: env.project,
             datasetId,
             tableId,
             policyId,
-            body: toPolicyBody(env.project, datasetId, tableId, policyId, news, filter, false),
           })
           .pipe(
             Effect.catchTag("NotFound", () =>
               bigquery
                 .insertRowAccessPolicies({
+                  ...toPolicyBody(env.project, datasetId, tableId, policyId, news, filter, true),
                   projectId: env.project,
                   datasetId,
                   tableId,
-                  body: toPolicyBody(env.project, datasetId, tableId, policyId, news, filter, true),
                 })
                 .pipe(
                   Effect.catchTag("Conflict", () =>

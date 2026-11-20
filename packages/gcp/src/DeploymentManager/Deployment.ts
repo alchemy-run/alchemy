@@ -361,15 +361,13 @@ export const DeploymentProvider = () =>
       if (current === undefined) {
         const created = yield* deploymentmanager
           .insertDeployments({
+            name: deploymentId,
+            description: news.description,
+            labels: recordToLabels(desiredLabels),
+            target,
             project: env.project,
             preview,
             createPolicy,
-            body: {
-              name: deploymentId,
-              description: news.description,
-              labels: recordToLabels(desiredLabels),
-              target,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -402,18 +400,16 @@ export const DeploymentProvider = () =>
       if (labelsChanged || descriptionChanged || previewChanged || targetChanged) {
         const operation = yield* deploymentmanager
           .patchDeployments({
+            name,
+            fingerprint: current.fingerprint,
+            description: news.description,
+            labels: recordToLabels(desiredLabels),
+            target,
             project: env.project,
             deployment: name,
             preview,
             createPolicy,
             deletePolicy,
-            body: {
-              name,
-              fingerprint: current.fingerprint,
-              description: news.description,
-              labels: recordToLabels(desiredLabels),
-              target,
-            },
           })
           .pipe(
             Effect.retry({

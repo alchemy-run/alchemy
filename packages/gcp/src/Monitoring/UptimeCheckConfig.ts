@@ -614,10 +614,7 @@ export const UptimeCheckConfigProvider = () =>
 
       if (current === undefined) {
         const created = yield* monitoring
-          .createProjectsUptimeCheckConfigs({
-            parent: parentOf(env.project),
-            body,
-          })
+          .createProjectsUptimeCheckConfigs({ ...body, parent: parentOf(env.project) })
           .pipe(Effect.catchTag("Conflict", () => findOwned(env.project, id)));
         current = created ?? undefined;
       }
@@ -677,9 +674,9 @@ export const UptimeCheckConfigProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* monitoring.patchProjectsUptimeCheckConfigs({
+          ...body,
           name,
           updateMask: updateMask.join(","),
-          body: { ...body, name },
         });
       }
 

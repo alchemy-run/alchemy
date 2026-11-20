@@ -311,14 +311,12 @@ export const RegionCompositeHealthCheckProvider = () =>
           env.project,
           region,
           compute.insertRegionCompositeHealthChecks({
+            name: healthCheckName,
+            description: desiredDescription,
+            healthDestination: news.healthDestination,
+            healthSources: news.healthSources,
             project: env.project,
             region,
-            body: {
-              name: healthCheckName,
-              description: desiredDescription,
-              healthDestination: news.healthDestination,
-              healthSources: news.healthSources,
-            },
           }),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
@@ -353,10 +351,10 @@ export const RegionCompositeHealthCheckProvider = () =>
           env.project,
           region,
           compute.patchRegionCompositeHealthChecks({
+            ...patch,
             project: env.project,
             region,
             compositeHealthCheck: healthCheckName,
-            body: patch,
           }),
         );
         current = (yield* getByName(env.project, region, healthCheckName)) ?? current;

@@ -57,8 +57,8 @@ test.provider(
         Buffer.from("alchemy-secret-payload", "utf8").toString("base64"),
       );
       const version = yield* secretmanager.addVersionProjectsSecrets({
+        payload: { data: payload },
         parent: created.name,
-        body: { payload: { data: payload } },
       });
       expect(version.name).toContain("/versions/");
 

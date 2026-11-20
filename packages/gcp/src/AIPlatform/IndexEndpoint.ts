@@ -296,16 +296,14 @@ export const IndexEndpointProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsIndexEndpoints({
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+            publicEndpointEnabled,
+            network: news.network,
+            encryptionSpec: news.encryptionSpec,
+            privateServiceConnectConfig: news.privateServiceConnectConfig,
             parent: `projects/${env.project}/locations/${location}`,
-            body: {
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-              publicEndpointEnabled,
-              network: news.network,
-              encryptionSpec: news.encryptionSpec,
-              privateServiceConnectConfig: news.privateServiceConnectConfig,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -334,6 +332,9 @@ export const IndexEndpointProvider = () =>
 
       if (descriptionChanged || displayChanged || labelsChanged) {
         current = yield* aiplatform.patchProjectsLocationsIndexEndpoints({
+          displayName,
+          description: news.description,
+          labels: desiredLabels,
           name,
           updateMask: [
             descriptionChanged ? "description" : undefined,
@@ -342,12 +343,6 @@ export const IndexEndpointProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            description: news.description,
-            labels: desiredLabels,
-          },
         });
       }
 

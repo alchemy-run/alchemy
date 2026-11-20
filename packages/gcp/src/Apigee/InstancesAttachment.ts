@@ -219,10 +219,7 @@ export const InstancesAttachmentProvider = () =>
 
       if (current === undefined) {
         const created = yield* apigee
-          .createOrganizationsInstancesAttachments({
-            parent,
-            body: { environment: news.environment },
-          })
+          .createOrganizationsInstancesAttachments({ environment: news.environment, parent })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });

@@ -268,13 +268,11 @@ export const PeeringProvider = () =>
       if (current === undefined) {
         const created = yield* managedidentities
           .createProjectsLocationsGlobalPeerings({
+            domainResource,
+            authorizedNetwork,
+            labels: desiredLabels,
             parent: globalParent(env.project),
             peeringId,
-            body: {
-              domainResource,
-              authorizedNetwork,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -300,12 +298,9 @@ export const PeeringProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* managedidentities.patchProjectsLocationsGlobalPeerings({
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

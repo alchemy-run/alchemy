@@ -469,10 +469,10 @@ const syncRules = (
           region,
           firewallPolicyName,
           compute.addRuleRegionNetworkFirewallPolicies({
+            ...toRuleBody(rule),
             project,
             region,
             firewallPolicy: firewallPolicyName,
-            body: toRuleBody(rule),
           }),
           { ignoreAlreadyExists: true },
         );
@@ -484,11 +484,11 @@ const syncRules = (
           region,
           firewallPolicyName,
           compute.patchRuleRegionNetworkFirewallPolicies({
+            ...toRuleBody(rule),
             project,
             region,
             firewallPolicy: firewallPolicyName,
             priority,
-            body: toRuleBody(rule),
           }),
         );
       }
@@ -612,9 +612,9 @@ export const RegionNetworkFirewallPolicyProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertRegionNetworkFirewallPolicies({
+            ...insertBody(firewallPolicyName, news, desiredDescription),
             project: env.project,
             region,
-            body: insertBody(firewallPolicyName, news, desiredDescription),
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -640,13 +640,11 @@ export const RegionNetworkFirewallPolicyProvider = () =>
           region,
           firewallPolicyName,
           compute.patchRegionNetworkFirewallPolicies({
+            fingerprint: current.fingerprint,
+            description: desiredDescription,
             project: env.project,
             region,
             firewallPolicy: firewallPolicyName,
-            body: {
-              fingerprint: current.fingerprint,
-              description: desiredDescription,
-            },
           }),
         );
         current = (yield* getByName(env.project, region, firewallPolicyName)) ?? current;

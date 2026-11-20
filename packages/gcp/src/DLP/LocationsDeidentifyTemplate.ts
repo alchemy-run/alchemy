@@ -263,11 +263,9 @@ export const LocationsDeidentifyTemplateProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createProjectsLocationsDeidentifyTemplates({
+            templateId,
+            deidentifyTemplate: body,
             parent: locationParent(env.project, location),
-            body: {
-              templateId,
-              deidentifyTemplate: body,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -283,15 +281,13 @@ export const LocationsDeidentifyTemplateProvider = () =>
 
       if (displayChanged || descriptionChanged || configChanged) {
         current = yield* dlp.patchProjectsLocationsDeidentifyTemplates({
+          deidentifyTemplate: body,
+          updateMask: updateMaskOf(
+            displayChanged ? "displayName" : undefined,
+            descriptionChanged ? "description" : undefined,
+            configChanged ? "deidentifyConfig" : undefined,
+          ),
           name: current.name ?? name,
-          body: {
-            deidentifyTemplate: body,
-            updateMask: updateMaskOf(
-              displayChanged ? "displayName" : undefined,
-              descriptionChanged ? "description" : undefined,
-              configChanged ? "deidentifyConfig" : undefined,
-            ),
-          },
         });
       }
 

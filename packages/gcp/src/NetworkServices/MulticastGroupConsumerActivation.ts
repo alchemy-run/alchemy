@@ -380,16 +380,14 @@ export const MulticastGroupConsumerActivationProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsMulticastGroupConsumerActivations({
+            description: news.description,
+            labels: desiredLabels,
+            multicastConsumerAssociation,
+            multicastGroupRangeActivation,
+            multicastGroup,
+            logConfig,
             parent: parentOf(env.project, location),
             multicastGroupConsumerActivationId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              multicastConsumerAssociation,
-              multicastGroupRangeActivation,
-              multicastGroup,
-              logConfig,
-            },
           })
           .pipe(
             Effect.retry({
@@ -418,14 +416,11 @@ export const MulticastGroupConsumerActivationProvider = () =>
       if (updateMask.length > 0) {
         const operation =
           yield* networkservices.patchProjectsLocationsMulticastGroupConsumerActivations({
+            labels: desiredLabels,
+            description: news.description,
+            logConfig,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              logConfig,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

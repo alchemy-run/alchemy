@@ -310,14 +310,12 @@ export const AnalysisRuleProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsAnalysisRules({
+            displayName,
+            conversationFilter: news.conversationFilter,
+            active,
+            analysisPercentage,
+            annotatorSelector,
             parent,
-            body: {
-              displayName,
-              conversationFilter: news.conversationFilter,
-              active,
-              analysisPercentage,
-              annotatorSelector,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? (yield* findByDisplayName(parent, displayName));
@@ -342,6 +340,11 @@ export const AnalysisRuleProvider = () =>
         selectorChanged
       ) {
         current = yield* cci.patchProjectsLocationsAnalysisRules({
+          displayName,
+          conversationFilter: news.conversationFilter,
+          active,
+          analysisPercentage,
+          annotatorSelector,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -350,14 +353,6 @@ export const AnalysisRuleProvider = () =>
             percentageChanged ? "analysis_percentage" : undefined,
             selectorChanged ? "annotator_selector" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            conversationFilter: news.conversationFilter,
-            active,
-            analysisPercentage,
-            annotatorSelector,
-          },
         });
       }
 

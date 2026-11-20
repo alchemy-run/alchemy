@@ -272,16 +272,16 @@ export const LocationsOccurrenceProvider = () =>
           create: (request) =>
             retryTransient(
               containeranalysis.createProjectsLocationsOccurrences({
+                ...request.body,
                 parent: request.parent,
-                body: request.body,
               }),
             ),
           patch: (request) =>
             retryTransient(
               containeranalysis.patchProjectsLocationsOccurrences({
+                ...request.body,
                 name: request.name,
                 updateMask: request.updateMask,
-                body: request.body,
               }),
             ),
         },

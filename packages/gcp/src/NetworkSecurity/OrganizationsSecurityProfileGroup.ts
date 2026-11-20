@@ -334,16 +334,14 @@ export const OrganizationsSecurityProfileGroupProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createOrganizationsLocationsSecurityProfileGroups({
+            description: news.description,
+            labels: desiredLabels,
+            threatPreventionProfile: news.threatPreventionProfile,
+            urlFilteringProfile: news.urlFilteringProfile,
+            customMirroringProfile: news.customMirroringProfile,
+            customInterceptProfile: news.customInterceptProfile,
             parent: organizationParent(organization, location),
             securityProfileGroupId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              threatPreventionProfile: news.threatPreventionProfile,
-              urlFilteringProfile: news.urlFilteringProfile,
-              customMirroringProfile: news.customMirroringProfile,
-              customInterceptProfile: news.customInterceptProfile,
-            },
           })
           .pipe(
             Effect.retry({
@@ -393,17 +391,14 @@ export const OrganizationsSecurityProfileGroupProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* networksecurity.patchOrganizationsLocationsSecurityProfileGroups({
+          labels: desiredLabels,
+          description: news.description,
+          threatPreventionProfile: news.threatPreventionProfile,
+          urlFilteringProfile: news.urlFilteringProfile,
+          customMirroringProfile: news.customMirroringProfile,
+          customInterceptProfile: news.customInterceptProfile,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            threatPreventionProfile: news.threatPreventionProfile,
-            urlFilteringProfile: news.urlFilteringProfile,
-            customMirroringProfile: news.customMirroringProfile,
-            customInterceptProfile: news.customInterceptProfile,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

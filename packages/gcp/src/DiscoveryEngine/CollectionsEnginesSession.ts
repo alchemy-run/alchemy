@@ -248,15 +248,13 @@ export const CollectionsEnginesSessionProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsEnginesSessions({
+            displayName,
+            userPseudoId: news.userPseudoId,
+            state: news.state,
+            isPinned: isPinned ? true : undefined,
+            labels,
             parent: news.engine,
             sessionId,
-            body: {
-              displayName,
-              userPseudoId: news.userPseudoId,
-              state: news.state,
-              isPinned: isPinned ? true : undefined,
-              labels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(fallbackName)));
         current = created ?? undefined;
@@ -277,6 +275,11 @@ export const CollectionsEnginesSessionProvider = () =>
 
       if (displayNameChanged || userChanged || stateChanged || pinnedChanged || labelsChanged) {
         current = yield* discoveryengine.patchProjectsLocationsCollectionsEnginesSessions({
+          displayName,
+          userPseudoId: news.userPseudoId,
+          state: news.state,
+          isPinned,
+          labels,
           name,
           updateMask: [
             displayNameChanged ? "display_name" : undefined,
@@ -287,14 +290,6 @@ export const CollectionsEnginesSessionProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            userPseudoId: news.userPseudoId,
-            state: news.state,
-            isPinned,
-            labels,
-          },
         });
       }
 

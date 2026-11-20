@@ -868,15 +868,11 @@ export const InstanceProvider = () =>
         yield* (
           instanceType === "SECONDARY"
             ? alloydb.createsecondaryProjectsLocationsClustersInstances({
+                ...body,
                 parent,
                 instanceId,
-                body,
               })
-            : alloydb.createProjectsLocationsClustersInstances({
-                parent,
-                instanceId,
-                body,
-              })
+            : alloydb.createProjectsLocationsClustersInstances({ ...body, parent, instanceId })
         ).pipe(
           Effect.catchTag("Conflict", () => Effect.undefined),
           Effect.tap((created) =>
@@ -996,27 +992,24 @@ export const InstanceProvider = () =>
 
         const patched = yield* alloydb
           .patchProjectsLocationsClustersInstances({
+            labels: desiredLabels,
+            displayName: news.displayName,
+            annotations: news.annotations,
+            machineConfig,
+            availabilityType: news.availabilityType,
+            gceZone: news.gceZone,
+            activationPolicy: news.activationPolicy,
+            databaseFlags: news.databaseFlags,
+            readPoolConfig,
+            queryInsightsConfig: news.queryInsightsConfig,
+            observabilityConfig: news.observabilityConfig,
+            clientConnectionConfig: news.clientConnectionConfig,
+            networkConfig: news.networkConfig,
+            pscInstanceConfig: news.pscInstanceConfig,
+            connectionPoolConfig: news.connectionPoolConfig,
+            dataApiAccess: news.dataApiAccess,
             name,
             updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              displayName: news.displayName,
-              annotations: news.annotations,
-              machineConfig,
-              availabilityType: news.availabilityType,
-              gceZone: news.gceZone,
-              activationPolicy: news.activationPolicy,
-              databaseFlags: news.databaseFlags,
-              readPoolConfig,
-              queryInsightsConfig: news.queryInsightsConfig,
-              observabilityConfig: news.observabilityConfig,
-              clientConnectionConfig: news.clientConnectionConfig,
-              networkConfig: news.networkConfig,
-              pscInstanceConfig: news.pscInstanceConfig,
-              connectionPoolConfig: news.connectionPoolConfig,
-              dataApiAccess: news.dataApiAccess,
-            },
           })
           .pipe(
             Effect.retry({

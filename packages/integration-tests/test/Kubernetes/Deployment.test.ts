@@ -397,7 +397,7 @@ describe.skipIf(!!process.env.FAST)(
           expect(published.messageIds?.length).toBe(1);
 
           const pulled = yield* pubsub
-            .pullProjectsSubscriptions({ subscription: inbox, body: { maxMessages: 1 } })
+            .pullProjectsSubscriptions({ maxMessages: 1, subscription: inbox })
             .pipe(
               Effect.repeat({
                 until: (response) => (response.receivedMessages ?? []).length > 0,
