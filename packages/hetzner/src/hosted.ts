@@ -10,7 +10,7 @@ import {
 import { findCwdForBundle, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
-import { containerEnvFile, dockerEnvArgs, systemdEnvFile } from "alchemy/Util/envFile";
+import { containerEnvFile, DOCKER_ENV, systemdEnvFile } from "alchemy/Util/envFile";
 import {
   contextRootOf,
   extraFileDestination,
@@ -587,7 +587,8 @@ Requires=docker.service
 [Service]
 Type=simple
 ExecStartPre=-/usr/bin/docker rm -f ${unitName}
-ExecStart=/bin/sh -c '${dockerEnvArgs(`${appDir}/env`)} exec docker run --rm --name ${unitName} --network host "$$@" "$$(cat ${appDir}/image)"'
+EnvironmentFile=-${appDir}/env
+ExecStart=/usr/bin/docker run --rm --name ${unitName} --network host $${DOCKER_ENV} ${unitName}:alchemy
 ExecStop=/usr/bin/docker stop ${unitName}
 Restart=always
 RestartSec=5
@@ -637,7 +638,7 @@ WantedBy=multi-user.target
       [
         `set -euo pipefail`,
         loadImageArchiveScript(`${appDir}/image.tar`),
-        `echo "$IMAGE" > ${JSON.stringify(`${appDir}/image`)}`,
+        `docker tag "$IMAGE" ${input.unitName}:alchemy`,
         `systemctl daemon-reload`,
         `systemctl enable ${input.unitName}.service`,
         `systemctl restart ${input.unitName}.service`,

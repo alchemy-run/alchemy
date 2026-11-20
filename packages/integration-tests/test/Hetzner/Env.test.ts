@@ -37,7 +37,7 @@ const fetchEnv = (url: string) =>
   );
 
 // Both modes on one Server: the systemd `EnvironmentFile` program and a
-// `context` image run with `docker run --env-file`. The deploy runs inside the
+// `context` image whose `docker run` gets the same file. The deploy runs inside the
 // test so the Server's primary IPs are held only under the permit.
 test.provider(
   "Hetzner Services read every env value as its string (program and container)",

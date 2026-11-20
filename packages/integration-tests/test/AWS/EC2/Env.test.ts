@@ -14,8 +14,8 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Both modes in one stack: the systemd `EnvironmentFile` program and a
-// `context` image run with `docker run`.
+// Both modes in one stack, both reading one systemd `EnvironmentFile`: a
+// program, and a `context` image passed each key with `docker run -e NAME`.
 
 const Stack = Alchemy.Stack(
   "AlchemyEc2EnvStack",

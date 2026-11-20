@@ -15,7 +15,7 @@ import type { ScopedPlanStatusSession } from "alchemy/Report";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import { createInternalTags, createTagsList, hasTags } from "alchemy/Tags";
-import { containerEnvFile, dockerEnvArgs, systemdEnvFile } from "alchemy/Util/envFile";
+import { containerEnvFile, DOCKER_ENV, systemdEnvFile } from "alchemy/Util/envFile";
 import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";
 import * as Data from "effect/Data";
@@ -163,6 +163,8 @@ export interface Ec2HostedRuntimeState {
   assetPrefix?: string;
   code?: {
     hash: string;
+    /** {@link CONTAINER_UNIT_VERSION} a container instance was launched with. */
+    unit?: number;
   };
 }
 
@@ -182,6 +184,14 @@ export interface Ec2HostedCleanupState {
 export type Ec2HostRuntimeContext = HostRuntimeContext;
 
 export const createEc2HostRuntimeContext = createHostRuntimeContext;
+
+/**
+ * Version of the systemd unit a container instance's user data installs.
+ * User data runs once per instance, so an instance whose stored version
+ * differs is replaced: version 2 reads its env file through systemd, which
+ * a version 1 unit (`docker run --env-file`) can't.
+ */
+export const CONTAINER_UNIT_VERSION = 2;
 
 export const createEc2HostedSupport = ({
   stackName,
@@ -475,7 +485,7 @@ set -e
 aws s3 cp "s3://${bucket}/${bundleKey}" "${appDir}/image.tar" --region "${region}"
 aws s3 cp "s3://${bucket}/${envKey}" "${appDir}/env" --region "${region}"
 ${loadImageArchiveScript(`${appDir}/image.tar`)}
-echo "$IMAGE" > "${appDir}/image"
+docker tag "$IMAGE" ${unitName}:alchemy
 docker rm -f ${unitName} >/dev/null 2>&1 || true
 SETUP_EOF
 chmod +x /usr/local/bin/${unitName}-setup.sh
@@ -489,7 +499,8 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStartPre=/usr/local/bin/${unitName}-setup.sh
-ExecStart=/bin/sh -c '${dockerEnvArgs(`${appDir}/env`)} exec docker run --rm --name ${unitName} --network host "$$@" "$$(cat ${appDir}/image)"'
+EnvironmentFile=-${appDir}/env
+ExecStart=/usr/bin/docker run --rm --name ${unitName} --network host $${DOCKER_ENV} ${unitName}:alchemy
 ExecStop=/usr/bin/docker stop ${unitName}
 Restart=always
 RestartSec=5
@@ -851,6 +862,7 @@ systemctl enable --now ${unitName}.service
       assetPrefix,
       code: {
         hash,
+        ...(image ? { unit: CONTAINER_UNIT_VERSION } : {}),
       },
     } satisfies Ec2HostedRuntimeState;
   });

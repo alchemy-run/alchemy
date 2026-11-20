@@ -1,13 +1,20 @@
 import { envString } from "../RuntimeContext.ts";
 
-/** The variable {@link containerEnvFile} lists the env keys in. */
-const ENV_KEYS = "ALCHEMY_ENV_KEYS";
+/**
+ * The variable a {@link containerEnvFile} lists `-e NAME` for each key in.
+ * A unit passes it to `docker run` as `$ALCHEMY_DOCKER_ENV`: systemd splits
+ * an unbraced variable into one argument per word.
+ */
+export const DOCKER_ENV = "ALCHEMY_DOCKER_ENV";
+
+// The names systemd's `EnvironmentFile=` accepts; it drops any other line.
+const validName = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 const sorted = (env: Record<string, unknown>) =>
   Object.entries(env)
     .flatMap(([key, value]) => {
       const text = envString(value);
-      return text === undefined ? [] : [[key, text] as const];
+      return text === undefined || !validName.test(key) ? [] : [[key, text] as const];
     })
     .sort(([a], [b]) => a.localeCompare(b));
 
@@ -17,7 +24,9 @@ const line = (key: string, text: string) => `${key}="${text.replaceAll(/["\\`$]/
  * A systemd `EnvironmentFile=`, sorted so its hash is stable. Each value is
  * double-quoted: systemd keeps everything inside, newlines included, and
  * unescapes `\"`, `\\`, `\$` and `` \` ``. A quote only opens at the start of
- * a value, so single quotes can't carry a `'`.
+ * a value, so single quotes can't carry a `'`. Keys must be shell-style
+ * names (`[A-Za-z_][A-Za-z0-9_]*`); systemd can't hold any other, so they
+ * are left out.
  */
 export const systemdEnvFile = (env: Record<string, unknown>): string =>
   sorted(env)
@@ -25,25 +34,15 @@ export const systemdEnvFile = (env: Record<string, unknown>): string =>
     .join("\n");
 
 /**
- * {@link systemdEnvFile} for a unit that runs a container: it also lists the
- * keys, so {@link dockerEnvArgs} can pass each one through with `-e NAME`.
- * Docker's own `--env-file` can't hold a newline; a value systemd loads into
- * the `docker` CLI's environment can.
+ * {@link systemdEnvFile} for a unit that runs a container. It also sets
+ * {@link DOCKER_ENV} to `-e NAME` for each key, so `docker run` copies every
+ * value from its own environment. Docker's `--env-file` can't hold a newline;
+ * a value systemd loads can.
  */
 export const containerEnvFile = (env: Record<string, unknown>): string => {
   const entries = sorted(env);
   return [
     ...entries.map(([key, text]) => line(key, text)),
-    line(ENV_KEYS, entries.map(([key]) => key).join(" ")),
+    line(DOCKER_ENV, entries.map(([key]) => `-e ${key}`).join(" ")),
   ].join("\n");
 };
-
-/**
- * Shell for a systemd `ExecStart=/bin/sh -c '…'` that exports the
- * {@link containerEnvFile} at `path` and puts `-e NAME` for each of its keys
- * into `"$@"`, to pass to `docker run`. The file's double-quoted values use
- * `sh`'s own escapes, so sourcing it reads them back unchanged. `$$` keeps
- * systemd from expanding the variables itself.
- */
-export const dockerEnvArgs = (path: string) =>
-  `set -a; . ${path}; set +a; for k in $$${ENV_KEYS}; do set -- "$$@" -e "$$k"; done;`;

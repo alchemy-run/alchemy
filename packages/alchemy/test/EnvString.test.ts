@@ -41,12 +41,16 @@ describe("systemdEnvFile", { tags: ["unit"] }, () => {
       ['A="a\nb"', 'B="it\'s"', 'C="s"', 'D="1"', 'E="q\\"\\\\\\$\\`"'].join("\n"),
     );
   });
+
+  it("leaves out keys systemd can't hold", () => {
+    expect(systemdEnvFile({ "MY.KEY": "x", "K-2": "y", "A B": "z", OK_1: "w" })).toBe('OK_1="w"');
+  });
 });
 
 describe("containerEnvFile", { tags: ["unit"] }, () => {
-  it("adds the key list dockerEnvArgs passes to docker run", () => {
-    expect(containerEnvFile({ B: "b", A: "a\nb" })).toBe(
-      ['A="a\nb"', 'B="b"', 'ALCHEMY_ENV_KEYS="A B"'].join("\n"),
+  it("lists -e NAME for each key, for docker run to copy from systemd's env", () => {
+    expect(containerEnvFile({ B: "b", A: "a\nb", "MY.KEY": "x" })).toBe(
+      ['A="a\nb"', 'B="b"', 'ALCHEMY_DOCKER_ENV="-e A -e B"'].join("\n"),
     );
   });
 });
