@@ -8,6 +8,7 @@ import {
   type HostRuntimeContext,
   type ServerHost,
 } from "alchemy/Runtime/Process";
+import { envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
@@ -1060,21 +1061,9 @@ const normalizeEnvironment = (
     ]),
   );
 
-/**
- * Platform-injected env (`props.env`) after Output resolution: values are
- * usually marker-packed strings, but tolerate Redacted and structured values.
- */
+/** Platform-injected env (`props.env`) after Output resolution. */
 const normalizeBoundEnv = (env: Record<string, any> | undefined): Record<string, string> =>
-  Object.fromEntries(
-    Object.entries(env ?? {}).map(([key, value]) => [
-      key,
-      typeof value === "string"
-        ? value
-        : Redacted.isRedacted(value)
-          ? Redacted.value(value as Redacted.Redacted<string>)
-          : JSON.stringify(value),
-    ]),
-  );
+  envStrings(env);
 
 const normalizePorts = (ports: Service.PortMapping[] | undefined): Service.PortMapping[] =>
   (ports ?? []).map((port) => ({

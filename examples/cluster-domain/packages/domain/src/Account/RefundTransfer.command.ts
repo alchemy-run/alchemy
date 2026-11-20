@@ -14,7 +14,6 @@ export class TransferRefunded extends Domain.Event("TransferRefunded", {
  * `ExecuteTransfer` as the debit's compensation, so it never rejects.
  */
 export class RefundTransfer extends Domain.Command("RefundTransfer", {
-  target: AccountId,
-  input: { transferId: TransferId, amount: Cents },
+  input: { accountId: AccountId, transferId: TransferId, amount: Cents },
   events: [TransferRefunded],
 }) {}

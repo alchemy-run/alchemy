@@ -1,0 +1,23 @@
+{
+  "name": "alchemy-domain-verify-demo",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts DomainVerify out/domain-verify.mp4",
+    "still": "remotion still src/index.ts DomainVerify"
+  },
+  "dependencies": {
+    "@remotion/cli": "catalog:",
+    "@remotion/google-fonts": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "remotion": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:"
+  }
+}

@@ -10,6 +10,7 @@
   },
   "references": [
     { "path": "../../packages/alchemy/tsconfig.json" },
-    { "path": "../../packages/modal/tsconfig.json" }
+    { "path": "../../packages/modal/tsconfig.json" },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
   ]
 }

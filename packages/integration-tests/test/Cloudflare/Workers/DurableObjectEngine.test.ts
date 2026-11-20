@@ -1,5 +1,6 @@
 import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { describe, expect, it } from "@alchemy.run/test";
+import { type CallbackFactory, Callbacks } from "alchemy/Callback";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import {
   makeDurableObjectEngine,
@@ -39,8 +40,8 @@ const makeExecution = Effect.gen(function* () {
     env: {},
     get: () => Effect.succeed(undefined),
     set: (id: string) => Effect.succeed(id),
-    makeCallback: fixture.register,
   });
+  const callbacks = Layer.succeed(Callbacks, { make: fixture.register as CallbackFactory });
   const state = Layer.succeed(DurableObjectState, fixture.state);
 
   let impl: ObjectImpl<DurableObjectState> | undefined;
@@ -49,7 +50,7 @@ const makeExecution = Effect.gen(function* () {
     const scope = yield* Scope.make();
     const inner = yield* impl!.pipe(Effect.provide(state));
     methods = (yield* inner.pipe(
-      Effect.provide(Layer.mergeAll(state, runtime)),
+      Effect.provide(Layer.mergeAll(state, runtime, callbacks)),
       Scope.provide(scope),
     )) as typeof methods;
     fixture.seal();
