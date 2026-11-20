@@ -15,6 +15,7 @@ import {
 } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import * as Clock from "effect/Clock";
+import type { ConfigError } from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -200,7 +201,7 @@ export type Functions = Resource<
 const FunctionsResource = Resource<Functions>("Convex.Functions");
 
 /** The Layer of declared functions whose constructors bind resources. See {@link FunctionsDeclaration}. */
-export type FunctionsLayer = Layer.Layer<any, unknown, DeclarationServices>;
+export type FunctionsLayer = Layer.Layer<any, ConfigError, DeclarationServices>;
 
 export type FunctionsDeclaration = InputProps<FunctionsProps> & {
   /**
@@ -253,13 +254,17 @@ const constructed = (id: string, props: FunctionsDeclaration) =>
     const stack = yield* Stack;
     yield* runtime.set("ALCHEMY_STACK_NAME", Output.literal(stack.name));
     yield* runtime.set("ALCHEMY_STAGE", Output.literal(stack.stage));
-    yield* (Layer.build(functions!) as Effect.Effect<unknown, unknown, Scope.Scope>).pipe(
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the stack in context provides the providers and Stack the constructors name
+    yield* (Layer.build(functions!) as Effect.Effect<unknown, ConfigError, Scope.Scope>).pipe(
       Effect.scoped,
       Effect.provideService(RuntimeContext, runtime),
       Effect.provideService(ConfigProvider.ConfigProvider, capturing),
       Effect.orDie,
     );
-    return { ...rest, env: { ...rest.env, ...env } } as InputProps<FunctionsProps>;
+    return {
+      ...rest,
+      env: Object.assign({}, rest.env as Record<string, unknown> | undefined, env),
+    } as InputProps<FunctionsProps>;
   });
 
 export const Functions = Object.assign(

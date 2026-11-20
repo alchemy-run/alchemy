@@ -1735,6 +1735,10 @@ export default defineConfig({
               label: "Functions",
               items: [
                 { label: "Push functions", link: "/convex/functions/functions" },
+                {
+                  label: "Write functions with Effect",
+                  link: "/convex/functions/effect-functions",
+                },
                 { label: "Environment variables", link: "/convex/functions/environment-variables" },
                 { label: "Connect", link: "/convex/functions/connect" },
                 { label: "Calling functions", link: "/convex/functions/calling-functions" },

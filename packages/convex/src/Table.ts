@@ -159,7 +159,7 @@ export function Table(
   schema: TableSchema,
   indexes?: (table: TableDefinition<any>) => TableDefinition<any, any, any, any>,
 ): Table<string, any, any> {
-  const base = defineTable(validator(schema));
+  const base = defineTable(validator(schema) as ValidatorOf<Record<string, unknown>>);
   const id = Id(name);
   const DocumentSchema = Schema.Struct({
     ...schema.fields,
@@ -194,9 +194,7 @@ export function Table(
     const one = (pick: (query: OrderedQuery<any>) => Promise<unknown>) =>
       read((db) => pick(make(db))).pipe(
         Effect.flatMap((document) =>
-          document === null
-            ? Effect.succeed(Option.none())
-            : Effect.map(decode(document), Option.some),
+          document === null ? Effect.succeedNone : Effect.asSome(decode(document)),
         ),
       );
     return {
@@ -226,9 +224,7 @@ export function Table(
     get: (documentId) =>
       read((db) => db.get(name, documentId)).pipe(
         Effect.flatMap((document) =>
-          document === null
-            ? Effect.succeed(Option.none())
-            : Effect.map(decode(document), Option.some),
+          document === null ? Effect.succeedNone : Effect.asSome(decode(document)),
         ),
       ),
     query,

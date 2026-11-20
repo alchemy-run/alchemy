@@ -10,6 +10,7 @@ import type {
 import { makeFunctionReference } from "convex/server";
 import type { GenericId, Value } from "convex/values";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -124,127 +125,8 @@ export type Failure<F extends FunctionDeclaration> = FailureOf<F["error"]>;
 /** The arguments a function takes. */
 export type Args<F extends FunctionDeclaration> = F["args"]["Type"];
 
-const declare =
-  <Kind extends FunctionKind>(kind: Kind) =>
-  <Self>() =>
-  <
-    const Path extends string,
-    Args extends Codec,
-    Returns extends Codec | undefined = undefined,
-    Error extends Codec | undefined = undefined,
-    const Internal extends boolean = false,
-  >(
-    path: Path,
-    spec: FunctionSpec<Args, Returns, Error, Internal>,
-  ) =>
-    Object.assign(
-      Context.Service<Self, Handler<Kind, Args, Returns, Error>>()(`Convex.Function/${path}`),
-      {
-        kind,
-        path,
-        args: spec.args,
-        returns: spec.returns as Returns,
-        error: spec.error as Error,
-        internal: (spec.internal ?? false) as Internal,
-      } satisfies FunctionDeclaration<Kind, Path, Args, Returns, Error, Internal>,
-    );
-
-/**
- * Declare a Convex query: its path, arguments, result and failure. A query
- * only reads, and Convex reruns it for subscribers when what it read changes.
- *
- * The declaration holds no code, so a browser, Worker or Lambda can import
- * it to call the function. Implement it with a Layer, and serve it from a
- * file in `convex/` with {@link serve}.
- *
- * ### Declaring a Function
- * **Example:** A query with typed arguments and result
- * ```typescript
- * export class ListMessages extends Convex.Query<ListMessages>()("messages:list", {
- *   args: Schema.Struct({ channel: Schema.String }),
- *   returns: Schema.Array(Messages.Document),
- * }) {}
- * ```
- *
- * ### Implementing It
- * **Example:** Read a table in the handler
- * ```typescript
- * export const ListMessagesLive = Layer.succeed(ListMessages,
- *   Effect.fn(function* ({ channel }) {
- *     return yield* Messages.query((q) =>
- *       q.withIndex("by_channel", (r) => r.eq("channel", channel)),
- *     ).collect;
- *   }),
- * );
- * ```
- *
- * ### Serving It
- * The path is the file in `convex/` and the export name.
- *
- * **Example:** `convex/messages.ts`
- * ```typescript
- * export const list = Convex.serve(ListMessages, ListMessagesLive);
- * ```
- *
- * @primitive
- * @product Functions
- */
-export const Query = declare("query");
-
-/**
- * Declare a Convex mutation. A mutation reads and writes the database in one
- * transaction: a failure rolls every write back, and so does a conflict,
- * after which Convex runs it again. Side effects go through {@link schedule},
- * which commits with the writes.
- *
- * ### Declaring a Function
- * **Example:** A mutation with a typed failure
- * ```typescript
- * export class EmptyBody extends Schema.TaggedError<EmptyBody>()("EmptyBody", {}) {}
- *
- * export class AddMessage extends Convex.Mutation<AddMessage>()("messages:add", {
- *   args: Schema.Struct({ channel: Schema.String, body: Schema.String }),
- *   returns: Convex.Id("messages"),
- *   error: EmptyBody,
- * }) {}
- * ```
- *
- * ### Implementing It
- * **Example:** Insert, then schedule a follow-up
- * ```typescript
- * export const AddMessageLive = Layer.succeed(AddMessage,
- *   Effect.fn(function* ({ channel, body }) {
- *     if (body === "") return yield* new EmptyBody();
- *     const id = yield* Messages.insert({ channel, body });
- *     yield* Convex.schedule(Notify, { id });
- *     return id;
- *   }),
- * );
- * ```
- *
- * @primitive
- * @product Functions
- */
-export const Mutation = declare("mutation");
-
-/**
- * Declare a Convex action. An action may call the outside world, and calls
- * queries and mutations with {@link run}. It is not a transaction: each
- * `run` commits on its own.
- *
- * ### Declaring a Function
- * **Example:** An internal action a mutation schedules
- * ```typescript
- * export class Notify extends Convex.Action<Notify>()("messages:notify", {
- *   args: Schema.Struct({ id: Convex.Id("messages") }),
- *   internal: true,
- * }) {}
- * ```
- *
- * @primitive
- * @product Functions
- */
-export const Action = declare("action");
+/** The called function threw. Its `ConvexError` data, if any, decodes to the typed failure. */
+class CallRejected extends Data.TaggedError("CallRejected")<{ readonly cause: unknown }> {}
 
 const referenceTo = (fn: FunctionDeclaration) => makeFunctionReference<FunctionKind>(fn.path);
 
@@ -308,9 +190,9 @@ export const run = Effect.fn(function* <F extends FunctionDeclaration>(fn: F, ar
         : fn.kind === "mutation"
           ? runner.runMutation(reference as FunctionReference<"mutation">, encoded)
           : runner.runAction(reference as FunctionReference<"action">, encoded),
-    catch: (cause) => cause,
+    catch: (cause) => new CallRejected({ cause }),
   }).pipe(
-    Effect.catch((cause) =>
+    Effect.catchTag("CallRejected", ({ cause }) =>
       Option.match(convexErrorData(cause), {
         onNone: () => Effect.die(cause),
         onSome: (data) => decodeFailure(fn, data, cause),

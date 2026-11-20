@@ -18,7 +18,18 @@ Effect.gen(function* () {
 }).pipe(Effect.provide(Convex.RunQueryHttp));
 ```
 
-`Query`, `Mutation`, `Action` and `QueryBatch` grant nothing: public functions need no credentials.
+`RunQuery`, `RunMutation`, `RunAction` and `RunQueryBatch` grant nothing: public functions need no credentials.
+
+## Call a declared function
+
+Pass a function [declared with Effect](/convex/functions/effect-functions) instead of a path. The arguments, result and failure are typed by the declaration:
+
+```typescript
+const list = yield* Convex.RunQuery(Backend);
+const messages = yield* list(ListMessages, { channel: "general" });
+```
+
+The arguments are encoded with its schema, and the result is decoded, so a `Date` field arrives as a `Date`.
 
 ## Run a mutation
 

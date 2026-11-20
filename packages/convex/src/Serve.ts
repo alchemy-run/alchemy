@@ -1,3 +1,9 @@
+/**
+ * `serve` is generic over every declaration, whose failure type is whatever
+ * its error schema says: the error channels here are typed by `Handler`.
+ * @effect-diagnostics anyUnknownInErrorContext:off
+ */
+
 import type { ProviderCollectionLike } from "alchemy/Provider";
 import {
   type BaseRuntimeContext,
@@ -26,6 +32,7 @@ import {
 } from "convex/server";
 import { ConvexError, type Value } from "convex/values";
 import * as Cause from "effect/Cause";
+import type { ConfigError } from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -80,10 +87,6 @@ const deploymentVariables = ConfigProvider.make((path) => {
 });
 
 /**
- * The services a function of `kind` runs with. The handler's type only lets
- * it ask for these, so the context covers what it needs.
- */
-/**
  * What Alchemy bindings read at runtime: the variables `Convex.Functions`
  * set on the deployment when it ran the constructors at deploy.
  */
@@ -91,7 +94,9 @@ const runtimeContext: BaseRuntimeContext = {
   Type: "Convex.Functions",
   id: "Convex.Functions",
   env: {},
-  get: <T>(key: string) => Effect.sync(() => unpackEnvValue<T>(process.env[key])),
+  get: <T>(key: string) =>
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- the raw value: Config would unwrap what unpackEnvValue decodes
+    Effect.sync(() => unpackEnvValue<T>(process.env[key])),
   // `yield* output` sets, then gets. The value was set at deploy, so setting
   // here only names the key.
   set: (key) => Effect.succeed(key),
@@ -107,20 +112,22 @@ export type DeclarationServices = ProviderCollectionLike | Stack | Stage;
  * The services a constructor resolves resources and bindings with: the
  * runtime context, and the stack `Convex.Functions` deployed it from.
  */
-const runtimeServices = () => {
-  const name = process.env.ALCHEMY_STACK_NAME;
-  const stage = process.env.ALCHEMY_STAGE;
+const runtimeServices = (): Layer.Layer<RuntimeContext | Stack | Stage> => {
+  // Unset when the app was pushed without `functions`: nothing declares a
+  // resource then, so the stack is never read.
+  const name = process.env.ALCHEMY_STACK_NAME ?? "";
+  const stage = process.env.ALCHEMY_STAGE ?? "";
   return Layer.mergeAll(
     Layer.succeed(RuntimeContext, runtimeContext),
-    name === undefined || stage === undefined
-      ? Layer.empty
-      : Layer.mergeAll(
-          Layer.succeed(StackContext, { name, stage, bindings: {}, resources: {}, actions: {} }),
-          Layer.succeed(Stage, stage),
-        ),
+    Layer.succeed(StackContext, { name, stage, bindings: {}, resources: {}, actions: {} }),
+    Layer.succeed(Stage, stage),
   );
 };
 
+/**
+ * The services a function of `kind` runs with. The handler's type only lets
+ * it ask for these, so the context covers what it needs.
+ */
 const servicesOf = (
   kind: FunctionDeclaration["kind"],
   ctx: AnyCtx,
@@ -208,17 +215,20 @@ const toThrown = (fn: FunctionDeclaration, cause: Cause.Cause<unknown>) =>
  */
 export const serve = <F extends FunctionDeclaration & Context.Key<any, any>>(
   fn: F,
-  layer: Layer.Layer<F["Identifier"], unknown, DeclarationServices>,
+  layer: Layer.Layer<F["Identifier"], ConfigError, DeclarationServices>,
 ): Served<F> => {
+  // Built once per isolate, on first use: it reads the deployment's variables.
+  let provided: Layer.Layer<F["Identifier"], ConfigError, never> | undefined;
   const program = (ctx: AnyCtx, rawArgs: unknown) =>
     Effect.gen(function* () {
-      const context = yield* Layer.buildWithMemoMap(
-        // A binding's constructor reads what it bound at deploy from here.
-        // Declaring a resource needs its provider only at deploy.
-        Layer.provide(layer, runtimeServices()) as Layer.Layer<F["Identifier"], unknown, never>,
-        memoMap,
-        isolateScope,
+      // A binding's constructor reads what it bound at deploy from these.
+      // Declaring a resource needs its provider only at deploy.
+      provided ??= Layer.provide(
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- providers are type-only at runtime: a declaration never calls one
+        layer as Layer.Layer<F["Identifier"], ConfigError, Stack | Stage>,
+        runtimeServices(),
       );
+      const context = yield* Layer.buildWithMemoMap(provided, memoMap, isolateScope);
       const handler = Context.get(context, fn) as Handler<any, any, any, any>;
       const args = yield* Schema.decodeUnknownEffect(fn.args)(rawArgs).pipe(Effect.orDie);
       const value = yield* handler(args).pipe(Effect.provideContext(servicesOf(fn.kind, ctx)));

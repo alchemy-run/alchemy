@@ -73,13 +73,15 @@ export const RunActionHttp = Layer.effect(
       const send = (path: string, args: Record<string, unknown>) =>
         // Not idempotent: a retry after a lost response would run it twice.
         createOnce(functions.action({ path, args, format: "json" }));
+      // The overloads on the client type carry the types; this dispatches.
       const client = (target: string | FunctionDeclaration, args: Record<string, unknown> = {}) =>
         typeof target === "string"
           ? send(target, args).pipe(
               Effect.flatMap((response) => unwrap(target, response)),
               on,
             )
-          : callDeclared(target, args, (encoded) => send(target.path, encoded)).pipe(on);
+          : // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- typed by the client interface's overload
+            callDeclared(target, args, (encoded) => send(target.path, encoded)).pipe(on);
       return client as RunActionClient;
     }),
   ),

@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import type * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import { DeployKey } from "./DeployKey.ts";
@@ -105,7 +106,7 @@ export const callDeclared = <F extends FunctionDeclaration, E, R>(
     const response = yield* send(convexToJson(encoded) as Record<string, unknown>);
     if (response.status === "success") {
       if (fn.returns === undefined) return undefined as Success<F>;
-      return (yield* Schema.decodeUnknownEffect(fn.returns)(
+      return (yield* Schema.decodeEffect(fn.returns)(
         jsonToConvex(response.value as never),
       )) as Success<F>;
     }
@@ -113,13 +114,15 @@ export const callDeclared = <F extends FunctionDeclaration, E, R>(
       response.errorData === undefined || response.errorData === null
         ? undefined
         : jsonToConvex(response.errorData as never);
-    if (fn.error !== undefined && data !== undefined) {
-      const failure = yield* Schema.decodeUnknownEffect(fn.error)(data).pipe(Effect.option);
-      if (failure._tag === "Some") return yield* Effect.fail(failure.value as Failure<F>);
-    }
-    return yield* new ConvexFunctionError({
+    const undeclared = new ConvexFunctionError({
       path: fn.path,
       message: response.errorMessage,
       data: data as Value | undefined,
+    });
+    if (fn.error === undefined || data === undefined) return yield* undeclared;
+    const failure = yield* Schema.decodeEffect(fn.error)(data).pipe(Effect.option);
+    return yield* Option.match(failure, {
+      onNone: () => Effect.fail(undeclared),
+      onSome: (value) => Effect.fail(value as Failure<F>),
     });
   });

@@ -8,7 +8,10 @@
  * import * as Convex from "@alchemy.run/convex/Server";
  * ```
  */
+export * from "./Action.ts";
 export * from "./Function.ts";
+export * from "./Mutation.ts";
+export * from "./Query.ts";
 export * from "./Serve.ts";
 export * from "./Table.ts";
 export {
