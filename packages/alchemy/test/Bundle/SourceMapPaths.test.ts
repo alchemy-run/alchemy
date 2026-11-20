@@ -20,14 +20,16 @@ interface Checkout {
   /** The package manager's store directory, relative to the temporary root. */
   readonly store: string;
   readonly manager: keyof typeof storeDirectory;
-  readonly greeting?: string;
+  /** A comment in a source: it changes the source and nothing of the code built from it. */
+  readonly note?: string;
 }
 
 /**
  * Creates a checkout as a CI job has one: a package whose entry imports a
  * source outside the package and a dependency. The package manager keeps the
  * dependency in a store directory of its own and links it into the package's
- * `node_modules`.
+ * `node_modules`. The entry also imports a module that is not a file, which a
+ * plugin provides (see {@link inputOf}).
  */
 const makeCheckout = (root: string, checkout: Checkout) =>
   Effect.gen(function* () {
@@ -49,13 +51,14 @@ const makeCheckout = (root: string, checkout: Checkout) =>
       [
         'import { greeting } from "../../shared/greeting.ts";',
         'import { decorate } from "fixture-dependency";',
-        "export default { fetch: () => new Response(decorate(greeting)) };",
+        'import { suffix } from "virtual:suffix";',
+        "export default { fetch: () => new Response(decorate(greeting) + suffix()) };",
         "",
       ].join("\n"),
     );
     yield* write(
       path.join(root, checkout.directory, "shared/greeting.ts"),
-      `export const greeting = ${JSON.stringify(checkout.greeting ?? "hello")};\n`,
+      `// ${checkout.note ?? "first"}\nexport const greeting = "hello";\n`,
     );
     const dependency = path.join(root, checkout.store, storeDirectory[checkout.manager]);
     yield* write(
@@ -79,16 +82,32 @@ const makeCheckout = (root: string, checkout: Checkout) =>
   });
 
 /**
+ * The input options of a checkout's bundle. The plugin provides `virtual:suffix`
+ * under its own name, as plugins such as rolldown's `esmExternalRequirePlugin`
+ * do for the modules they add (`builtin:…`).
+ */
+const inputOf = (checkout: { readonly app: string; readonly entry: string }) =>
+  ({
+    input: checkout.entry,
+    cwd: checkout.app,
+    plugins: [
+      {
+        name: "fixture:virtual",
+        resolveId: (id) => (id === "virtual:suffix" ? id : null),
+        load: (id) =>
+          id === "virtual:suffix" ? "export const suffix = () => String(Date.now() % 3);" : null,
+      },
+    ],
+  }) satisfies rolldown.InputOptions;
+
+/**
  * Builds a checkout minified, as a Worker bundle is. Unminified code also
  * carries rolldown's module path comments, which no output option controls.
  */
 const build = (root: string, checkout: Checkout, output?: rolldown.OutputOptions) =>
   Effect.gen(function* () {
-    const { app, entry } = yield* makeCheckout(root, checkout);
-    return yield* Bundle.build(
-      { input: entry, cwd: app },
-      { sourcemap: "hidden", minify: true, ...output },
-    );
+    const input = inputOf(yield* makeCheckout(root, checkout));
+    return yield* Bundle.build(input, { sourcemap: "hidden", minify: true, ...output });
   });
 
 const text = (file: Bundle.BundleFile) =>
@@ -103,11 +122,14 @@ const sources = (output: Bundle.BundleOutput): string[] => {
   return [...JSON.parse(text(map)).sources].sort();
 };
 
-const stableSources = (manager: keyof typeof storeDirectory) => [
-  "../shared/greeting.ts",
-  `${storeDirectory[manager]}/index.js`,
-  "src/entry.ts",
-];
+/** What a map names, `up` directories below the bundle `cwd`. */
+const stableSources = (manager: keyof typeof storeDirectory, up: string) =>
+  [
+    `${up}../shared/greeting.ts`,
+    `${up}${storeDirectory[manager]}/index.js`,
+    `${up}src/entry.ts`,
+    "virtual:suffix",
+  ].sort();
 
 layer(NodeServices.layer)("Bundle source map paths", (it) => {
   for (const manager of ["pnpm", "bun"] as const) {
@@ -131,7 +153,8 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
             manager,
           });
 
-          expect(sources(first)).toEqual(stableSources(manager));
+          // In memory the map sits in rolldown's default `dist`, one below `cwd`.
+          expect(sources(first)).toEqual(stableSources(manager, "../"));
           expect(contents(second)).toEqual(contents(first));
           expect(second.hash).toBe(first.hash);
         }).pipe(Effect.scoped),
@@ -140,33 +163,36 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
   }
 
   it.effect(
-    "build names sources the same way when the bundle is written to a directory",
+    "a written bundle names its files from the map's directory, where a reader finds them",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-bundle-source-map-" });
+        const dir = (checkout: string) => path.join(root, checkout, "app/.alchemy/bundles/Fixture");
 
-        const inside = yield* build(
+        const first = yield* build(
           root,
           { directory: "one/checkout", store: "one/store/aaaaaaaa", manager: "pnpm" },
-          { dir: path.join(root, "one/checkout/app/.alchemy/bundles/Fixture") },
+          { dir: dir("one/checkout") },
         );
-        const outside = yield* build(
+        const second = yield* build(
           root,
-          { directory: "two/checkout", store: "two/store/bbbbbbbb", manager: "pnpm" },
-          { dir: path.join(root, "two/elsewhere/out") },
+          { directory: "two/runner/work/checkout", store: "two/cache/bbbbbbbb", manager: "pnpm" },
+          { dir: dir("two/runner/work/checkout") },
         );
 
-        expect(sources(inside)).toEqual(stableSources("pnpm"));
-        expect(sources(outside)).toEqual(stableSources("pnpm"));
-        expect(outside.hash).toBe(inside.hash);
+        expect(sources(first)).toEqual(stableSources("pnpm", "../../../"));
+        expect(second.hash).toBe(first.hash);
+        for (const source of ["../../../../shared/greeting.ts", "../../../src/entry.ts"]) {
+          expect(yield* fs.exists(path.resolve(dir("one/checkout"), source))).toBe(true);
+        }
       }).pipe(Effect.scoped),
     { tags: ["unit", "local"] },
   );
 
   it.effect(
-    "a changed source still changes the code, the map and the hash",
+    "a changed comment leaves the code alone and still changes the map and the hash",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -181,11 +207,12 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
           directory: "two/checkout",
           store: "two/store/bbbbbbbb",
           manager: "pnpm",
-          greeting: "hello, changed",
+          note: "second",
         });
 
         for (const file of first.files) {
-          expect(contents(changed)[file.path]).not.toBe(text(file));
+          const same = contents(changed)[file.path] === text(file);
+          expect(same).toBe(!file.path.endsWith(".map"));
         }
         expect(changed.hash).not.toBe(first.hash);
       }).pipe(Effect.scoped),
@@ -205,29 +232,31 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
           { sourcemapPathTransform: (source) => `mine/${source.split("/").at(-1)}` },
         );
 
-        expect(sources(result)).toEqual(["mine/entry.ts", "mine/greeting.ts", "mine/index.js"]);
+        expect(sources(result)).toEqual([
+          "mine/entry.ts",
+          "mine/greeting.ts",
+          "mine/index.js",
+          "mine/virtual:suffix",
+        ]);
       }).pipe(Effect.scoped),
     { tags: ["unit", "local"] },
   );
 
   it.effect(
-    "watch keeps paths that lead from the map to the files on disk",
+    "watch keeps rolldown's own paths",
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const path = yield* Path.Path;
         const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-bundle-source-map-" });
-        const { app, entry } = yield* makeCheckout(root, {
+        const checkout = yield* makeCheckout(root, {
           directory: "one/checkout",
           store: "one/store/aaaaaaaa",
           manager: "pnpm",
         });
-        const dir = path.join(app, ".alchemy/bundles/Fixture");
+        const dir = path.join(checkout.app, ".alchemy/bundles/Fixture");
 
-        const output = yield* Bundle.watch(
-          { input: entry, cwd: app },
-          { sourcemap: "hidden", dir },
-        ).pipe(
+        const output = yield* Bundle.watch(inputOf(checkout), { sourcemap: "hidden", dir }).pipe(
           Stream.filter((event) => event._tag !== "Start"),
           Stream.runHead,
           Effect.map((event) => {
@@ -239,8 +268,9 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
           }),
         );
 
+        // The dependency is named where its store really sits, not below `cwd`.
         expect(sources(output).map((source) => path.resolve(dir, source))).toContain(
-          yield* fs.realPath(entry),
+          yield* fs.realPath(path.join(checkout.app, "node_modules/fixture-dependency/index.js")),
         );
       }).pipe(Effect.scoped),
     { tags: ["unit", "local"] },

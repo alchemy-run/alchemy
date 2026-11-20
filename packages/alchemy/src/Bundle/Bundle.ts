@@ -234,24 +234,33 @@ const withDceDefault = (outputOptions?: rolldown.OutputOptions): rolldown.Output
 const PACKAGE_STORES = ["/node_modules/.pnpm/", "/node_modules/.bun/"];
 
 /**
- * Names a source in a source map without this machine's directories: a
- * dependency from its `node_modules` directory onward (from the package
- * manager's store when it lives in one), anything else relative to the bundle
- * `cwd`.
+ * A source's path in a source map as rolldown writes it, from the map's own
+ * directory, with the two parts that depend on the machine replaced:
  *
- * Rolldown's default is the path from the output directory to the source,
- * which spells out where the checkout and the package store sit. The bundle
- * hash covers the map, so the same sources built from another location (a CI
- * job with a freshly named store, a second checkout) hashed differently and
- * every bundle was deployed again.
+ * - a dependency in a package manager's store is named as if the store sat in
+ *   the bundle `cwd`. A store outside the project (a CI cache, a global
+ *   store) otherwise puts its own location into the map;
+ * - a module that is not a file (a plugin's `builtin:…` id) keeps its own
+ *   name. Rolldown resolves such an id like a path, against the directory the
+ *   process was started in.
+ *
+ * Every other source keeps rolldown's path, so whatever reads the map from
+ * where it sits still finds the file. The bundle hash covers the map: without
+ * this the same sources built in another CI job hashed differently and every
+ * bundle was deployed again.
  */
 const stableSourcePath =
   (cwd: string) =>
   (source: string, sourcemapPath: string): string => {
-    const file = pathe.resolve(pathe.dirname(sourcemapPath), source);
-    const store = Math.max(...PACKAGE_STORES.map((directory) => file.lastIndexOf(directory)));
-    const dependency = store === -1 ? file.lastIndexOf("/node_modules/") : store;
-    return dependency === -1 ? pathe.relative(cwd, file) : file.slice(dependency + 1);
+    const directory = pathe.dirname(sourcemapPath);
+    const file = pathe.resolve(directory, source);
+    const store = Math.max(...PACKAGE_STORES.map((marker) => file.lastIndexOf(marker)));
+    if (store !== -1) {
+      return pathe.relative(directory, pathe.join(pathe.resolve(cwd), file.slice(store + 1)));
+    }
+    const parts = file.split("/");
+    const id = parts.findIndex((part) => /^[a-z][a-z0-9+.-]+:/i.test(part));
+    return id === -1 ? source : parts.slice(id).join("/");
   };
 
 /**
