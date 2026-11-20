@@ -24,13 +24,13 @@ const native = <Self>(tag: ToolTagClass<Self, string>): Layer.Layer<Self, never,
   );
 
 /** Pi's `bash` as `AI.Bash`: run a shell command in the conversation's sandbox. */
-export const BashLive = native(AI.Bash);
+export const Bash = native(AI.Bash);
 /** Pi's `read` as `AI.Read`: text with line numbers, or an image. */
-export const ReadLive = native(AI.Read);
+export const Read = native(AI.Read);
 /** Pi's `edit` as `AI.Edit`: replace exact text in a file. */
-export const EditLive = native(AI.Edit);
+export const Edit = native(AI.Edit);
 /** Pi's `write` as `AI.Write`: write a whole file, creating its directories. */
-export const WriteLive = native(AI.Write);
+export const Write = native(AI.Write);
 
 const MAX_LINES = 200;
 
@@ -49,7 +49,7 @@ const Found = Schema.Struct({
 });
 
 /** `AI.Grep` for Pi, which has no search tool of its own: `grep -rnE` in the sandbox. */
-export const GrepLive = AI.Grep.make(
+export const Grep = AI.Grep.make(
   {
     description: `Search file contents with a regular expression. Returns matching lines as path:line:text, at most ${MAX_LINES}. Narrow the search with path or include when there are more.`,
     parameters: Schema.Struct({
@@ -87,7 +87,7 @@ export const GrepLive = AI.Grep.make(
 );
 
 /** `AI.Glob` for Pi, which has no file finder of its own: a `bash` glob in the sandbox. */
-export const GlobLive = AI.Glob.make(
+export const Glob = AI.Glob.make(
   {
     description: `Find files by glob pattern, such as "src/**/*.ts". Returns matching paths, at most ${MAX_LINES}.`,
     parameters: Schema.Struct({
@@ -126,11 +126,4 @@ export const GlobLive = AI.Glob.make(
  * A Layer for every tool in `AI.CodingTools`: Pi's own `bash`, `read`,
  * `edit` and `write`, and a `grep` and `glob` that run in the sandbox.
  */
-export const CodingToolsLive = Layer.mergeAll(
-  BashLive,
-  ReadLive,
-  EditLive,
-  WriteLive,
-  GrepLive,
-  GlobLive,
-);
+export const CodingTools = Layer.mergeAll(Bash, Read, Edit, Write, Grep, Glob);

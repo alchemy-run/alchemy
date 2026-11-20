@@ -414,7 +414,7 @@ export const Harness = <
                 if (impl.engine !== ENGINE) {
                   return Effect.die(
                     new PiError({
-                      message: `AI.Tool/${tool.toolName} was given ${impl.engine}'s tool, which only runs on that harness. Provide a Pi Layer for it (Pi.CodingToolsLive) or your own.`,
+                      message: `AI.Tool/${tool.toolName} was given ${impl.engine}'s tool, which only runs on that harness. Provide a Pi Layer for it (Pi.CodingTools) or your own.`,
                     }),
                   );
                 }

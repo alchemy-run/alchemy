@@ -83,7 +83,7 @@ class CountBytes extends AI.Tool<CountBytes>()(
 const HarnessLive = Layer.mergeAll(
   ModelsLive,
   PiCloudflare.DurableObjectStorage,
-  Pi.CodingToolsLive.pipe(Layer.provideMerge(SandboxLive)),
+  Pi.CodingTools.pipe(Layer.provideMerge(SandboxLive)),
 ).pipe(
   Layer.provideMerge(Layer.mergeAll(Cloudflare.AI.QueryGatewayBinding, Boat.CreateSandboxHttp)),
 );

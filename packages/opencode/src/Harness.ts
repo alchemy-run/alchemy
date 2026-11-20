@@ -338,7 +338,7 @@ export const Harness = <
             ? Effect.succeed({ key: tool.key, native: impl.tool as string })
             : Effect.die(
                 new OpenCodeError({
-                  message: `AI.Tool/${tool.toolName} was given ${impl.engine}'s tool, which only runs on that harness. Provide an OpenCode Layer for it (OpenCode.CodingToolsLive) or your own.`,
+                  message: `AI.Tool/${tool.toolName} was given ${impl.engine}'s tool, which only runs on that harness. Provide an OpenCode Layer for it (OpenCode.CodingTools) or your own.`,
                 }),
               );
         },

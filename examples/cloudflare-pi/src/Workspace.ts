@@ -69,7 +69,7 @@ const workspace = <E, R>(sandbox: Layer.Layer<AI.Sandboxes, E, R>) =>
       Layer.mergeAll(
         FastLive,
         PiCloudflare.DurableObjectStorage,
-        Pi.CodingToolsLive.pipe(Layer.provideMerge(sandbox)),
+        Pi.CodingTools.pipe(Layer.provideMerge(sandbox)),
       ),
     ),
   );

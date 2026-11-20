@@ -183,19 +183,19 @@ All three operations are safe to repeat. `open` returns the sandbox running, wha
 const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools] });
 ```
 
-`Pi.CodingToolsLive` provides them all, and requires `AI.Sandboxes`:
+`Pi.CodingTools` provides them all, and requires `AI.Sandboxes`:
 
 ```typescript
 const HarnessLive = Layer.mergeAll(
   FastLive,
   PiCloudflare.DurableObjectStorage,
-  Pi.CodingToolsLive.pipe(Layer.provideMerge(E2BSandbox)),
+  Pi.CodingTools.pipe(Layer.provideMerge(E2BSandbox)),
 );
 ```
 
 `bash`, `read`, `edit` and `write` are Pi's own tools, with Pi's descriptions and schemas. Pi's `pi-env` daemon runs in the sandbox, so they behave exactly as they do locally. Pi has no `grep` or `glob`, so those two run a command in the sandbox.
 
-Each tool has a Layer of its own (`Pi.BashLive`, `Pi.ReadLive`), and any of them can be yours instead: `AI.Bash.make` takes the description, the schema and the handler.
+Each tool has a Layer of its own (`Pi.Bash`, `Pi.Read`), and any of them can be yours instead: `AI.Bash.make` takes the description, the schema and the handler.
 
 A tool of your own runs in the harness. To reach the conversation's files and shell it uses `AI.Sandbox`, which the harness has already scoped to the call's conversation. Its Layer then requires `AI.Sandboxes`, as the coding tools do:
 

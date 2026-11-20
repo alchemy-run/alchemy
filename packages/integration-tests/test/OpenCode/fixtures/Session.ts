@@ -101,7 +101,7 @@ const HarnessLive = Layer.mergeAll(
   ModelsLive,
   AddLive,
   SandboxLive,
-  OpenCode.CodingToolsLive,
+  OpenCode.CodingTools,
   OpenCodeCloudflare.DurableObjectInstance,
 ).pipe(
   Layer.provideMerge(Layer.mergeAll(Cloudflare.AI.QueryGatewayBinding, Boat.CreateSandboxHttp)),

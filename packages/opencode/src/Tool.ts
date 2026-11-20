@@ -15,7 +15,7 @@ const OpenCodeToolTypeId = "~alchemy/OpenCode/Tool" as const;
 /**
  * One of the tools only OpenCode has (`webfetch`, `task`, …), run by
  * OpenCode in the session's sandbox. The tools every coding agent has are
- * tool tags instead (`AI.Bash`), provided here by `OpenCode.CodingToolsLive`.
+ * tool tags instead (`AI.Bash`), provided here by `OpenCode.CodingTools`.
  */
 export interface BuiltinTool<Name extends string = string> {
   readonly [OpenCodeToolTypeId]: "builtin";

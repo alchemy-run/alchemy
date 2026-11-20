@@ -34,13 +34,11 @@ type _OneCodingToolNeedsItsLayer = Assert<
 // Pi's Layers for them work in a sandbox, so they require `AI.Sandboxes`.
 type _PiProvidesThem = Assert<
   Equals<
-    Layer.Success<typeof Pi.CodingToolsLive>,
+    Layer.Success<typeof Pi.CodingTools>,
     AI.Bash | AI.Read | AI.Edit | AI.Write | AI.Grep | AI.Glob
   >
 >;
-type _PiToolsNeedSandboxes = Assert<
-  Equals<Layer.Services<typeof Pi.CodingToolsLive>, AI.Sandboxes>
->;
+type _PiToolsNeedSandboxes = Assert<Equals<Layer.Services<typeof Pi.CodingTools>, AI.Sandboxes>>;
 // A tool tag implemented by hand takes its schema from the Layer.
 const OwnBash = AI.Bash.make(
   {

@@ -59,13 +59,11 @@ type _CodingToolsNeedTheirLayers = Assert<
 >;
 type _OpenCodeProvidesThem = Assert<
   Equals<
-    Layer.Success<typeof OpenCode.CodingToolsLive>,
+    Layer.Success<typeof OpenCode.CodingTools>,
     AI.Bash | AI.Read | AI.Edit | AI.Write | AI.Grep | AI.Glob
   >
 >;
-type _OpenCodeToolsNeedNothing = Assert<
-  Equals<Layer.Services<typeof OpenCode.CodingToolsLive>, never>
->;
+type _OpenCodeToolsNeedNothing = Assert<Equals<Layer.Services<typeof OpenCode.CodingTools>, never>>;
 
 // An inline tool closes over what is in scope and requires nothing more.
 const Echo = AI.Tool(

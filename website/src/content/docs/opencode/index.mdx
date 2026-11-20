@@ -88,7 +88,7 @@ const ModelsLive = Layer.unwrap(
 const HarnessLive = Layer.mergeAll(
   ModelsLive,
   BoatSandbox,
-  OpenCode.CodingToolsLive,
+  OpenCode.CodingTools,
   OpenCodeCloudflare.DurableObjectInstance,
 ).pipe(Layer.provideMerge(Cloudflare.AI.QueryGatewayBinding));
 
@@ -109,7 +109,7 @@ export default class Coder extends Cloudflare.DurableObject<Coder>()(
 ) {}
 ```
 
-`AI.CodingTools` names `bash`, `read`, `edit`, `write`, `grep` and `glob`. A name says nothing about how the tool works: `OpenCode.CodingToolsLive` provides OpenCode's own tool for each, with OpenCode's description and schema. The same list runs on another harness with that harness's Layer.
+`AI.CodingTools` names `bash`, `read`, `edit`, `write`, `grep` and `glob`. A name says nothing about how the tool works: `OpenCode.CodingTools` provides OpenCode's own tool for each, with OpenCode's description and schema. The same list runs on another harness with that harness's Layer.
 
 `harness.session(name)` does nothing until it is used. Its first call opens the session's sandbox, installs OpenCode there and starts it; later calls find it running. `requestId` makes a prompt exactly-once while its sandbox runs: a retried call waits for the original answer.
 
