@@ -1,0 +1,56 @@
+---
+title: Skills
+description: Give Pi conversations skills: the model sees each skill's description and loads its instructions and files with load_skill when the task calls for it.
+---
+
+A Pi harness takes [`AI.Skill`](/ai/skills) declarations beside its extensions. Pi advertises each selected skill in the system prompt, with its name and description, and gives the model a `load_skill` tool. Calling it returns the skill's instructions and writes its files into the conversation's sandbox.
+
+## List a skill
+
+Skills go in the harness's `extensions`:
+
+```typescript title="src/skills.ts"
+import * as AI from "@alchemy.run/ai";
+
+export class Releasing extends AI.Skill<Releasing>()("releasing", {
+  description: "Cut and upload a release. Use when the user asks to ship.",
+  instructions: "Run the tests, run .skills/releasing/bump.sh, build, then call deploy.",
+  files: { "bump.sh": "npm version patch --no-git-tag-version\n" },
+}) {}
+```
+
+```typescript
+const harness = yield* Pi.Harness({ models: [Fast], extensions: [Releasing] });
+```
+
+## Select it
+
+A skill on the harness is not selected by default. A conversation adds the ones it wants:
+
+```typescript
+yield* harness.createConversation({ name: "pr-142", extensions: [Releasing] });
+```
+
+Or adds one while it runs. The next model request advertises it:
+
+```typescript
+yield* harness.configure("pr-142", { extensions: { add: [Releasing] } });
+```
+
+## What loading does
+
+When the model calls `load_skill` with the skill's name, it gets the instructions as the tool's result. The skill's files are written under `.skills/<name>/` in the conversation's working directory, so `bump.sh` above is at `.skills/releasing/bump.sh`.
+
+Files need somewhere to go, so a skill with `files` needs a harness with [sandboxes](/pi/sandboxes).
+
+## Tools a skill brings
+
+A skill's `tools` are enabled in every conversation that selects it, and their Layers are requirements of the harness:
+
+```typescript
+export class Releasing extends AI.Skill<Releasing>()("releasing", {
+  description: "Cut and upload a release. Use when the user asks to ship.",
+  instructions: "Run the tests, build, then call deploy.",
+  tools: [Deploy],
+}) {}
+```

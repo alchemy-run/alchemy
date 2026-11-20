@@ -1,0 +1,98 @@
+---
+title: Extensions
+description: A Pi extension adds prompt sections, tools and hooks that a conversation selects by name: block a tool call, rewrite its arguments, or keep a run going.
+---
+
+An extension is a bundle a conversation selects by name: sections added to the system prompt, tools that come with it, and hooks on what the harness does. Use one for behavior that belongs to some conversations and not others, such as a review policy or a persona.
+
+## Declare an extension
+
+An extension has a name and what it declares up front: sections that never change, and the tools it brings.
+
+```typescript title="src/extensions.ts"
+import * as Pi from "@alchemy.run/pi";
+
+export class House extends Pi.Extension<House>()("house", {
+  sections: { style: "Answer in one short paragraph." },
+}) {}
+```
+
+List it on the harness. Extensions on the harness are selected by every conversation unless it says otherwise:
+
+```typescript
+const harness = yield* Pi.Harness({ models: [Fast], extensions: [House] });
+```
+
+## Block a tool call
+
+An extension's third argument is an Effect that returns its behavior. A `beforeTool` hook sees each call before it runs, and `Pi.block` refuses it with a reason the model reads:
+
+```typescript title="src/extensions.ts"
+import * as Pi from "@alchemy.run/pi";
+import * as Effect from "effect/Effect";
+
+export class Guard extends Pi.Extension<Guard>()(
+  "guard",
+  { sections: { policy: "Deploys need approval." } },
+  Effect.gen(function* () {
+    return {
+      hooks: {
+        beforeTool: Effect.fn(function* (call) {
+          return call.name === "deploy" ? Pi.block("Deploys need approval.") : undefined;
+        }),
+      },
+    };
+  }),
+) {}
+```
+
+Returning `undefined` changes nothing. Returning `{ arguments }` runs the call with those arguments instead.
+
+## Write a section per conversation
+
+A section can be computed before each model request, from the conversation it is for:
+
+```typescript title="src/extensions.ts"
+import * as Pi from "@alchemy.run/pi";
+import * as Effect from "effect/Effect";
+
+export class Clock extends Pi.Extension<Clock>()(
+  "clock",
+  {},
+  Effect.gen(function* () {
+    return {
+      sections: {
+        now: Effect.fn(function* ({ conversationId }) {
+          return `Conversation ${conversationId}. The time is ${new Date().toISOString()}.`;
+        }),
+      },
+    };
+  }),
+) {}
+```
+
+## The other hooks
+
+`afterTool` replaces a call's result. `beforeRequest` replaces the messages of one model request. `afterResponse` sees each answer. `onYield` runs when the model stops, and can keep the run going with another message:
+
+```typescript
+onYield: Effect.fn(function* (answer) {
+  const text = answer.content.map((part) => (part.type === "text" ? part.text : "")).join("");
+  return text.includes("DONE") ? undefined : { continue: "Keep going until the tests pass." };
+}),
+```
+
+## Use bindings in an extension
+
+The Effect that builds an extension's behavior runs where the harness is yielded, so it can declare bindings, as a tool's does. An extension with behavior but no third argument is implemented by a Layer, with `Guard.make(...)`.
+
+## Select extensions per conversation
+
+A conversation selects exactly the extensions it names, or adds and removes from the harness's:
+
+```typescript
+yield* harness.createConversation({ name: "review", extensions: [Guard] });
+yield* harness.configure("review", { extensions: { remove: [House] } });
+```
+
+Selecting an extension enables the tools it brings.

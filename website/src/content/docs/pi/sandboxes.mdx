@@ -1,0 +1,98 @@
+---
+title: Sandboxes
+description: Pi's coding tools run in a sandbox for each conversation, opened on first use on E2B, Daytona, Modal, Boat or Archil, and suspended or removed when you say.
+---
+
+A Durable Object can't run a process or hold a file system, so a Pi harness that uses the coding tools gives each conversation a sandbox. You say where sandboxes run with an [`AI.Sandboxes`](/ai/sandboxes) Layer, and the harness does the rest.
+
+## Give the harness sandboxes
+
+Provide your `AI.Sandboxes` Layer to `Pi.CodingTools`:
+
+```typescript title="src/Workspace.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive } from "./models.ts";
+import { BoatSandbox } from "./sandboxes.ts";
+
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  PiCloudflare.DurableObjectStorage,
+  Pi.CodingTools.pipe(Layer.provideMerge(BoatSandbox)),
+);
+
+export default class Workspace extends Cloudflare.DurableObject<Workspace>()(
+  "Workspace",
+  Effect.gen(function* () {
+    const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools] });
+
+    return Effect.gen(function* () {
+      return {
+        prompt: Effect.fn(function* (name: string, text: string, requestId: string) {
+          const conversation = yield* harness.createConversation({ name });
+          const submission = yield* conversation.submit({ type: "input", content: text, requestId });
+          return (yield* submission.wait).status;
+        }),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+`BoatSandbox` is the Layer on the [Sandboxes](/ai/sandboxes#say-where-sandboxes-run) page. `Layer.provideMerge` gives it to the coding tools and to the harness.
+
+## One sandbox per conversation
+
+The harness opens a conversation's sandbox the first time one of its tools needs it. A conversation that only chats never has one.
+
+The sandbox's key comes from the Durable Object and the conversation, so two objects with a conversation of the same name never share a sandbox. `conversation.sandboxKey` is that key, for finding the sandbox on the platform yourself.
+
+## Pi's daemon
+
+Pi's tools talk to a small daemon, `pi-env`, that the harness installs in each new sandbox. The daemon does the file and process work, which is why `read`, `edit` and `bash` behave in a sandbox as they do on your own machine.
+
+The install downloads the daemon from npm, once for each new sandbox. To skip it, bake the daemon into the image your sandboxes start from.
+
+## Your own tools in the sandbox
+
+A tool of yours reaches the same sandbox through `AI.Sandbox`:
+
+```typescript
+export const RunTestsLive = RunTests.make(
+  Effect.fn(function* () {
+    const sandbox = yield* AI.Sandbox;
+    const result = yield* sandbox.exec(["npm", "test"]).pipe(Effect.orDie);
+    return { exitCode: result.exitCode };
+  }),
+);
+```
+
+Its Layer requires `AI.Sandboxes`, like the coding tools: `RunTestsLive.pipe(Layer.provideMerge(BoatSandbox))`.
+
+## Suspend a sandbox
+
+A sandbox costs money while it runs. Suspend it when its conversation goes quiet:
+
+```typescript
+yield* harness.suspendSandbox("pr-142");
+```
+
+The conversation's next tool call opens it again, with its files where the platform keeps them.
+
+## Remove a sandbox
+
+Remove it when the conversation is over:
+
+```typescript
+yield* harness.removeSandbox("pr-142");
+```
+
+A later tool call opens a new, empty one.
+
+## Change platform
+
+The platform is the one Layer. See [Sandbox platforms](/ai/sandbox-platforms) for E2B, Daytona, Modal, Boat and Archil.

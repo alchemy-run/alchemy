@@ -3063,6 +3063,33 @@ importers:
         specifier: 'catalog:'
         version: 4.3.3
 
+  examples/cloudflare-opencode-github:
+    dependencies:
+      '@alchemy.run/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
+      '@alchemy.run/boat':
+        specifier: workspace:*
+        version: link:../../packages/boat
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
+      '@alchemy.run/github':
+        specifier: workspace:*
+        version: link:../../packages/github
+      '@alchemy.run/opencode':
+        specifier: workspace:*
+        version: link:../../packages/opencode
+      '@cloudflare/workers-types':
+        specifier: 5.20261117.1
+        version: 5.20261117.1
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+
   examples/cloudflare-pi:
     dependencies:
       '@alchemy.run/ai':

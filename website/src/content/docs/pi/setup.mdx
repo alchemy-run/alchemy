@@ -1,0 +1,81 @@
+---
+title: Setup
+description: Install @alchemy.run/pi and @alchemy.run/ai, and add a Pi harness to a Cloudflare Durable Object.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+You need:
+
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
+- An Alchemy app on Cloudflare. See [Cloudflare setup](/cloudflare/setup).
+
+Pi itself needs no account. The model is yours, through any Effect AI provider, and so is the sandbox platform, when the harness uses one.
+
+## Install
+
+Install the harness and the shared AI package:
+
+<PackageManagers add="@alchemy.run/pi @alchemy.run/ai" />
+
+## A model
+
+A harness needs at least one model. Workers AI needs nothing beyond your Cloudflare account:
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const ai = yield* Cloudflare.Workers.AI();
+    return Fast.layer(ai.model({ model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" }));
+  }),
+).pipe(Layer.provide(Cloudflare.Workers.AIBinding));
+```
+
+See [Models](/ai/models) for other providers.
+
+## A harness
+
+Yield the harness in a Durable Object's outer Effect and provide its Layers once:
+
+```typescript title="src/Session.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive } from "./models.ts";
+
+const HarnessLive = Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage);
+
+export default class Session extends Cloudflare.DurableObject<Session>()(
+  "Session",
+  Effect.gen(function* () {
+    const harness = yield* Pi.Harness({ models: [Fast] });
+
+    return Effect.gen(function* () {
+      return {
+        prompt: Effect.fn(function* (name: string, text: string) {
+          const conversation = yield* harness.createConversation({ name });
+          const submission = yield* conversation.submit({ type: "input", content: text });
+          return (yield* submission.wait).status;
+        }),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+Bind the Durable Object to a Worker by yielding `Session` in the Worker's own outer Effect. See [Durable Objects](/cloudflare/compute/durable-objects).
+
+## A sandbox platform
+
+A harness that uses the coding tools needs a sandbox platform: E2B, Daytona, Modal, Boat or Archil. Add its provider to the Stack and sign in to it with your profile. See [Sandboxes](/pi/sandboxes).
+
+Next: the [tutorial](/pi/tutorial/part-1).

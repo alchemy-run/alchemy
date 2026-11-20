@@ -410,6 +410,9 @@
       "path": "./examples/cloudflare-pi-github/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-opencode-github/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-planetscale-mysql-drizzle/tsconfig.json"
     },
     {
