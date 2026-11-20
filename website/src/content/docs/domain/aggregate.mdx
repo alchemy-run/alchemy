@@ -350,7 +350,7 @@ An import commits its events together under its `commandId`, stamped with the cu
 ```typescript title="src/ImportAccount.ts"
 const receipt = yield* accounts.import(
   accountId,
-  old.map((row) => ({ event: new MoneyDeposited(row), at: DateTime.makeUnsafe(row.createdAt) })),
+  deposits.map((row) => ({ event: new MoneyDeposited(row), at: DateTime.makeUnsafe(row.createdAt) })),
   { commandId: `import:${accountId}` },
 );
 ```
