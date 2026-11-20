@@ -1,0 +1,23 @@
+---
+title: Connect
+description: Give a Worker or Lambda your deployment's URLs for the convex client.
+---
+
+`Convex.Connect` gives a host the deployment's URLs. It grants nothing.
+
+## Use the convex client
+
+```typescript
+Effect.gen(function* () {
+  const convex = yield* Convex.Connect(Backend);
+  return {
+    fetch: Effect.gen(function* () {
+      const client = new ConvexHttpClient(yield* convex.url);
+      const rows = yield* Effect.tryPromise(() => client.query(api.messages.list, {}));
+      return yield* HttpServerResponse.json(rows);
+    }),
+  };
+}).pipe(Effect.provide(Convex.ConnectHttp));
+```
+
+`siteUrl` is the address of your HTTP actions.
