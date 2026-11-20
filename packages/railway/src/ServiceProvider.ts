@@ -228,6 +228,10 @@ const samePreDeployCommand = (observed: unknown, desired: string | null | undefi
     : observed === desired ||
       (Array.isArray(observed) && observed.length === 1 && observed[0] === desired));
 
+const sameStartCommand = (observed: unknown, desired: string | null | undefined) =>
+  desired === undefined ||
+  (desired === null ? observed == null || observed === "" : observed === desired);
+
 const assignIfChanged = <K extends keyof InstanceSettingsDelta>(
   input: InstanceSettingsDelta,
   key: K,
@@ -251,7 +255,7 @@ const instanceSettingsDelta = (input: {
     rootDirectory?: string;
     buildCommand?: string;
     preDeploy?: { command: string | null };
-    startCommand?: string;
+    startCommand?: string | null;
     healthcheckPath?: string;
     healthcheck?: string;
     healthcheckTimeout?: number;
@@ -306,9 +310,12 @@ const instanceSettingsDelta = (input: {
     delta.preDeployCommand = preDeployCommand === null ? [] : [preDeployCommand];
     changed = true;
   }
-  changed =
-    assignIfChanged(delta, "startCommand", input.props.startCommand, instance?.startCommand) ||
-    changed;
+  const startCommand = input.props.startCommand;
+  if (startCommand !== undefined && !sameStartCommand(instance?.startCommand, startCommand)) {
+    // Railway treats a `null` start command as no change; `""` clears it.
+    delta.startCommand = startCommand === null ? "" : startCommand;
+    changed = true;
+  }
   changed =
     assignIfChanged(
       delta,

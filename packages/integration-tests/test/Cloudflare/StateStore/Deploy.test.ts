@@ -210,6 +210,49 @@ test.provider(
   { tags, timeout: 300_000 },
 );
 
+/**
+ * Whether the store Worker's invocation logs are on, once Cloudflare reports
+ * `expected`. A just-replaced Worker's settings take a while to read back.
+ * Cloudflare omits a disabled configuration.
+ */
+const invocationLogs = (accountId: string, workerName: string, expected: boolean) =>
+  workers.getScriptScriptAndVersionSetting({ accountId, scriptName: workerName }).pipe(
+    Effect.map(
+      ({ observability }) =>
+        (observability?.enabled && observability.logs?.invocationLogs) ?? false,
+    ),
+    Effect.retry({
+      while: (e) => e._tag === "WorkerNotFound" || e._tag === "WorkerHasNoVersions",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 15,
+    }),
+    Effect.repeat({
+      until: (on) => on === expected,
+      schedule: Schedule.spaced("2 seconds"),
+      times: 15,
+    }),
+  );
+
+test.provider(
+  "a store's observability follows the option, and the default without it",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workerName = storeWorker("observability");
+      yield* teardownStateStore({ workerName });
+
+      yield* bootstrap({ workerName, observability: { enabled: false } });
+      expect(yield* invocationLogs(accountId, workerName, false)).toBe(false);
+
+      yield* bootstrap({ workerName, force: true });
+      expect(yield* invocationLogs(accountId, workerName, true)).toBe(true);
+
+      yield* teardownStateStore({ workerName });
+      expect(yield* scriptExists(accountId, workerName)).toBe(false);
+    }),
+  { tags, timeout: 300_000 },
+);
+
 test.provider(
   "a Worker name workers.dev can't serve fails before anything is created",
   () =>

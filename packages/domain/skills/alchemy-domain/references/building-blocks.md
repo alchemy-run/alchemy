@@ -161,9 +161,10 @@ yield* registration.send(new RegisterCustomer({ customerId, name: "Sam", usernam
 - **List it in the model's `decisions`.** Every command has one implementation, an aggregate or a decision; a second is a type error.
 - **The receipt has `commits`**, one `{ stream, version }` per instance read: pass one as a view's `atLeast`.
 - **Send it like any command:** `bank.RegisterCustomer({ customerId, name, username })` from an Api client, `Story.when(command)` in a story.
+- **State what it must keep in `transitions`:** `({ before, after, command, events }) => boolean`, with each state under its key in `reads`. Verification proves them, and that the decision keeps each aggregate's own rules.
 - **Use a saga instead** when the process waits, takes time, or calls an external system.
 
-More: [Decision](https://alchemy.run/domain/decision), [Decision: How it commits](https://alchemy.run/domain/decision#how-it-commits), [Unique values](https://alchemy.run/domain/unique-values).
+More: [Decision](https://alchemy.run/domain/decision), [Decision: How it commits](https://alchemy.run/domain/decision#how-it-commits), [Decision: Say what it must keep](https://alchemy.run/domain/decision#say-what-it-must-keep), [Unique values](https://alchemy.run/domain/unique-values).
 
 ## Request context and middleware
 
