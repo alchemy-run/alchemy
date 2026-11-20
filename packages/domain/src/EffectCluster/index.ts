@@ -460,7 +460,9 @@ export interface EntitiesOptions<PoolReq> {
    * How long the host keeps rows that only dedupe needs: command receipts,
    * policy delivery marks, cancelled scheduled commands, and Effect
    * Cluster's processed messages to the entity. Every runner sweeps them
-   * each `interval`.
+   * each `interval`. Only pools with a cluster database sweep: on
+   * `ClusterCloudflare.DurableObjectPool`, each instance keeps these rows in
+   * its own storage, and they are kept.
    *
    * @default { receipts: "30 days", deliveries: "7 days", cancelled: "7 days", messages: "7 days", interval: "1 hour" }
    */
@@ -754,19 +756,27 @@ export const layerEntities = <PoolReq>(
             for (const [workflow, execute] of yield* Ref.get(registrations))
               yield* sagas.register(workflow as never, execute as never);
             yield* Deferred.succeed(engine, clusterEngine);
-            // Each runner sweeps on its own; a sweep that fails runs at the next interval.
-            yield* Effect.forkScoped(
-              Effect.flatMap(sql, (client) => sweep(client, name, options.retention)).pipe(
-                Effect.catchCause((cause) =>
-                  Effect.logWarning(`Cluster.Entity '${name}': retention sweep failed`, cause),
-                ),
-                Effect.repeat(
-                  Schedule.spaced(
-                    Duration.fromInputUnsafe(options.retention?.interval ?? "1 hour"),
+            // Retention sweeps the rows of the cluster's database. A pool with
+            // none (the Durable Object pool) keeps them in each instance's own
+            // storage, and its runners have nothing to sweep.
+            const database = yield* Config.option(Config.Redacted("CLUSTER_DATABASE_URL")).pipe(
+              Effect.orDie,
+            );
+            if (Option.isSome(database)) {
+              // Each runner sweeps on its own; a sweep that fails runs at the next interval.
+              yield* Effect.forkScoped(
+                Effect.flatMap(sql, (client) => sweep(client, name, options.retention)).pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning(`Cluster.Entity '${name}': retention sweep failed`, cause),
+                  ),
+                  Effect.repeat(
+                    Schedule.spaced(
+                      Duration.fromInputUnsafe(options.retention?.interval ?? "1 hour"),
+                    ),
                   ),
                 ),
-              ),
-            );
+              );
+            }
           }).pipe(Layer.effectDiscard),
         );
         const deferredEngine = WorkflowEngine.WorkflowEngine.of({

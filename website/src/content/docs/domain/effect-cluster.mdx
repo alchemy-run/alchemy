@@ -142,6 +142,8 @@ DomainCluster.layerEntities({
 
 These are the defaults. `"forever"` keeps a kind of row. Events, state and the views' entries are never deleted.
 
+Retention applies to pools with a cluster database. On `ClusterCloudflare.DurableObjectPool`, each instance keeps its rows in its own Durable Object, and the host keeps them.
+
 ## Watch without polling
 
 Give the client `Domain.protocolWebSocket` (see [Api](/domain/api#choose-a-protocol)). The runtime that serves the Api holds each live read's WebSocket, and the entity that owns the key pushes every commit to it over a streamed call through the pool's gateway.
