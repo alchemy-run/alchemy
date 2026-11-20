@@ -563,6 +563,33 @@ describe(
         { timeout: 240_000 },
       );
 
+      test.provider(
+        "redelivers a recurring run whose handler dies, then keeps the job pending",
+        (_stack) =>
+          Effect.gen(function* () {
+            const id = `${SCHEDULE_PREFIX}flaky-recurring`;
+            const scheduled = yield* call(
+              HttpClientRequest.post(`${baseUrl}/flaky/${id}?every=60`),
+            );
+            expect(scheduled.message).toBeUndefined();
+
+            // The first run dies; the job's recovery wake delivers it again
+            // about a minute later, and that delivery forwards.
+            const delivered = yield* receiveMatching(
+              cronQueueUrl,
+              (body) => body.marker === "alch-schedtest-callback" && body.id === id,
+              { times: 150 },
+            );
+            expect(delivered.retried).toBe(true);
+
+            const pending = yield* call(HttpClientRequest.get(`${baseUrl}/flaky/${id}`));
+            expect(pending.status).not.toBeNull();
+            const cancelled = yield* call(HttpClientRequest.delete(`${baseUrl}/flaky/${id}`));
+            expect(cancelled.message).toBeUndefined();
+          }),
+        { timeout: 300_000 },
+      );
+
       test.provider("replaces and cancels a pending job", (_stack) =>
         Effect.gen(function* () {
           const id = `${SCHEDULE_PREFIX}pending`;

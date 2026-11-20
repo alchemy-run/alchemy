@@ -49,7 +49,17 @@ interface CallbackEnvelope {
   progress?: number;
   /** How a recurring job repeats; absent for one run. */
   recurrence?: CallbackRecurrence;
+  /** A recurring run's failed or unfinished attempts. */
+  attempts?: number;
+  /** When a recurring run is retried, if it's due again before it finished. */
+  retryAt?: number;
 }
+
+/**
+ * A recurring run's retry wait: a minute (Scheduler's precision) doubling to
+ * an hour, as the alarm schedulers back off.
+ */
+const retryDelay = (attempts: number) => Math.min(3_600_000, 60_000 * 2 ** (attempts - 1));
 
 const isCallbackEnvelope = (event: any): event is CallbackEnvelope =>
   event?.source === "alchemy.callback" &&
@@ -174,9 +184,11 @@ export interface SchedulerCallbacksOptions<R = never> {
  * );
  * ```
  *
- * A recurring job (`every` or `cron`) is a one-time schedule that moves to
- * its next run when a delivery starts, so a delivery Lambda gives up on still
- * leaves the job pending. Its runs keep Scheduler's precision of about a
+ * A recurring job (`every` or `cron`) is one schedule that moves from run to
+ * run. While a run is delivered it waits as that run's retry, from a minute
+ * doubling to an hour, so a handler that dies is delivered again until it
+ * succeeds; then it moves to the next run. Lambda's own retries of a
+ * recurring run are skipped. Its runs keep Scheduler's precision of about a
  * minute, whatever the interval.
  *
  * Delivery is at least once, so handlers must be idempotent. A job runs at
@@ -333,7 +345,7 @@ export const SchedulerCallbacks = <R = never>(options: SchedulerCallbacksOptions
           const request = {
             Name: scheduleNameOf(envelope.callback, envelope.id),
             GroupName: yield* GroupName,
-            ScheduleExpression: atExpression(envelope.scheduledAt),
+            ScheduleExpression: atExpression(envelope.retryAt ?? envelope.scheduledAt),
             FlexibleTimeWindow: { Mode: "OFF" },
             KmsKeyArn: KmsKeyArn ? yield* KmsKeyArn : undefined,
             Target: {
@@ -365,24 +377,38 @@ export const SchedulerCallbacks = <R = never>(options: SchedulerCallbacksOptions
           }
           const name = scheduleNameOf(envelope.callback, envelope.id);
           if (envelope.recurrence !== undefined) {
-            // Move a recurring job to its next run before this one runs, so a
-            // delivery Lambda gives up on still leaves the job pending. A
-            // retried delivery finds the job moved on and only runs.
+            // The job's own schedule is the recurring run's recovery wake, as
+            // the alarm schedulers keep one: it moves to a retry time before
+            // the handler runs, so a handler that dies is delivered again
+            // until it succeeds, and only then moves to the next run.
             const current = yield* read(envelope.callback, name);
-            if (current?.token === envelope.token) {
-              const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
-              yield* put({
-                ...envelope,
-                token: randomUUID(),
-                scheduledAt: yield* nextCallbackRun(
-                  envelope.callback,
-                  envelope.recurrence,
-                  envelope.scheduledAt,
-                  now,
-                ),
-              });
-            }
-            return yield* Effect.scoped(run(envelope.payload));
+            // Replaced, cancelled, or a Lambda retry of a delivery the
+            // recovery wake already took over.
+            if (current?.token !== envelope.token) return;
+            const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
+            const attempts = (envelope.attempts ?? 0) + 1;
+            const recovery: CallbackEnvelope = {
+              ...envelope,
+              token: randomUUID(),
+              attempts,
+              retryAt: now + retryDelay(attempts),
+            };
+            yield* put(recovery);
+            yield* Effect.scoped(run(envelope.payload));
+            const after = yield* read(envelope.callback, name);
+            // Scheduled again or cancelled while it ran: that stands.
+            if (after?.token !== recovery.token) return;
+            const { attempts: _, retryAt: __, ...job } = recovery;
+            return yield* put({
+              ...job,
+              token: randomUUID(),
+              scheduledAt: yield* nextCallbackRun(
+                envelope.callback,
+                envelope.recurrence,
+                envelope.scheduledAt,
+                yield* Effect.clockWith((clock) => clock.currentTimeMillis),
+              ),
+            });
           }
           yield* Effect.scoped(run(envelope.payload));
           // Acknowledge: delete the job unless it was replaced while it ran.
