@@ -244,6 +244,35 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
   );
 
   it.effect(
+    "a colon in the name of a directory right below the process directory is not taken for a module id",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        // The deploy runs from the directory that holds the checkouts, and the
+        // one they sit in has a colon in its name.
+        const root = yield* fs.makeTempDirectoryScoped({
+          directory: process.cwd(),
+          prefix: "build:",
+        });
+
+        const first = yield* build(root, {
+          directory: "one/checkout",
+          store: "cache/store/aaaaaaaa",
+          manager: "pnpm",
+        });
+        const second = yield* build(root, {
+          directory: "two/checkout",
+          store: "cache/store/bbbbbbbb",
+          manager: "pnpm",
+        });
+
+        expect(sources(first)).toEqual(stableSources("pnpm", "../"));
+        expect(second.hash).toBe(first.hash);
+      }).pipe(Effect.scoped),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
     "a caller's own sourcemapPathTransform wins",
     () =>
       Effect.gen(function* () {

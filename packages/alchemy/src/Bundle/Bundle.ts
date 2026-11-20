@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { existsSync } from "node:fs";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -242,8 +243,9 @@ const PACKAGE_STORES = ["/node_modules/.pnpm/", "/node_modules/.bun/"];
  *   store) otherwise puts its own location into the map;
  * - a module that is not a file (a plugin's `builtin:…` id) keeps its own
  *   name. Rolldown resolves such an id like a path, against the directory the
- *   process was started in, so only an id right below that directory counts:
- *   a colon in the name of a directory deeper than that leaves the path alone.
+ *   process was started in, so only a path right below that directory that
+ *   names no file counts: a colon in a real directory's name leaves the path
+ *   alone.
  *
  * Every other source keeps rolldown's path, so whatever reads the map from
  * where it sits still finds a project file. A store dependency's new path is
@@ -262,7 +264,8 @@ const stableSourcePath =
       return pathe.relative(directory, pathe.join(pathe.resolve(cwd), file.slice(store + 1)));
     }
     const id = pathe.relative(pathe.resolve(process.cwd()), file);
-    return !id.startsWith("../") && /^[a-z][a-z0-9+.-]+:/i.test(id) ? id : source;
+    const isId = !id.startsWith("../") && /^[a-z][a-z0-9+.-]+:/i.test(id) && !existsSync(file);
+    return isId ? id : source;
   };
 
 /**
