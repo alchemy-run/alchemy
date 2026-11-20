@@ -206,6 +206,12 @@ export interface ServiceProps extends PlatformProps {
    */
   sleepApplication?: boolean;
   /**
+   * Whether the service may make outbound IPv6 connections. Written to
+   * `deploy.ipv6EgressEnabled` through `environmentPatchCommit`. Omit it
+   * and the current Railway setting is left alone.
+   */
+  ipv6Egress?: boolean;
+  /**
    * Auto-deploy on new commits / image tags
    * (`serviceInstanceAutoDeployUpdate`).
    */
@@ -264,6 +270,11 @@ export type Service = Resource<
      * `deploy.multiRegionConfig` has replicas in exactly one region.
      */
     region: string | undefined;
+    /**
+     * Observed `deploy.ipv6EgressEnabled`. `undefined` when Railway has
+     * not stored a value.
+     */
+    ipv6Egress: boolean | undefined;
     /** Port published on the generated service domain. */
     port: number | undefined;
     /** Public `https://{domain}` URL (`*.up.railway.app`). */
@@ -477,6 +488,20 @@ const createServiceRuntimeContext = (id: string): ServiceRuntimeContext => {
  *   project: site,
  *   image: "hashicorp/http-echo",
  *   preDeploy: { command: "bun --cwd apps/api migrate" },
+ * });
+ * ```
+ *
+ * ### IPv6 egress
+ * `ipv6Egress` turns outbound IPv6 on or off for the service
+ * (`deploy.ipv6EgressEnabled`). Omit it to leave the current setting.
+ *
+ * **Example:** Enable IPv6 egress
+ * ```typescript
+ * const api = yield* Railway.Service("Api", {
+ *   project: site,
+ *   image: "hashicorp/http-echo",
+ *   port: 5678,
+ *   ipv6Egress: true,
  * });
  * ```
  *

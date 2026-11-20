@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Railway from "@alchemy.run/railway";
+import { serviceIpv6Egress } from "@alchemy.run/railway/ServiceIpv6Egress";
 import { activeReplicaRegions, serviceRegionPlacement } from "@alchemy.run/railway/ServiceRegion";
 import { withEnvironmentConfigLock } from "@alchemy.run/railway/transient";
 import { expect } from "@alchemy.run/test";
@@ -10,6 +11,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -778,6 +780,64 @@ test.provider(
         updated.api.projectId,
       );
       expect(placedRegions(updatedConfig.config, updated.api.serviceId)).toEqual([moved]);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(created.api.serviceId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 180_000,
+  },
+);
+
+test.provider(
+  "set IPv6 egress, leave it alone when omitted, then turn it off",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (ipv6Egress: boolean | undefined) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const { project, environment } = yield* suitePartition;
+            const api = yield* Railway.Service("Ipv6Egress", {
+              project,
+              environment,
+              image: "hashicorp/http-echo",
+              port: 5678,
+              publicDomain: false,
+              ipv6Egress,
+            });
+            return { api };
+          }),
+        );
+      const observed = (api: { environmentId: string; projectId: string; serviceId: string }) =>
+        readEnvironmentConfig(api.environmentId, api.projectId).pipe(
+          Effect.flatMap((environment) => serviceIpv6Egress(environment.config, api.serviceId)),
+        );
+
+      const created = yield* deploy(true);
+      expect(created.api.ipv6Egress).toEqual(true);
+      expect(yield* observed(created.api)).toEqual(Option.some(true));
+
+      // Omitted right after `true`, so resetting to the default would show.
+      const left = yield* deploy(undefined);
+      expect(left.api.serviceId).toEqual(created.api.serviceId);
+      expect(left.api.ipv6Egress).toEqual(true);
+      expect(yield* observed(left.api)).toEqual(Option.some(true));
+
+      const disabled = yield* deploy(false);
+      expect(disabled.api.serviceId).toEqual(created.api.serviceId);
+      expect(disabled.api.ipv6Egress).toEqual(false);
+      expect(yield* observed(disabled.api)).toEqual(Option.some(false));
 
       yield* stack.destroy();
 
