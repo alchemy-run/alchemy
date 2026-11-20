@@ -471,6 +471,26 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * }).pipe(Effect.provide(Counters));
  * ```
  *
+ * ### Deploying a prebuilt image
+ * **Example:** An image the app already builds and ships
+ * ```typescript
+ * export const Actors = Rivet.DurableObject("Actors", {
+ *   image: "us-docker.pkg.dev/acme/app/actors@sha256:…",
+ * }).pipe(Effect.provide(Default));
+ * ```
+ *
+ * **Example:** An image built in the same stack
+ * ```typescript
+ * export const Actors = Effect.gen(function* () {
+ *   const image = yield* Docker.Image("ActorsImage", {
+ *     build: { context: "./actors" },
+ *   });
+ *   return yield* Rivet.DurableObject("Actors", { image: image.imageRef }).pipe(
+ *     Effect.provide(Default),
+ *   );
+ * });
+ * ```
+ *
  * @resource
  */
 export const DurableObject: DurableObjectClass = ((
