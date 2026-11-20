@@ -149,3 +149,41 @@ test.provider(
     timeout: 180_000,
   },
 );
+
+// A prebuilt Worker's declared flags are used exactly as declared (#1721), and
+// local dev must run it with the flags deploy uploads. At a date before both
+// defaults, `flags: []` gives neither the new module registry nor Node
+// compatibility; with `flags` omitted, Alchemy's defaults apply.
+test.provider(
+  "runs a prebuilt Worker with the flags deploy uploads",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const flags = pathe.resolve(import.meta.dirname, "fixtures/prebuilt/flags.mjs");
+      const { declared, defaulted } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const declared = yield* Cloudflare.Worker("PrebuiltDeclaredFlags", {
+            main: flags,
+            bundle: false,
+            compatibility: { date: "2026-06-19", flags: [] },
+          });
+          const defaulted = yield* Cloudflare.Worker("PrebuiltDefaultFlags", {
+            main: flags,
+            bundle: false,
+            compatibility: { date: "2026-06-19" },
+          });
+          return { declared, defaulted };
+        }),
+      );
+
+      yield* expectUrlContains(declared.url!, `{"resolve":"undefined","process":"undefined"}`);
+      yield* expectUrlContains(defaulted.url!, `{"resolve":"function","process":"object"}`);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "local"],
+    timeout: 120_000,
+  },
+);
