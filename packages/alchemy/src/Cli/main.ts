@@ -4,6 +4,7 @@ import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Contributions from "alchemy/Contributions";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
+import { loadConfigProvider } from "alchemy/Util/ConfigProvider";
 import { moduleExtension } from "alchemy/Util/Node";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as CliConfig from "effect/cli/CliConfig";
@@ -18,6 +19,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Scope from "effect/Scope";
 import packageJson from "../../package.json" with { type: "json" };
@@ -94,6 +96,16 @@ const loadCommand = async (name: CommandName) => {
 };
 
 const argv = process.argv.slice(2);
+
+/** The `--env-file` value, read before the command line is parsed. */
+const envFileArg = (args: ReadonlyArray<string>): string | undefined => {
+  for (const [index, arg] of args.entries()) {
+    if (arg === "--") return undefined;
+    if (arg === "--env-file") return args[index + 1];
+    if (arg.startsWith("--env-file=")) return arg.slice("--env-file=".length);
+  }
+  return undefined;
+};
 const compatibilityName = Object.hasOwn(compatibilityCommands, argv[0] ?? "")
   ? (argv[0] as CompatibilityCommand)
   : undefined;
@@ -194,11 +206,26 @@ const cli = Command.run(root, {
     devRunMode === undefined ? packageJson.version : `${packageJson.version} (${devRunMode})`,
 });
 
+// `ALCHEMY_DIR` resolves like `ALCHEMY_STAGE`: the shell over `.env`, or
+// `--env-file` over the shell. The directory is needed before the command line
+// is parsed, so the env file is read from argv. One layer, so the run log and
+// every command share the directory.
+const alchemyContext = AlchemyContextLive.pipe(
+  Layer.provide(
+    ConfigProvider.layer(
+      loadConfigProvider(Option.fromNullishOr(envFileArg(argv))).pipe(
+        // A bad `--env-file` is reported by the command that reads it.
+        Effect.orElseSucceed(() => ConfigProvider.fromEnv()),
+      ),
+    ),
+  ),
+);
+
 const services = Layer.mergeAll(
   CliConfig.layer({
     builtIns: [GlobalFlag.Help, GlobalFlag.Version, GlobalFlag.Completions],
   }),
-  Layer.provideMerge(AlchemyContextLive, PlatformServices),
+  Layer.provideMerge(alchemyContext, PlatformServices),
   Layer.provide(ProfileStoreLive, PlatformServices),
   Layer.provide(CredentialsStoreLive, PlatformServices),
   // Ambient per-CLI-run artifact root. Commands that define their own run
@@ -211,7 +238,7 @@ const services = Layer.mergeAll(
   // Debug run log in the project's .alchemy/log — the console noise floor stays at
   // Info, but full causes and auth-flow breadcrumbs land in the file so
   // support can ask users for it.
-  Layer.provide(GlobalLogLive, PlatformServices),
+  Layer.provide(GlobalLogLive, Layer.provideMerge(alchemyContext, PlatformServices)),
   TelemetryLive,
 );
 

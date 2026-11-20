@@ -112,38 +112,71 @@ describe("AlchemyContext runtime directory", { tags: ["unit", "local"] }, () => 
     }),
   );
 
-  for (const runtime of ["bun", "node"] as const) {
-    it.live.skipIf(runtime === "node" && !nodeSupportsDevMode)(
-      `${runtime} CLI creates only the configured runtime directory`,
-      () =>
-        Effect.gen(function* () {
-          const fs = yield* FileSystem.FileSystem;
-          const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-dir-cli-" });
-          const directory = path.join(root, "custom", "runtime");
-          const child = yield* ChildProcess.make(
-            runtime === "bun" ? "bun" : nodePath!,
-            runtime === "bun" ? [cli, "--help"] : ["--experimental-strip-types", cli, "--help"],
-            {
-              cwd: root,
-              env: {
-                ALCHEMY_DIR: directory,
-                ALCHEMY_HOME: path.join(root, "home"),
-                CI: "1",
-              },
-              extendEnv: true,
-              stdin: "ignore",
-              stdout: "ignore",
-              stderr: "ignore",
-              killSignal: "SIGTERM",
-              forceKillAfter: "1 second",
-            },
-          );
+  // Resolved like `ALCHEMY_STAGE`: the shell over `.env`, `--env-file` over the shell.
+  const sources = [
+    { name: "the shell", shell: "shell", dotEnv: undefined, envFile: undefined, expected: "shell" },
+    { name: ".env", shell: undefined, dotEnv: "dotenv", envFile: undefined, expected: "dotenv" },
+    {
+      name: "the shell over .env",
+      shell: "shell",
+      dotEnv: "dotenv",
+      envFile: undefined,
+      expected: "shell",
+    },
+    {
+      name: "--env-file over the shell",
+      shell: "shell",
+      dotEnv: undefined,
+      envFile: "envfile",
+      expected: "envfile",
+    },
+  ] as const;
 
-          expect(yield* child.exitCode).toBe(0);
-          expect(yield* fs.exists(directory)).toBe(true);
-          expect(yield* fs.exists(path.join(root, ".alchemy"))).toBe(false);
-        }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
-      { timeout: 20_000 },
-    );
-  }
+  for (const runtime of ["bun", "node"] as const)
+    for (const source of sources)
+      it.live.skipIf(runtime === "node" && !nodeSupportsDevMode)(
+        `${runtime} CLI reads ALCHEMY_DIR from ${source.name}`,
+        () =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-dir-cli-" });
+            const runtimeDir = (name: string) => path.join(root, name, "runtime");
+            if (source.dotEnv)
+              yield* fs.writeFileString(
+                path.join(root, ".env"),
+                `ALCHEMY_DIR=${runtimeDir(source.dotEnv)}\n`,
+              );
+            if (source.envFile)
+              yield* fs.writeFileString(
+                path.join(root, "app.env"),
+                `ALCHEMY_DIR=${runtimeDir(source.envFile)}\n`,
+              );
+            const args = [cli, "--help", ...(source.envFile ? ["--env-file", "app.env"] : [])];
+            const child = yield* ChildProcess.make(
+              runtime === "bun" ? "bun" : nodePath!,
+              runtime === "bun" ? args : ["--experimental-strip-types", ...args],
+              {
+                cwd: root,
+                env: {
+                  ALCHEMY_HOME: path.join(root, "home"),
+                  CI: "1",
+                  ...(source.shell ? { ALCHEMY_DIR: runtimeDir(source.shell) } : {}),
+                },
+                extendEnv: true,
+                stdin: "ignore",
+                stdout: "ignore",
+                stderr: "ignore",
+                killSignal: "SIGTERM",
+                forceKillAfter: "1 second",
+              },
+            );
+
+            expect(yield* child.exitCode).toBe(0);
+            expect(yield* fs.exists(runtimeDir(source.expected))).toBe(true);
+            for (const other of ["shell", "dotenv", "envfile"].filter((n) => n !== source.expected))
+              expect(yield* fs.exists(path.join(root, other))).toBe(false);
+            expect(yield* fs.exists(path.join(root, ".alchemy"))).toBe(false);
+          }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
+        { timeout: 20_000 },
+      );
 });
