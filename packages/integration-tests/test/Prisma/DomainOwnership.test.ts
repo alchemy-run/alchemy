@@ -1,6 +1,8 @@
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import { Retry } from "@distilled.cloud/prisma";
 import { AlchemyContext } from "alchemy/AlchemyContext";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -17,6 +19,7 @@ import {
 } from "../../../prisma/src/internal/DomainOwnershipProof.ts";
 import {
   data,
+  failure,
   type FakeManagementApi,
   makeFakeManagementApi,
   noContent,
@@ -62,6 +65,12 @@ interface CloudState {
   unlisted: WireOwnership | undefined;
   /** The options the record check was last called with. */
   checkedWith: CheckOptions | undefined;
+  /**
+   * Answers the next creates give, in order: `503` after creating the row, as
+   * when Prisma processed the request but the reply was lost; `429` without
+   * creating it.
+   */
+  createFailures: Array<503 | 429>;
 }
 
 /** One workspace's domain ownerships, served over the Management API routes. */
@@ -72,6 +81,7 @@ const makeOwnershipCloud = () => {
     verifiesAs: "verified",
     unlisted: undefined,
     checkedWith: undefined,
+    createFailures: [],
   };
   const fake: FakeManagementApi = makeFakeManagementApi((request) => {
     const path = request.pathname;
@@ -81,6 +91,13 @@ const makeOwnershipCloud = () => {
     if (path === "/v1/workspaces/ws-1/domain-ownerships") {
       if (request.method === "GET") return page(Array.from(rows.values()));
       if (request.method === "POST") {
+        const injected = state.createFailures.shift();
+        if (injected === 429) return failure(429, "rate-limited", "Too many requests");
+        if (injected === 503) {
+          const processed = ownership("do-created", "unverified");
+          rows.set(processed.id, processed);
+          return failure(503, "service-unavailable", "Service unavailable");
+        }
         const existing = state.unlisted ?? Array.from(rows.values())[0];
         if (existing) {
           rows.set(existing.id, existing);
@@ -117,6 +134,7 @@ const makeOwnershipCloud = () => {
       verifiesAs: "verified",
       unlisted: undefined,
       checkedWith: undefined,
+      createFailures: [],
     });
     Object.assign(state, options);
     fake.captured.length = 0;
@@ -146,6 +164,9 @@ const testFor = (cloud: OwnershipCloud, adopt = false) =>
       Layer.provide(
         Layer.succeed(AlchemyContext, { dotAlchemy: ".alchemy-test", dev: false, adopt: false }),
       ),
+      // The policy every deploy installs, which retries 5xx and transport
+      // failures; the create must still not be sent twice.
+      Layer.provideMerge(Layer.succeed(Retry.Retry, DeployRetry.policy)),
       Layer.provideMerge(cloud.fake.layer),
     ),
   });
@@ -205,6 +226,46 @@ testFor(created).test.provider(
 
       yield* stack.destroy();
       expect(created.rows.size).toBe(0);
+    }),
+  { tags },
+);
+
+const lostReply = makeOwnershipCloud();
+testFor(lostReply).test.provider(
+  "does not resend a create Prisma may have processed, and the next deploy finds the row",
+  (stack) =>
+    Effect.gen(function* () {
+      lostReply.reset({ visibility: "seen", createFailures: [503] });
+      yield* stack.destroy();
+
+      const failure = yield* failureOf(stack.deploy(ownershipStack()));
+
+      expect(failure).toContain("ServiceUnavailable");
+      expect(lostReply.routes().filter((route) => route === CREATE)).toEqual([CREATE]);
+
+      const proved = yield* stack.deploy(ownershipStack());
+      expect(proved.domainOwnershipId).toBe("do-created");
+      expect(proved.status).toBe("verified");
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const throttled = makeOwnershipCloud();
+testFor(throttled).test.provider(
+  "resends a create Prisma throttled, and owns the row it then creates",
+  (stack) =>
+    Effect.gen(function* () {
+      throttled.reset({ visibility: "seen", createFailures: [429] });
+      yield* stack.destroy();
+
+      const proved = yield* stack.deploy(ownershipStack());
+
+      expect(proved.domainOwnershipId).toBe("do-created");
+      expect(throttled.routes().filter((route) => route === CREATE)).toEqual([CREATE, CREATE]);
+
+      yield* stack.destroy();
     }),
   { tags },
 );
