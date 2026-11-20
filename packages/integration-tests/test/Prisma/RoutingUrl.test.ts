@@ -6,8 +6,12 @@ import * as Prisma from "@alchemy.run/prisma";
 import {
   RoutingUrl,
   type RoutingUrlHostnameChangeRefused,
-  RoutingUrlProvider,
-  RoutingUrlResources,
+  RoutingUrlInvalidHostname,
+  RoutingUrlLogicalIdTaken,
+  RoutingUrlOperationFailed,
+  RoutingUrlQuotaExceeded,
+  RoutingUrlServiceNotOnABranch,
+  RoutingUrlServiceOnAnotherBranch,
 } from "@alchemy.run/prisma/RoutingUrl";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -672,49 +676,96 @@ testFor(unroutedApex).test.provider(
   { tags },
 );
 
-const refusals = makeUrlCloud();
-testFor(refusals).test.provider(
-  "turns Prisma's 409 and 422 refusals into typed errors",
-  (stack) =>
-    Effect.gen(function* () {
-      const cases: ReadonlyArray<[Response, string]> = [
-        [
-          failure(409, "quota-exceeded", "Quota exceeded for custom_domains_per_service"),
-          "RoutingUrlQuotaExceeded",
-        ],
-        [
-          failure(
-            409,
-            "client-error",
-            'A RoutingUrl with logicalId "Url" already exists on this branch',
-          ),
-          "RoutingUrlLogicalIdTaken",
-        ],
-        [
-          failure(
-            422,
-            "validation-error",
-            "*.example.com is not a hostname such as shop.example.com.",
-          ),
-          "RoutingUrlInvalidHostname",
-        ],
-        [
-          failure(422, "validation-error", "The service must be on the RoutingUrl's Branch."),
-          "RoutingUrlServiceOnAnotherBranch",
-        ],
-      ];
-      for (const [response, tag] of cases) {
-        refusals.reset({ refusal: response });
-        yield* stack.destroy();
-        const message = yield* failureOf(stack.deploy(urlStack()));
-        expect(message).toContain(tag);
-      }
+/** Prisma's refusals, by the error code it sends; the message is arbitrary on purpose. */
+const refusalCases: ReadonlyArray<{
+  operation: "create" | "update";
+  status: 409 | 422;
+  code: string;
+  expected: { new (...args: never[]): { readonly _tag: string } };
+}> = [
+  { operation: "create", status: 409, code: "quota-exceeded", expected: RoutingUrlQuotaExceeded },
+  {
+    operation: "create",
+    status: 409,
+    code: "logical-id-taken",
+    expected: RoutingUrlLogicalIdTaken,
+  },
+  {
+    operation: "create",
+    status: 422,
+    code: "invalid-hostname",
+    expected: RoutingUrlInvalidHostname,
+  },
+  {
+    operation: "create",
+    status: 422,
+    code: "service-not-on-a-branch",
+    expected: RoutingUrlServiceNotOnABranch,
+  },
+  {
+    operation: "create",
+    status: 409,
+    code: "some-new-conflict",
+    expected: RoutingUrlOperationFailed,
+  },
+  {
+    operation: "create",
+    status: 422,
+    code: "validation-error",
+    expected: RoutingUrlOperationFailed,
+  },
+  { operation: "update", status: 409, code: "quota-exceeded", expected: RoutingUrlQuotaExceeded },
+  {
+    operation: "update",
+    status: 409,
+    code: "logical-id-taken",
+    expected: RoutingUrlLogicalIdTaken,
+  },
+  {
+    operation: "update",
+    status: 422,
+    code: "invalid-hostname",
+    expected: RoutingUrlInvalidHostname,
+  },
+  {
+    operation: "update",
+    status: 422,
+    code: "service-on-another-branch",
+    expected: RoutingUrlServiceOnAnotherBranch,
+  },
+];
 
-      refusals.reset();
-      yield* stack.destroy();
-    }),
-  { tags },
-);
+for (const { operation, status, code, expected } of refusalCases) {
+  const cloud = makeUrlCloud();
+  testFor(cloud).test.provider(
+    `turns Prisma's ${status} ${code} on ${operation} into ${expected.name}`,
+    (stack) =>
+      Effect.gen(function* () {
+        const refusal = failure(status, code, "arbitrary text 4711");
+        cloud.reset(
+          operation === "create" ? { refusal } : {},
+          ...(operation === "create" ? [] : [routingUrl("url-1")]),
+        );
+        yield* stack.destroy();
+        cloud.state.refusal = refusal;
+
+        const { errors } = yield* failuresOf(
+          stack.deploy(urlStack(operation === "create" ? HOSTNAME : "new.example.com")),
+        );
+
+        expect(errors.some((error) => error instanceof expected)).toBe(true);
+        expect(
+          cloud
+            .routes()
+            .some((route) => route.startsWith(operation === "create" ? "POST" : "PATCH")),
+        ).toBe(true);
+
+        cloud.reset();
+        yield* stack.destroy();
+      }),
+    { tags },
+  );
+}
 
 const live = Test.make({ providers: Prisma.providers() });
 

@@ -131,6 +131,7 @@ const publicExports = [
   "RoutingUrlLogicalIdTaken",
   "RoutingUrlHostnameTaken",
   "RoutingUrlInvalidHostname",
+  "RoutingUrlServiceNotOnABranch",
   "RoutingUrlServiceOnAnotherBranch",
   "RoutingUrlHostnameChangeRefused",
   "RoutingUrlOperationFailed",

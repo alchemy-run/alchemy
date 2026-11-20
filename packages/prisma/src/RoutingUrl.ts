@@ -1,4 +1,11 @@
 import type { Conflict, UnprocessableEntity } from "@distilled.cloud/prisma";
+import type {
+  RoutingUrlInvalidHostname as PrismaInvalidHostname,
+  RoutingUrlLogicalIdTaken as PrismaLogicalIdTaken,
+  RoutingUrlQuotaExceeded as PrismaQuotaExceeded,
+  RoutingUrlServiceNotOnABranch as PrismaServiceNotOnABranch,
+  RoutingUrlServiceOnAnotherBranch as PrismaServiceOnAnotherBranch,
+} from "@distilled.cloud/prisma/management";
 import {
   type GetUrlResponseData,
   createServiceUrl,
@@ -69,7 +76,18 @@ export class RoutingUrlInvalidHostname extends Data.TaggedError("RoutingUrlInval
   readonly cause?: unknown;
 }> {}
 
-/** The service is not on the RoutingUrl's Branch, or on no Branch. */
+/**
+ * The service is on no Branch, so it cannot serve a RoutingUrl. Attach the
+ * app to a Branch, then redeploy.
+ */
+export class RoutingUrlServiceNotOnABranch extends Data.TaggedError(
+  "RoutingUrlServiceNotOnABranch",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+/** The new service is on another Branch than the RoutingUrl. */
 export class RoutingUrlServiceOnAnotherBranch extends Data.TaggedError(
   "RoutingUrlServiceOnAnotherBranch",
 )<{
@@ -323,11 +341,7 @@ const attrsFrom = (url: ApiRoutingUrl): RoutingUrl["Attributes"] => ({
 const serviceOf = (serviceId: string) =>
   Effect.gen(function* () {
     const service = (yield* getService({ serviceId })).data;
-    if (service.branchId === null) {
-      return yield* new RoutingUrlServiceOnAnotherBranch({
-        message: `Prisma service '${serviceId}' is not on a Branch, so it cannot serve a RoutingUrl.`,
-      });
-    }
+    if (service.branchId === null) return yield* notOnABranch(serviceId);
     return { ...service, branchId: service.branchId };
   });
 
@@ -359,33 +373,46 @@ const ownRow = (
       normalizeHostname(url.hostname) === hostname,
   );
 
-/**
- * Prisma's 409 and 422 share the generic `Conflict` and
- * `UnprocessableEntity`, whose only field is the message.
- */
+const notOnABranch = (serviceId: string, cause?: unknown) =>
+  new RoutingUrlServiceNotOnABranch({
+    message: `Prisma service '${serviceId}' is not on a Branch, so it cannot serve a RoutingUrl. Attach the app to a Branch, for example with branchId or branchGitName on the App or Compute, then redeploy.`,
+    cause,
+  });
+
+/** Prisma's refusals of a RoutingUrl create or update, told apart by their error code. */
 const refusals = (hostname: string, logicalId: string, serviceId: string) => ({
+  RoutingUrlQuotaExceeded: (error: PrismaQuotaExceeded) =>
+    Effect.fail(
+      new RoutingUrlQuotaExceeded({
+        message: `Prisma service '${serviceId}' already serves as many hostnames as its plan allows; '${hostname}' was not added.`,
+        cause: error,
+      }),
+    ),
+  RoutingUrlLogicalIdTaken: (error: PrismaLogicalIdTaken) =>
+    Effect.fail(
+      new RoutingUrlLogicalIdTaken({
+        message: `Another Prisma RoutingUrl on the Branch has logicalId '${logicalId}'. Choose another logicalId.`,
+        cause: error,
+      }),
+    ),
+  RoutingUrlInvalidHostname: (error: PrismaInvalidHostname) =>
+    Effect.fail(new RoutingUrlInvalidHostname({ message: error.message, cause: error })),
   Conflict: (error: Conflict) =>
-    Effect.fail(
-      error.message.startsWith("Quota exceeded")
-        ? new RoutingUrlQuotaExceeded({
-            message: `Prisma service '${serviceId}' already serves as many hostnames as its plan allows; '${hostname}' was not added.`,
-            cause: error,
-          })
-        : error.message.includes("logicalId")
-          ? new RoutingUrlLogicalIdTaken({
-              message: `Another Prisma RoutingUrl on the Branch has logicalId '${logicalId}'. Choose another logicalId.`,
-              cause: error,
-            })
-          : new RoutingUrlOperationFailed({ message: error.message, cause: error }),
-    ),
+    Effect.fail(new RoutingUrlOperationFailed({ message: error.message, cause: error })),
   UnprocessableEntity: (error: UnprocessableEntity) =>
-    Effect.fail(
-      error.message.includes("is not a hostname")
-        ? new RoutingUrlInvalidHostname({ message: error.message, cause: error })
-        : error.message.includes("Branch")
-          ? new RoutingUrlServiceOnAnotherBranch({ message: error.message, cause: error })
-          : new RoutingUrlOperationFailed({ message: error.message, cause: error }),
-    ),
+    Effect.fail(new RoutingUrlOperationFailed({ message: error.message, cause: error })),
+});
+
+const createRefusals = (hostname: string, logicalId: string, serviceId: string) => ({
+  ...refusals(hostname, logicalId, serviceId),
+  RoutingUrlServiceNotOnABranch: (error: PrismaServiceNotOnABranch) =>
+    Effect.fail(notOnABranch(serviceId, error)),
+});
+
+const updateRefusals = (hostname: string, logicalId: string, serviceId: string) => ({
+  ...refusals(hostname, logicalId, serviceId),
+  RoutingUrlServiceOnAnotherBranch: (error: PrismaServiceOnAnotherBranch) =>
+    Effect.fail(new RoutingUrlServiceOnAnotherBranch({ message: error.message, cause: error })),
 });
 
 /** `*.example.com` for `api.example.com`; a wildcard's base needs two labels. */
@@ -510,7 +537,7 @@ const ProviderLive = () =>
           }
           if (!observed) {
             const created = yield* createServiceUrl({ serviceId, hostname, logicalId }).pipe(
-              Effect.catchTags(refusals(hostname, logicalId, serviceId)),
+              Effect.catchTags(createRefusals(hostname, logicalId, serviceId)),
             );
             return attrsFrom(created.data);
           }
@@ -529,7 +556,7 @@ const ProviderLive = () =>
             );
           }
           const updated = yield* updateUrl({ id: observed.id, ...change }).pipe(
-            Effect.catchTags(refusals(hostname, logicalId, serviceId)),
+            Effect.catchTags(updateRefusals(hostname, logicalId, serviceId)),
           );
           return attrsFrom(updated.data);
         }),
