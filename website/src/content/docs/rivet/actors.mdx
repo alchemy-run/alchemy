@@ -136,7 +136,16 @@ export const Actors = Rivet.DurableObject("Actors", {
 }).pipe(Effect.provide(Counters));
 ```
 
-The image's `CMD` starts a RivetKit registry, which reads `RIVET_ENDPOINT`, `RIVET_TOKEN`, `RIVET_NAMESPACE` and `RIVET_POOL` from its environment. `image` can also be a `Docker.Image`'s `imageRef` from the same stack.
+The image's `CMD` starts a RivetKit registry, which reads `RIVET_ENDPOINT`, `RIVET_TOKEN`, `RIVET_NAMESPACE` and `RIVET_POOL` from its environment.
+
+Or give it your Dockerfile, and the pool builds it, the same `context` and `dockerfile` an ECS Task or a Cloudflare Container takes:
+
+```typescript title="src/actors.ts"
+export const Actors = Rivet.DurableObject("Actors", {
+  context: "./actors",
+  dockerfile: "./actors/Dockerfile.prod",
+}).pipe(Effect.provide(Counters));
+```
 
 ## What the other three give up
 

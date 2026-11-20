@@ -13,8 +13,8 @@ import type { CargoBuild } from "./internal/RustProgram.ts";
 /**
  * What a pool Layer gives the Effect it is provided to: a way for an
  * external `Rivet.DurableObject` to run its program on the pool's nodes —
- * a RivetKit program (`main`), a Rust crate (`crate`), or a prebuilt image
- * (`image`).
+ * a RivetKit program (`main`), a Rust crate (`crate`), or a Dockerfile
+ * (`context`/`dockerfile`, which a prebuilt `image` becomes).
  */
 export class PoolHost extends Context.Service<
   PoolHost,
@@ -30,9 +30,10 @@ export class PoolHost extends Context.Service<
       readonly build: CargoBuild | undefined;
       readonly resource: DurableObject;
     }) => Effect.Effect<void>;
-    readonly deployImage: (object: {
+    readonly deployDockerfile: (object: {
       readonly id: string;
-      readonly image: Input<string>;
+      readonly context: string | undefined;
+      readonly dockerfile: string | { readonly content: Input<string> } | undefined;
       readonly resource: DurableObject;
     }) => Effect.Effect<void>;
   }

@@ -24,6 +24,7 @@ const AsyncPool = RivetDocker.SwarmPool("AsyncPool").pipe(Layer.provide(Cluster)
 const EffectPool = RivetDocker.SwarmPool("EffectPool").pipe(Layer.provide(Cluster));
 const RustPool = RivetDocker.SwarmPool("RustPool").pipe(Layer.provide(Cluster));
 const ImagePool = RivetDocker.SwarmPool("ImagePool").pipe(Layer.provide(Cluster));
+const DockerfilePool = RivetDocker.SwarmPool("DockerfilePool").pipe(Layer.provide(Cluster));
 
 const fixture = (file: string) =>
   fileURLToPath(new URL(`./fixtures/external/${file}`, import.meta.url));
@@ -67,6 +68,11 @@ const program = (step: string) =>
     const imageActors = yield* Rivet.DurableObject("ImageActors", {
       image: appImage.imageRef,
     }).pipe(Effect.provide(ImagePool));
+    // The app's own Dockerfile, built by the pool.
+    const dockerfileActors = yield* Rivet.DurableObject("DockerfileActors", {
+      context: fixture("."),
+      dockerfile: fixture("image.Dockerfile"),
+    }).pipe(Effect.provide(DockerfilePool));
     return {
       token: asyncActors.token,
       namespace: asyncActors.namespace,
@@ -74,6 +80,7 @@ const program = (step: string) =>
       effectPool: effectActors.pool,
       rustPool: rustActors.pool,
       imagePool: imageActors.pool,
+      dockerfilePool: dockerfileActors.pool,
     };
   });
 
@@ -84,6 +91,7 @@ let deployed: {
   effectPool: string;
   rustPool: string;
   imagePool: string;
+  dockerfilePool: string;
 };
 
 const clientFor = (poolName: string) =>
@@ -157,6 +165,20 @@ describe.skipIf(!!process.env.FAST)(
       Effect.gen(function* () {
         expect(deployed.imagePool).toBeTruthy();
         const counter = clientFor(deployed.imagePool).counter.getOrCreate(["external-image"]);
+        const first = yield* call(() => counter.increment(3));
+        const second = yield* call(() => counter.increment(4));
+        expect(second - first).toBe(4);
+      }),
+      { timeout: 300_000 },
+    );
+
+    test(
+      "an app's own Dockerfile runs as it is",
+      Effect.gen(function* () {
+        expect(deployed.dockerfilePool).toBeTruthy();
+        const counter = clientFor(deployed.dockerfilePool).counter.getOrCreate([
+          "external-dockerfile",
+        ]);
         const first = yield* call(() => counter.increment(3));
         const second = yield* call(() => counter.increment(4));
         expect(second - first).toBe(4);

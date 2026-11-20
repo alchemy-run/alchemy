@@ -176,11 +176,11 @@ const makeHost = <Network, Req>(options: {
     const cluster = yield* Cluster;
     // An external Durable Object deploys from its own Effect: give it the
     // services this Layer was built with.
-    const context = yield* Effect.context<Stack | Providers | Req>();
+    const services = yield* Effect.context<Stack | Providers | Req>();
     const noop: PoolHost["Service"] = {
       deployExternal: () => Effect.void,
       deployCrate: () => Effect.void,
-      deployImage: () => Effect.void,
+      deployDockerfile: () => Effect.void,
     };
     if (globalThis.__ALCHEMY_RUNTIME__) return noop;
     const network = options.network(cluster);
@@ -290,7 +290,7 @@ const makeHost = <Network, Req>(options: {
               },
             },
           }),
-        ).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
+        ).pipe(Effect.provide(services), Effect.orDie) as Effect.Effect<void>,
       deployCrate: ({ id, crate, build, resource }) =>
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
         Effect.gen(function* () {
@@ -302,49 +302,62 @@ const makeHost = <Network, Req>(options: {
             resource.bind`Pool`(caller),
             () => image,
           );
-        }).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
-      deployImage: ({ id, image, resource }) =>
+        }).pipe(Effect.provide(services), Effect.orDie) as Effect.Effect<void>,
+      deployDockerfile: ({ id, context, dockerfile, resource }) =>
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
         Effect.gen(function* () {
-          // The prebuilt image is the node, staged as a build every host runs.
+          // The Dockerfile's image is the node, built wherever the host builds images.
           const label = yield* stackDnsLabel(id);
-          const program = yield* stageImageProgram(label, image);
+          const program = yield* stageDockerfileProgram(label, context, dockerfile);
           yield* deploy(
-            { name: id, module: `image:${label}`, handler: "", external: true },
+            { name: id, module: `dockerfile:${label}`, handler: "", external: true },
             {},
             resource.bind`Pool`(caller),
             () => program,
           );
-        }).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
+        }).pipe(Effect.provide(services), Effect.orDie) as Effect.Effect<void>,
     } satisfies PoolHost["Service"];
   });
 
 /**
- * Stage a prebuilt image as a node program: a build context, named
- * `label`, whose Dockerfile is the image and nothing else. Every host
- * already builds an {@link ImageProgram} for its platform, so the image
- * reaches each one the way a Rust crate's does, and runs unchanged.
- *
- * The Dockerfile is written once `image` resolves, so an image built in
- * the same stack is built before the pool builds from it.
+ * A user's Dockerfile as a node program, resolved as every container
+ * resource resolves `context` and `dockerfile`: paths are relative to where
+ * the deploy runs, the Dockerfile defaults to `${context}/Dockerfile`, and
+ * inline content is written, once it resolves, to an empty context of its
+ * own named `label`. Every host already builds an {@link ImageProgram} for
+ * its platform, so it reaches each one the way a Rust crate's does.
  */
-const stageImageProgram = Effect.fn(function* (label: string, image: Input<string>) {
-  const fs = yield* FileSystem.FileSystem;
+const stageDockerfileProgram = Effect.fn(function* (
+  label: string,
+  context: string | undefined,
+  dockerfile: string | { readonly content: Input<string> } | undefined,
+) {
   const path = yield* Path.Path;
-  const dir = path.resolve(yield* dotAlchemyDirectory, "rivet", "image", label);
-  const dockerfile = path.join(dir, "Dockerfile");
-  const staged = output(image).pipe(
-    Output.mapEffect((ref: string) =>
+  if (typeof dockerfile !== "object") {
+    const dir = path.resolve(context ?? ".");
+    return {
+      context: dir,
+      dockerfile:
+        dockerfile === undefined ? path.join(dir, "Dockerfile") : path.resolve(dockerfile),
+    } satisfies ImageProgram;
+  }
+  const fs = yield* FileSystem.FileSystem;
+  const dir = path.resolve(yield* dotAlchemyDirectory, "rivet", "dockerfile", label);
+  const file = path.join(dir, "Dockerfile");
+  // Written once the content resolves, so an image built in the same stack
+  // is built before the pool builds from it.
+  const staged = output(dockerfile.content).pipe(
+    Output.mapEffect((content: string) =>
       Effect.gen(function* () {
         yield* fs.makeDirectory(dir, { recursive: true });
-        yield* fs.writeFileString(dockerfile, `FROM ${ref}\n`);
+        yield* fs.writeFileString(file, content);
         return dir;
       }).pipe(Effect.orDie),
     ),
   );
   return {
     context: staged,
-    dockerfile: staged.pipe(Output.map(() => dockerfile)),
+    dockerfile: staged.pipe(Output.map(() => file)),
   } satisfies ImageProgram;
 });
 
