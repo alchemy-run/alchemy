@@ -1,3 +1,4 @@
+import * as NodePath from "node:path";
 import type * as Context from "effect/Context";
 import type * as vite from "vite";
 import type { BindingHooks, RuntimeServices, RuntimeWorker } from "../core/index.ts";
@@ -185,7 +186,7 @@ const alchemyCloudflareVitePlugin = (): vite.Plugin => ({
       await disableOfficialCloudflareVitePlugins(config.plugins);
       // Vite concatenates this with a user's own `server.fs.deny`, which
       // would otherwise replace Vite's defaults and expose `.env`.
-      return { server: { fs: { deny: [...DENIED_FILES] } } };
+      return { server: { fs: { deny: [...DENIED_FILES, ...deniedAlchemyDir()] } } };
     },
   },
 });
@@ -210,6 +211,20 @@ const DENIED_FILES = [
   "**/.alchemy/**",
   "alchemy.run.*",
 ];
+
+/**
+ * Alchemy's state when `ALCHEMY_DIR` moves it out of `.alchemy`. The dev
+ * server inherits the CLI's environment and working directory, so it resolves
+ * the same directory.
+ */
+const deniedAlchemyDir = (): string[] => {
+  const dir = process.env.ALCHEMY_DIR;
+  if (!dir) return [];
+  const glob = NodePath.resolve(dir)
+    .replaceAll("\\", "/")
+    .replace(/[*?[\]{}()!+@]/g, "\\$&");
+  return [`${glob}/**`];
+};
 
 /**
  * The empty entry the default build gives a client with no `index.html`, so
