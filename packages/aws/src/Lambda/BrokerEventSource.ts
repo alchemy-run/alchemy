@@ -9,6 +9,7 @@ import {
   type MQEvent,
   type MQMessage,
 } from "../MQ/BrokerEventSource.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
 
@@ -41,49 +42,53 @@ export const BrokerEventSource = Layer.effect(
       // once running inside the deployed Function (the global guard).
       // Namespaced under the host so the mapping's logical identity is stable.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.MQ.BrokerEventSource(${broker}))`({
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: ["mq:DescribeBroker"],
-                  Resource: [broker.brokerArn],
-                },
-                {
-                  Effect: "Allow",
-                  Action: ["secretsmanager:GetSecretValue"],
-                  Resource: [props.credentialsSecretArn],
-                },
-                {
-                  // MQ event sources run in the broker's VPC; the poller
-                  // manages elastic network interfaces on the function's
-                  // behalf. These EC2 actions have no resource-level scoping.
-                  Effect: "Allow",
-                  Action: [
-                    "ec2:CreateNetworkInterface",
-                    "ec2:DeleteNetworkInterface",
-                    "ec2:DescribeNetworkInterfaces",
-                    "ec2:DescribeSecurityGroups",
-                    "ec2:DescribeSubnets",
-                    "ec2:DescribeVpcs",
-                  ],
-                  Resource: ["*"],
-                },
-              ],
-            });
+        yield* wireEventSource(host, broker, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              yield* host.bind`Allow(${host}, AWS.MQ.BrokerEventSource(${broker}))`({
+                policyStatements: [
+                  {
+                    Effect: "Allow",
+                    Action: ["mq:DescribeBroker"],
+                    Resource: [broker.brokerArn],
+                  },
+                  {
+                    Effect: "Allow",
+                    Action: ["secretsmanager:GetSecretValue"],
+                    Resource: [props.credentialsSecretArn],
+                  },
+                  {
+                    // MQ event sources run in the broker's VPC; the poller
+                    // manages elastic network interfaces on the function's
+                    // behalf. These EC2 actions have no resource-level scoping.
+                    Effect: "Allow",
+                    Action: [
+                      "ec2:CreateNetworkInterface",
+                      "ec2:DeleteNetworkInterface",
+                      "ec2:DescribeNetworkInterfaces",
+                      "ec2:DescribeSecurityGroups",
+                      "ec2:DescribeSubnets",
+                      "ec2:DescribeVpcs",
+                    ],
+                    Resource: ["*"],
+                  },
+                ],
+              });
 
-            yield* Mapping(`${broker.LogicalId}-EventSource`, {
-              functionName: Lambda.qualifiedNameOf(host),
-              eventSourceArn: broker.brokerArn,
-              queues: props.queues,
-              sourceAccessConfigurations: [{ Type: "BASIC_AUTH", URI: props.credentialsSecretArn }],
-              batchSize: props.batchSize ?? 100,
-              maximumBatchingWindow: props.maximumBatchingWindow,
-              enabled: props.enabled ?? true,
-            });
-          }),
+              yield* Mapping(`${broker.LogicalId}-EventSource`, {
+                functionName: Lambda.qualifiedNameOf(host),
+                eventSourceArn: broker.brokerArn,
+                queues: props.queues,
+                sourceAccessConfigurations: [
+                  { Type: "BASIC_AUTH", URI: props.credentialsSecretArn },
+                ],
+                batchSize: props.batchSize ?? 100,
+                maximumBatchingWindow: props.maximumBatchingWindow,
+                enabled: props.enabled ?? true,
+              });
+            }),
+          ),
         );
       }
 

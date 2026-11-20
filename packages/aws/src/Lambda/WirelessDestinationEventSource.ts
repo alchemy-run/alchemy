@@ -10,6 +10,7 @@ import {
   type WirelessUplinkHandlerFn,
   type WirelessUplinkMessage,
 } from "../IoTWireless/DestinationEventSource.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -67,22 +68,24 @@ export const WirelessDestinationEventSource = Layer.effect(
       // inside the deployed function, where the only work is registering
       // the runtime handler.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            const rule = yield* Rule(`${destination.LogicalId}-UplinkRule`, {
-              ruleName: destination.expression,
-              sql: "SELECT * FROM 'iotwireless/uplink'",
-              actions: [{ lambda: { functionArn: Lambda.qualifiedArnOf(host) } }],
-            });
+        yield* wireEventSource(host, destination, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              const rule = yield* Rule(`${destination.LogicalId}-UplinkRule`, {
+                ruleName: destination.expression,
+                sql: "SELECT * FROM 'iotwireless/uplink'",
+                actions: [{ lambda: { functionArn: Lambda.qualifiedArnOf(host) } }],
+              });
 
-            yield* Permission(`AWS.IoTWireless.UplinkInvoke(${destination.LogicalId})`, {
-              action: "lambda:InvokeFunction",
-              functionName: Lambda.qualifiedNameOf(host),
-              principal: "iot.amazonaws.com",
-              sourceArn: rule.ruleArn,
-            });
-          }),
+              yield* Permission(`AWS.IoTWireless.UplinkInvoke(${destination.LogicalId})`, {
+                action: "lambda:InvokeFunction",
+                functionName: Lambda.qualifiedNameOf(host),
+                principal: "iot.amazonaws.com",
+                sourceArn: rule.ruleArn,
+              });
+            }),
+          ),
         );
       }
 

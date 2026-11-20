@@ -13,6 +13,7 @@ import {
   type WebSocketResult,
   type WebSocketRouteProps,
 } from "../ApiGatewayV2/WebSocketEventSource.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -75,44 +76,46 @@ export const WebSocketEventSource = Layer.effect(
       // registering the runtime dispatcher below. Namespaced under the
       // host for stable logical identity.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            const key = sanitizeRouteKey(props.routeKey);
+        yield* wireEventSource(host, api, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              const key = sanitizeRouteKey(props.routeKey);
 
-            const integration = yield* Integration(`${api.LogicalId}-${key}-Integration`, {
-              apiId: api.apiId,
-              integrationType: "AWS_PROXY",
-              // WebSocket AWS_PROXY integrations require the full Lambda
-              // invocation URI. Region is derived from the function ARN
-              // so the binding needs no ambient environment.
-              integrationUri: Output.map(
-                Lambda.qualifiedArnOf(host),
-                (arn: string) =>
-                  `arn:aws:apigateway:${arn.split(":")[3]}:lambda:path/2015-03-31/functions/${arn}/invocations`,
-              ),
-              integrationMethod: "POST",
-            });
+              const integration = yield* Integration(`${api.LogicalId}-${key}-Integration`, {
+                apiId: api.apiId,
+                integrationType: "AWS_PROXY",
+                // WebSocket AWS_PROXY integrations require the full Lambda
+                // invocation URI. Region is derived from the function ARN
+                // so the binding needs no ambient environment.
+                integrationUri: Output.map(
+                  Lambda.qualifiedArnOf(host),
+                  (arn: string) =>
+                    `arn:aws:apigateway:${arn.split(":")[3]}:lambda:path/2015-03-31/functions/${arn}/invocations`,
+                ),
+                integrationMethod: "POST",
+              });
 
-            yield* Route(`${api.LogicalId}-${key}-Route`, {
-              apiId: api.apiId,
-              routeKey: props.routeKey,
-              target: Output.map(integration.integrationId, (id: string) => `integrations/${id}`),
-            });
+              yield* Route(`${api.LogicalId}-${key}-Route`, {
+                apiId: api.apiId,
+                routeKey: props.routeKey,
+                target: Output.map(integration.integrationId, (id: string) => `integrations/${id}`),
+              });
 
-            yield* Permission(`${api.LogicalId}-${key}-Permission`, {
-              action: "lambda:InvokeFunction",
-              functionName: Lambda.qualifiedNameOf(host),
-              principal: "apigateway.amazonaws.com",
-              sourceArn: Output.map(
-                Output.all(host.functionArn, api.apiId),
-                ([fnArn, apiId]: [string, string]) => {
-                  const [, , , region, accountId] = fnArn.split(":");
-                  return `arn:aws:execute-api:${region}:${accountId}:${apiId}/*`;
-                },
-              ),
-            });
-          }),
+              yield* Permission(`${api.LogicalId}-${key}-Permission`, {
+                action: "lambda:InvokeFunction",
+                functionName: Lambda.qualifiedNameOf(host),
+                principal: "apigateway.amazonaws.com",
+                sourceArn: Output.map(
+                  Output.all(host.functionArn, api.apiId),
+                  ([fnArn, apiId]: [string, string]) => {
+                    const [, , , region, accountId] = fnArn.split(":");
+                    return `arn:aws:execute-api:${region}:${accountId}:${apiId}/*`;
+                  },
+                ),
+              });
+            }),
+          ),
         );
       }
 

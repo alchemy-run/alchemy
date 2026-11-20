@@ -57,6 +57,22 @@ export class ConflictingProviderModeError extends Data.TaggedError("ConflictingP
 }> {}
 
 /**
+ * An `alchemy dev` interaction between an emulated end and a real-cloud end
+ * that no bridge carries, e.g. a resource in the real cloud configured with
+ * an identity that exists only on the developer's machine. Raised at plan
+ * time so the interaction never silently lands on the wrong side.
+ */
+export class UnbridgedDevEdge extends Data.TaggedError("UnbridgedDevEdge")<{
+  message: string;
+  /** The FQN of the dependent end: the runtime host, or the referencing resource. */
+  from: string;
+  /** The FQN of the end it depends on. */
+  to: string;
+  /** How the two interact: a binding call, an event delivery, a socket, or a plain input. */
+  edge: "call" | "event" | "connect" | "reference";
+}> {}
+
+/**
  * Prefix marking a locally-emulated resource's physical identity. Local
  * providers fabricate ids/names with this prefix (`dev:<uuid>` queue and
  * namespace ids, `dev:`-prefixed bucket names, ...) so a resource's

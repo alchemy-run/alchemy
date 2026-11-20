@@ -9,6 +9,7 @@ import {
   type ScheduleEvent,
   type ScheduleEventSourceService,
 } from "../Scheduler/ScheduleEventSource.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import * as Lambda from "./Function.ts";
 
 /**
@@ -62,7 +63,10 @@ export const ScheduleEventSource = Layer.effect(
       // global guard), where the only work is registering the runtime handler
       // below.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* createScheduleRoute(routeId, descriptor, host).pipe(Effect.asVoid);
+        // EventBridge Scheduler is emulated, so a schedule follows the run mode.
+        yield* wireEventSource(host, undefined, (host) =>
+          createScheduleRoute(routeId, descriptor, host),
+        ).pipe(Effect.asVoid);
       }
 
       yield* host.listen(

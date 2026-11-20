@@ -14,6 +14,7 @@ import type { Environment } from "../AppConfig/Environment.ts";
 import { Extension } from "../AppConfig/Extension.ts";
 import { ExtensionAssociation } from "../AppConfig/ExtensionAssociation.ts";
 import { Role } from "../IAM/Role.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import * as Lambda from "./Function.ts";
 
 const ALL_DEPLOYMENT_EVENTS: DeploymentEventType[] = [
@@ -111,66 +112,68 @@ export const AppConfigDeploymentEventSource = Layer.effect(
       // is registering the runtime handler below. Namespaced under the host
       // so the sub-resources' logical identity is stable per host function.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            // NB: hyphenated logical ids only — the id lands in the
-            // `alchemy::id` tag value, and IAM/AppConfig tag values reject
-            // `(`, `)` and `,`.
-            const role = yield* InvokeRole(`${target.LogicalId}-${suffix}-InvokeRole`, {
-              assumeRolePolicyDocument: {
-                Version: "2012-10-17",
-                Statement: [
-                  {
-                    Effect: "Allow",
-                    Principal: { Service: "appconfig.amazonaws.com" },
-                    Action: ["sts:AssumeRole"],
-                  },
-                ],
-              },
-              inlinePolicies: {
-                InvokeFunction: {
+        yield* wireEventSource(host, target, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              // NB: hyphenated logical ids only — the id lands in the
+              // `alchemy::id` tag value, and IAM/AppConfig tag values reject
+              // `(`, `)` and `,`.
+              const role = yield* InvokeRole(`${target.LogicalId}-${suffix}-InvokeRole`, {
+                assumeRolePolicyDocument: {
                   Version: "2012-10-17",
                   Statement: [
                     {
                       Effect: "Allow",
-                      Action: ["lambda:InvokeFunction"],
-                      Resource: [Lambda.qualifiedArnOf(host) as any],
+                      Principal: { Service: "appconfig.amazonaws.com" },
+                      Action: ["sts:AssumeRole"],
                     },
                   ],
                 },
-              },
-            });
-
-            const extension = yield* DeploymentExtension(
-              `${target.LogicalId}-${suffix}-DeploymentEvents`,
-              {
-                description: `Deployment notifications for ${target.LogicalId} -> ${host.LogicalId}`,
-                actions: Object.fromEntries(
-                  events.map((event) => [
-                    event,
-                    [
+                inlinePolicies: {
+                  InvokeFunction: {
+                    Version: "2012-10-17",
+                    Statement: [
                       {
-                        name: event,
-                        uri: Lambda.qualifiedArnOf(host) as any,
-                        roleArn: role.roleArn as any,
+                        Effect: "Allow",
+                        Action: ["lambda:InvokeFunction"],
+                        Resource: [Lambda.qualifiedArnOf(host) as any],
                       },
                     ],
-                  ]),
-                ),
-              },
-            );
+                  },
+                },
+              });
 
-            yield* DeploymentExtensionAssociation(
-              `${target.LogicalId}-${suffix}-DeploymentEventsAssociation`,
-              {
-                extensionIdentifier: extension.extensionId as any,
-                resourceIdentifier: (isEnvironment(target)
-                  ? target.environmentArn
-                  : target.applicationArn) as any,
-              },
-            );
-          }),
+              const extension = yield* DeploymentExtension(
+                `${target.LogicalId}-${suffix}-DeploymentEvents`,
+                {
+                  description: `Deployment notifications for ${target.LogicalId} -> ${host.LogicalId}`,
+                  actions: Object.fromEntries(
+                    events.map((event) => [
+                      event,
+                      [
+                        {
+                          name: event,
+                          uri: Lambda.qualifiedArnOf(host) as any,
+                          roleArn: role.roleArn as any,
+                        },
+                      ],
+                    ]),
+                  ),
+                },
+              );
+
+              yield* DeploymentExtensionAssociation(
+                `${target.LogicalId}-${suffix}-DeploymentEventsAssociation`,
+                {
+                  extensionIdentifier: extension.extensionId as any,
+                  resourceIdentifier: (isEnvironment(target)
+                    ? target.environmentArn
+                    : target.applicationArn) as any,
+                },
+              );
+            }),
+          ),
         );
       }
 
