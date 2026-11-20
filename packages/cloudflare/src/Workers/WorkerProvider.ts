@@ -6107,7 +6107,6 @@ const commitDurableObjectTransfer = (params: {
   workers.patchScriptScriptAndVersionSetting({
     accountId: params.accountId,
     scriptName: params.fromScript,
-    // The settings part is sent verbatim, so entries use wire names.
     settings: {
       exports: Object.fromEntries(
         params.observedNamespaces
@@ -6115,7 +6114,7 @@ const commitDurableObjectTransfer = (params: {
           .map((ns) => [
             ns.class,
             params.classNames.includes(ns.class)
-              ? { type: "durable-object", state: "transferred", transferred_to: params.toScript }
+              ? { type: "durable-object", state: "transferred", transferredTo: params.toScript }
               : {
                   type: "durable-object",
                   storage: observedStorage(params.observedNamespaces, params.fromScript, ns.class),
