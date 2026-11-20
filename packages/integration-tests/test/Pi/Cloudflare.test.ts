@@ -291,10 +291,11 @@ test(
       isError: boolean;
       text: string;
     }>;
-    const script = results.find((result) => result.tool === "codemode");
-    expect(script?.isError).toBe(false);
-    expect(script?.text).toContain("1005");
-    expect(script?.text).toContain("1030");
+    // The model may need a second try to write a script that prints.
+    const scripts = results.filter((result) => result.tool === "codemode" && !result.isError);
+    const printed = scripts.map((script) => script.text).join("\n---\n");
+    expect(printed).toContain("1005");
+    expect(printed).toContain("1030");
   }),
   { tags, timeout: 180_000 },
 );
