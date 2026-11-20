@@ -11777,16 +11777,27 @@ describe("incomplete interrupted-create checkpoints", { tags: ["unit", "local"] 
   /** `Subject` lives in a namespace that only resolves during apply. */
   const scoped = (
     cycle: boolean,
-    { tenant = "tenant", version }: { tenant?: string; version?: number } = {},
+    {
+      tenant = "tenant",
+      version,
+      literalNamespace = false,
+    }: {
+      tenant?: string;
+      version?: number;
+      literalNamespace?: boolean;
+    } = {},
   ) =>
     Effect.gen(function* () {
-      const namespace = yield* TestResource("Tenant", { string: tenant });
+      const namespace = yield* BindingTarget("Tenant", { string: tenant });
       const subject = yield* Scoped("Subject", {
         name: "api",
-        namespace: namespace.string,
+        namespace: literalNamespace ? tenant : namespace.string,
         version,
       });
-      if (cycle) yield* subject.bind("Self", { self: subject.key });
+      if (cycle) {
+        yield* subject.bind("Self", { self: subject.key });
+        yield* namespace.bind("Subject", { env: { SUBJECT: subject.key } });
+      }
       return subject;
     });
 
@@ -11888,7 +11899,7 @@ describe("incomplete interrupted-create checkpoints", { tags: ["unit", "local"] 
   test.provider("a checkpoint with resolved props keeps recovery by lookup (control)", (stack) =>
     Effect.gen(function* () {
       const cloud = yield* reset(stack);
-      yield* stack.deploy(TestResource("Tenant", { string: "tenant" }));
+      yield* stack.deploy(BindingTarget("Tenant", { string: "tenant" }));
       cloud.crash.add("tenant/api");
       cloud.events.length = 0;
       // `Tenant` already exists, so `Subject`'s props resolve at plan time.
@@ -12000,7 +12011,7 @@ describe("incomplete interrupted-create checkpoints", { tags: ["unit", "local"] 
       const cloud = yield* interrupt(stack);
       cloud.interrupt = true;
       yield* stack
-        .deploy(scoped(true, { version: 2 }))
+        .deploy(scoped(true, { version: 2, literalNamespace: true }))
         .pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
       cloud.interrupt = false;
       const replacing = yield* getState("Subject");
