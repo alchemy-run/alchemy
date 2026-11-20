@@ -99,6 +99,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/turso/src",
   },
   {
+    srcRoot: "packages/convex/src",
+    providerPrefix: "Convex",
+    sourceDisplayPrefix: "packages/convex/src",
+  },
+  {
     srcRoot: "packages/daytona/src",
     providerPrefix: "Daytona",
     sourceDisplayPrefix: "packages/daytona/src",

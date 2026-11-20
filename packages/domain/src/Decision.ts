@@ -72,6 +72,20 @@ export type StatesOf<R extends Reads, K extends KeysOf<R> = KeysOf<R>> = {
   readonly [N in keyof R]: OneOrMany<K[N], Aggregate.StateOf<R[N]>>;
 };
 
+/**
+ * One step a decision takes: every instance it read, before and after what it
+ * recorded, with the command and the events.
+ */
+export interface Transition<States, Cmd, Ev> {
+  /** Each instance's state as the decision read it, under its name in `reads`. */
+  readonly before: States;
+  /** Each instance's state after the events recorded on it. */
+  readonly after: States;
+  readonly command: Cmd;
+  /** Every event, in the order `decide` recorded them. */
+  readonly events: ReadonlyArray<Ev>;
+}
+
 /** Context passed to a decision's `decide`. */
 export interface DecideContext {
   /** The id the command was sent with; its events' envelopes carry it too. */
@@ -125,6 +139,19 @@ export type Definition<C extends Command.Any, R extends Reads, K extends KeysOf<
     command: InstanceOf<C>,
     context: DecideContext,
   ) => Outcome<C>;
+  /**
+   * Rules that hold for every step the decision takes, each named and given
+   * the states it read, the command, the events it recorded and the states
+   * after: `true` while the rule holds. They say what holds of the instances
+   * together, which no one aggregate's rule can: that a transfer takes from
+   * one account what it gives the other. `Prove.decision` proves that
+   * `decide` can't break one.
+   */
+  readonly transitions?: {
+    readonly [name: string]: (
+      step: Transition<StatesOf<R, K>, InstanceOf<C>, InstanceOf<C["events"][number]>>,
+    ) => boolean | Effect.Effect<boolean, never, Command.ContextOf<C>>;
+  };
 } & (C["reply"] extends Schema.Top
   ? {
       /** The command's reply, from each instance's state after the events. */
@@ -140,6 +167,7 @@ export interface AnyDefinition {
   readonly reads: Reads;
   readonly keyOf: (command: any) => { readonly [name: string]: string | ReadonlyArray<string> };
   readonly decide: (reads: any, command: any, context: DecideContext) => unknown;
+  readonly transitions?: { readonly [name: string]: (step: any) => unknown } | undefined;
   readonly reply?: ((states: any, events: ReadonlyArray<any>) => unknown) | undefined;
 }
 
@@ -300,6 +328,32 @@ export interface DecisionClass<
  *       from.record(new TransferSent({ amount: cmd.amount })),
  *       account.record(new TransferReceived({ amount: cmd.amount })),
  *     ]),
+ * }) {}
+ * ```
+ *
+ * ### Stating what it must keep
+ * `transitions` are rules about the step: the states the decision read,
+ * before and after, with the command and the events. Nothing runs one when a
+ * command arrives. `Verify.model` and `Prove.decision` prove that `decide`
+ * can't break one, and that it keeps the rules of each aggregate it records
+ * on.
+ *
+ * **Example:** A transfer creates no money
+ * ```typescript
+ * export class Transfer extends Domain.Decision(TransferMoney, {
+ *   reads: { from: Account, to: Account },
+ *   keyOf: (cmd) => ({ from: cmd.from, to: cmd.to }),
+ *   decide: ({ from, to }, cmd) =>
+ *     cmd.amount > from.state.balance
+ *       ? new InsufficientFunds()
+ *       : [
+ *           from.record(new TransferSent({ amount: cmd.amount })),
+ *           to.record(new TransferReceived({ amount: cmd.amount })),
+ *         ],
+ *   transitions: {
+ *     MoneyIsConserved: ({ before, after }) =>
+ *       after.from.balance + after.to.balance === before.from.balance + before.to.balance,
+ *   },
  * }) {}
  * ```
  *

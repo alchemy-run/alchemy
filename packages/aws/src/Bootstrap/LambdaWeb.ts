@@ -14,7 +14,7 @@ import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import * as Region from "@distilled.cloud/aws/Region";
 import { NodeServices } from "@effect/platform-node";
 import { NodeHttpServer } from "alchemy/Http";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
   entrypointLayer,
   resolveProgram,
@@ -22,7 +22,6 @@ import {
   stackFromEnv,
 } from "alchemy/Runtime/Bootstrap";
 import { ManagedHttpShutdown } from "alchemy/Runtime/ManagedHttpShutdown";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -76,15 +75,7 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
     Layer.provideMerge(Endpoint.fromEnv()),
     Layer.provideMerge(NodeHttpServer({ hostname: host, port })),
     Layer.provideMerge(platform),
-    Layer.provideMerge(
-      Layer.succeed(
-        ConfigProvider.ConfigProvider,
-        // Auto-bound `Config` values arrive in the env as Redacted markers;
-        // reify them so a `Config` re-read inside a handler decodes the raw
-        // source value.
-        reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
-      ),
-    ),
+    Layer.provideMerge(RuntimeConfigProviderLive),
     Layer.provideMerge(Layer.succeed(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info")),
   );
 

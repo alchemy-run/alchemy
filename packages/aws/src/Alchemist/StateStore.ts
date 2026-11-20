@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { deleteAllObjects } from "../AssetsBucket.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { createStateKeyAlias, ensureStateKey, keepStateKey } from "../StateStore/Key.ts";
 import { openLegacyBucket } from "../StateStore/LegacyLayout.ts";
 import {
   createStateBucketName,
@@ -15,27 +16,30 @@ import {
 } from "../StateStore/State.ts";
 
 /**
- * Ensure a state bucket (by default the account's in this region) with the
- * settings first use would give it.
+ * Ensure a state bucket and its KMS key (by default the account's in this
+ * region) with the settings first use would give them.
  */
 const bootstrapStateBucket = Effect.fn("AWS.state.bootstrap")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
   if (name !== undefined) yield* Provisioning.storeName(name);
   const bucketName = createStateBucketName(accountId, region, name);
   const existed = yield* stateBucketExists(bucketName);
-  yield* provisionStateBucket(bucketName, region);
+  yield* provisionStateBucket(bucketName, region, yield* ensureStateKey(createStateKeyAlias(name)));
   return { accountId, region, bucketName, existed };
 });
 
 /**
  * Empty and delete a state bucket (by default the account's in this region),
- * every object version included. A missing bucket is not an error.
+ * every object version included. A missing bucket is not an error. The KMS
+ * key it shares with the DynamoDB store of the same name is kept: see
+ * {@link keepStateKey}.
  */
 export const teardownStateBucket = Effect.fn("AWS.state.teardown")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
   if (name !== undefined) yield* Provisioning.storeName(name);
   const bucketName = createStateBucketName(accountId, region, name);
   if (!(yield* stateBucketExists(bucketName))) {
+    yield* keepStateKey(createStateKeyAlias(name));
     return { bucketName, deleted: false };
   }
   // A migration denies object access in the bucket policy; lift it first.
@@ -48,6 +52,7 @@ export const teardownStateBucket = Effect.fn("AWS.state.teardown")(function* (na
       schedule: Schedule.max([Schedule.exponential(100), Schedule.recurs(10)]),
     }),
   );
+  yield* keepStateKey(createStateKeyAlias(name));
   return { bucketName, deleted: true };
 });
 

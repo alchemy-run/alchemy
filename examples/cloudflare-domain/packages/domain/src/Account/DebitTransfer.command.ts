@@ -1,6 +1,6 @@
 import * as Domain from "@alchemy.run/domain";
 import { Actor } from "../Actor.ts";
-import { Cents } from "../Money.ts";
+import { Amount, Cents } from "../Money.ts";
 import { TransferId } from "../Transfer/Transfer.id.ts";
 import { AccountId } from "./Account.id.ts";
 import { Frozen } from "./Frozen.rejection.ts";
@@ -20,7 +20,7 @@ export class TransferDebited extends Domain.Event("TransferDebited", {
  * fact recorded on it, so it is input rather than request context.
  */
 export class DebitTransfer extends Domain.Command("DebitTransfer", {
-  input: { accountId: AccountId, transferId: TransferId, amount: Cents, requestedBy: Actor },
+  input: { accountId: AccountId, transferId: TransferId, amount: Amount, requestedBy: Actor },
   events: [TransferDebited],
   rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds],
 }) {}
