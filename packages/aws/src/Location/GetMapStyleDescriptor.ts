@@ -1,6 +1,8 @@
-import type * as location from "@distilled.cloud/aws/location";
+import * as location from "@distilled.cloud/aws/location";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLocationMapHttpBinding } from "./BindingHttp.ts";
 import type { Map as LocationMap } from "./Map.ts";
 
 /**
@@ -43,4 +45,13 @@ export interface GetMapStyleDescriptor extends Binding.Service<
 > {}
 export const GetMapStyleDescriptor = Binding.Service<GetMapStyleDescriptor>(
   "AWS.Location.GetMapStyleDescriptor",
+);
+
+export const GetMapStyleDescriptorHttp = Layer.effect(
+  GetMapStyleDescriptor,
+  makeLocationMapHttpBinding({
+    tag: "AWS.Location.GetMapStyleDescriptor",
+    operation: location.getMapStyleDescriptor,
+    actions: ["geo:GetMapStyleDescriptor"],
+  }),
 );

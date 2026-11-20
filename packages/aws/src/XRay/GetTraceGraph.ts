@@ -1,6 +1,8 @@
-import type * as xray from "@distilled.cloud/aws/xray";
+import * as xray from "@distilled.cloud/aws/xray";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeXRayHttpBinding } from "./BindingHttp.ts";
 
 export interface GetTraceGraphRequest extends xray.GetTraceGraphRequest {}
 
@@ -39,3 +41,30 @@ export interface GetTraceGraph extends Binding.Service<
   >
 > {}
 export const GetTraceGraph = Binding.Service<GetTraceGraph>("AWS.XRay.GetTraceGraph");
+
+/**
+ * HTTP implementation of the `XRay.GetTraceGraph` binding.
+ *
+ * At deploy time it grants `xray:GetTraceGraph` on `*` to the host Lambda
+ * Function (the action does not support resource-level permissions); at
+ * runtime it calls the X-Ray API with the function's execution role
+ * credentials.
+ *
+ * @example Provide on the Function effect
+ * ```typescript
+ * import * as XRay from "@alchemy.run/aws/XRay";
+ *
+ * Effect.gen(function* () {
+ *   const getTraceGraph = yield* XRay.GetTraceGraph();
+ *   // ...
+ * }).pipe(Effect.provide(XRay.GetTraceGraphHttp));
+ * ```
+ */
+export const GetTraceGraphHttp = Layer.effect(
+  GetTraceGraph,
+  makeXRayHttpBinding({
+    tag: "AWS.XRay.GetTraceGraph",
+    operation: xray.getTraceGraph,
+    actions: ["xray:GetTraceGraph"],
+  }),
+);

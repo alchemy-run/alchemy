@@ -1,3 +1,4 @@
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
@@ -82,6 +83,11 @@ export const makeSignerHttpBinding = <I, A, E, R>(options: {
    * chosen per request at runtime and unknowable at deploy time).
    */
   actions: readonly string[];
+  /**
+   * ARN formats to grant the actions on instead of `*`, with `${Partition}`,
+   * `${Region}`, and `${Account}` filled in at deploy (`AWSBindings.accountArn`).
+   */
+  arns?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -89,11 +95,11 @@ export const makeSignerHttpBinding = <I, A, E, R>(options: {
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const policyStatements: PolicyStatement[] = [
+        const policyStatements: Input<PolicyStatement>[] = [
           {
             Effect: "Allow",
             Action: [...options.actions],
-            Resource: ["*"],
+            Resource: AWSBindings.grantResources(options.arns),
           },
         ];
         yield* bind`${options.tag}()`({

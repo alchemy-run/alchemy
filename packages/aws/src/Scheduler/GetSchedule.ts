@@ -1,6 +1,8 @@
-import type * as scheduler from "@distilled.cloud/aws/scheduler";
+import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeScheduleGroupScopedHttpBinding } from "./BindingHttp.ts";
 import type { ScheduleGroup } from "./ScheduleGroup.ts";
 
 export interface GetScheduleRequest extends Omit<scheduler.GetScheduleInput, "GroupName"> {}
@@ -41,3 +43,12 @@ export interface GetSchedule extends Binding.Service<
   >
 > {}
 export const GetSchedule = Binding.Service<GetSchedule>("AWS.Scheduler.GetSchedule");
+
+export const GetScheduleHttp = Layer.effect(
+  GetSchedule,
+  makeScheduleGroupScopedHttpBinding({
+    tag: "AWS.Scheduler.GetSchedule",
+    operation: scheduler.getSchedule,
+    actions: ["scheduler:GetSchedule"],
+  }),
+);

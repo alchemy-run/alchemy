@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/finspace";
+import * as finspace from "@distilled.cloud/aws/finspace";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFinSpaceKxHttpBinding } from "./BindingHttp.ts";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
@@ -38,4 +41,13 @@ export interface UpdateKxClusterCodeConfiguration extends Binding.Service<
 > {}
 export const UpdateKxClusterCodeConfiguration = Binding.Service<UpdateKxClusterCodeConfiguration>(
   "AWS.FinSpace.UpdateKxClusterCodeConfiguration",
+);
+
+export const UpdateKxClusterCodeConfigurationHttp = Layer.effect(
+  UpdateKxClusterCodeConfiguration,
+  makeFinSpaceKxHttpBinding({
+    tag: "AWS.FinSpace.UpdateKxClusterCodeConfiguration",
+    operation: finspace.updateKxClusterCodeConfiguration,
+    actions: ["finspace:UpdateKxClusterCodeConfiguration"],
+  }),
 );

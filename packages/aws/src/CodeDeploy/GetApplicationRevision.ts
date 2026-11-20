@@ -1,7 +1,10 @@
 import type * as SVC from "@distilled.cloud/aws/codedeploy";
+import * as codedeploy from "@distilled.cloud/aws/codedeploy";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeCodeDeployApplicationHttpBinding } from "./BindingHttp.ts";
 
 export interface GetApplicationRevisionRequest extends Omit<
   SVC.GetApplicationRevisionInput,
@@ -41,4 +44,13 @@ export interface GetApplicationRevision extends Binding.Service<
 > {}
 export const GetApplicationRevision = Binding.Service<GetApplicationRevision>(
   "AWS.CodeDeploy.GetApplicationRevision",
+);
+
+export const GetApplicationRevisionHttp = Layer.effect(
+  GetApplicationRevision,
+  makeCodeDeployApplicationHttpBinding({
+    tag: "AWS.CodeDeploy.GetApplicationRevision",
+    operation: codedeploy.getApplicationRevision,
+    actions: ["codedeploy:GetApplicationRevision"],
+  }),
 );

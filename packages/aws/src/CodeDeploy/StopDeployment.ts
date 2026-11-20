@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codedeploy";
+import * as codedeploy from "@distilled.cloud/aws/codedeploy";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeDeployGroupHttpBinding } from "./BindingHttp.ts";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
 /**
@@ -32,3 +35,12 @@ export interface StopDeployment extends Binding.Service<
   >
 > {}
 export const StopDeployment = Binding.Service<StopDeployment>("AWS.CodeDeploy.StopDeployment");
+
+export const StopDeploymentHttp = Layer.effect(
+  StopDeployment,
+  makeCodeDeployGroupHttpBinding({
+    tag: "AWS.CodeDeploy.StopDeployment",
+    operation: codedeploy.stopDeployment,
+    actions: ["codedeploy:StopDeployment"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as iot from "@distilled.cloud/aws/iot";
+import * as iot from "@distilled.cloud/aws/iot";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListThingsRequest extends iot.ListThingsRequest {}
 
@@ -34,3 +36,16 @@ export interface ListThings extends Binding.Service<
 > {}
 
 export const ListThings = Binding.Service<ListThings>("AWS.IoT.ListThings");
+
+/**
+ * HTTP implementation of the {@link ListThings} capability — grants
+ * `iot:ListThings` on `*` and calls the IoT `ListThings` API.
+ */
+export const ListThingsHttp = Layer.effect(
+  ListThings,
+  makeIotAccountHttpBinding({
+    tag: "AWS.IoT.ListThings",
+    operation: iot.listThings,
+    actions: ["iot:ListThings"],
+  }),
+);

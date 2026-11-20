@@ -1,0 +1,323 @@
+{
+  "tag": "AWS.Rekognition",
+  "module": "rekognition",
+  "resources": {},
+  "builder": "makeRekognitionHttpBinding",
+  "builders": {
+    "makeRekognitionHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "AssociateFaces": {
+      "operation": "associateFaces",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CompareFaces": {
+      "operation": "compareFaces",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateCollection": {
+      "operation": "createCollection",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateFaceLivenessSession": {
+      "operation": "createFaceLivenessSession"
+    },
+    "CreateUser": {
+      "operation": "createUser",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteCollection": {
+      "operation": "deleteCollection",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteFaces": {
+      "operation": "deleteFaces",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteUser": {
+      "operation": "deleteUser",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeCollection": {
+      "operation": "describeCollection",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeProjectVersions": {
+      "operation": "describeProjectVersions",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeProjects": {
+      "operation": "describeProjects"
+    },
+    "DescribeStreamProcessor": {
+      "operation": "describeStreamProcessor",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DetectCustomLabels": {
+      "operation": "detectCustomLabels",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DetectFaces": {
+      "operation": "detectFaces",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DetectLabels": {
+      "operation": "detectLabels",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DetectModerationLabels": {
+      "operation": "detectModerationLabels",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DetectProtectiveEquipment": {
+      "operation": "detectProtectiveEquipment",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DetectText": {
+      "operation": "detectText",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DisassociateFaces": {
+      "operation": "disassociateFaces",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetCelebrityInfo": {
+      "operation": "getCelebrityInfo",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetCelebrityRecognition": {
+      "operation": "getCelebrityRecognition",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetContentModeration": {
+      "operation": "getContentModeration",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetFaceDetection": {
+      "operation": "getFaceDetection",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetFaceLivenessSessionResults": {
+      "operation": "getFaceLivenessSessionResults",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetFaceSearch": {
+      "operation": "getFaceSearch",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetLabelDetection": {
+      "operation": "getLabelDetection",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetMediaAnalysisJob": {
+      "operation": "getMediaAnalysisJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetPersonTracking": {
+      "operation": "getPersonTracking",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetSegmentDetection": {
+      "operation": "getSegmentDetection",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetTextDetection": {
+      "operation": "getTextDetection",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "IndexFaces": {
+      "operation": "indexFaces",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListCollections": {
+      "operation": "listCollections"
+    },
+    "ListFaces": {
+      "operation": "listFaces",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListMediaAnalysisJobs": {
+      "operation": "listMediaAnalysisJobs"
+    },
+    "ListStreamProcessors": {
+      "operation": "listStreamProcessors"
+    },
+    "ListUsers": {
+      "operation": "listUsers",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "RecognizeCelebrities": {
+      "operation": "recognizeCelebrities",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SearchFaces": {
+      "operation": "searchFaces",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SearchFacesByImage": {
+      "operation": "searchFacesByImage",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SearchUsers": {
+      "operation": "searchUsers",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SearchUsersByImage": {
+      "operation": "searchUsersByImage",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartCelebrityRecognition": {
+      "operation": "startCelebrityRecognition",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartContentModeration": {
+      "operation": "startContentModeration",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartFaceDetection": {
+      "operation": "startFaceDetection",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartFaceSearch": {
+      "operation": "startFaceSearch",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartLabelDetection": {
+      "operation": "startLabelDetection",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartMediaAnalysisJob": {
+      "operation": "startMediaAnalysisJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartPersonTracking": {
+      "operation": "startPersonTracking",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartProjectVersion": {
+      "operation": "startProjectVersion",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartSegmentDetection": {
+      "operation": "startSegmentDetection",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartStreamProcessor": {
+      "operation": "startStreamProcessor",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartTextDetection": {
+      "operation": "startTextDetection",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StopProjectVersion": {
+      "operation": "stopProjectVersion",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StopStreamProcessor": {
+      "operation": "stopStreamProcessor",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

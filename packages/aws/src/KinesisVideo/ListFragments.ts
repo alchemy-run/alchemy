@@ -1,7 +1,9 @@
 import type * as kv from "@distilled.cloud/aws/kinesis-video";
-import type * as kvam from "@distilled.cloud/aws/kinesis-video-archived-media";
+import * as kvam from "@distilled.cloud/aws/kinesis-video-archived-media";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStreamMediaHttpBinding } from "./BindingHttp.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface ListFragmentsRequest extends Omit<
@@ -46,3 +48,13 @@ export interface ListFragments extends Binding.Service<
 > {}
 
 export const ListFragments = Binding.Service<ListFragments>("AWS.KinesisVideo.ListFragments");
+
+export const ListFragmentsHttp = Layer.effect(
+  ListFragments,
+  makeStreamMediaHttpBinding({
+    tag: "AWS.KinesisVideo.ListFragments",
+    apiName: "LIST_FRAGMENTS",
+    actions: ["kinesisvideo:ListFragments"],
+    operation: kvam.listFragments,
+  }),
+);

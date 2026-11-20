@@ -1,0 +1,62 @@
+{
+  "tag": "AWS.Route53Resolver",
+  "module": "route53resolver",
+  "alias": "r53r",
+  "resources": {
+    "ResolverEndpoint": {
+      "file": "ResolverEndpoint.ts"
+    },
+    "ResolverRule": {
+      "file": "ResolverRule.ts"
+    }
+  },
+  "builder": "makeRoute53ResolverEndpointHttpBinding",
+  "builders": {
+    "makeRoute53ResolverEndpointHttpBinding": {
+      "grants": "resource"
+    },
+    "makeRoute53ResolverRuleHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetResolverEndpoint": {
+      "operation": "getResolverEndpoint",
+      "resource": "ResolverEndpoint",
+      "param": "endpoint",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "GetResolverRule": {
+      "operation": "getResolverRule",
+      "resource": "ResolverRule",
+      "param": "rule",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeRoute53ResolverRuleHttpBinding"
+    },
+    "ListResolverEndpointIpAddresses": {
+      "operation": "listResolverEndpointIpAddresses",
+      "resource": "ResolverEndpoint",
+      "param": "endpoint",
+      "request": {
+        "mode": "optional",
+        "interface": "ListResolverEndpointIpAddressesRequest",
+        "omit": ["ResolverEndpointId"]
+      }
+    },
+    "UpdateResolverRule": {
+      "operation": "updateResolverRule",
+      "resource": "ResolverRule",
+      "param": "rule",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateResolverRuleRequest",
+        "omit": ["ResolverRuleId"]
+      },
+      "builder": "makeRoute53ResolverRuleHttpBinding"
+    }
+  }
+}

@@ -1,6 +1,8 @@
-import type * as RE2 from "@distilled.cloud/aws/resource-explorer-2";
+import * as RE2 from "@distilled.cloud/aws/resource-explorer-2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeResourceExplorerViewHttpBinding } from "./BindingHttp.ts";
 import type { View } from "./View.ts";
 
 export interface ListResourcesRequest extends Omit<RE2.ListResourcesInput, "ViewArn"> {}
@@ -44,3 +46,12 @@ export interface ListResources extends Binding.Service<
   >
 > {}
 export const ListResources = Binding.Service<ListResources>("AWS.ResourceExplorer.ListResources");
+
+export const ListResourcesHttp = Layer.effect(
+  ListResources,
+  makeResourceExplorerViewHttpBinding({
+    tag: "AWS.ResourceExplorer.ListResources",
+    operation: RE2.listResources,
+    actions: ["resource-explorer-2:ListResources"],
+  }),
+);

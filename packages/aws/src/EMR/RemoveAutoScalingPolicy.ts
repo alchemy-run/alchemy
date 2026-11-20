@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/emr";
+import * as emr from "@distilled.cloud/aws/emr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEmrClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -28,4 +31,13 @@ export interface RemoveAutoScalingPolicy extends Binding.Service<
 > {}
 export const RemoveAutoScalingPolicy = Binding.Service<RemoveAutoScalingPolicy>(
   "AWS.EMR.RemoveAutoScalingPolicy",
+);
+
+export const RemoveAutoScalingPolicyHttp = Layer.effect(
+  RemoveAutoScalingPolicy,
+  makeEmrClusterHttpBinding({
+    tag: "AWS.EMR.RemoveAutoScalingPolicy",
+    operation: emr.removeAutoScalingPolicy,
+    actions: ["elasticmapreduce:RemoveAutoScalingPolicy"],
+  }),
 );

@@ -1,6 +1,7 @@
-import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import { makeImageBinding } from "./MicrovmBinding.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
 export interface SuspendMicrovmRequest extends microvms.SuspendMicrovmRequest {}
@@ -31,3 +32,11 @@ export interface SuspendMicrovm extends Binding.Service<
   >
 > {}
 export const SuspendMicrovm = Binding.Service<SuspendMicrovm>("AWS.Lambda.SuspendMicrovm");
+
+export const SuspendMicrovmHttp = makeImageBinding({
+  binding: SuspendMicrovm,
+  name: "SuspendMicrovm",
+  actions: ["lambda:SuspendMicrovm"],
+  operation: microvms.suspendMicrovm,
+  scope: "microvm",
+});

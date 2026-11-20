@@ -1,6 +1,9 @@
-import type * as SSM from "@distilled.cloud/aws/ssm";
+import * as SSM from "@distilled.cloud/aws/ssm";
 import * as Binding from "alchemy/Binding";
+import * as Output from "alchemy/Output";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeParameterHttpBinding } from "./BindingHttp.ts";
 import type { Parameter } from "./Parameter.ts";
 
 export interface GetParametersByPathRequest extends Omit<SSM.GetParametersByPathRequest, "Path"> {}
@@ -43,4 +46,23 @@ export interface GetParametersByPath extends Binding.Service<
 > {}
 export const GetParametersByPath = Binding.Service<GetParametersByPath>(
   "AWS.SSM.GetParametersByPath",
+);
+
+export const GetParametersByPathHttp = Layer.effect(
+  GetParametersByPath,
+  makeParameterHttpBinding({
+    tag: "AWS.SSM.GetParametersByPath",
+    operation: SSM.getParametersByPath,
+    actions: ["ssm:GetParametersByPath"],
+    requestKey: "Path",
+    // The by-path read authorizes against the subtree under the bound
+    // parameter's name, so grant on the parameter ARN plus its `/*` children.
+    resources: (parameter) => [
+      parameter.parameterArn,
+      Output.interpolate`${parameter.parameterArn}/*`,
+    ],
+    // kms:Decrypt so `WithDecryption: true` works for SecureString children
+    // encrypted with the bound parameter's key.
+    kmsActions: ["kms:Decrypt"],
+  }),
 );

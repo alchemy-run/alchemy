@@ -1,6 +1,8 @@
-import type * as TSW from "@distilled.cloud/aws/timestream-write";
+import * as TSW from "@distilled.cloud/aws/timestream-write";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWriteTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface WriteRecordsRequest extends Omit<
@@ -57,3 +59,16 @@ export interface WriteRecords extends Binding.Service<
 > {}
 
 export const WriteRecords = Binding.Service<WriteRecords>("AWS.Timestream.WriteRecords");
+
+export const WriteRecordsHttp = Layer.effect(
+  WriteRecords,
+  makeWriteTableHttpBinding({
+    tag: "AWS.Timestream.WriteRecords",
+    operation: TSW.writeRecords,
+    actions: ["timestream:WriteRecords"],
+    toRequest: (request: WriteRecordsRequest, names) => ({
+      ...request,
+      ...names,
+    }),
+  }),
+);

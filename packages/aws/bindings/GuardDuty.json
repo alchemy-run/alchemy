@@ -1,0 +1,363 @@
+{
+  "tag": "AWS.GuardDuty",
+  "module": "guardduty",
+  "resources": {
+    "Detector": {
+      "file": "Detector.ts"
+    }
+  },
+  "builder": "makeGuardDutyDetectorHttpBinding",
+  "builders": {
+    "makeGuardDutyAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeGuardDutyDetectorHttpBinding": {}
+  },
+  "bindings": {
+    "AcceptAdministratorInvitation": {
+      "operation": "acceptAdministratorInvitation",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "ArchiveFindings": {
+      "operation": "archiveFindings",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "CreateInvestigation": {
+      "operation": "createInvestigation",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "CreateMembers": {
+      "operation": "createMembers",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "CreateSampleFindings": {
+      "operation": "createSampleFindings",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "DeclineInvitations": {
+      "operation": "declineInvitations",
+      "builder": "makeGuardDutyAccountHttpBinding"
+    },
+    "DeleteInvitations": {
+      "operation": "deleteInvitations",
+      "builder": "makeGuardDutyAccountHttpBinding"
+    },
+    "DeleteMembers": {
+      "operation": "deleteMembers",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "DescribeMalwareScans": {
+      "operation": "describeMalwareScans",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "DescribeOrganizationConfiguration": {
+      "operation": "describeOrganizationConfiguration",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "DisableOrganizationAdminAccount": {
+      "operation": "disableOrganizationAdminAccount",
+      "builder": "makeGuardDutyAccountHttpBinding"
+    },
+    "DisassociateFromAdministratorAccount": {
+      "operation": "disassociateFromAdministratorAccount",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "DisassociateMembers": {
+      "operation": "disassociateMembers",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "EnableOrganizationAdminAccount": {
+      "operation": "enableOrganizationAdminAccount",
+      "builder": "makeGuardDutyAccountHttpBinding"
+    },
+    "GetAdministratorAccount": {
+      "operation": "getAdministratorAccount",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "GetCoverageStatistics": {
+      "operation": "getCoverageStatistics",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      },
+      "with": {
+        "resourceLevel": true
+      },
+      "note": "One of the two GuardDuty actions that supports resource-level permissions on the detector ARN."
+    },
+    "GetFindings": {
+      "operation": "getFindings",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "GetFindingsStatistics": {
+      "operation": "getFindingsStatistics",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "GetInvestigation": {
+      "operation": "getInvestigation",
+      "resource": "Detector",
+      "request": {
+        "mode": "required",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "GetInvitationsCount": {
+      "operation": "getInvitationsCount",
+      "builder": "makeGuardDutyAccountHttpBinding"
+    },
+    "GetMalwareScan": {
+      "operation": "getMalwareScan",
+      "builder": "makeGuardDutyAccountHttpBinding"
+    },
+    "GetMalwareScanSettings": {
+      "operation": "getMalwareScanSettings",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "GetMemberDetectors": {
+      "operation": "getMemberDetectors",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "GetMembers": {
+      "operation": "getMembers",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "GetOrganizationStatistics": {
+      "operation": "getOrganizationStatistics",
+      "builder": "makeGuardDutyAccountHttpBinding"
+    },
+    "GetRemainingFreeTrialDays": {
+      "operation": "getRemainingFreeTrialDays",
+      "resource": "Detector",
+      "request": {
+        "mode": "required",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "GetUsageStatistics": {
+      "operation": "getUsageStatistics",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "InviteMembers": {
+      "operation": "inviteMembers",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "ListCoverage": {
+      "operation": "listCoverage",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      },
+      "with": {
+        "resourceLevel": true
+      },
+      "note": "One of the two GuardDuty actions that supports resource-level permissions on the detector ARN."
+    },
+    "ListFindings": {
+      "operation": "listFindings",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "ListInvestigations": {
+      "operation": "listInvestigations",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "ListInvitations": {
+      "operation": "listInvitations",
+      "builder": "makeGuardDutyAccountHttpBinding"
+    },
+    "ListMalwareScans": {
+      "operation": "listMalwareScans",
+      "builder": "makeGuardDutyAccountHttpBinding"
+    },
+    "ListMembers": {
+      "operation": "listMembers",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "ListOrganizationAdminAccounts": {
+      "operation": "listOrganizationAdminAccounts",
+      "builder": "makeGuardDutyAccountHttpBinding"
+    },
+    "SendObjectMalwareScan": {
+      "operation": "sendObjectMalwareScan",
+      "builder": "makeGuardDutyAccountHttpBinding"
+    },
+    "StartMalwareScan": {
+      "operation": "startMalwareScan",
+      "builder": "makeGuardDutyAccountHttpBinding"
+    },
+    "StartMonitoringMembers": {
+      "operation": "startMonitoringMembers",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "StopMonitoringMembers": {
+      "operation": "stopMonitoringMembers",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "UnarchiveFindings": {
+      "operation": "unarchiveFindings",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "UpdateFindingsFeedback": {
+      "operation": "updateFindingsFeedback",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "UpdateMalwareScanSettings": {
+      "operation": "updateMalwareScanSettings",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "UpdateMemberDetectors": {
+      "operation": "updateMemberDetectors",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    },
+    "UpdateOrganizationConfiguration": {
+      "operation": "updateOrganizationConfiguration",
+      "resource": "Detector",
+      "request": {
+        "mode": "optional",
+        "omit": ["DetectorId"],
+        "inline": true
+      }
+    }
+  }
+}

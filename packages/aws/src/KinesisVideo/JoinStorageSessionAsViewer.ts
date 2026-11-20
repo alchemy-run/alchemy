@@ -1,7 +1,9 @@
 import type * as kv from "@distilled.cloud/aws/kinesis-video";
-import type * as kvws from "@distilled.cloud/aws/kinesis-video-webrtc-storage";
+import * as kvws from "@distilled.cloud/aws/kinesis-video-webrtc-storage";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeChannelSignalingHttpBinding } from "./BindingHttp.ts";
 import type { SignalingEndpointUnavailable } from "./internal.ts";
 import type { SignalingChannel } from "./SignalingChannel.ts";
 
@@ -55,4 +57,18 @@ export interface JoinStorageSessionAsViewer extends Binding.Service<
 
 export const JoinStorageSessionAsViewer = Binding.Service<JoinStorageSessionAsViewer>(
   "AWS.KinesisVideo.JoinStorageSessionAsViewer",
+);
+
+export const JoinStorageSessionAsViewerHttp = Layer.effect(
+  JoinStorageSessionAsViewer,
+  makeChannelSignalingHttpBinding({
+    tag: "AWS.KinesisVideo.JoinStorageSessionAsViewer",
+    // served by the channel's WEBRTC storage endpoint (only available once
+    // media storage is configured for the channel)
+    protocol: "WEBRTC",
+    role: "VIEWER",
+    actions: ["kinesisvideo:JoinStorageSessionAsViewer"],
+    key: "channelArn",
+    operation: kvws.joinStorageSessionAsViewer,
+  }),
 );

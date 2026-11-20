@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codepipeline";
+import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodePipelinePipelineNameHttpBinding } from "./BindingHttp.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 export interface ListDeployActionExecutionTargetsRequest extends Omit<
@@ -41,4 +44,14 @@ export interface ListDeployActionExecutionTargets extends Binding.Service<
 > {}
 export const ListDeployActionExecutionTargets = Binding.Service<ListDeployActionExecutionTargets>(
   "AWS.CodePipeline.ListDeployActionExecutionTargets",
+);
+
+export const ListDeployActionExecutionTargetsHttp = Layer.effect(
+  ListDeployActionExecutionTargets,
+  makeCodePipelinePipelineNameHttpBinding({
+    tag: "AWS.CodePipeline.ListDeployActionExecutionTargets",
+    operation: codepipeline.listDeployActionExecutionTargets,
+    actions: ["codepipeline:ListDeployActionExecutionTargets"],
+    subScoped: true,
+  }),
 );

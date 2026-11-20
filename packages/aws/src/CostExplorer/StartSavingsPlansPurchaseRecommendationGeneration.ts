@@ -1,6 +1,8 @@
-import type * as ce from "@distilled.cloud/aws/cost-explorer";
+import * as ce from "@distilled.cloud/aws/cost-explorer";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCostExplorerHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request for {@link StartSavingsPlansPurchaseRecommendationGeneration}.
@@ -44,3 +46,12 @@ export const StartSavingsPlansPurchaseRecommendationGeneration =
   Binding.Service<StartSavingsPlansPurchaseRecommendationGeneration>(
     "AWS.CostExplorer.StartSavingsPlansPurchaseRecommendationGeneration",
   );
+
+export const StartSavingsPlansPurchaseRecommendationGenerationHttp = Layer.effect(
+  StartSavingsPlansPurchaseRecommendationGeneration,
+  makeCostExplorerHttpBinding({
+    capability: "StartSavingsPlansPurchaseRecommendationGeneration",
+    iamActions: ["ce:StartSavingsPlansPurchaseRecommendationGeneration"],
+    operation: ce.startSavingsPlansPurchaseRecommendationGeneration,
+  }),
+);

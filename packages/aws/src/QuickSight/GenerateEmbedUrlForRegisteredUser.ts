@@ -1,6 +1,8 @@
-import type * as quicksight from "@distilled.cloud/aws/quicksight";
+import * as quicksight from "@distilled.cloud/aws/quicksight";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQuickSightEmbedHttpBinding } from "./BindingHttp.ts";
 import type { Dashboard } from "./Dashboard.ts";
 
 /**
@@ -60,4 +62,19 @@ export interface GenerateEmbedUrlForRegisteredUser extends Binding.Service<
 > {}
 export const GenerateEmbedUrlForRegisteredUser = Binding.Service<GenerateEmbedUrlForRegisteredUser>(
   "AWS.QuickSight.GenerateEmbedUrlForRegisteredUser",
+);
+
+export const GenerateEmbedUrlForRegisteredUserHttp = Layer.effect(
+  GenerateEmbedUrlForRegisteredUser,
+  makeQuickSightEmbedHttpBinding({
+    tag: "AWS.QuickSight.GenerateEmbedUrlForRegisteredUser",
+    operation: quicksight.generateEmbedUrlForRegisteredUser,
+    actions: ["quicksight:GenerateEmbedUrlForRegisteredUser"],
+    applyDefaults: (request: GenerateEmbedUrlForRegisteredUserRequest, dashboard) => ({
+      ...request,
+      ExperienceConfiguration: request.ExperienceConfiguration ?? {
+        Dashboard: { InitialDashboardId: dashboard.dashboardId },
+      },
+    }),
+  }),
 );

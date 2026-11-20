@@ -1,0 +1,38 @@
+{
+  "tag": "AWS.Shield",
+  "module": "shield",
+  "resources": {},
+  "builder": "makeShieldHttpBinding",
+  "builders": {
+    "makeShieldHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "DescribeAttack": {
+      "operation": "describeAttack",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeAttackStatistics": {
+      "operation": "describeAttackStatistics"
+    },
+    "DescribeDRTAccess": {
+      "operation": "describeDRTAccess"
+    },
+    "GetSubscriptionState": {
+      "operation": "getSubscriptionState"
+    },
+    "ListAttacks": {
+      "operation": "listAttacks"
+    },
+    "ListResourcesInProtectionGroup": {
+      "operation": "listResourcesInProtectionGroup",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

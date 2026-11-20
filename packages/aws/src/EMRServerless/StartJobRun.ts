@@ -1,7 +1,9 @@
-import type * as emr from "@distilled.cloud/aws/emr-serverless";
+import * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeEmrServerlessHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request accepted by the {@link StartJobRun} runtime callable. The
@@ -58,3 +60,13 @@ export interface StartJobRun extends Binding.Service<
   >
 > {}
 export const StartJobRun = Binding.Service<StartJobRun>("AWS.EMRServerless.StartJobRun");
+
+export const StartJobRunHttp = Layer.effect(
+  StartJobRun,
+  makeEmrServerlessHttpBinding({
+    tag: "AWS.EMRServerless.StartJobRun",
+    operation: emr.startJobRun,
+    actions: ["emr-serverless:StartJobRun"],
+    passRole: true,
+  }),
+);

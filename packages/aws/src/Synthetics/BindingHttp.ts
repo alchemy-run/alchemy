@@ -70,6 +70,11 @@ export const makeSyntheticsAccountHttpBinding = <I, A, E, R>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted on `*`. */
   actions: readonly string[];
+  /**
+   * ARN formats to grant the actions on instead of `*`, with `${Partition}`,
+   * `${Region}`, and `${Account}` filled in at deploy (`AWSBindings.accountArn`).
+   */
+  arns?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -82,7 +87,7 @@ export const makeSyntheticsAccountHttpBinding = <I, A, E, R>(options: {
             {
               Effect: "Allow",
               Action: [...options.actions],
-              Resource: ["*"],
+              Resource: AWSBindings.grantResources(options.arns),
             },
           ],
         });

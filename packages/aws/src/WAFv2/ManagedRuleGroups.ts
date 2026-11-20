@@ -1,6 +1,9 @@
 import type * as WAFV2 from "@distilled.cloud/aws/wafv2";
+import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWafv2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `wafv2:DescribeManagedRuleGroup` — read the rules,
@@ -189,4 +192,49 @@ export interface DescribeManagedProductsByVendor extends Binding.Service<
 
 export const DescribeManagedProductsByVendor = Binding.Service<DescribeManagedProductsByVendor>(
   "AWS.WAFv2.DescribeManagedProductsByVendor",
+);
+
+export const DescribeManagedRuleGroupHttp = Layer.effect(
+  DescribeManagedRuleGroup,
+  makeWafv2AccountHttpBinding({
+    tag: "AWS.WAFv2.DescribeManagedRuleGroup",
+    operation: wafv2.describeManagedRuleGroup,
+    actions: ["wafv2:DescribeManagedRuleGroup"],
+  }),
+);
+
+export const ListAvailableManagedRuleGroupsHttp = Layer.effect(
+  ListAvailableManagedRuleGroups,
+  makeWafv2AccountHttpBinding({
+    tag: "AWS.WAFv2.ListAvailableManagedRuleGroups",
+    operation: wafv2.listAvailableManagedRuleGroups,
+    actions: ["wafv2:ListAvailableManagedRuleGroups"],
+  }),
+);
+
+export const ListAvailableManagedRuleGroupVersionsHttp = Layer.effect(
+  ListAvailableManagedRuleGroupVersions,
+  makeWafv2AccountHttpBinding({
+    tag: "AWS.WAFv2.ListAvailableManagedRuleGroupVersions",
+    operation: wafv2.listAvailableManagedRuleGroupVersions,
+    actions: ["wafv2:ListAvailableManagedRuleGroupVersions"],
+  }),
+);
+
+export const DescribeAllManagedProductsHttp = Layer.effect(
+  DescribeAllManagedProducts,
+  makeWafv2AccountHttpBinding({
+    tag: "AWS.WAFv2.DescribeAllManagedProducts",
+    operation: wafv2.describeAllManagedProducts,
+    actions: ["wafv2:DescribeAllManagedProducts"],
+  }),
+);
+
+export const DescribeManagedProductsByVendorHttp = Layer.effect(
+  DescribeManagedProductsByVendor,
+  makeWafv2AccountHttpBinding({
+    tag: "AWS.WAFv2.DescribeManagedProductsByVendor",
+    operation: wafv2.describeManagedProductsByVendor,
+    actions: ["wafv2:DescribeManagedProductsByVendor"],
+  }),
 );

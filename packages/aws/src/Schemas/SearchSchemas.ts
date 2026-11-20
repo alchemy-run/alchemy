@@ -1,6 +1,8 @@
-import type * as schemas from "@distilled.cloud/aws/schemas";
+import * as schemas from "@distilled.cloud/aws/schemas";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSchemasRegistryHttpBinding } from "./BindingHttp.ts";
 import type { Registry } from "./Registry.ts";
 
 /**
@@ -38,3 +40,12 @@ export interface SearchSchemas extends Binding.Service<
   >
 > {}
 export const SearchSchemas = Binding.Service<SearchSchemas>("AWS.Schemas.SearchSchemas");
+
+export const SearchSchemasHttp = Layer.effect(
+  SearchSchemas,
+  makeSchemasRegistryHttpBinding({
+    tag: "AWS.Schemas.SearchSchemas",
+    operation: schemas.searchSchemas,
+    actions: ["schemas:SearchSchemas"],
+  }),
+);

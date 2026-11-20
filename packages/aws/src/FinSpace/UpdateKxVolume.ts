@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/finspace";
+import * as finspace from "@distilled.cloud/aws/finspace";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFinSpaceKxHttpBinding } from "./BindingHttp.ts";
 import type { KxEnvironment } from "./KxEnvironment.ts";
 
 /**
@@ -33,3 +36,12 @@ export interface UpdateKxVolume extends Binding.Service<
   >
 > {}
 export const UpdateKxVolume = Binding.Service<UpdateKxVolume>("AWS.FinSpace.UpdateKxVolume");
+
+export const UpdateKxVolumeHttp = Layer.effect(
+  UpdateKxVolume,
+  makeFinSpaceKxHttpBinding({
+    tag: "AWS.FinSpace.UpdateKxVolume",
+    operation: finspace.updateKxVolume,
+    actions: ["finspace:UpdateKxVolume"],
+  }),
+);

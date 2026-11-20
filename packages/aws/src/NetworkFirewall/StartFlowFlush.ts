@@ -1,6 +1,9 @@
 import type * as NFW from "@distilled.cloud/aws/network-firewall";
+import * as nfw from "@distilled.cloud/aws/network-firewall";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNetworkFirewallFirewallHttpBinding } from "./BindingHttp.ts";
 import type { Firewall } from "./Firewall.ts";
 
 export interface StartFlowFlushRequest extends Omit<NFW.StartFlowFlushRequest, "FirewallArn"> {}
@@ -40,3 +43,12 @@ export interface StartFlowFlush extends Binding.Service<
 > {}
 
 export const StartFlowFlush = Binding.Service<StartFlowFlush>("AWS.NetworkFirewall.StartFlowFlush");
+
+export const StartFlowFlushHttp = Layer.effect(
+  StartFlowFlush,
+  makeNetworkFirewallFirewallHttpBinding({
+    tag: "AWS.NetworkFirewall.StartFlowFlush",
+    operation: nfw.startFlowFlush,
+    actions: ["network-firewall:StartFlowFlush"],
+  }),
+);

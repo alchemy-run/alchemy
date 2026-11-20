@@ -1,6 +1,8 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface HeadObjectRequest extends Omit<S3.HeadObjectRequest, "Bucket"> {}
@@ -47,3 +49,13 @@ export interface HeadObject extends Binding.Service<
 > {}
 
 export const HeadObject = Binding.Service<HeadObject>("AWS.S3.HeadObject");
+
+export const HeadObjectHttp = Layer.effect(
+  HeadObject,
+  makeBucketHttpBinding({
+    tag: "AWS.S3.HeadObject",
+    operation: S3.headObject,
+    actions: ["s3:GetObject", "s3:GetObjectVersion"],
+    listBucket: true,
+  }),
+);

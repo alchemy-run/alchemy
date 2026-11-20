@@ -1,0 +1,40 @@
+{
+  "tag": "AWS.Account",
+  "module": "account",
+  "resources": {},
+  "builder": "makeAccountHttpBinding",
+  "builders": {
+    "makeAccountHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "GetAccountInformation": {
+      "operation": "getAccountInformation"
+    },
+    "GetAlternateContact": {
+      "operation": "getAlternateContact",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetContactInformation": {
+      "operation": "getContactInformation"
+    },
+    "GetRegionOptStatus": {
+      "operation": "getRegionOptStatus",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListRegions": {
+      "operation": "listRegions"
+    }
+  }
+}

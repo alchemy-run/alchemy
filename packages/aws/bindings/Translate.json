@@ -1,0 +1,62 @@
+{
+  "tag": "AWS.Translate",
+  "module": "translate",
+  "resources": {},
+  "builder": "makeTranslateHttpBinding",
+  "builders": {
+    "makeTranslateHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "DescribeTextTranslationJob": {
+      "operation": "describeTextTranslationJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetParallelData": {
+      "operation": "getParallelData",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetTerminology": {
+      "operation": "getTerminology",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListLanguages": {
+      "operation": "listLanguages"
+    },
+    "ListParallelData": {
+      "operation": "listParallelData"
+    },
+    "ListTerminologies": {
+      "operation": "listTerminologies"
+    },
+    "ListTextTranslationJobs": {
+      "operation": "listTextTranslationJobs"
+    },
+    "StopTextTranslationJob": {
+      "operation": "stopTextTranslationJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "TranslateDocument": {
+      "operation": "translateDocument",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "TranslateText": {
+      "operation": "translateText",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

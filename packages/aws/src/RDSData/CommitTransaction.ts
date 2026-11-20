@@ -2,8 +2,10 @@ import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
+import { makeRDSDataHttpBinding } from "./BindingHttp.ts";
 
 export interface CommitTransactionOptions {
   secret: Secret;
@@ -55,4 +57,22 @@ export interface CommitTransaction extends Binding.Service<
 
 export const CommitTransaction = Binding.Service<CommitTransaction>(
   "AWS.RDSData.CommitTransaction",
+);
+
+export const CommitTransactionHttp = Layer.effect(
+  CommitTransaction,
+  makeRDSDataHttpBinding({
+    tag: "AWS.RDSData.CommitTransaction",
+    action: "rds-data:CommitTransaction",
+    operation: rdsdata.commitTransaction,
+    // commit is transaction-scoped — no database/schema on the wire
+    makeInput: (
+      request: CommitTransactionRequest,
+      { resourceArn, secretArn },
+    ): rdsdata.CommitTransactionRequest => ({
+      ...request,
+      resourceArn,
+      secretArn,
+    }),
+  }),
 );

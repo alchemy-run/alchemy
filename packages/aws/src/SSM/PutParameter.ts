@@ -1,6 +1,8 @@
-import type * as SSM from "@distilled.cloud/aws/ssm";
+import * as SSM from "@distilled.cloud/aws/ssm";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeParameterHttpBinding } from "./BindingHttp.ts";
 import type { Parameter } from "./Parameter.ts";
 
 export interface PutParameterRequest extends Omit<SSM.PutParameterRequest, "Name"> {}
@@ -39,3 +41,16 @@ export interface PutParameter extends Binding.Service<
   >
 > {}
 export const PutParameter = Binding.Service<PutParameter>("AWS.SSM.PutParameter");
+
+export const PutParameterHttp = Layer.effect(
+  PutParameter,
+  makeParameterHttpBinding({
+    tag: "AWS.SSM.PutParameter",
+    operation: SSM.putParameter,
+    actions: ["ssm:PutParameter"],
+    // kms:Encrypt + kms:GenerateDataKey so SecureString writes work with the
+    // parameter's customer-managed key (GenerateDataKey covers Advanced-tier
+    // parameters, which envelope-encrypt).
+    kmsActions: ["kms:Encrypt", "kms:GenerateDataKey"],
+  }),
+);

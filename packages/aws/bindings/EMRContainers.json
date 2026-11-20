@@ -1,0 +1,88 @@
+{
+  "tag": "AWS.EMRContainers",
+  "module": "emr-containers",
+  "alias": "emrc",
+  "resources": {
+    "JobTemplate": {
+      "file": "JobTemplate.ts"
+    },
+    "VirtualCluster": {
+      "file": "VirtualCluster.ts"
+    }
+  },
+  "builder": "makeEMRContainersVirtualClusterHttpBinding",
+  "builders": {
+    "makeEMRContainersAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeEMRContainersJobTemplateHttpBinding": {
+      "grants": "resource"
+    },
+    "makeEMRContainersVirtualClusterHttpBinding": {}
+  },
+  "bindings": {
+    "CancelJobRun": {
+      "operation": "cancelJobRun",
+      "resource": "VirtualCluster",
+      "request": {
+        "mode": "required",
+        "omit": ["virtualClusterId"],
+        "inline": true
+      }
+    },
+    "DescribeJobRun": {
+      "operation": "describeJobRun",
+      "resource": "VirtualCluster",
+      "request": {
+        "mode": "required",
+        "omit": ["virtualClusterId"],
+        "inline": true
+      }
+    },
+    "DescribeJobTemplate": {
+      "operation": "describeJobTemplate",
+      "resource": "JobTemplate",
+      "param": "template",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeEMRContainersJobTemplateHttpBinding"
+    },
+    "DescribeManagedEndpoint": {
+      "operation": "describeManagedEndpoint",
+      "resource": "VirtualCluster",
+      "request": {
+        "mode": "required",
+        "omit": ["virtualClusterId"],
+        "inline": true
+      }
+    },
+    "ListJobRuns": {
+      "operation": "listJobRuns",
+      "resource": "VirtualCluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["virtualClusterId"],
+        "inline": true
+      }
+    },
+    "ListJobTemplates": {
+      "operation": "listJobTemplates",
+      "builder": "makeEMRContainersAccountHttpBinding"
+    },
+    "ListManagedEndpoints": {
+      "operation": "listManagedEndpoints",
+      "resource": "VirtualCluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["virtualClusterId"],
+        "inline": true
+      }
+    },
+    "ListVirtualClusters": {
+      "operation": "listVirtualClusters",
+      "builder": "makeEMRContainersAccountHttpBinding"
+    }
+  }
+}

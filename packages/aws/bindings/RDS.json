@@ -1,0 +1,168 @@
+{
+  "tag": "AWS.RDS",
+  "module": "rds",
+  "resources": {
+    "DBCluster": {
+      "file": "DBCluster.ts"
+    },
+    "DBInstance": {
+      "file": "DBInstance.ts"
+    }
+  },
+  "builder": "makeRdsAccountHttpBinding",
+  "builders": {
+    "makeRdsAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeRdsClusterHttpBinding": {
+      "grants": "resource"
+    },
+    "makeRdsInstanceHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "ApplyPendingMaintenanceAction": {
+      "operation": "applyPendingMaintenanceAction",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CopyDBClusterSnapshot": {
+      "operation": "copyDBClusterSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CopyDBSnapshot": {
+      "operation": "copyDBSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateDBClusterSnapshot": {
+      "operation": "createDBClusterSnapshot",
+      "resource": "DBCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["DBClusterIdentifier"],
+        "inline": true
+      },
+      "builder": "makeRdsClusterHttpBinding",
+      "withTs": {
+        "extraResources": "(arn) => [`${arn.split(\":\").slice(0, 5).join(\":\")}:cluster-snapshot:*`]"
+      },
+      "note": "Snapshot creation authorizes against BOTH the source ARN and the target snapshot ARN — widen the grant to the account's `cluster-snapshot` ARN space."
+    },
+    "CreateDBSnapshot": {
+      "operation": "createDBSnapshot",
+      "resource": "DBInstance",
+      "param": "instance",
+      "request": {
+        "mode": "required",
+        "omit": ["DBInstanceIdentifier"],
+        "inline": true
+      },
+      "builder": "makeRdsInstanceHttpBinding",
+      "withTs": {
+        "extraResources": "(arn) => [`${arn.split(\":\").slice(0, 5).join(\":\")}:snapshot:*`]"
+      },
+      "note": "Snapshot creation authorizes against BOTH the source ARN and the target snapshot ARN — widen the grant to the account's `snapshot` ARN space."
+    },
+    "DeleteDBClusterSnapshot": {
+      "operation": "deleteDBClusterSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteDBSnapshot": {
+      "operation": "deleteDBSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeDBClusterEndpoints": {
+      "operation": "describeDBClusterEndpoints"
+    },
+    "DescribeDBClusterSnapshots": {
+      "operation": "describeDBClusterSnapshots"
+    },
+    "DescribeDBClusters": {
+      "operation": "describeDBClusters"
+    },
+    "DescribeDBInstances": {
+      "operation": "describeDBInstances"
+    },
+    "DescribeDBSnapshots": {
+      "operation": "describeDBSnapshots"
+    },
+    "DescribeEvents": {
+      "operation": "describeEvents"
+    },
+    "DescribePendingMaintenanceActions": {
+      "operation": "describePendingMaintenanceActions"
+    },
+    "FailoverDBCluster": {
+      "operation": "failoverDBCluster",
+      "resource": "DBCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "optional",
+        "omit": ["DBClusterIdentifier"],
+        "inline": true
+      },
+      "builder": "makeRdsClusterHttpBinding"
+    },
+    "RebootDBInstance": {
+      "operation": "rebootDBInstance",
+      "resource": "DBInstance",
+      "param": "instance",
+      "request": {
+        "mode": "optional",
+        "omit": ["DBInstanceIdentifier"],
+        "inline": true
+      },
+      "builder": "makeRdsInstanceHttpBinding"
+    },
+    "StartDBCluster": {
+      "operation": "startDBCluster",
+      "resource": "DBCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeRdsClusterHttpBinding"
+    },
+    "StartDBInstance": {
+      "operation": "startDBInstance",
+      "resource": "DBInstance",
+      "param": "instance",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeRdsInstanceHttpBinding"
+    },
+    "StopDBCluster": {
+      "operation": "stopDBCluster",
+      "resource": "DBCluster",
+      "param": "cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeRdsClusterHttpBinding"
+    },
+    "StopDBInstance": {
+      "operation": "stopDBInstance",
+      "resource": "DBInstance",
+      "param": "instance",
+      "request": {
+        "mode": "optional",
+        "omit": ["DBInstanceIdentifier"],
+        "inline": true
+      },
+      "builder": "makeRdsInstanceHttpBinding"
+    }
+  }
+}

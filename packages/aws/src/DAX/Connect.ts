@@ -1,8 +1,17 @@
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import { connectEnvPrefix as makeConnectEnvPrefix } from "../Connection/internal.ts";
+import * as Layer from "effect/Layer";
 import type { Cluster } from "./Cluster.ts";
+import {
+  DAX_PROTOCOL_ACTIONS,
+  DAX_READ_ACTIONS,
+  makeDaxConnectHttpBinding,
+  DAX_WRITE_ACTIONS,
+} from "./ConnectHttp.ts";
+import { connectEnvPrefix } from "./ConnectHttp.ts";
+
+export { connectEnvPrefix };
 
 /**
  * Connection descriptor for a DAX cluster. Alchemy does not bundle a DAX
@@ -23,15 +32,6 @@ export interface ClusterConnectionInfo {
   /** Whether the cluster endpoint requires encryption in transit (TLS). */
   tls: boolean;
 }
-
-/**
- * Environment variable prefix under which the connect bindings publish the
- * cluster endpoint on the host Function, derived from the cluster's logical
- * ID. A cluster with logical ID `Cache` yields `DAX_CACHE` and the variables
- * `DAX_CACHE_HOST`, `DAX_CACHE_PORT`, `DAX_CACHE_URL`, and `DAX_CACHE_TLS`.
- */
-export const connectEnvPrefix = (logicalId: string): string =>
-  makeConnectEnvPrefix("DAX", logicalId);
 
 /**
  * Read-only runtime access to a DAX {@link Cluster}'s data plane.
@@ -118,3 +118,27 @@ export interface ConnectReadWrite extends Binding.Service<
   (cluster: Cluster) => Effect.Effect<Effect.Effect<ClusterConnectionInfo, never, RuntimeContext>>
 > {}
 export const ConnectReadWrite = Binding.Service<ConnectReadWrite>("AWS.DAX.ConnectReadWrite");
+
+export const ConnectReadHttp = Layer.effect(
+  ConnectRead,
+  makeDaxConnectHttpBinding({
+    tag: "AWS.DAX.ConnectRead",
+    actions: [...DAX_PROTOCOL_ACTIONS, ...DAX_READ_ACTIONS],
+  }),
+);
+
+export const ConnectReadWriteHttp = Layer.effect(
+  ConnectReadWrite,
+  makeDaxConnectHttpBinding({
+    tag: "AWS.DAX.ConnectReadWrite",
+    actions: [...DAX_PROTOCOL_ACTIONS, ...DAX_READ_ACTIONS, ...DAX_WRITE_ACTIONS],
+  }),
+);
+
+export const ConnectWriteHttp = Layer.effect(
+  ConnectWrite,
+  makeDaxConnectHttpBinding({
+    tag: "AWS.DAX.ConnectWrite",
+    actions: [...DAX_PROTOCOL_ACTIONS, ...DAX_WRITE_ACTIONS],
+  }),
+);

@@ -1,6 +1,9 @@
-import type * as ag from "@distilled.cloud/aws/api-gateway";
+import * as ag from "@distilled.cloud/aws/api-gateway";
 import * as Binding from "alchemy/Binding";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
+import { RegisterApiGatewayBinding } from "./BindingHttp.ts";
 
 export interface CreateApiKeyRequest extends ag.CreateApiKeyRequest {}
 
@@ -41,3 +44,27 @@ export interface CreateApiKey extends Binding.Service<
   >
 > {}
 export const CreateApiKey = Binding.Service<CreateApiKey>("AWS.ApiGateway.CreateApiKey");
+
+/**
+ * HTTP implementation of the {@link CreateApiKey} binding. Grants
+ * `apigateway:POST` on `/apikeys` and calls the API with the host
+ * Function's credentials.
+ */
+export const CreateApiKeyHttp = Layer.effect(
+  CreateApiKey,
+  Effect.gen(function* () {
+    const registerApiGatewayBinding = yield* RegisterApiGatewayBinding;
+    const createApiKey = yield* AWSBindings.withCredentials(ag.createApiKey);
+    return Effect.fn(function* () {
+      yield* registerApiGatewayBinding({
+        cap: "AWS.ApiGateway.CreateApiKey",
+        target: "",
+        verb: "POST",
+        paths: (region) => [`arn:aws:apigateway:${region}::/apikeys`],
+      });
+      return Effect.fn("AWS.ApiGateway.CreateApiKey")(function* (request?: CreateApiKeyRequest) {
+        return yield* createApiKey(request ?? {});
+      });
+    });
+  }),
+);

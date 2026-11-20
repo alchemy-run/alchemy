@@ -1,6 +1,8 @@
-import type * as bedrock from "@distilled.cloud/aws/bedrock-agent";
+import * as bedrock from "@distilled.cloud/aws/bedrock-agent";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataSourceScopedHttpBinding } from "./BindingHttp.ts";
 import type { DataSource } from "./DataSource.ts";
 
 /**
@@ -54,4 +56,13 @@ export interface DeleteKnowledgeBaseDocuments extends Binding.Service<
 > {}
 export const DeleteKnowledgeBaseDocuments = Binding.Service<DeleteKnowledgeBaseDocuments>(
   "AWS.Bedrock.DeleteKnowledgeBaseDocuments",
+);
+
+export const DeleteKnowledgeBaseDocumentsHttp = Layer.effect(
+  DeleteKnowledgeBaseDocuments,
+  makeDataSourceScopedHttpBinding({
+    tag: "AWS.Bedrock.DeleteKnowledgeBaseDocuments",
+    operation: bedrock.deleteKnowledgeBaseDocuments,
+    actions: ["bedrock:DeleteKnowledgeBaseDocuments"],
+  }),
 );

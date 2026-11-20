@@ -1,6 +1,8 @@
-import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import type { Memory } from "./Memory.ts";
 
 export interface StartMemoryExtractionJobRequest extends Omit<
@@ -50,4 +52,16 @@ export interface StartMemoryExtractionJob extends Binding.Service<
 > {}
 export const StartMemoryExtractionJob = Binding.Service<StartMemoryExtractionJob>(
   "AWS.BedrockAgentCore.StartMemoryExtractionJob",
+);
+
+export const StartMemoryExtractionJobHttp = Layer.effect(
+  StartMemoryExtractionJob,
+  makeAgentCoreHttpBinding({
+    tag: "AWS.BedrockAgentCore.StartMemoryExtractionJob",
+    operation: agentcore.startMemoryExtractionJob,
+    actions: ["bedrock-agentcore:StartMemoryExtractionJob"],
+    requestKey: "memoryId",
+    identifier: (memory: Memory) => memory.memoryId,
+    arns: (memory: Memory) => [memory.memoryArn],
+  }),
 );

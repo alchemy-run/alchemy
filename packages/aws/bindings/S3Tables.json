@@ -1,0 +1,73 @@
+{
+  "tag": "AWS.S3Tables",
+  "module": "s3tables",
+  "resources": {
+    "Table": {
+      "file": "Table.ts"
+    },
+    "TableBucket": {
+      "file": "TableBucket.ts"
+    }
+  },
+  "builder": "makeS3TablesTableHttpBinding",
+  "builders": {
+    "makeS3TablesTableBucketHttpBinding": {
+      "grants": "resource"
+    },
+    "makeS3TablesTableHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetTable": {
+      "operation": "getTable",
+      "resource": "Table",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "GetTableMaintenanceJobStatus": {
+      "operation": "getTableMaintenanceJobStatus",
+      "resource": "Table",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "GetTableMetadataLocation": {
+      "operation": "getTableMetadataLocation",
+      "resource": "Table",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "ListNamespaces": {
+      "operation": "listNamespaces",
+      "resource": "TableBucket",
+      "request": {
+        "mode": "optional",
+        "interface": "ListNamespacesRequest",
+        "omit": ["tableBucketARN"]
+      },
+      "builder": "makeS3TablesTableBucketHttpBinding"
+    },
+    "ListTables": {
+      "operation": "listTables",
+      "resource": "TableBucket",
+      "request": {
+        "mode": "optional",
+        "interface": "ListTablesRequest",
+        "omit": ["tableBucketARN"]
+      },
+      "builder": "makeS3TablesTableBucketHttpBinding"
+    },
+    "UpdateTableMetadataLocation": {
+      "operation": "updateTableMetadataLocation",
+      "resource": "Table",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateTableMetadataLocationRequest",
+        "omit": ["tableBucketARN", "namespace", "name"]
+      }
+    }
+  }
+}

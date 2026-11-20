@@ -1,6 +1,8 @@
-import type * as codeartifact from "@distilled.cloud/aws/codeartifact";
+import * as codeartifact from "@distilled.cloud/aws/codeartifact";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRepositoryHttpBinding, packageArns } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -50,4 +52,15 @@ export interface ListPackageVersions extends Binding.Service<
 
 export const ListPackageVersions = Binding.Service<ListPackageVersions>(
   "AWS.CodeArtifact.ListPackageVersions",
+);
+
+/** HTTP implementation of {@link ListPackageVersions} over the CodeArtifact API. */
+export const ListPackageVersionsHttp = Layer.effect(
+  ListPackageVersions,
+  makeRepositoryHttpBinding({
+    tag: "AWS.CodeArtifact.ListPackageVersions",
+    operation: codeartifact.listPackageVersions,
+    actions: ["codeartifact:ListPackageVersions"],
+    resources: packageArns,
+  }),
 );

@@ -1,6 +1,9 @@
 import type * as NFW from "@distilled.cloud/aws/network-firewall";
+import * as nfw from "@distilled.cloud/aws/network-firewall";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNetworkFirewallRuleGroupHttpBinding } from "./BindingHttp.ts";
 import type { RuleGroup } from "./RuleGroup.ts";
 
 export interface DescribeRuleGroupSummaryRequest extends Omit<
@@ -43,4 +46,13 @@ export interface DescribeRuleGroupSummary extends Binding.Service<
 
 export const DescribeRuleGroupSummary = Binding.Service<DescribeRuleGroupSummary>(
   "AWS.NetworkFirewall.DescribeRuleGroupSummary",
+);
+
+export const DescribeRuleGroupSummaryHttp = Layer.effect(
+  DescribeRuleGroupSummary,
+  makeNetworkFirewallRuleGroupHttpBinding({
+    tag: "AWS.NetworkFirewall.DescribeRuleGroupSummary",
+    operation: nfw.describeRuleGroupSummary,
+    actions: ["network-firewall:DescribeRuleGroupSummary"],
+  }),
 );

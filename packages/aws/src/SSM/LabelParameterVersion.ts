@@ -1,6 +1,8 @@
-import type * as SSM from "@distilled.cloud/aws/ssm";
+import * as SSM from "@distilled.cloud/aws/ssm";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeParameterHttpBinding } from "./BindingHttp.ts";
 import type { Parameter } from "./Parameter.ts";
 
 export interface LabelParameterVersionRequest extends Omit<
@@ -40,4 +42,13 @@ export interface LabelParameterVersion extends Binding.Service<
 > {}
 export const LabelParameterVersion = Binding.Service<LabelParameterVersion>(
   "AWS.SSM.LabelParameterVersion",
+);
+
+export const LabelParameterVersionHttp = Layer.effect(
+  LabelParameterVersion,
+  makeParameterHttpBinding({
+    tag: "AWS.SSM.LabelParameterVersion",
+    operation: SSM.labelParameterVersion,
+    actions: ["ssm:LabelParameterVersion"],
+  }),
 );

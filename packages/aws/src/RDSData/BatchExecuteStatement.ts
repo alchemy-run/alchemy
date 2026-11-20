@@ -2,8 +2,10 @@ import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
+import { makeRDSDataHttpBinding } from "./BindingHttp.ts";
 
 export interface BatchExecuteStatementOptions {
   secret: Secret;
@@ -64,4 +66,23 @@ export interface BatchExecuteStatement extends Binding.Service<
 
 export const BatchExecuteStatement = Binding.Service<BatchExecuteStatement>(
   "AWS.RDSData.BatchExecuteStatement",
+);
+
+export const BatchExecuteStatementHttp = Layer.effect(
+  BatchExecuteStatement,
+  makeRDSDataHttpBinding({
+    tag: "AWS.RDSData.BatchExecuteStatement",
+    action: "rds-data:BatchExecuteStatement",
+    operation: rdsdata.batchExecuteStatement,
+    makeInput: (
+      request: BatchExecuteStatementRequest,
+      { resourceArn, secretArn, database, schema },
+    ): rdsdata.BatchExecuteStatementRequest => ({
+      ...request,
+      resourceArn,
+      secretArn,
+      database,
+      schema,
+    }),
+  }),
 );

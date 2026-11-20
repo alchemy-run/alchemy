@@ -1,6 +1,12 @@
 import type * as s3vectors from "@distilled.cloud/aws/s3vectors";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import {
+  makeReadVectorsClient,
+  makeVectorsHttpBinding,
+  readVectorsActions,
+} from "./BindingHttp.ts";
 import type { Index } from "./VectorIndex.ts";
 
 /** Fields the binding injects from the bound {@link Index}. */
@@ -62,3 +68,17 @@ export interface VectorsRead extends Binding.Service<
   <I extends Index>(index: I) => Effect.Effect<ReadVectorsClient>
 > {}
 export const VectorsRead = Binding.Service<VectorsRead>("AWS.S3Vectors.VectorsRead");
+
+/**
+ * HTTP implementation of {@link VectorsRead} — calls the S3 Vectors data
+ * plane with the host Function's own credentials, granting only the read
+ * actions (`QueryVectors`, `GetVectors`, `ListVectors`) on the bound index.
+ */
+export const VectorsReadHttp = Layer.effect(
+  VectorsRead,
+  makeVectorsHttpBinding({
+    name: "VectorsRead",
+    actions: readVectorsActions,
+    makeClient: makeReadVectorsClient,
+  }),
+);

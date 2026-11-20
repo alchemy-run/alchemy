@@ -1,0 +1,62 @@
+{
+  "tag": "AWS.GeoPlaces",
+  "module": "geo-places",
+  "alias": "geoPlaces",
+  "resources": {},
+  "builder": "makeGeoPlacesHttpBinding",
+  "builders": {
+    "makeGeoPlacesHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "Autocomplete": {
+      "operation": "autocomplete",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "Geocode": {
+      "operation": "geocode",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetPlace": {
+      "operation": "getPlace",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ReverseGeocode": {
+      "operation": "reverseGeocode",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SearchNearby": {
+      "operation": "searchNearby",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SearchText": {
+      "operation": "searchText",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "Suggest": {
+      "operation": "suggest",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

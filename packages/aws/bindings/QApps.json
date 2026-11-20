@@ -1,0 +1,347 @@
+{
+  "tag": "AWS.QApps",
+  "module": "qapps",
+  "resources": {
+    "QApp": {
+      "file": "QApp.ts"
+    }
+  },
+  "builder": "makeQAppHttpBinding",
+  "builders": {
+    "makeQAppHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      }
+    },
+    "makeQAppsInstanceHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "AssociateLibraryItemReview": {
+      "operation": "associateLibraryItemReview",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "AssociateLibraryItemReviewRequest",
+        "omit": ["instanceId"]
+      },
+      "builder": "makeQAppsInstanceHttpBinding"
+    },
+    "AssociateQAppWithUser": {
+      "operation": "associateQAppWithUser",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "optional",
+        "interface": "AssociateQAppWithUserRequest",
+        "omit": ["instanceId", "appId"]
+      },
+      "with": {
+        "injectAppId": true
+      }
+    },
+    "BatchCreateCategory": {
+      "operation": "batchCreateCategory",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "BatchCreateCategoryRequest",
+        "omit": ["instanceId"]
+      },
+      "builder": "makeQAppsInstanceHttpBinding"
+    },
+    "BatchDeleteCategory": {
+      "operation": "batchDeleteCategory",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "BatchDeleteCategoryRequest",
+        "omit": ["instanceId"]
+      },
+      "builder": "makeQAppsInstanceHttpBinding"
+    },
+    "BatchUpdateCategory": {
+      "operation": "batchUpdateCategory",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "BatchUpdateCategoryRequest",
+        "omit": ["instanceId"]
+      },
+      "builder": "makeQAppsInstanceHttpBinding"
+    },
+    "CreateLibraryItem": {
+      "operation": "createLibraryItem",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "CreateLibraryItemRequest",
+        "omit": ["instanceId", "appId"]
+      },
+      "with": {
+        "injectAppId": true
+      }
+    },
+    "CreatePresignedUrl": {
+      "operation": "createPresignedUrl",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "CreatePresignedUrlRequest",
+        "omit": ["instanceId", "appId"]
+      },
+      "with": {
+        "injectAppId": true
+      }
+    },
+    "DeleteLibraryItem": {
+      "operation": "deleteLibraryItem",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteLibraryItemRequest",
+        "omit": ["instanceId"]
+      },
+      "builder": "makeQAppsInstanceHttpBinding"
+    },
+    "DescribeQAppPermissions": {
+      "operation": "describeQAppPermissions",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeQAppPermissionsRequest",
+        "omit": ["instanceId", "appId"]
+      },
+      "with": {
+        "injectAppId": true
+      }
+    },
+    "DisassociateLibraryItemReview": {
+      "operation": "disassociateLibraryItemReview",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "DisassociateLibraryItemReviewRequest",
+        "omit": ["instanceId"]
+      },
+      "builder": "makeQAppsInstanceHttpBinding"
+    },
+    "DisassociateQAppFromUser": {
+      "operation": "disassociateQAppFromUser",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "optional",
+        "interface": "DisassociateQAppFromUserRequest",
+        "omit": ["instanceId", "appId"]
+      },
+      "with": {
+        "injectAppId": true
+      }
+    },
+    "ExportQAppSessionData": {
+      "operation": "exportQAppSessionData",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "ExportQAppSessionDataRequest",
+        "omit": ["instanceId", "appId"]
+      }
+    },
+    "GetLibraryItem": {
+      "operation": "getLibraryItem",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "GetLibraryItemRequest",
+        "omit": ["instanceId"]
+      },
+      "builder": "makeQAppsInstanceHttpBinding"
+    },
+    "GetQAppSession": {
+      "operation": "getQAppSession",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "GetQAppSessionRequest",
+        "omit": ["instanceId", "appId"]
+      }
+    },
+    "GetQAppSessionMetadata": {
+      "operation": "getQAppSessionMetadata",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "GetQAppSessionMetadataRequest",
+        "omit": ["instanceId", "appId"]
+      }
+    },
+    "ImportDocument": {
+      "operation": "importDocument",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "ImportDocumentRequest",
+        "omit": ["instanceId", "appId"]
+      },
+      "with": {
+        "injectAppId": true
+      }
+    },
+    "ListCategories": {
+      "operation": "listCategories",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "optional",
+        "interface": "ListCategoriesRequest",
+        "omit": ["instanceId"]
+      },
+      "builder": "makeQAppsInstanceHttpBinding"
+    },
+    "ListLibraryItems": {
+      "operation": "listLibraryItems",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "optional",
+        "interface": "ListLibraryItemsRequest",
+        "omit": ["instanceId"]
+      },
+      "builder": "makeQAppsInstanceHttpBinding"
+    },
+    "ListQAppSessionData": {
+      "operation": "listQAppSessionData",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "ListQAppSessionDataRequest",
+        "omit": ["instanceId", "appId"]
+      }
+    },
+    "ListQApps": {
+      "operation": "listQApps",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "optional",
+        "interface": "ListQAppsRequest",
+        "omit": ["instanceId"]
+      },
+      "builder": "makeQAppsInstanceHttpBinding"
+    },
+    "PredictQApp": {
+      "operation": "predictQApp",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "optional",
+        "interface": "PredictQAppRequest",
+        "omit": ["instanceId"]
+      },
+      "builder": "makeQAppsInstanceHttpBinding"
+    },
+    "StartQAppSession": {
+      "operation": "startQAppSession",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "StartQAppSessionRequest",
+        "omit": ["instanceId", "appId"]
+      },
+      "with": {
+        "injectAppId": true
+      }
+    },
+    "StopQAppSession": {
+      "operation": "stopQAppSession",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "StopQAppSessionRequest",
+        "omit": ["instanceId", "appId"]
+      }
+    },
+    "UpdateLibraryItem": {
+      "operation": "updateLibraryItem",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateLibraryItemRequest",
+        "omit": ["instanceId"]
+      },
+      "builder": "makeQAppsInstanceHttpBinding"
+    },
+    "UpdateLibraryItemMetadata": {
+      "operation": "updateLibraryItemMetadata",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateLibraryItemMetadataRequest",
+        "omit": ["instanceId"]
+      },
+      "builder": "makeQAppsInstanceHttpBinding"
+    },
+    "UpdateQAppPermissions": {
+      "operation": "updateQAppPermissions",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "optional",
+        "interface": "UpdateQAppPermissionsRequest",
+        "omit": ["instanceId", "appId"]
+      },
+      "with": {
+        "injectAppId": true
+      }
+    },
+    "UpdateQAppSession": {
+      "operation": "updateQAppSession",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateQAppSessionRequest",
+        "omit": ["instanceId", "appId"]
+      }
+    },
+    "UpdateQAppSessionMetadata": {
+      "operation": "updateQAppSessionMetadata",
+      "resource": "QApp",
+      "param": "app",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateQAppSessionMetadataRequest",
+        "omit": ["instanceId", "appId"]
+      }
+    }
+  }
+}

@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/emr";
+import * as emr from "@distilled.cloud/aws/emr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEmrClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -28,4 +31,13 @@ export interface GetManagedScalingPolicy extends Binding.Service<
 > {}
 export const GetManagedScalingPolicy = Binding.Service<GetManagedScalingPolicy>(
   "AWS.EMR.GetManagedScalingPolicy",
+);
+
+export const GetManagedScalingPolicyHttp = Layer.effect(
+  GetManagedScalingPolicy,
+  makeEmrClusterHttpBinding({
+    tag: "AWS.EMR.GetManagedScalingPolicy",
+    operation: emr.getManagedScalingPolicy,
+    actions: ["elasticmapreduce:GetManagedScalingPolicy"],
+  }),
 );

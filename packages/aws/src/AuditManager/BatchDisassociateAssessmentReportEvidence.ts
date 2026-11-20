@@ -1,7 +1,9 @@
-import type * as auditmanager from "@distilled.cloud/aws/auditmanager";
+import * as auditmanager from "@distilled.cloud/aws/auditmanager";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Assessment } from "./Assessment.ts";
+import { makeAssessmentScopedHttpBinding } from "./BindingHttp.ts";
 
 /** `BatchDisassociateAssessmentReportEvidence` request with `assessmentId` injected from the bound {@link Assessment}. */
 export interface BatchDisassociateAssessmentReportEvidenceRequest extends Omit<
@@ -43,3 +45,12 @@ export const BatchDisassociateAssessmentReportEvidence =
   Binding.Service<BatchDisassociateAssessmentReportEvidence>(
     "AWS.AuditManager.BatchDisassociateAssessmentReportEvidence",
   );
+
+export const BatchDisassociateAssessmentReportEvidenceHttp = Layer.effect(
+  BatchDisassociateAssessmentReportEvidence,
+  makeAssessmentScopedHttpBinding({
+    tag: "AWS.AuditManager.BatchDisassociateAssessmentReportEvidence",
+    operation: auditmanager.batchDisassociateAssessmentReportEvidence,
+    actions: ["auditmanager:BatchDisassociateAssessmentReportEvidence"],
+  }),
+);

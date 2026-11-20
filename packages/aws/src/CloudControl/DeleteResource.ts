@@ -1,6 +1,8 @@
-import type * as cloudcontrol from "@distilled.cloud/aws/cloudcontrol";
+import * as cloudcontrol from "@distilled.cloud/aws/cloudcontrol";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudControlHttpBinding } from "./BindingHttp.ts";
 import type { CloudControlBindingOptions } from "./BindingOptions.ts";
 
 /**
@@ -43,3 +45,12 @@ export interface DeleteResource extends Binding.Service<
 > {}
 
 export const DeleteResource = Binding.Service<DeleteResource>("AWS.CloudControl.DeleteResource");
+
+export const DeleteResourceHttp = Layer.effect(
+  DeleteResource,
+  makeCloudControlHttpBinding({
+    tag: "AWS.CloudControl.DeleteResource",
+    operation: cloudcontrol.deleteResource,
+    actions: ["cloudformation:DeleteResource"],
+  }),
+);

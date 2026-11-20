@@ -1,7 +1,9 @@
-import type * as emr from "@distilled.cloud/aws/emr-serverless";
+import * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeEmrServerlessHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request accepted by the {@link GetSessionEndpoint} runtime callable. The
@@ -42,4 +44,14 @@ export interface GetSessionEndpoint extends Binding.Service<
 > {}
 export const GetSessionEndpoint = Binding.Service<GetSessionEndpoint>(
   "AWS.EMRServerless.GetSessionEndpoint",
+);
+
+export const GetSessionEndpointHttp = Layer.effect(
+  GetSessionEndpoint,
+  makeEmrServerlessHttpBinding({
+    tag: "AWS.EMRServerless.GetSessionEndpoint",
+    operation: emr.getSessionEndpoint,
+    actions: ["emr-serverless:GetSessionEndpoint"],
+    subresources: ["/sessions/*"],
+  }),
 );

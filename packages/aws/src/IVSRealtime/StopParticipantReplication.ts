@@ -1,6 +1,8 @@
-import type * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
+import * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsRealtimeReplicationHttpBinding } from "./BindingHttp.ts";
 import type { Stage } from "./Stage.ts";
 
 /**
@@ -46,4 +48,13 @@ export interface StopParticipantReplication extends Binding.Service<
 > {}
 export const StopParticipantReplication = Binding.Service<StopParticipantReplication>(
   "AWS.IVSRealtime.StopParticipantReplication",
+);
+
+export const StopParticipantReplicationHttp = Layer.effect(
+  StopParticipantReplication,
+  makeIvsRealtimeReplicationHttpBinding({
+    tag: "AWS.IVSRealtime.StopParticipantReplication",
+    operation: ivsrealtime.stopParticipantReplication,
+    actions: ["ivs:StopParticipantReplication"],
+  }),
 );

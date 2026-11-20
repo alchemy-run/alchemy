@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/databrew";
+import * as databrew from "@distilled.cloud/aws/databrew";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataBrewJobHttpBinding } from "./BindingHttp.ts";
 import type { Job } from "./Job.ts";
 
 export interface StopJobRunRequest extends Omit<SVC.StopJobRunRequest, "Name"> {}
@@ -28,3 +31,12 @@ export interface StopJobRun extends Binding.Service<
   >
 > {}
 export const StopJobRun = Binding.Service<StopJobRun>("AWS.DataBrew.StopJobRun");
+
+export const StopJobRunHttp = Layer.effect(
+  StopJobRun,
+  makeDataBrewJobHttpBinding({
+    tag: "AWS.DataBrew.StopJobRun",
+    operation: databrew.stopJobRun,
+    actions: ["databrew:StopJobRun"],
+  }),
+);

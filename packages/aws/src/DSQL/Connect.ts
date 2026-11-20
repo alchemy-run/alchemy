@@ -1,9 +1,17 @@
+import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type { PresignError } from "@distilled.cloud/aws/Presign";
+import type * as Region from "@distilled.cloud/aws/Region";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as Effect from "effect/Effect";
-import type { SqlConnectionInfo } from "../Connection/internal.ts";
-import { connectEnvPrefix as makeConnectEnvPrefix } from "../Connection/internal.ts";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
+import { generateDbAuthToken } from "../Connection/DbAuthToken.ts";
+import {
+  type SqlConnectionInfo,
+  connectEnvPrefix as makeConnectEnvPrefix,
+  formatSqlConnectionUrl,
+} from "../Connection/internal.ts";
 import type { Cluster } from "./Cluster.ts";
 
 export interface ConnectOptions {
@@ -88,3 +96,77 @@ export interface Connect extends Binding.Service<
   ) => Effect.Effect<Effect.Effect<SqlConnectionInfo, PresignError, RuntimeContext>>
 > {}
 export const Connect = Binding.Service<Connect>("AWS.DSQL.Connect");
+
+const DSQL_PORT = 5432;
+
+/**
+ * IAM-token implementation of {@link Connect}. At deploy time it grants
+ * `dsql:DbConnect` (or `dsql:DbConnectAdmin`) on the cluster to the host
+ * Function and publishes the endpoint as `DSQL_{LOGICAL_ID}_HOST`; at runtime
+ * it presigns a fresh auth token (client-side SigV4 — no API call) with the
+ * Function's own credentials and formats the full connection descriptor.
+ */
+export const ConnectHttp = Layer.effect(
+  Connect,
+  Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
+    // Captured at layer build so the runtime callable only requires
+    // RuntimeContext — the presign resolves credentials lazily from the
+    // service on every mint, so refreshed execution-role creds are honored.
+    const services = yield* AWSBindings.withCredentials(
+      Effect.context<Credentials.Credentials | Region.Region>(),
+    );
+
+    return Effect.fn(function* (cluster: Cluster, options?: ConnectOptions) {
+      const Host = yield* cluster.endpoint;
+      const admin = options?.admin ?? false;
+
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const prefix = connectEnvPrefix(cluster.LogicalId);
+        yield* bind`AWS.DSQL.Connect(${cluster})`({
+          env: {
+            [`${prefix}_HOST`]: cluster.endpoint,
+          },
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [admin ? "dsql:DbConnectAdmin" : "dsql:DbConnect"],
+              Resource: [cluster.clusterArn],
+            },
+          ],
+        });
+      }
+
+      const username = admin ? "admin" : options?.username;
+      const database = options?.database ?? "postgres";
+
+      return Effect.gen(function* () {
+        const host = yield* Host;
+        if (!host) {
+          return yield* Effect.die(`DSQL endpoint for '${cluster.LogicalId}' is not available yet`);
+        }
+        const password = yield* generateDbAuthToken({
+          service: "dsql",
+          hostname: host,
+          action: admin ? "DbConnectAdmin" : "DbConnect",
+        }).pipe(Effect.provideContext(services));
+        return {
+          host,
+          port: DSQL_PORT,
+          database,
+          username,
+          password,
+          ssl: true,
+          url: formatSqlConnectionUrl({
+            host,
+            port: DSQL_PORT,
+            database,
+            username,
+            password,
+            ssl: true,
+          }),
+        } satisfies SqlConnectionInfo;
+      });
+    });
+  }),
+);

@@ -1,7 +1,9 @@
-import type * as emr from "@distilled.cloud/aws/emr-serverless";
+import * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeEmrServerlessHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request accepted by the {@link ListJobRunAttempts} runtime callable. The
@@ -41,4 +43,14 @@ export interface ListJobRunAttempts extends Binding.Service<
 > {}
 export const ListJobRunAttempts = Binding.Service<ListJobRunAttempts>(
   "AWS.EMRServerless.ListJobRunAttempts",
+);
+
+export const ListJobRunAttemptsHttp = Layer.effect(
+  ListJobRunAttempts,
+  makeEmrServerlessHttpBinding({
+    tag: "AWS.EMRServerless.ListJobRunAttempts",
+    operation: emr.listJobRunAttempts,
+    actions: ["emr-serverless:ListJobRunAttempts"],
+    subresources: ["/jobruns/*"],
+  }),
 );

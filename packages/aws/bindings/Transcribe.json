@@ -1,0 +1,227 @@
+{
+  "tag": "AWS.Transcribe",
+  "module": "transcribe",
+  "resources": {},
+  "builder": "makeTranscribeHttpBinding",
+  "builders": {
+    "makeTranscribeHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "CreateCallAnalyticsCategory": {
+      "operation": "createCallAnalyticsCategory",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateMedicalVocabulary": {
+      "operation": "createMedicalVocabulary",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateVocabulary": {
+      "operation": "createVocabulary",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateVocabularyFilter": {
+      "operation": "createVocabularyFilter",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteCallAnalyticsCategory": {
+      "operation": "deleteCallAnalyticsCategory",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteCallAnalyticsJob": {
+      "operation": "deleteCallAnalyticsJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteLanguageModel": {
+      "operation": "deleteLanguageModel",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteMedicalScribeJob": {
+      "operation": "deleteMedicalScribeJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteMedicalTranscriptionJob": {
+      "operation": "deleteMedicalTranscriptionJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteMedicalVocabulary": {
+      "operation": "deleteMedicalVocabulary",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteTranscriptionJob": {
+      "operation": "deleteTranscriptionJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteVocabulary": {
+      "operation": "deleteVocabulary",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteVocabularyFilter": {
+      "operation": "deleteVocabularyFilter",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeLanguageModel": {
+      "operation": "describeLanguageModel",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetCallAnalyticsCategory": {
+      "operation": "getCallAnalyticsCategory",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetCallAnalyticsJob": {
+      "operation": "getCallAnalyticsJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetMedicalScribeJob": {
+      "operation": "getMedicalScribeJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetMedicalTranscriptionJob": {
+      "operation": "getMedicalTranscriptionJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetMedicalVocabulary": {
+      "operation": "getMedicalVocabulary",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetTranscriptionJob": {
+      "operation": "getTranscriptionJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetVocabulary": {
+      "operation": "getVocabulary",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetVocabularyFilter": {
+      "operation": "getVocabularyFilter",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListCallAnalyticsCategories": {
+      "operation": "listCallAnalyticsCategories"
+    },
+    "ListCallAnalyticsJobs": {
+      "operation": "listCallAnalyticsJobs"
+    },
+    "ListLanguageModels": {
+      "operation": "listLanguageModels"
+    },
+    "ListMedicalScribeJobs": {
+      "operation": "listMedicalScribeJobs"
+    },
+    "ListMedicalTranscriptionJobs": {
+      "operation": "listMedicalTranscriptionJobs"
+    },
+    "ListMedicalVocabularies": {
+      "operation": "listMedicalVocabularies"
+    },
+    "ListTagsForResource": {
+      "operation": "listTagsForResource",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListTranscriptionJobs": {
+      "operation": "listTranscriptionJobs"
+    },
+    "ListVocabularies": {
+      "operation": "listVocabularies"
+    },
+    "ListVocabularyFilters": {
+      "operation": "listVocabularyFilters"
+    },
+    "StartMedicalTranscriptionJob": {
+      "operation": "startMedicalTranscriptionJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartTranscriptionJob": {
+      "operation": "startTranscriptionJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "TagResource": {
+      "operation": "tagResource",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UntagResource": {
+      "operation": "untagResource",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateCallAnalyticsCategory": {
+      "operation": "updateCallAnalyticsCategory",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateMedicalVocabulary": {
+      "operation": "updateMedicalVocabulary",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateVocabulary": {
+      "operation": "updateVocabulary",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateVocabularyFilter": {
+      "operation": "updateVocabularyFilter",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

@@ -1,6 +1,7 @@
-import type * as apprunner from "@distilled.cloud/aws/apprunner";
+import * as apprunner from "@distilled.cloud/aws/apprunner";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import { makeAppRunnerHttpBinding } from "./BindingHttp.ts";
 import type { Service } from "./Service.ts";
 
 /**
@@ -32,3 +33,19 @@ export interface ResumeService extends Binding.Service<
   >
 > {}
 export const ResumeService = Binding.Service<ResumeService>("AWS.AppRunner.ResumeService");
+
+/**
+ * HTTP implementation of the {@link ResumeService} binding. Calls
+ * `apprunner:ResumeService` with the Lambda's IAM role, scoped to the bound
+ * service.
+ */
+export const ResumeServiceHttp = makeAppRunnerHttpBinding(ResumeService, {
+  operation: apprunner.resumeService,
+  spec: (service: Service) => ({
+    identifiers: { ServiceArn: service.serviceArn },
+    iam: () => ({
+      actions: ["apprunner:ResumeService"],
+      resources: [service.serviceArn],
+    }),
+  }),
+});

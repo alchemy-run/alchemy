@@ -3,7 +3,12 @@ import type * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Binding from "alchemy/Binding";
 import type { SourceError } from "effect/ConfigProvider";
 import type * as Effect from "effect/Effect";
-import type { IngestRequest, PipelineIngestError } from "./BindingHttp.ts";
+import * as Layer from "effect/Layer";
+import {
+  type IngestRequest,
+  type PipelineIngestError,
+  makeOsisIngestBinding,
+} from "./BindingHttp.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 export type { IngestRequest } from "./BindingHttp.ts";
@@ -50,3 +55,5 @@ export interface Ingest extends Binding.Service<
   >
 > {}
 export const Ingest = Binding.Service<Ingest>("AWS.OSIS.Ingest");
+
+export const IngestHttp = Layer.effect(Ingest, makeOsisIngestBinding);

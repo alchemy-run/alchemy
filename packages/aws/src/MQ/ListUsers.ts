@@ -1,6 +1,8 @@
-import type * as mq from "@distilled.cloud/aws/mq";
+import * as mq from "@distilled.cloud/aws/mq";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMqBrokerHttpBinding } from "./BindingHttp.ts";
 import type { Broker } from "./Broker.ts";
 
 /**
@@ -32,3 +34,16 @@ export interface ListUsers extends Binding.Service<
   >
 > {}
 export const ListUsers = Binding.Service<ListUsers>("AWS.MQ.ListUsers");
+
+export const ListUsersHttp = Layer.effect(
+  ListUsers,
+  makeMqBrokerHttpBinding<
+    Omit<mq.ListUsersRequest, "BrokerId">,
+    mq.ListUsersResponse,
+    mq.ListUsersError
+  >({
+    capability: "ListUsers",
+    operation: mq.listUsers,
+    iamActions: ["mq:ListUsers"],
+  }),
+);

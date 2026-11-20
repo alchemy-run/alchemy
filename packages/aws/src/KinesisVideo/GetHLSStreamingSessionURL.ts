@@ -1,7 +1,9 @@
 import type * as kv from "@distilled.cloud/aws/kinesis-video";
-import type * as kvam from "@distilled.cloud/aws/kinesis-video-archived-media";
+import * as kvam from "@distilled.cloud/aws/kinesis-video-archived-media";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStreamMediaHttpBinding } from "./BindingHttp.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface GetHLSStreamingSessionURLRequest extends Omit<
@@ -72,4 +74,14 @@ export interface GetHLSStreamingSessionURL extends Binding.Service<
 
 export const GetHLSStreamingSessionURL = Binding.Service<GetHLSStreamingSessionURL>(
   "AWS.KinesisVideo.GetHLSStreamingSessionURL",
+);
+
+export const GetHLSStreamingSessionURLHttp = Layer.effect(
+  GetHLSStreamingSessionURL,
+  makeStreamMediaHttpBinding({
+    tag: "AWS.KinesisVideo.GetHLSStreamingSessionURL",
+    apiName: "GET_HLS_STREAMING_SESSION_URL",
+    actions: ["kinesisvideo:GetHLSStreamingSessionURL"],
+    operation: kvam.getHLSStreamingSessionURL,
+  }),
 );

@@ -1,0 +1,138 @@
+{
+  "tag": "AWS.ImageBuilder",
+  "module": "imagebuilder",
+  "resources": {
+    "ImagePipeline": {
+      "file": "ImagePipeline.ts"
+    }
+  },
+  "builder": "makeImageBuilderAccountHttpBinding",
+  "builders": {
+    "makeImageBuilderAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeImageBuilderPipelineHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CancelImageCreation": {
+      "operation": "cancelImageCreation",
+      "request": {
+        "mode": "required",
+        "omit": ["clientToken"],
+        "inline": true
+      }
+    },
+    "DeleteImage": {
+      "operation": "deleteImage",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetImage": {
+      "operation": "getImage",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetImagePipeline": {
+      "operation": "getImagePipeline",
+      "resource": "ImagePipeline",
+      "param": "pipeline",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeImageBuilderPipelineHttpBinding"
+    },
+    "GetWorkflowExecution": {
+      "operation": "getWorkflowExecution",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetWorkflowStepExecution": {
+      "operation": "getWorkflowStepExecution",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListImageBuildVersions": {
+      "operation": "listImageBuildVersions",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListImagePackages": {
+      "operation": "listImagePackages",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListImagePipelineImages": {
+      "operation": "listImagePipelineImages",
+      "resource": "ImagePipeline",
+      "param": "pipeline",
+      "request": {
+        "mode": "optional",
+        "omit": ["imagePipelineArn"],
+        "inline": true
+      },
+      "builder": "makeImageBuilderPipelineHttpBinding"
+    },
+    "ListImageScanFindingAggregations": {
+      "operation": "listImageScanFindingAggregations",
+      "note": "Image Builder serves scan aggregations from Amazon Inspector, so the API authorizes the dependent inspector2 action too — without it the call fails with AccessDeniedException even when the imagebuilder action is granted."
+    },
+    "ListImageScanFindings": {
+      "operation": "listImageScanFindings",
+      "note": "Image Builder serves scan findings from Amazon Inspector, so the API authorizes the dependent inspector2 action too — without it the call fails with AccessDeniedException even when the imagebuilder action is granted."
+    },
+    "ListImages": {
+      "operation": "listImages"
+    },
+    "ListWaitingWorkflowSteps": {
+      "operation": "listWaitingWorkflowSteps"
+    },
+    "ListWorkflowExecutions": {
+      "operation": "listWorkflowExecutions",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListWorkflowStepExecutions": {
+      "operation": "listWorkflowStepExecutions",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "RetryImage": {
+      "operation": "retryImage",
+      "request": {
+        "mode": "required",
+        "omit": ["clientToken"],
+        "inline": true
+      }
+    },
+    "SendWorkflowStepAction": {
+      "operation": "sendWorkflowStepAction",
+      "request": {
+        "mode": "required",
+        "omit": ["clientToken"],
+        "inline": true
+      }
+    },
+    "StartImagePipelineExecution": {
+      "operation": "startImagePipelineExecution",
+      "resource": "ImagePipeline",
+      "param": "pipeline",
+      "request": {
+        "mode": "optional",
+        "omit": ["imagePipelineArn", "clientToken"],
+        "inline": true
+      },
+      "builder": "makeImageBuilderPipelineHttpBinding"
+    }
+  }
+}

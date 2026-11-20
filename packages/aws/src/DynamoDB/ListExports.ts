@@ -1,6 +1,8 @@
-import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableArnHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface ListExportsRequest extends Omit<DynamoDB.ListExportsInput, "TableArn"> {}
@@ -35,3 +37,13 @@ export interface ListExports extends Binding.Service<
   >
 > {}
 export const ListExports = Binding.Service<ListExports>("AWS.DynamoDB.ListExports");
+
+export const ListExportsHttp = Layer.effect(
+  ListExports,
+  makeTableArnHttpBinding({
+    tag: "AWS.DynamoDB.ListExports",
+    key: "TableArn",
+    operation: DynamoDB.listExports,
+    actions: ["dynamodb:ListExports"],
+  }),
+);

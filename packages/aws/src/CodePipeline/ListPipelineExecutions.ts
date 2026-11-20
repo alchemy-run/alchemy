@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codepipeline";
+import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodePipelinePipelineNameHttpBinding } from "./BindingHttp.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 export interface ListPipelineExecutionsRequest extends Omit<
@@ -36,4 +39,13 @@ export interface ListPipelineExecutions extends Binding.Service<
 > {}
 export const ListPipelineExecutions = Binding.Service<ListPipelineExecutions>(
   "AWS.CodePipeline.ListPipelineExecutions",
+);
+
+export const ListPipelineExecutionsHttp = Layer.effect(
+  ListPipelineExecutions,
+  makeCodePipelinePipelineNameHttpBinding({
+    tag: "AWS.CodePipeline.ListPipelineExecutions",
+    operation: codepipeline.listPipelineExecutions,
+    actions: ["codepipeline:ListPipelineExecutions"],
+  }),
 );

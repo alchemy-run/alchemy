@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codepipeline";
+import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodePipelineJobHttpBinding } from "./BindingHttp.ts";
 
 export interface PutJobFailureResultRequest extends SVC.PutJobFailureResultInput {}
 
@@ -36,4 +39,13 @@ export interface PutJobFailureResult extends Binding.Service<
 > {}
 export const PutJobFailureResult = Binding.Service<PutJobFailureResult>(
   "AWS.CodePipeline.PutJobFailureResult",
+);
+
+export const PutJobFailureResultHttp = Layer.effect(
+  PutJobFailureResult,
+  makeCodePipelineJobHttpBinding({
+    tag: "AWS.CodePipeline.PutJobFailureResult",
+    operation: codepipeline.putJobFailureResult,
+    actions: ["codepipeline:PutJobFailureResult"],
+  }),
 );

@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codedeploy";
+import * as codedeploy from "@distilled.cloud/aws/codedeploy";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeDeployGroupHttpBinding } from "./BindingHttp.ts";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
 /**
@@ -33,4 +36,13 @@ export interface ListDeploymentTargets extends Binding.Service<
 > {}
 export const ListDeploymentTargets = Binding.Service<ListDeploymentTargets>(
   "AWS.CodeDeploy.ListDeploymentTargets",
+);
+
+export const ListDeploymentTargetsHttp = Layer.effect(
+  ListDeploymentTargets,
+  makeCodeDeployGroupHttpBinding({
+    tag: "AWS.CodeDeploy.ListDeploymentTargets",
+    operation: codedeploy.listDeploymentTargets,
+    actions: ["codedeploy:ListDeploymentTargets"],
+  }),
 );

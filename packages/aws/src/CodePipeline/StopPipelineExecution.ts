@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codepipeline";
+import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodePipelinePipelineNameHttpBinding } from "./BindingHttp.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 export interface StopPipelineExecutionRequest extends Omit<
@@ -39,4 +42,13 @@ export interface StopPipelineExecution extends Binding.Service<
 > {}
 export const StopPipelineExecution = Binding.Service<StopPipelineExecution>(
   "AWS.CodePipeline.StopPipelineExecution",
+);
+
+export const StopPipelineExecutionHttp = Layer.effect(
+  StopPipelineExecution,
+  makeCodePipelinePipelineNameHttpBinding({
+    tag: "AWS.CodePipeline.StopPipelineExecution",
+    operation: codepipeline.stopPipelineExecution,
+    actions: ["codepipeline:StopPipelineExecution"],
+  }),
 );

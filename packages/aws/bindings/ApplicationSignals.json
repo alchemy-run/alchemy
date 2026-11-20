@@ -1,0 +1,124 @@
+{
+  "tag": "AWS.ApplicationSignals",
+  "module": "application-signals",
+  "alias": "appsignals",
+  "resources": {
+    "ServiceLevelObjective": {
+      "file": "ServiceLevelObjective.ts"
+    }
+  },
+  "builder": "makeApplicationSignalsAccountHttpBinding",
+  "builders": {
+    "makeApplicationSignalsAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeSloBatchHttpBinding": {},
+    "makeSloIdHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchGetServiceLevelObjectiveBudgetReport": {
+      "operation": "batchGetServiceLevelObjectiveBudgetReport",
+      "resource": "ServiceLevelObjective",
+      "param": "slo",
+      "request": {
+        "mode": "required",
+        "interface": "GetBudgetReportRequest",
+        "omit": ["SloIds"]
+      },
+      "builder": "makeSloBatchHttpBinding",
+      "with": {
+        "accountActions": ["cloudwatch:GetMetricData"]
+      },
+      "note": "Budget reports evaluate the SLI with the CALLER's credentials — verified live: without cloudwatch:GetMetricData the operation fails with AccessDeniedException (empty message)."
+    },
+    "BatchUpdateExclusionWindows": {
+      "operation": "batchUpdateExclusionWindows",
+      "resource": "ServiceLevelObjective",
+      "param": "slo",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateExclusionWindowsRequest",
+        "omit": ["SloIds"]
+      },
+      "builder": "makeSloBatchHttpBinding"
+    },
+    "GetService": {
+      "operation": "getService",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetServiceLevelObjective": {
+      "operation": "getServiceLevelObjective",
+      "resource": "ServiceLevelObjective",
+      "param": "slo",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeSloIdHttpBinding"
+    },
+    "ListAuditFindings": {
+      "operation": "listAuditFindings",
+      "request": {
+        "mode": "required"
+      },
+      "note": "The auditors run with the CALLER's credentials — verified live: a service-target audit fails with AccessDeniedException (empty message) unless the caller can also enumerate SLOs and read metric data. Deeper detail levels (trace/log auditors) may need further read permissions (xray/logs)."
+    },
+    "ListEntityEvents": {
+      "operation": "listEntityEvents",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListServiceDependencies": {
+      "operation": "listServiceDependencies",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListServiceDependents": {
+      "operation": "listServiceDependents",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListServiceLevelObjectiveExclusionWindows": {
+      "operation": "listServiceLevelObjectiveExclusionWindows",
+      "resource": "ServiceLevelObjective",
+      "param": "slo",
+      "request": {
+        "mode": "optional",
+        "interface": "ListExclusionWindowsRequest",
+        "omit": ["Id"]
+      },
+      "builder": "makeSloIdHttpBinding"
+    },
+    "ListServiceLevelObjectives": {
+      "operation": "listServiceLevelObjectives",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListServiceOperations": {
+      "operation": "listServiceOperations",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListServiceStates": {
+      "operation": "listServiceStates",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListServices": {
+      "operation": "listServices",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

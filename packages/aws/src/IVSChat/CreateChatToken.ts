@@ -1,7 +1,10 @@
-import type * as ivschat from "@distilled.cloud/aws/ivschat";
+import * as ivschat from "@distilled.cloud/aws/ivschat";
 import * as Binding from "alchemy/Binding";
+import { toWireMinutes } from "alchemy/Util/Duration";
 import type * as Duration from "effect/Duration";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsChatRoomHttpBinding } from "./BindingHttp.ts";
 import type { Room } from "./Room.ts";
 
 /**
@@ -74,3 +77,16 @@ export interface CreateChatToken extends Binding.Service<
   >
 > {}
 export const CreateChatToken = Binding.Service<CreateChatToken>("AWS.IVSChat.CreateChatToken");
+
+export const CreateChatTokenHttp = Layer.effect(
+  CreateChatToken,
+  makeIvsChatRoomHttpBinding({
+    tag: "AWS.IVSChat.CreateChatToken",
+    operation: ivschat.createChatToken,
+    actions: ["ivschat:CreateChatToken"],
+    prepare: ({ sessionDuration, ...request }: CreateChatTokenRequest) => ({
+      ...request,
+      sessionDurationInMinutes: toWireMinutes(sessionDuration),
+    }),
+  }),
+);

@@ -1,7 +1,10 @@
-import type * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
+import * as ivsrealtime from "@distilled.cloud/aws/ivs-realtime";
 import * as Binding from "alchemy/Binding";
+import { toWireSeconds } from "alchemy/Util/Duration";
 import type * as Duration from "effect/Duration";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIvsRealtimeReplicationHttpBinding } from "./BindingHttp.ts";
 import type { Stage } from "./Stage.ts";
 
 /**
@@ -60,4 +63,23 @@ export interface StartParticipantReplication extends Binding.Service<
 > {}
 export const StartParticipantReplication = Binding.Service<StartParticipantReplication>(
   "AWS.IVSRealtime.StartParticipantReplication",
+);
+
+export const StartParticipantReplicationHttp = Layer.effect(
+  StartParticipantReplication,
+  Effect.gen(function* () {
+    const make = yield* makeIvsRealtimeReplicationHttpBinding({
+      tag: "AWS.IVSRealtime.StartParticipantReplication",
+      operation: ivsrealtime.startParticipantReplication,
+      actions: ["ivs:StartParticipantReplication"],
+    });
+    return Effect.fn(function* (sourceStage: Stage, destinationStage: Stage) {
+      const startReplication = yield* make(sourceStage, destinationStage);
+      return ({ reconnectWindow, ...request }: StartParticipantReplicationRequest) =>
+        startReplication({
+          ...request,
+          reconnectWindowSeconds: toWireSeconds(reconnectWindow),
+        });
+    });
+  }),
 );

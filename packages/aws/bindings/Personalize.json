@@ -1,0 +1,176 @@
+{
+  "tag": "AWS.Personalize",
+  "module": "personalize",
+  "resources": {
+    "Dataset": {
+      "file": "Dataset.ts"
+    },
+    "EventTracker": {
+      "file": "EventTracker.ts"
+    }
+  },
+  "builder": "makePersonalizeAccountHttpBinding",
+  "builders": {
+    "makePersonalizeAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makePersonalizeDatasetHttpBinding": {},
+    "makePersonalizeEventTrackerHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "CreateBatchInferenceJob": {
+      "operation": "createBatchInferenceJob",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "passRole": true
+      }
+    },
+    "CreateCampaign": {
+      "operation": "createCampaign",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateDatasetImportJob": {
+      "operation": "createDatasetImportJob",
+      "request": {
+        "mode": "required"
+      },
+      "with": {
+        "passRole": true
+      }
+    },
+    "CreateSolution": {
+      "operation": "createSolution",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateSolutionVersion": {
+      "operation": "createSolutionVersion",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeBatchInferenceJob": {
+      "operation": "describeBatchInferenceJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeCampaign": {
+      "operation": "describeCampaign",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeDatasetImportJob": {
+      "operation": "describeDatasetImportJob",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeSolutionVersion": {
+      "operation": "describeSolutionVersion",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetActionRecommendations": {
+      "operation": "getActionRecommendations",
+      "request": {
+        "mode": "required"
+      },
+      "module": "personalize-runtime"
+    },
+    "GetPersonalizedRanking": {
+      "operation": "getPersonalizedRanking",
+      "request": {
+        "mode": "required"
+      },
+      "module": "personalize-runtime"
+    },
+    "GetRecommendations": {
+      "operation": "getRecommendations",
+      "request": {
+        "mode": "required"
+      },
+      "module": "personalize-runtime"
+    },
+    "GetSolutionMetrics": {
+      "operation": "getSolutionMetrics",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "PutActionInteractions": {
+      "operation": "putActionInteractions",
+      "resource": "EventTracker",
+      "param": "tracker",
+      "request": {
+        "mode": "required",
+        "interface": "PutActionInteractionsRequest",
+        "omit": ["trackingId"]
+      },
+      "builder": "makePersonalizeEventTrackerHttpBinding",
+      "module": "personalize-events"
+    },
+    "PutActions": {
+      "operation": "putActions",
+      "resource": "Dataset",
+      "request": {
+        "mode": "required",
+        "interface": "PutActionsRequest",
+        "omit": ["datasetArn"]
+      },
+      "builder": "makePersonalizeDatasetHttpBinding",
+      "module": "personalize-events"
+    },
+    "PutEvents": {
+      "operation": "putEvents",
+      "resource": "EventTracker",
+      "param": "tracker",
+      "request": {
+        "mode": "required",
+        "interface": "PutEventsRequest",
+        "omit": ["trackingId"]
+      },
+      "builder": "makePersonalizeEventTrackerHttpBinding",
+      "module": "personalize-events"
+    },
+    "PutItems": {
+      "operation": "putItems",
+      "resource": "Dataset",
+      "request": {
+        "mode": "required",
+        "interface": "PutItemsRequest",
+        "omit": ["datasetArn"]
+      },
+      "builder": "makePersonalizeDatasetHttpBinding",
+      "module": "personalize-events"
+    },
+    "PutUsers": {
+      "operation": "putUsers",
+      "resource": "Dataset",
+      "request": {
+        "mode": "required",
+        "interface": "PutUsersRequest",
+        "omit": ["datasetArn"]
+      },
+      "builder": "makePersonalizeDatasetHttpBinding",
+      "module": "personalize-events"
+    },
+    "UpdateCampaign": {
+      "operation": "updateCampaign",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

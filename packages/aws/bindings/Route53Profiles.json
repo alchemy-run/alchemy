@@ -1,0 +1,37 @@
+{
+  "tag": "AWS.Route53Profiles",
+  "module": "route53profiles",
+  "alias": "profiles",
+  "resources": {
+    "Profile": {
+      "file": "Profile.ts"
+    }
+  },
+  "builder": "makeProfilesHttpBinding",
+  "builders": {
+    "makeProfilesHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "ListProfileAssociations": {
+      "operation": "listProfileAssociations",
+      "resource": "Profile",
+      "request": {
+        "mode": "optional",
+        "interface": "ListProfileAssociationsRequest",
+        "omit": ["ProfileId"]
+      }
+    },
+    "ListProfileResourceAssociations": {
+      "operation": "listProfileResourceAssociations",
+      "resource": "Profile",
+      "request": {
+        "mode": "optional",
+        "interface": "ListProfileResourceAssociationsRequest",
+        "omit": ["ProfileId"]
+      }
+    }
+  }
+}

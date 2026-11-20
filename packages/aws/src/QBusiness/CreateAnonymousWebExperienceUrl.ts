@@ -1,7 +1,10 @@
-import type * as qbusiness from "@distilled.cloud/aws/qbusiness";
+import * as qbusiness from "@distilled.cloud/aws/qbusiness";
 import * as Binding from "alchemy/Binding";
+import { toWireMinutes } from "alchemy/Util/Duration";
 import type * as Duration from "effect/Duration";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQBusinessWebExperienceHttpBinding } from "./BindingHttp.ts";
 import type { WebExperience } from "./WebExperience.ts";
 
 /**
@@ -56,4 +59,16 @@ export interface CreateAnonymousWebExperienceUrl extends Binding.Service<
 > {}
 export const CreateAnonymousWebExperienceUrl = Binding.Service<CreateAnonymousWebExperienceUrl>(
   "AWS.QBusiness.CreateAnonymousWebExperienceUrl",
+);
+
+export const CreateAnonymousWebExperienceUrlHttp = Layer.effect(
+  CreateAnonymousWebExperienceUrl,
+  makeQBusinessWebExperienceHttpBinding({
+    tag: "AWS.QBusiness.CreateAnonymousWebExperienceUrl",
+    operation: qbusiness.createAnonymousWebExperienceUrl,
+    actions: ["qbusiness:CreateAnonymousWebExperienceUrl"],
+    prepare: (request: CreateAnonymousWebExperienceUrlRequest | undefined) => ({
+      sessionDurationInMinutes: toWireMinutes(request?.sessionDuration),
+    }),
+  }),
 );

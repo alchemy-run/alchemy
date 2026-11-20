@@ -1,0 +1,79 @@
+{
+  "tag": "AWS.Batch",
+  "module": "batch",
+  "resources": {
+    "JobQueue": {
+      "file": "JobQueue.ts"
+    }
+  },
+  "builder": "makeBatchJobHttpBinding",
+  "builders": {
+    "makeBatchJobHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeBatchQueueHttpBinding": {}
+  },
+  "bindings": {
+    "CancelJob": {
+      "operation": "cancelJob",
+      "resource": "JobQueue",
+      "param": "queue",
+      "request": {
+        "mode": "required",
+        "interface": "CancelJobRequest",
+        "omit": []
+      },
+      "note": "Job ARNs (arn:…:job/{jobId}) are only known at runtime, so the statement cannot enumerate them at deploy time."
+    },
+    "DescribeJobs": {
+      "operation": "describeJobs",
+      "resource": "JobQueue",
+      "param": "queue",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeJobsRequest",
+        "omit": []
+      },
+      "note": "batch:DescribeJobs does not support resource-level IAM."
+    },
+    "GetJobQueueSnapshot": {
+      "operation": "getJobQueueSnapshot",
+      "resource": "JobQueue",
+      "param": "queue",
+      "request": {
+        "mode": "optional",
+        "interface": "GetJobQueueSnapshotRequest",
+        "omit": ["jobQueue"]
+      },
+      "builder": "makeBatchQueueHttpBinding",
+      "note": "batch:GetJobQueueSnapshot supports the job-queue resource type — scope the grant to the bound queue's ARN."
+    },
+    "ListJobs": {
+      "operation": "listJobs",
+      "resource": "JobQueue",
+      "param": "queue",
+      "request": {
+        "mode": "optional",
+        "interface": "ListJobsRequest",
+        "omit": ["jobQueue"]
+      },
+      "builder": "makeBatchQueueHttpBinding",
+      "with": {
+        "wildcardIam": true
+      },
+      "note": "batch:ListJobs does not support resource-level IAM."
+    },
+    "TerminateJob": {
+      "operation": "terminateJob",
+      "resource": "JobQueue",
+      "param": "queue",
+      "request": {
+        "mode": "required",
+        "interface": "TerminateJobRequest",
+        "omit": []
+      },
+      "note": "Job ARNs (arn:…:job/{jobId}) are only known at runtime, so the statement cannot enumerate them at deploy time."
+    }
+  }
+}

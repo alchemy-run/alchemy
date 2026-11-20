@@ -1,0 +1,94 @@
+{
+  "tag": "AWS.InternetMonitor",
+  "module": "internetmonitor",
+  "alias": "im",
+  "resources": {
+    "Monitor": {
+      "file": "Monitor.ts"
+    }
+  },
+  "builder": "makeInternetMonitorMonitorHttpBinding",
+  "builders": {
+    "makeInternetMonitorAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeInternetMonitorMonitorHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetHealthEvent": {
+      "operation": "getHealthEvent",
+      "resource": "Monitor",
+      "request": {
+        "mode": "required",
+        "interface": "GetHealthEventRequest",
+        "omit": ["MonitorName"]
+      }
+    },
+    "GetInternetEvent": {
+      "operation": "getInternetEvent",
+      "request": {
+        "mode": "required",
+        "interface": "GetInternetEventRequest",
+        "omit": []
+      },
+      "builder": "makeInternetMonitorAccountHttpBinding"
+    },
+    "GetQueryResults": {
+      "operation": "getQueryResults",
+      "resource": "Monitor",
+      "request": {
+        "mode": "required",
+        "interface": "GetQueryResultsRequest",
+        "omit": ["MonitorName"]
+      }
+    },
+    "GetQueryStatus": {
+      "operation": "getQueryStatus",
+      "resource": "Monitor",
+      "request": {
+        "mode": "required",
+        "interface": "GetQueryStatusRequest",
+        "omit": ["MonitorName"]
+      }
+    },
+    "ListHealthEvents": {
+      "operation": "listHealthEvents",
+      "resource": "Monitor",
+      "request": {
+        "mode": "optional",
+        "interface": "ListHealthEventsRequest",
+        "omit": ["MonitorName"]
+      }
+    },
+    "ListInternetEvents": {
+      "operation": "listInternetEvents",
+      "request": {
+        "mode": "optional",
+        "interface": "ListInternetEventsRequest",
+        "omit": []
+      },
+      "builder": "makeInternetMonitorAccountHttpBinding"
+    },
+    "StartQuery": {
+      "operation": "startQuery",
+      "resource": "Monitor",
+      "request": {
+        "mode": "required",
+        "interface": "StartQueryRequest",
+        "omit": ["MonitorName"]
+      }
+    },
+    "StopQuery": {
+      "operation": "stopQuery",
+      "resource": "Monitor",
+      "request": {
+        "mode": "required",
+        "interface": "StopQueryRequest",
+        "omit": ["MonitorName"]
+      }
+    }
+  }
+}

@@ -1,6 +1,8 @@
-import type * as codeartifact from "@distilled.cloud/aws/codeartifact";
+import * as codeartifact from "@distilled.cloud/aws/codeartifact";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -45,4 +47,14 @@ export interface GetRepositoryEndpoint extends Binding.Service<
 
 export const GetRepositoryEndpoint = Binding.Service<GetRepositoryEndpoint>(
   "AWS.CodeArtifact.GetRepositoryEndpoint",
+);
+
+/** HTTP implementation of {@link GetRepositoryEndpoint} over the CodeArtifact API. */
+export const GetRepositoryEndpointHttp = Layer.effect(
+  GetRepositoryEndpoint,
+  makeRepositoryHttpBinding({
+    tag: "AWS.CodeArtifact.GetRepositoryEndpoint",
+    operation: codeartifact.getRepositoryEndpoint,
+    actions: ["codeartifact:GetRepositoryEndpoint"],
+  }),
 );

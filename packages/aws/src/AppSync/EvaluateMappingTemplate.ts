@@ -1,6 +1,8 @@
-import type * as appsync from "@distilled.cloud/aws/appsync";
+import * as appsync from "@distilled.cloud/aws/appsync";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAppSyncAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `appsync:EvaluateMappingTemplate` — evaluate a VTL
@@ -44,4 +46,19 @@ export interface EvaluateMappingTemplate extends Binding.Service<
 > {}
 export const EvaluateMappingTemplate = Binding.Service<EvaluateMappingTemplate>(
   "AWS.AppSync.EvaluateMappingTemplate",
+);
+
+/**
+ * HTTP implementation of the {@link EvaluateMappingTemplate} binding. Calls
+ * `appsync:EvaluateMappingTemplate` with the host Function's IAM role. The
+ * action defines no IAM resource types, so the grant is necessarily
+ * `Resource: "*"`.
+ */
+export const EvaluateMappingTemplateHttp = Layer.effect(
+  EvaluateMappingTemplate,
+  makeAppSyncAccountHttpBinding({
+    tag: "AWS.AppSync.EvaluateMappingTemplate",
+    actions: ["appsync:EvaluateMappingTemplate"],
+    operation: appsync.evaluateMappingTemplate,
+  }),
 );

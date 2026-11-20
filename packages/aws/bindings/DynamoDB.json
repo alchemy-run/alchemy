@@ -1,0 +1,23 @@
+{
+  "tag": "AWS.DynamoDB",
+  "module": "dynamodb",
+  "alias": "DynamoDB",
+  "resources": {},
+  "builder": "makeAccountHttpBinding",
+  "builders": {
+    "makeAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "ListTables": {
+      "operation": "listTables",
+      "request": {
+        "mode": "optional",
+        "interface": "ListTablesRequest",
+        "omit": []
+      }
+    }
+  }
+}

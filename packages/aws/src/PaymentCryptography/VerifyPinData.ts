@@ -1,6 +1,8 @@
-import type * as paymentcryptographydata from "@distilled.cloud/aws/payment-cryptography-data";
+import * as paymentcryptographydata from "@distilled.cloud/aws/payment-cryptography-data";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePaymentCryptographyKeyPairHttpBinding } from "./BindingHttp.ts";
 import type { Key } from "./Key.ts";
 
 export interface VerifyPinDataRequest extends Omit<
@@ -57,4 +59,21 @@ export interface VerifyPinData extends Binding.Service<
 
 export const VerifyPinData = Binding.Service<VerifyPinData>(
   "AWS.PaymentCryptography.VerifyPinData",
+);
+
+/**
+ * HTTP implementation of {@link VerifyPinData} — grants the host Function
+ * `payment-cryptography:VerifyPinData` on both the verification key (PVK)
+ * and the encryption key (PEK) and calls the Payment Cryptography Data API
+ * at runtime. A PIN mismatch fails with the typed
+ * `VerificationFailedException`.
+ */
+export const VerifyPinDataHttp = Layer.effect(
+  VerifyPinData,
+  makePaymentCryptographyKeyPairHttpBinding({
+    tag: "AWS.PaymentCryptography.VerifyPinData",
+    operation: paymentcryptographydata.verifyPinData,
+    actions: ["payment-cryptography:VerifyPinData"],
+    keyFields: ["VerificationKeyIdentifier", "EncryptionKeyIdentifier"],
+  }),
 );

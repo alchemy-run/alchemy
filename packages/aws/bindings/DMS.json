@@ -1,0 +1,132 @@
+{
+  "tag": "AWS.DMS",
+  "module": "database-migration-service",
+  "alias": "dms",
+  "resources": {
+    "Endpoint": {
+      "file": "Endpoint.ts"
+    },
+    "ReplicationInstance": {
+      "file": "ReplicationInstance.ts"
+    }
+  },
+  "builder": "makeDmsAccountHttpBinding",
+  "builders": {
+    "makeDmsAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeDmsEndpointScopedHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeDmsInstanceScopedHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DescribeConnections": {
+      "operation": "describeConnections"
+    },
+    "DescribeEndpointSettings": {
+      "operation": "describeEndpointSettings",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeEvents": {
+      "operation": "describeEvents"
+    },
+    "DescribeOrderableReplicationInstances": {
+      "operation": "describeOrderableReplicationInstances"
+    },
+    "DescribeRefreshSchemasStatus": {
+      "operation": "describeRefreshSchemasStatus",
+      "resource": "Endpoint",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDmsEndpointScopedHttpBinding"
+    },
+    "DescribeReplicationInstanceTaskLogs": {
+      "operation": "describeReplicationInstanceTaskLogs",
+      "resource": "ReplicationInstance",
+      "param": "instance",
+      "request": {
+        "mode": "optional",
+        "omit": ["ReplicationInstanceArn"],
+        "inline": true
+      },
+      "builder": "makeDmsInstanceScopedHttpBinding",
+      "with": {
+        "iam": "wildcard"
+      }
+    },
+    "DescribeReplicationTasks": {
+      "operation": "describeReplicationTasks"
+    },
+    "DescribeReplications": {
+      "operation": "describeReplications"
+    },
+    "DescribeSchemas": {
+      "operation": "describeSchemas",
+      "resource": "Endpoint",
+      "request": {
+        "mode": "optional",
+        "omit": ["EndpointArn"],
+        "inline": true
+      },
+      "builder": "makeDmsEndpointScopedHttpBinding"
+    },
+    "DescribeTableStatistics": {
+      "operation": "describeTableStatistics",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "RebootReplicationInstance": {
+      "operation": "rebootReplicationInstance",
+      "resource": "ReplicationInstance",
+      "param": "instance",
+      "request": {
+        "mode": "optional",
+        "omit": ["ReplicationInstanceArn"],
+        "inline": true
+      },
+      "builder": "makeDmsInstanceScopedHttpBinding",
+      "with": {
+        "iam": "resource"
+      }
+    },
+    "ReloadTables": {
+      "operation": "reloadTables",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartReplication": {
+      "operation": "startReplication",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartReplicationTask": {
+      "operation": "startReplicationTask",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StopReplication": {
+      "operation": "stopReplication",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StopReplicationTask": {
+      "operation": "stopReplicationTask",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

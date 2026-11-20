@@ -1,9 +1,13 @@
 import type * as Firehose from "@distilled.cloud/aws/firehose";
 import * as Binding from "alchemy/Binding";
-import type { BatchRetryExhaustedError } from "alchemy/Util/BatchedSink";
-import type * as Effect from "effect/Effect";
+import * as Output from "alchemy/Output";
+import { type BatchRetryExhaustedError, makeBatchedSink } from "alchemy/Util/BatchedSink";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type * as Sink from "effect/Sink";
+import * as AWSBindings from "../AWSBindings.ts";
 import type { DeliveryStream } from "./DeliveryStream.ts";
+import { PutRecordBatch } from "./PutRecordBatch.ts";
 
 /**
  * The raw distilled `PutRecordBatch` entry. Callers stay in control of the
@@ -68,4 +72,54 @@ export interface DeliveryStreamSink extends Binding.Service<
 
 export const DeliveryStreamSink = Binding.Service<DeliveryStreamSink>(
   "AWS.Firehose.DeliveryStreamSink",
+);
+
+/**
+ * HTTP implementation of {@link DeliveryStreamSink}. At deploy time it grants
+ * `firehose:PutRecordBatch` on the bound delivery stream; at runtime it
+ * batches stream elements into `PutRecordBatch` calls (500 records / 4 MiB)
+ * with bounded retry of transient per-record failures. Provide this layer on
+ * the Function using the sink.
+ */
+export const DeliveryStreamSinkHttp = Layer.effect(
+  DeliveryStreamSink,
+  Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
+    const putRecordBatch = yield* PutRecordBatch;
+
+    return Effect.fn(function* (deliveryStream: DeliveryStream) {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`AWS.Firehose.DeliveryStreamSink(${deliveryStream})`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["firehose:PutRecordBatch"],
+              Resource: [Output.interpolate`${deliveryStream.deliveryStreamArn}`],
+            },
+          ],
+        });
+      }
+      const send = yield* putRecordBatch(deliveryStream);
+      return makeBatchedSink<
+        DeliveryStreamSinkRecord,
+        Firehose.PutRecordBatchOutput,
+        Firehose.PutRecordBatchError
+      >({
+        maxRecords: 500,
+        maxBytes: 4 * 1024 * 1024,
+        sizeOf: (record) => record.Data.length,
+        send: (batch) => send({ Records: [...batch] }),
+        // PutRecordBatch failures are positional: RequestResponses[i] mirrors
+        // the request order and carries an ErrorCode (ServiceUnavailable /
+        // internal failure) — all transient, so re-submit them on the
+        // bounded schedule.
+        unprocessed: (out, batch) => {
+          if (!out.FailedPutCount) {
+            return [];
+          }
+          return batch.filter((_, index) => out.RequestResponses[index]?.ErrorCode !== undefined);
+        },
+      });
+    });
+  }),
 );

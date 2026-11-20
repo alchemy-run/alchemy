@@ -1,0 +1,203 @@
+{
+  "tag": "AWS.AuditManager",
+  "module": "auditmanager",
+  "resources": {
+    "Assessment": {
+      "file": "Assessment.ts"
+    }
+  },
+  "builder": "makeAssessmentScopedHttpBinding",
+  "builders": {
+    "makeAssessmentScopedHttpBinding": {
+      "grants": "resource"
+    },
+    "makeAuditManagerAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "BatchCreateDelegationByAssessment": {
+      "operation": "batchCreateDelegationByAssessment",
+      "resource": "Assessment",
+      "request": {
+        "mode": "required",
+        "interface": "BatchCreateDelegationByAssessmentRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "BatchDeleteDelegationByAssessment": {
+      "operation": "batchDeleteDelegationByAssessment",
+      "resource": "Assessment",
+      "request": {
+        "mode": "required",
+        "interface": "BatchDeleteDelegationByAssessmentRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "CreateAssessmentReport": {
+      "operation": "createAssessmentReport",
+      "resource": "Assessment",
+      "request": {
+        "mode": "required",
+        "interface": "CreateAssessmentReportRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "DeleteAssessmentReport": {
+      "operation": "deleteAssessmentReport",
+      "resource": "Assessment",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteAssessmentReportRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "GetAccountStatus": {
+      "operation": "getAccountStatus",
+      "builder": "makeAuditManagerAccountHttpBinding"
+    },
+    "GetAssessmentReportUrl": {
+      "operation": "getAssessmentReportUrl",
+      "resource": "Assessment",
+      "request": {
+        "mode": "required",
+        "interface": "GetAssessmentReportUrlRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "GetChangeLogs": {
+      "operation": "getChangeLogs",
+      "resource": "Assessment",
+      "request": {
+        "mode": "optional",
+        "interface": "GetChangeLogsRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "GetDelegations": {
+      "operation": "getDelegations",
+      "builder": "makeAuditManagerAccountHttpBinding"
+    },
+    "GetEvidence": {
+      "operation": "getEvidence",
+      "resource": "Assessment",
+      "request": {
+        "mode": "required",
+        "interface": "GetEvidenceRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "GetEvidenceByEvidenceFolder": {
+      "operation": "getEvidenceByEvidenceFolder",
+      "resource": "Assessment",
+      "request": {
+        "mode": "required",
+        "interface": "GetEvidenceByEvidenceFolderRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "GetEvidenceFileUploadUrl": {
+      "operation": "getEvidenceFileUploadUrl",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAuditManagerAccountHttpBinding"
+    },
+    "GetEvidenceFolder": {
+      "operation": "getEvidenceFolder",
+      "resource": "Assessment",
+      "request": {
+        "mode": "required",
+        "interface": "GetEvidenceFolderRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "GetEvidenceFoldersByAssessment": {
+      "operation": "getEvidenceFoldersByAssessment",
+      "resource": "Assessment",
+      "request": {
+        "mode": "optional",
+        "interface": "GetEvidenceFoldersByAssessmentRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "GetInsights": {
+      "operation": "getInsights",
+      "builder": "makeAuditManagerAccountHttpBinding"
+    },
+    "GetInsightsByAssessment": {
+      "operation": "getInsightsByAssessment",
+      "resource": "Assessment",
+      "request": {
+        "mode": "optional",
+        "interface": "GetInsightsByAssessmentRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "GetServicesInScope": {
+      "operation": "getServicesInScope",
+      "builder": "makeAuditManagerAccountHttpBinding"
+    },
+    "ListAssessmentReports": {
+      "operation": "listAssessmentReports",
+      "builder": "makeAuditManagerAccountHttpBinding"
+    },
+    "ListControlDomainInsights": {
+      "operation": "listControlDomainInsights",
+      "builder": "makeAuditManagerAccountHttpBinding"
+    },
+    "ListControlInsightsByControlDomain": {
+      "operation": "listControlInsightsByControlDomain",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAuditManagerAccountHttpBinding"
+    },
+    "ListKeywordsForDataSource": {
+      "operation": "listKeywordsForDataSource",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAuditManagerAccountHttpBinding"
+    },
+    "ListNotifications": {
+      "operation": "listNotifications",
+      "builder": "makeAuditManagerAccountHttpBinding"
+    },
+    "UpdateAssessmentControl": {
+      "operation": "updateAssessmentControl",
+      "resource": "Assessment",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateAssessmentControlRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "UpdateAssessmentControlSetStatus": {
+      "operation": "updateAssessmentControlSetStatus",
+      "resource": "Assessment",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateAssessmentControlSetStatusRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "UpdateAssessmentStatus": {
+      "operation": "updateAssessmentStatus",
+      "resource": "Assessment",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateAssessmentStatusRequest",
+        "omit": ["assessmentId"]
+      }
+    },
+    "ValidateAssessmentReportIntegrity": {
+      "operation": "validateAssessmentReportIntegrity",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeAuditManagerAccountHttpBinding"
+    }
+  }
+}

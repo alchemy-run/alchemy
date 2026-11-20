@@ -1,6 +1,8 @@
-import type * as featurestore from "@distilled.cloud/aws/sagemaker-featurestore-runtime";
+import * as featurestore from "@distilled.cloud/aws/sagemaker-featurestore-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFeatureGroupHttpBinding } from "./BindingHttp.ts";
 import type { FeatureGroup } from "./FeatureGroup.ts";
 
 export interface ListRecordsRequest extends Omit<
@@ -40,3 +42,16 @@ export interface ListRecords extends Binding.Service<
   >
 > {}
 export const ListRecords = Binding.Service<ListRecords>("AWS.SageMaker.ListRecords");
+
+export const ListRecordsHttp = Layer.effect(
+  ListRecords,
+  makeFeatureGroupHttpBinding({
+    tag: "AWS.SageMaker.ListRecords",
+    operation: featurestore.listRecords,
+    actions: ["sagemaker:ListRecords"],
+    prepare: (request: ListRecordsRequest | undefined, featureGroupName) => ({
+      ...request,
+      FeatureGroupName: featureGroupName,
+    }),
+  }),
+);

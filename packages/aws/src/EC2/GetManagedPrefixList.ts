@@ -1,9 +1,11 @@
-import type * as ec2 from "@distilled.cloud/aws/ec2";
+import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Binding from "alchemy/Binding";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 
 /** No managed prefix list by that name exists in the region. */
 export class ManagedPrefixListNotFound extends Data.TaggedError(
@@ -79,3 +81,35 @@ export const managedPrefixListId = (name: string) =>
           ),
     ),
   );
+
+// Bespoke (not the shared scaffold): the binding is account-scoped — there
+// is no resource to bind, only a name to look up.
+export const GetManagedPrefixListHttp = Layer.effect(
+  GetManagedPrefixList,
+  Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
+    const describeManagedPrefixLists = yield* AWSBindings.withCredentials(
+      ec2.describeManagedPrefixLists,
+    );
+
+    return Effect.fn(function* (name: string) {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`AWS.EC2.GetManagedPrefixList`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: ["ec2:DescribeManagedPrefixLists"],
+              Resource: ["*"],
+            },
+          ],
+        });
+      }
+      return Effect.fn("AWS.EC2.GetManagedPrefixList")(function* () {
+        const response = yield* describeManagedPrefixLists({
+          Filters: [{ Name: "prefix-list-name", Values: [name] }],
+        });
+        return response.PrefixLists?.[0];
+      });
+    });
+  }),
+);

@@ -1,6 +1,9 @@
 import type * as WAFV2 from "@distilled.cloud/aws/wafv2";
+import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWafv2IPSetHttpBinding } from "./BindingHttp.ts";
 import type { IPSet } from "./IPSet.ts";
 
 /**
@@ -29,3 +32,12 @@ export interface GetIPSet extends Binding.Service<
 > {}
 
 export const GetIPSet = Binding.Service<GetIPSet>("AWS.WAFv2.GetIPSet");
+
+export const GetIPSetHttp = Layer.effect(
+  GetIPSet,
+  makeWafv2IPSetHttpBinding({
+    tag: "AWS.WAFv2.GetIPSet",
+    operation: wafv2.getIPSet,
+    actions: ["wafv2:GetIPSet"],
+  }),
+);

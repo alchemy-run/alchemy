@@ -1,0 +1,161 @@
+{
+  "tag": "AWS.KMS",
+  "module": "kms",
+  "resources": {
+    "AliasName": {
+      "file": "Alias.ts"
+    },
+    "Key": {
+      "file": "Key.ts"
+    }
+  },
+  "builder": "makeKmsKeyHttpBinding",
+  "builders": {
+    "makeKmsAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeKmsKeyHttpBinding": {}
+  },
+  "bindings": {
+    "Decrypt": {
+      "operation": "decrypt",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "DecryptRequest",
+        "omit": ["KeyId"]
+      }
+    },
+    "DeriveSharedSecret": {
+      "operation": "deriveSharedSecret",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "DeriveSharedSecretRequest",
+        "omit": ["KeyId"]
+      }
+    },
+    "DescribeKey": {
+      "operation": "describeKey",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeKeyRequest",
+        "omit": ["KeyId"]
+      }
+    },
+    "Encrypt": {
+      "operation": "encrypt",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "EncryptRequest",
+        "omit": ["KeyId"]
+      }
+    },
+    "GenerateDataKey": {
+      "operation": "generateDataKey",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "GenerateDataKeyRequest",
+        "omit": ["KeyId"]
+      }
+    },
+    "GenerateDataKeyPair": {
+      "operation": "generateDataKeyPair",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "GenerateDataKeyPairRequest",
+        "omit": ["KeyId"]
+      }
+    },
+    "GenerateDataKeyPairWithoutPlaintext": {
+      "operation": "generateDataKeyPairWithoutPlaintext",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "GenerateDataKeyPairWithoutPlaintextRequest",
+        "omit": ["KeyId"]
+      }
+    },
+    "GenerateDataKeyWithoutPlaintext": {
+      "operation": "generateDataKeyWithoutPlaintext",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "GenerateDataKeyWithoutPlaintextRequest",
+        "omit": ["KeyId"]
+      }
+    },
+    "GenerateMac": {
+      "operation": "generateMac",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "GenerateMacRequest",
+        "omit": ["KeyId"]
+      }
+    },
+    "GenerateRandom": {
+      "operation": "generateRandom",
+      "request": {
+        "mode": "optional",
+        "interface": "GenerateRandomRequest",
+        "omit": []
+      },
+      "builder": "makeKmsAccountHttpBinding"
+    },
+    "GetPublicKey": {
+      "operation": "getPublicKey",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "optional",
+        "interface": "GetPublicKeyRequest",
+        "omit": ["KeyId"]
+      }
+    },
+    "Sign": {
+      "operation": "sign",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "SignRequest",
+        "omit": ["KeyId"]
+      }
+    },
+    "Verify": {
+      "operation": "verify",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "VerifyRequest",
+        "omit": ["KeyId"]
+      }
+    },
+    "VerifyMac": {
+      "operation": "verifyMac",
+      "resource": ["Key", "AliasName"],
+      "param": "key",
+      "request": {
+        "mode": "required",
+        "interface": "VerifyMacRequest",
+        "omit": ["KeyId"]
+      }
+    }
+  }
+}

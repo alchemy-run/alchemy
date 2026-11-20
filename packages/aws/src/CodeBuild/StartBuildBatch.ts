@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codebuild";
+import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeBuildProjectNameHttpBinding } from "./BindingHttp.ts";
 import type { Project } from "./Project.ts";
 
 /**
@@ -29,3 +32,12 @@ export interface StartBuildBatch extends Binding.Service<
   >
 > {}
 export const StartBuildBatch = Binding.Service<StartBuildBatch>("AWS.CodeBuild.StartBuildBatch");
+
+export const StartBuildBatchHttp = Layer.effect(
+  StartBuildBatch,
+  makeCodeBuildProjectNameHttpBinding({
+    tag: "AWS.CodeBuild.StartBuildBatch",
+    operation: codebuild.startBuildBatch,
+    actions: ["codebuild:StartBuildBatch"],
+  }),
+);

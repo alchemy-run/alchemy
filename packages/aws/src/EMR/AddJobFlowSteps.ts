@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/emr";
+import * as emr from "@distilled.cloud/aws/emr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEmrClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -36,3 +39,13 @@ export interface AddJobFlowSteps extends Binding.Service<
   >
 > {}
 export const AddJobFlowSteps = Binding.Service<AddJobFlowSteps>("AWS.EMR.AddJobFlowSteps");
+
+export const AddJobFlowStepsHttp = Layer.effect(
+  AddJobFlowSteps,
+  makeEmrClusterHttpBinding({
+    tag: "AWS.EMR.AddJobFlowSteps",
+    operation: emr.addJobFlowSteps,
+    actions: ["elasticmapreduce:AddJobFlowSteps"],
+    inject: "JobFlowId",
+  }),
+);

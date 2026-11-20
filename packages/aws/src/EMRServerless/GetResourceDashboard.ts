@@ -1,7 +1,9 @@
-import type * as emr from "@distilled.cloud/aws/emr-serverless";
+import * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeEmrServerlessHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request accepted by the {@link GetResourceDashboard} runtime callable. The
@@ -41,4 +43,19 @@ export interface GetResourceDashboard extends Binding.Service<
 > {}
 export const GetResourceDashboard = Binding.Service<GetResourceDashboard>(
   "AWS.EMRServerless.GetResourceDashboard",
+);
+
+export const GetResourceDashboardHttp = Layer.effect(
+  GetResourceDashboard,
+  makeEmrServerlessHttpBinding({
+    tag: "AWS.EMRServerless.GetResourceDashboard",
+    operation: emr.getResourceDashboard,
+    actions: ["emr-serverless:GetResourceDashboard"],
+    // The dashboard is minted for a sub-resource (e.g. a session) of the
+    // application — grant the sub-resource wildcard alongside the
+    // application ARN. NOTE: as of 2026-07 the service denies this action
+    // for every caller (even `Action:"*"` admins) — see
+    // test/AWS/EMRServerless/probe.test.ts, which pins that platform gate.
+    subresources: ["/*"],
+  }),
 );

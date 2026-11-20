@@ -1,0 +1,87 @@
+{
+  "tag": "AWS.BCMDataExports",
+  "module": "bcm-data-exports",
+  "alias": "bcm",
+  "resources": {
+    "Export": {
+      "file": "Export.ts"
+    }
+  },
+  "builder": "makeExportHttpBinding",
+  "builders": {
+    "makeDataExportsAccountHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    },
+    "makeExportHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetExecution": {
+      "operation": "getExecution",
+      "resource": "Export",
+      "param": "dataExport",
+      "request": {
+        "mode": "required",
+        "interface": "GetExecutionRequest",
+        "omit": ["ExportArn"]
+      }
+    },
+    "GetExport": {
+      "operation": "getExport",
+      "resource": "Export",
+      "param": "dataExport",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "GetTable": {
+      "operation": "getTable",
+      "request": {
+        "mode": "required",
+        "interface": "GetTableRequest",
+        "omit": []
+      },
+      "builder": "makeDataExportsAccountHttpBinding"
+    },
+    "ListExecutions": {
+      "operation": "listExecutions",
+      "resource": "Export",
+      "param": "dataExport",
+      "request": {
+        "mode": "optional",
+        "interface": "ListExecutionsRequest",
+        "omit": ["ExportArn"]
+      }
+    },
+    "ListExports": {
+      "operation": "listExports",
+      "request": {
+        "mode": "optional",
+        "interface": "ListExportsRequest",
+        "omit": []
+      },
+      "builder": "makeDataExportsAccountHttpBinding"
+    },
+    "ListTables": {
+      "operation": "listTables",
+      "request": {
+        "mode": "optional",
+        "interface": "ListTablesRequest",
+        "omit": []
+      },
+      "builder": "makeDataExportsAccountHttpBinding"
+    }
+  }
+}

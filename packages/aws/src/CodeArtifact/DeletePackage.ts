@@ -1,6 +1,8 @@
-import type * as codeartifact from "@distilled.cloud/aws/codeartifact";
+import * as codeartifact from "@distilled.cloud/aws/codeartifact";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRepositoryHttpBinding, packageArns } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -44,3 +46,14 @@ export interface DeletePackage extends Binding.Service<
 > {}
 
 export const DeletePackage = Binding.Service<DeletePackage>("AWS.CodeArtifact.DeletePackage");
+
+/** HTTP implementation of {@link DeletePackage} over the CodeArtifact API. */
+export const DeletePackageHttp = Layer.effect(
+  DeletePackage,
+  makeRepositoryHttpBinding({
+    tag: "AWS.CodeArtifact.DeletePackage",
+    operation: codeartifact.deletePackage,
+    actions: ["codeartifact:DeletePackage"],
+    resources: packageArns,
+  }),
+);

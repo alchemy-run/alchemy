@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/emr";
+import * as emr from "@distilled.cloud/aws/emr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEmrClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -33,3 +36,12 @@ export interface AddInstanceFleet extends Binding.Service<
   >
 > {}
 export const AddInstanceFleet = Binding.Service<AddInstanceFleet>("AWS.EMR.AddInstanceFleet");
+
+export const AddInstanceFleetHttp = Layer.effect(
+  AddInstanceFleet,
+  makeEmrClusterHttpBinding({
+    tag: "AWS.EMR.AddInstanceFleet",
+    operation: emr.addInstanceFleet,
+    actions: ["elasticmapreduce:AddInstanceFleet"],
+  }),
+);

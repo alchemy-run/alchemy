@@ -1,7 +1,9 @@
-import type * as transcribe from "@distilled.cloud/aws/transcribe";
+import * as transcribe from "@distilled.cloud/aws/transcribe";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Role } from "../IAM/Role.ts";
+import { makeTranscribeRoleHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `StartMedicalScribeJob` request with `DataAccessRoleArn` defaulting to the role the
@@ -61,4 +63,13 @@ export interface StartMedicalScribeJob extends Binding.Service<
 > {}
 export const StartMedicalScribeJob = Binding.Service<StartMedicalScribeJob>(
   "AWS.Transcribe.StartMedicalScribeJob",
+);
+
+export const StartMedicalScribeJobHttp = Layer.effect(
+  StartMedicalScribeJob,
+  makeTranscribeRoleHttpBinding({
+    tag: "AWS.Transcribe.StartMedicalScribeJob",
+    operation: transcribe.startMedicalScribeJob,
+    actions: ["transcribe:StartMedicalScribeJob"],
+  }),
 );

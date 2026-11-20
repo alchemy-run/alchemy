@@ -1,6 +1,9 @@
-import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
+import * as Output from "alchemy/Output";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableIamHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface DeleteBackupRequest extends DynamoDB.DeleteBackupInput {}
@@ -35,3 +38,13 @@ export interface DeleteBackup extends Binding.Service<
   >
 > {}
 export const DeleteBackup = Binding.Service<DeleteBackup>("AWS.DynamoDB.DeleteBackup");
+
+export const DeleteBackupHttp = Layer.effect(
+  DeleteBackup,
+  makeTableIamHttpBinding({
+    tag: "AWS.DynamoDB.DeleteBackup",
+    operation: DynamoDB.deleteBackup,
+    actions: ["dynamodb:DeleteBackup"],
+    resources: (table) => [Output.interpolate`${table.tableArn}/backup/*`],
+  }),
+);

@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codebuild";
+import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeBuildReportGroupHttpBinding } from "./BindingHttp.ts";
 import type { ReportGroup } from "./ReportGroup.ts";
 
 /**
@@ -26,3 +29,12 @@ export interface DeleteReport extends Binding.Service<
   >
 > {}
 export const DeleteReport = Binding.Service<DeleteReport>("AWS.CodeBuild.DeleteReport");
+
+export const DeleteReportHttp = Layer.effect(
+  DeleteReport,
+  makeCodeBuildReportGroupHttpBinding({
+    tag: "AWS.CodeBuild.DeleteReport",
+    operation: codebuild.deleteReport,
+    actions: ["codebuild:DeleteReport"],
+  }),
+);

@@ -1,0 +1,116 @@
+{
+  "tag": "AWS.OpenSearch",
+  "module": "opensearch",
+  "resources": {},
+  "builder": "makeOpenSearchHttpBinding",
+  "builders": {
+    "makeOpenSearchHttpBinding": {}
+  },
+  "bindings": {
+    "CancelServiceSoftwareUpdate": {
+      "operation": "cancelServiceSoftwareUpdate",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeDomain": {
+      "operation": "describeDomain",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeDomainAutoTunes": {
+      "operation": "describeDomainAutoTunes",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeDomainChangeProgress": {
+      "operation": "describeDomainChangeProgress",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeDomainConfig": {
+      "operation": "describeDomainConfig",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeDomainHealth": {
+      "operation": "describeDomainHealth",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeDomainNodes": {
+      "operation": "describeDomainNodes",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeDomains": {
+      "operation": "describeDomains",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetCompatibleVersions": {
+      "operation": "getCompatibleVersions"
+    },
+    "GetDomainMaintenanceStatus": {
+      "operation": "getDomainMaintenanceStatus",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetUpgradeHistory": {
+      "operation": "getUpgradeHistory",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetUpgradeStatus": {
+      "operation": "getUpgradeStatus",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListDomainMaintenances": {
+      "operation": "listDomainMaintenances",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListDomainNames": {
+      "operation": "listDomainNames"
+    },
+    "ListInstanceTypeDetails": {
+      "operation": "listInstanceTypeDetails",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListScheduledActions": {
+      "operation": "listScheduledActions",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListVersions": {
+      "operation": "listVersions"
+    },
+    "StartDomainMaintenance": {
+      "operation": "startDomainMaintenance",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartServiceSoftwareUpdate": {
+      "operation": "startServiceSoftwareUpdate",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

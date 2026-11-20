@@ -1,7 +1,9 @@
-import type * as bedrock from "@distilled.cloud/aws/bedrock-agent-runtime";
+import * as bedrock from "@distilled.cloud/aws/bedrock-agent-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AgentAlias } from "./AgentAlias.ts";
+import { makeAgentAliasScopedHttpBinding } from "./BindingHttp.ts";
 
 /**
  * The `GetAgentMemory` request with the binding-injected `agentId` and
@@ -54,3 +56,12 @@ export interface GetAgentMemory extends Binding.Service<
   >
 > {}
 export const GetAgentMemory = Binding.Service<GetAgentMemory>("AWS.Bedrock.GetAgentMemory");
+
+export const GetAgentMemoryHttp = Layer.effect(
+  GetAgentMemory,
+  makeAgentAliasScopedHttpBinding({
+    tag: "AWS.Bedrock.GetAgentMemory",
+    operation: bedrock.getAgentMemory,
+    actions: ["bedrock:GetAgentMemory"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
+import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLogGroupHttpBinding } from "./BindingHttp.ts";
 import type { LogGroup } from "./LogGroup.ts";
 
 export interface CreateLogStreamRequest extends Omit<Logs.CreateLogStreamRequest, "logGroupName"> {}
@@ -42,3 +44,12 @@ export interface CreateLogStream extends Binding.Service<
   >
 > {}
 export const CreateLogStream = Binding.Service<CreateLogStream>("AWS.Logs.CreateLogStream");
+
+export const CreateLogStreamHttp = Layer.effect(
+  CreateLogStream,
+  makeLogGroupHttpBinding({
+    tag: "AWS.Logs.CreateLogStream",
+    operation: Logs.createLogStream,
+    actions: ["logs:CreateLogStream"],
+  }),
+);

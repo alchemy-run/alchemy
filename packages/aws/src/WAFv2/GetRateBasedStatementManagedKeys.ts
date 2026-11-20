@@ -1,6 +1,9 @@
 import type * as WAFV2 from "@distilled.cloud/aws/wafv2";
+import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWafv2WebAclHttpBinding } from "./BindingHttp.ts";
 import type { WebACL } from "./WebACL.ts";
 
 export interface GetRateBasedStatementManagedKeysRequest extends Omit<
@@ -46,4 +49,18 @@ export interface GetRateBasedStatementManagedKeys extends Binding.Service<
 
 export const GetRateBasedStatementManagedKeys = Binding.Service<GetRateBasedStatementManagedKeys>(
   "AWS.WAFv2.GetRateBasedStatementManagedKeys",
+);
+
+export const GetRateBasedStatementManagedKeysHttp = Layer.effect(
+  GetRateBasedStatementManagedKeys,
+  makeWafv2WebAclHttpBinding({
+    tag: "AWS.WAFv2.GetRateBasedStatementManagedKeys",
+    operation: wafv2.getRateBasedStatementManagedKeys,
+    actions: ["wafv2:GetRateBasedStatementManagedKeys"],
+    inject: (acl) => ({
+      Scope: acl.scope,
+      WebACLName: acl.name,
+      WebACLId: acl.id,
+    }),
+  }),
 );

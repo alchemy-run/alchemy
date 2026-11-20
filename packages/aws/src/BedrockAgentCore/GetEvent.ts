@@ -1,6 +1,8 @@
-import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import type { Memory } from "./Memory.ts";
 
 export interface GetEventRequest extends Omit<agentcore.GetEventInput, "memoryId"> {}
@@ -43,3 +45,15 @@ export interface GetEvent extends Binding.Service<
   >
 > {}
 export const GetEvent = Binding.Service<GetEvent>("AWS.BedrockAgentCore.GetEvent");
+
+export const GetEventHttp = Layer.effect(
+  GetEvent,
+  makeAgentCoreHttpBinding({
+    tag: "AWS.BedrockAgentCore.GetEvent",
+    operation: agentcore.getEvent,
+    actions: ["bedrock-agentcore:GetEvent"],
+    requestKey: "memoryId",
+    identifier: (memory: Memory) => memory.memoryId,
+    arns: (memory: Memory) => [memory.memoryArn],
+  }),
+);

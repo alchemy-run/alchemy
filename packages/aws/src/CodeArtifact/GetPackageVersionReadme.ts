@@ -1,6 +1,8 @@
-import type * as codeartifact from "@distilled.cloud/aws/codeartifact";
+import * as codeartifact from "@distilled.cloud/aws/codeartifact";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRepositoryHttpBinding, packageArns } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -49,4 +51,15 @@ export interface GetPackageVersionReadme extends Binding.Service<
 
 export const GetPackageVersionReadme = Binding.Service<GetPackageVersionReadme>(
   "AWS.CodeArtifact.GetPackageVersionReadme",
+);
+
+/** HTTP implementation of {@link GetPackageVersionReadme} over the CodeArtifact API. */
+export const GetPackageVersionReadmeHttp = Layer.effect(
+  GetPackageVersionReadme,
+  makeRepositoryHttpBinding({
+    tag: "AWS.CodeArtifact.GetPackageVersionReadme",
+    operation: codeartifact.getPackageVersionReadme,
+    actions: ["codeartifact:GetPackageVersionReadme"],
+    resources: packageArns,
+  }),
 );

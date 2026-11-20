@@ -1,6 +1,8 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface PutItemRequest extends Omit<DynamoDB.PutItemInput, "TableName"> {}
@@ -40,3 +42,12 @@ export interface PutItem extends Binding.Service<
 > {}
 
 export const PutItem = Binding.Service<PutItem>("AWS.DynamoDB.PutItem");
+
+export const PutItemHttp = Layer.effect(
+  PutItem,
+  makeTableHttpBinding({
+    tag: "AWS.DynamoDB.PutItem",
+    operation: DynamoDB.putItem,
+    actions: ["dynamodb:PutItem"],
+  }),
+);

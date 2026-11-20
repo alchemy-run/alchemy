@@ -1,6 +1,9 @@
 import type * as NFW from "@distilled.cloud/aws/network-firewall";
+import * as nfw from "@distilled.cloud/aws/network-firewall";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeNetworkFirewallFirewallPolicyHttpBinding } from "./BindingHttp.ts";
 import type { FirewallPolicy } from "./FirewallPolicy.ts";
 
 export interface DescribeFirewallPolicyRequest extends Omit<
@@ -42,4 +45,13 @@ export interface DescribeFirewallPolicy extends Binding.Service<
 
 export const DescribeFirewallPolicy = Binding.Service<DescribeFirewallPolicy>(
   "AWS.NetworkFirewall.DescribeFirewallPolicy",
+);
+
+export const DescribeFirewallPolicyHttp = Layer.effect(
+  DescribeFirewallPolicy,
+  makeNetworkFirewallFirewallPolicyHttpBinding({
+    tag: "AWS.NetworkFirewall.DescribeFirewallPolicy",
+    operation: nfw.describeFirewallPolicy,
+    actions: ["network-firewall:DescribeFirewallPolicy"],
+  }),
 );

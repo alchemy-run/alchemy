@@ -1,7 +1,8 @@
-import type * as mwaa from "@distilled.cloud/aws/mwaa";
+import * as mwaa from "@distilled.cloud/aws/mwaa";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
-import type { AirflowRoleOptions } from "./BindingHttp.ts";
+import * as Layer from "effect/Layer";
+import { type AirflowRoleOptions, makeMWAAAirflowRoleHttpBinding } from "./BindingHttp.ts";
 import type { Environment } from "./Environment.ts";
 
 /**
@@ -50,4 +51,13 @@ export interface CreateWebLoginToken extends Binding.Service<
 
 export const CreateWebLoginToken = Binding.Service<CreateWebLoginToken>(
   "AWS.MWAA.CreateWebLoginToken",
+);
+
+export const CreateWebLoginTokenHttp = Layer.effect(
+  CreateWebLoginToken,
+  makeMWAAAirflowRoleHttpBinding({
+    tag: "AWS.MWAA.CreateWebLoginToken",
+    operation: mwaa.createWebLoginToken,
+    actions: ["airflow:CreateWebLoginToken"],
+  }),
 );

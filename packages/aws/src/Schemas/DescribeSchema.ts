@@ -1,6 +1,8 @@
-import type * as schemas from "@distilled.cloud/aws/schemas";
+import * as schemas from "@distilled.cloud/aws/schemas";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSchemasSchemaHttpBinding } from "./BindingHttp.ts";
 import type { Schema } from "./Schema.ts";
 
 /**
@@ -36,3 +38,12 @@ export interface DescribeSchema extends Binding.Service<
   >
 > {}
 export const DescribeSchema = Binding.Service<DescribeSchema>("AWS.Schemas.DescribeSchema");
+
+export const DescribeSchemaHttp = Layer.effect(
+  DescribeSchema,
+  makeSchemasSchemaHttpBinding({
+    tag: "AWS.Schemas.DescribeSchema",
+    operation: schemas.describeSchema,
+    actions: ["schemas:DescribeSchema"],
+  }),
+);

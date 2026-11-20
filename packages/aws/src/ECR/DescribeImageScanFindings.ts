@@ -1,6 +1,8 @@
-import type * as ecr from "@distilled.cloud/aws/ecr";
+import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcrRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -42,4 +44,14 @@ export interface DescribeImageScanFindings extends Binding.Service<
 
 export const DescribeImageScanFindings = Binding.Service<DescribeImageScanFindings>(
   "AWS.ECR.DescribeImageScanFindings",
+);
+
+/** HTTP implementation of {@link DescribeImageScanFindings} over the ECR API. */
+export const DescribeImageScanFindingsHttp = Layer.effect(
+  DescribeImageScanFindings,
+  makeEcrRepositoryHttpBinding({
+    capability: "DescribeImageScanFindings",
+    operation: ecr.describeImageScanFindings,
+    iamActions: ["ecr:DescribeImageScanFindings"],
+  }),
 );

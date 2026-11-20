@@ -1,0 +1,79 @@
+{
+  "tag": "AWS.IAM",
+  "module": "iam",
+  "resources": {},
+  "builder": "makeIamHttpBinding",
+  "builders": {
+    "makeIamHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "GenerateCredentialReport": {
+      "operation": "generateCredentialReport"
+    },
+    "GenerateServiceLastAccessedDetails": {
+      "operation": "generateServiceLastAccessedDetails",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetAccountAuthorizationDetails": {
+      "operation": "getAccountAuthorizationDetails"
+    },
+    "GetAccountSummary": {
+      "operation": "getAccountSummary"
+    },
+    "GetContextKeysForCustomPolicy": {
+      "operation": "getContextKeysForCustomPolicy",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetContextKeysForPrincipalPolicy": {
+      "operation": "getContextKeysForPrincipalPolicy",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetCredentialReport": {
+      "operation": "getCredentialReport"
+    },
+    "GetServiceLastAccessedDetails": {
+      "operation": "getServiceLastAccessedDetails",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetServiceLastAccessedDetailsWithEntities": {
+      "operation": "getServiceLastAccessedDetailsWithEntities",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListPoliciesGrantingServiceAccess": {
+      "operation": "listPoliciesGrantingServiceAccess",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SimulateCustomPolicy": {
+      "operation": "simulateCustomPolicy",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SimulatePrincipalPolicy": {
+      "operation": "simulatePrincipalPolicy",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

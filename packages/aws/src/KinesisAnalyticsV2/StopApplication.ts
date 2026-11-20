@@ -1,7 +1,10 @@
 import type * as SVC from "@distilled.cloud/aws/kinesis-analytics-v2";
+import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeKinesisAnalyticsHttpBinding } from "./BindingHttp.ts";
 
 export interface StopApplicationRequest extends Omit<
   SVC.StopApplicationRequest,
@@ -35,4 +38,13 @@ export interface StopApplication extends Binding.Service<
 > {}
 export const StopApplication = Binding.Service<StopApplication>(
   "AWS.KinesisAnalyticsV2.StopApplication",
+);
+
+export const StopApplicationHttp = Layer.effect(
+  StopApplication,
+  makeKinesisAnalyticsHttpBinding({
+    tag: "AWS.KinesisAnalyticsV2.StopApplication",
+    operation: analytics.stopApplication,
+    actions: ["kinesisanalytics:StopApplication"],
+  }),
 );

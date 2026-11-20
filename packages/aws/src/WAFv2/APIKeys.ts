@@ -1,6 +1,9 @@
 import type * as WAFV2 from "@distilled.cloud/aws/wafv2";
+import * as wafv2 from "@distilled.cloud/aws/wafv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWafv2AccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `wafv2:CreateAPIKey` — mint an API key for the
@@ -132,3 +135,39 @@ export interface DeleteAPIKey extends Binding.Service<
 > {}
 
 export const DeleteAPIKey = Binding.Service<DeleteAPIKey>("AWS.WAFv2.DeleteAPIKey");
+
+export const CreateAPIKeyHttp = Layer.effect(
+  CreateAPIKey,
+  makeWafv2AccountHttpBinding({
+    tag: "AWS.WAFv2.CreateAPIKey",
+    operation: wafv2.createAPIKey,
+    actions: ["wafv2:CreateAPIKey"],
+  }),
+);
+
+export const GetDecryptedAPIKeyHttp = Layer.effect(
+  GetDecryptedAPIKey,
+  makeWafv2AccountHttpBinding({
+    tag: "AWS.WAFv2.GetDecryptedAPIKey",
+    operation: wafv2.getDecryptedAPIKey,
+    actions: ["wafv2:GetDecryptedAPIKey"],
+  }),
+);
+
+export const ListAPIKeysHttp = Layer.effect(
+  ListAPIKeys,
+  makeWafv2AccountHttpBinding({
+    tag: "AWS.WAFv2.ListAPIKeys",
+    operation: wafv2.listAPIKeys,
+    actions: ["wafv2:ListAPIKeys"],
+  }),
+);
+
+export const DeleteAPIKeyHttp = Layer.effect(
+  DeleteAPIKey,
+  makeWafv2AccountHttpBinding({
+    tag: "AWS.WAFv2.DeleteAPIKey",
+    operation: wafv2.deleteAPIKey,
+    actions: ["wafv2:DeleteAPIKey"],
+  }),
+);

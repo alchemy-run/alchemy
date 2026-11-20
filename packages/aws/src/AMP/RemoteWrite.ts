@@ -1,9 +1,13 @@
 import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Binding from "alchemy/Binding";
+import * as Clock from "effect/Clock";
 import type { SourceError } from "effect/ConfigProvider";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAmpWorkspaceHttpBinding } from "./BindingHttp.ts";
 import type { PrometheusApiError } from "./PrometheusTypes.ts";
+import { encodeWriteRequest, snappyCompress, type EncodableSeries } from "./RemoteWriteCodec.ts";
 import type { Workspace } from "./Workspace.ts";
 
 export interface RemoteWriteSample {
@@ -83,3 +87,37 @@ export interface RemoteWrite extends Binding.Service<
   >
 > {}
 export const RemoteWrite = Binding.Service<RemoteWrite>("AWS.AMP.RemoteWrite");
+
+export const RemoteWriteHttp = Layer.effect(
+  RemoteWrite,
+  makeAmpWorkspaceHttpBinding({
+    name: "RemoteWrite",
+    iamActions: ["aps:RemoteWrite"],
+    makeClient: (send) => (request: RemoteWriteRequest) =>
+      Effect.gen(function* () {
+        const now = yield* Clock.currentTimeMillis;
+        const body = yield* Effect.sync(() => {
+          const timeseries: EncodableSeries[] = request.timeseries.map((series) => ({
+            labels: { ...series.labels, __name__: series.name },
+            samples: series.samples.map((sample) => ({
+              value: sample.value,
+              timestamp: sample.timestamp ?? now,
+            })),
+          }));
+          return snappyCompress(encodeWriteRequest(timeseries));
+        });
+        yield* send({
+          method: "POST",
+          path: "api/v1/remote_write",
+          bytes: {
+            data: body,
+            contentType: "application/x-protobuf",
+            headers: {
+              "content-encoding": "snappy",
+              "x-prometheus-remote-write-version": "0.1.0",
+            },
+          },
+        });
+      }),
+  }),
+);

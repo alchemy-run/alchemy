@@ -1,0 +1,221 @@
+{
+  "tag": "AWS.Macie2",
+  "module": "macie2",
+  "resources": {},
+  "builder": "makeMacie2HttpBinding",
+  "builders": {
+    "makeMacie2HttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "AcceptInvitation": {
+      "operation": "acceptInvitation"
+    },
+    "BatchGetCustomDataIdentifiers": {
+      "operation": "batchGetCustomDataIdentifiers"
+    },
+    "BatchUpdateAutomatedDiscoveryAccounts": {
+      "operation": "batchUpdateAutomatedDiscoveryAccounts"
+    },
+    "CreateInvitations": {
+      "operation": "createInvitations"
+    },
+    "CreateMember": {
+      "operation": "createMember"
+    },
+    "CreateSampleFindings": {
+      "operation": "createSampleFindings"
+    },
+    "DeclineInvitations": {
+      "operation": "declineInvitations"
+    },
+    "DeleteInvitations": {
+      "operation": "deleteInvitations"
+    },
+    "DeleteMember": {
+      "operation": "deleteMember",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeBuckets": {
+      "operation": "describeBuckets"
+    },
+    "DescribeOrganizationConfiguration": {
+      "operation": "describeOrganizationConfiguration"
+    },
+    "DisableOrganizationAdminAccount": {
+      "operation": "disableOrganizationAdminAccount"
+    },
+    "DisassociateFromAdministratorAccount": {
+      "operation": "disassociateFromAdministratorAccount",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DisassociateMember": {
+      "operation": "disassociateMember",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "EnableOrganizationAdminAccount": {
+      "operation": "enableOrganizationAdminAccount"
+    },
+    "GetAdministratorAccount": {
+      "operation": "getAdministratorAccount"
+    },
+    "GetAutomatedDiscoveryConfiguration": {
+      "operation": "getAutomatedDiscoveryConfiguration"
+    },
+    "GetBucketStatistics": {
+      "operation": "getBucketStatistics"
+    },
+    "GetClassificationExportConfiguration": {
+      "operation": "getClassificationExportConfiguration"
+    },
+    "GetClassificationScope": {
+      "operation": "getClassificationScope",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetFindingStatistics": {
+      "operation": "getFindingStatistics"
+    },
+    "GetFindings": {
+      "operation": "getFindings"
+    },
+    "GetFindingsPublicationConfiguration": {
+      "operation": "getFindingsPublicationConfiguration"
+    },
+    "GetInvitationsCount": {
+      "operation": "getInvitationsCount"
+    },
+    "GetMember": {
+      "operation": "getMember",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetResourceProfile": {
+      "operation": "getResourceProfile"
+    },
+    "GetRevealConfiguration": {
+      "operation": "getRevealConfiguration"
+    },
+    "GetSensitiveDataOccurrences": {
+      "operation": "getSensitiveDataOccurrences",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetSensitiveDataOccurrencesAvailability": {
+      "operation": "getSensitiveDataOccurrencesAvailability",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetSensitivityInspectionTemplate": {
+      "operation": "getSensitivityInspectionTemplate",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetUsageStatistics": {
+      "operation": "getUsageStatistics"
+    },
+    "GetUsageTotals": {
+      "operation": "getUsageTotals"
+    },
+    "ListAllowLists": {
+      "operation": "listAllowLists"
+    },
+    "ListAutomatedDiscoveryAccounts": {
+      "operation": "listAutomatedDiscoveryAccounts"
+    },
+    "ListClassificationJobs": {
+      "operation": "listClassificationJobs"
+    },
+    "ListClassificationScopes": {
+      "operation": "listClassificationScopes"
+    },
+    "ListCustomDataIdentifiers": {
+      "operation": "listCustomDataIdentifiers"
+    },
+    "ListFindings": {
+      "operation": "listFindings"
+    },
+    "ListFindingsFilters": {
+      "operation": "listFindingsFilters"
+    },
+    "ListInvitations": {
+      "operation": "listInvitations"
+    },
+    "ListManagedDataIdentifiers": {
+      "operation": "listManagedDataIdentifiers"
+    },
+    "ListMembers": {
+      "operation": "listMembers"
+    },
+    "ListOrganizationAdminAccounts": {
+      "operation": "listOrganizationAdminAccounts"
+    },
+    "ListResourceProfileArtifacts": {
+      "operation": "listResourceProfileArtifacts"
+    },
+    "ListResourceProfileDetections": {
+      "operation": "listResourceProfileDetections"
+    },
+    "ListSensitivityInspectionTemplates": {
+      "operation": "listSensitivityInspectionTemplates"
+    },
+    "PutClassificationExportConfiguration": {
+      "operation": "putClassificationExportConfiguration"
+    },
+    "PutFindingsPublicationConfiguration": {
+      "operation": "putFindingsPublicationConfiguration"
+    },
+    "SearchResources": {
+      "operation": "searchResources"
+    },
+    "TestCustomDataIdentifier": {
+      "operation": "testCustomDataIdentifier"
+    },
+    "UpdateAutomatedDiscoveryConfiguration": {
+      "operation": "updateAutomatedDiscoveryConfiguration"
+    },
+    "UpdateClassificationScope": {
+      "operation": "updateClassificationScope",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateMemberSession": {
+      "operation": "updateMemberSession",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateOrganizationConfiguration": {
+      "operation": "updateOrganizationConfiguration"
+    },
+    "UpdateResourceProfile": {
+      "operation": "updateResourceProfile"
+    },
+    "UpdateResourceProfileDetections": {
+      "operation": "updateResourceProfileDetections"
+    },
+    "UpdateRevealConfiguration": {
+      "operation": "updateRevealConfiguration"
+    },
+    "UpdateSensitivityInspectionTemplate": {
+      "operation": "updateSensitivityInspectionTemplate",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

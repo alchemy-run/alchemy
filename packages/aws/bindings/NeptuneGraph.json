@@ -1,0 +1,249 @@
+{
+  "tag": "AWS.NeptuneGraph",
+  "module": "neptune-graph",
+  "resources": {
+    "Graph": {
+      "file": "Graph.ts"
+    }
+  },
+  "builder": "makeNeptuneGraphGraphHttpBinding",
+  "builders": {
+    "makeNeptuneGraphAccountHttpBinding": {},
+    "makeNeptuneGraphGraphHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CancelExportTask": {
+      "operation": "cancelExportTask",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "withTs": {
+        "resources": "[EXPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["EXPORT_TASK_ARN_WILDCARD"]
+      }
+    },
+    "CancelImportTask": {
+      "operation": "cancelImportTask",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "withTs": {
+        "resources": "[IMPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["IMPORT_TASK_ARN_WILDCARD"]
+      }
+    },
+    "CancelQuery": {
+      "operation": "cancelQuery",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      }
+    },
+    "CreateGraphSnapshot": {
+      "operation": "createGraphSnapshot",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "withTs": {
+        "extraResources": "[SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SNAPSHOT_ARN_WILDCARD"]
+      }
+    },
+    "DeleteGraphSnapshot": {
+      "operation": "deleteGraphSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "withTs": {
+        "resources": "[SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SNAPSHOT_ARN_WILDCARD"]
+      }
+    },
+    "GetExportTask": {
+      "operation": "getExportTask",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "withTs": {
+        "resources": "[EXPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["EXPORT_TASK_ARN_WILDCARD"]
+      }
+    },
+    "GetGraphSnapshot": {
+      "operation": "getGraphSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "withTs": {
+        "resources": "[SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SNAPSHOT_ARN_WILDCARD"]
+      }
+    },
+    "GetGraphSummary": {
+      "operation": "getGraphSummary",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      }
+    },
+    "GetImportTask": {
+      "operation": "getImportTask",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "withTs": {
+        "resources": "[IMPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["IMPORT_TASK_ARN_WILDCARD"]
+      }
+    },
+    "GetQuery": {
+      "operation": "getQuery",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      }
+    },
+    "ListExportTasks": {
+      "operation": "listExportTasks",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "withTs": {
+        "extraResources": "[EXPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["EXPORT_TASK_ARN_WILDCARD"]
+      },
+      "note": "ListExportTasks authorizes against the export-task resource type."
+    },
+    "ListGraphSnapshots": {
+      "operation": "listGraphSnapshots",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "withTs": {
+        "extraResources": "[SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SNAPSHOT_ARN_WILDCARD"]
+      }
+    },
+    "ListImportTasks": {
+      "operation": "listImportTasks",
+      "builder": "makeNeptuneGraphAccountHttpBinding",
+      "withTs": {
+        "resources": "[IMPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["IMPORT_TASK_ARN_WILDCARD"]
+      }
+    },
+    "ListQueries": {
+      "operation": "listQueries",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      }
+    },
+    "ResetGraph": {
+      "operation": "resetGraph",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      }
+    },
+    "StartExportTask": {
+      "operation": "startExportTask",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "with": {
+        "passRole": true
+      },
+      "withTs": {
+        "extraResources": "[EXPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["EXPORT_TASK_ARN_WILDCARD"]
+      },
+      "note": "StartExportTask authorizes against both the graph and the (not yet existing) export-task resource types."
+    },
+    "StartGraph": {
+      "operation": "startGraph",
+      "resource": "Graph",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "StartImportTask": {
+      "operation": "startImportTask",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["graphIdentifier"],
+        "inline": true
+      },
+      "with": {
+        "passRole": true
+      },
+      "withTs": {
+        "extraResources": "[IMPORT_TASK_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["IMPORT_TASK_ARN_WILDCARD"]
+      },
+      "note": "StartImportTask authorizes against both the graph and the (not yet existing) import-task resource types."
+    },
+    "StopGraph": {
+      "operation": "stopGraph",
+      "resource": "Graph",
+      "request": {
+        "mode": "none"
+      }
+    }
+  }
+}

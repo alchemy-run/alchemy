@@ -122,6 +122,11 @@ export const makeIotWirelessAccountHttpBinding = <I, A, E, R, Req>(options: {
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Map the public request shape onto the wire request. */
   prepare: (request: Req) => I;
+  /**
+   * ARN formats to grant the actions on instead of `*`, with `${Partition}`,
+   * `${Region}`, and `${Account}` filled in at deploy (`AWSBindings.accountArn`).
+   */
+  arns?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -134,7 +139,7 @@ export const makeIotWirelessAccountHttpBinding = <I, A, E, R, Req>(options: {
             {
               Effect: "Allow",
               Action: [...options.iamActions],
-              Resource: ["*"],
+              Resource: AWSBindings.grantResources(options.arns),
             },
           ],
         });

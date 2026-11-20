@@ -1,6 +1,8 @@
-import type * as bedrock from "@distilled.cloud/aws/bedrock-runtime";
+import * as bedrock from "@distilled.cloud/aws/bedrock-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeModelScopedHttpBinding } from "./BindingHttp.ts";
 
 /**
  * The `InvokeModelWithResponseStream` request with the binding-injected
@@ -80,4 +82,15 @@ export interface InvokeModelWithResponseStream extends Binding.Service<
 > {}
 export const InvokeModelWithResponseStream = Binding.Service<InvokeModelWithResponseStream>(
   "AWS.Bedrock.InvokeModelWithResponseStream",
+);
+
+export const InvokeModelWithResponseStreamHttp = Layer.effect(
+  InvokeModelWithResponseStream,
+  makeModelScopedHttpBinding({
+    tag: "AWS.Bedrock.InvokeModelWithResponseStream",
+    operation: bedrock.invokeModelWithResponseStream,
+    // Streaming operations authorize against this action, not
+    // bedrock:InvokeModel.
+    actions: ["bedrock:InvokeModelWithResponseStream"],
+  }),
 );

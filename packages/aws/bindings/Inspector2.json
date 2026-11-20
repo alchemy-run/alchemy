@@ -1,0 +1,242 @@
+{
+  "tag": "AWS.Inspector2",
+  "module": "inspector2",
+  "resources": {},
+  "builder": "makeInspector2AccountHttpBinding",
+  "builders": {
+    "makeInspector2AccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "AssociateMember": {
+      "operation": "associateMember",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "BatchGetCodeSnippet": {
+      "operation": "batchGetCodeSnippet",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "BatchGetFindingDetails": {
+      "operation": "batchGetFindingDetails",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "BatchGetFreeTrialInfo": {
+      "operation": "batchGetFreeTrialInfo",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "BatchGetMemberEc2DeepInspectionStatus": {
+      "operation": "batchGetMemberEc2DeepInspectionStatus"
+    },
+    "BatchUpdateMemberEc2DeepInspectionStatus": {
+      "operation": "batchUpdateMemberEc2DeepInspectionStatus",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CancelFindingsReport": {
+      "operation": "cancelFindingsReport",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CancelSbomExport": {
+      "operation": "cancelSbomExport",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateFindingsReport": {
+      "operation": "createFindingsReport",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CreateSbomExport": {
+      "operation": "createSbomExport",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeOrganizationConfiguration": {
+      "operation": "describeOrganizationConfiguration",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DisableDelegatedAdminAccount": {
+      "operation": "disableDelegatedAdminAccount",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DisassociateMember": {
+      "operation": "disassociateMember",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "EnableDelegatedAdminAccount": {
+      "operation": "enableDelegatedAdminAccount",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetCisScanReport": {
+      "operation": "getCisScanReport",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetCisScanResultDetails": {
+      "operation": "getCisScanResultDetails",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetClustersForImage": {
+      "operation": "getClustersForImage",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetCodeSecurityScan": {
+      "operation": "getCodeSecurityScan",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetConfiguration": {
+      "operation": "getConfiguration",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetDelegatedAdminAccount": {
+      "operation": "getDelegatedAdminAccount",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetEc2DeepInspectionConfiguration": {
+      "operation": "getEc2DeepInspectionConfiguration",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetEncryptionKey": {
+      "operation": "getEncryptionKey",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetFindingsReportStatus": {
+      "operation": "getFindingsReportStatus"
+    },
+    "GetMember": {
+      "operation": "getMember",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetSbomExport": {
+      "operation": "getSbomExport",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListAccountPermissions": {
+      "operation": "listAccountPermissions"
+    },
+    "ListCisScanResultsAggregatedByChecks": {
+      "operation": "listCisScanResultsAggregatedByChecks",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListCisScanResultsAggregatedByTargetResource": {
+      "operation": "listCisScanResultsAggregatedByTargetResource",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListCisScans": {
+      "operation": "listCisScans"
+    },
+    "ListCoverage": {
+      "operation": "listCoverage"
+    },
+    "ListCoverageStatistics": {
+      "operation": "listCoverageStatistics"
+    },
+    "ListDelegatedAdminAccounts": {
+      "operation": "listDelegatedAdminAccounts"
+    },
+    "ListFindingAggregations": {
+      "operation": "listFindingAggregations",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListFindings": {
+      "operation": "listFindings"
+    },
+    "ListMembers": {
+      "operation": "listMembers"
+    },
+    "ListUsageTotals": {
+      "operation": "listUsageTotals"
+    },
+    "ResetEncryptionKey": {
+      "operation": "resetEncryptionKey",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SearchVulnerabilities": {
+      "operation": "searchVulnerabilities",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartCodeSecurityScan": {
+      "operation": "startCodeSecurityScan",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateConfiguration": {
+      "operation": "updateConfiguration"
+    },
+    "UpdateEc2DeepInspectionConfiguration": {
+      "operation": "updateEc2DeepInspectionConfiguration"
+    },
+    "UpdateEncryptionKey": {
+      "operation": "updateEncryptionKey",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateOrgEc2DeepInspectionConfiguration": {
+      "operation": "updateOrgEc2DeepInspectionConfiguration",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "UpdateOrganizationConfiguration": {
+      "operation": "updateOrganizationConfiguration",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "tag": "AWS.ApplicationAutoScaling",
+  "module": "application-auto-scaling",
+  "alias": "aas",
+  "resources": {
+    "ScalableTarget": {
+      "file": "ScalableTarget.ts"
+    },
+    "ScalingPolicy": {
+      "file": "ScalingPolicy.ts"
+    }
+  },
+  "builder": "makeTargetScopedHttpBinding",
+  "builders": {
+    "makePolicyScopedHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeTargetScopedHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "DescribeScalingActivities": {
+      "operation": "describeScalingActivities",
+      "resource": "ScalableTarget",
+      "param": "target",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeScalingActivitiesRequest",
+        "omit": ["ServiceNamespace", "ResourceId", "ScalableDimension"]
+      }
+    },
+    "GetPredictiveScalingForecast": {
+      "operation": "getPredictiveScalingForecast",
+      "resource": "ScalingPolicy",
+      "param": "policy",
+      "request": {
+        "mode": "required",
+        "interface": "GetPredictiveScalingForecastRequest",
+        "omit": ["ServiceNamespace", "ResourceId", "ScalableDimension", "PolicyName"]
+      },
+      "builder": "makePolicyScopedHttpBinding"
+    }
+  }
+}

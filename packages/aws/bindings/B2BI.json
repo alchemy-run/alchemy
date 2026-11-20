@@ -1,0 +1,82 @@
+{
+  "tag": "AWS.B2BI",
+  "module": "b2bi",
+  "resources": {
+    "Transformer": {
+      "file": "Transformer.ts"
+    }
+  },
+  "builder": "makeB2biAccountHttpBinding",
+  "builders": {
+    "makeB2biAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeTransformerScopedHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CreateStarterMappingTemplate": {
+      "operation": "createStarterMappingTemplate",
+      "request": {
+        "mode": "required"
+      },
+      "note": "`outputSampleLocation` is written through the caller's session (forward-access), so the S3 write grant rides along."
+    },
+    "GenerateMapping": {
+      "operation": "generateMapping",
+      "request": {
+        "mode": "required"
+      },
+      "note": "GenerateMapping invokes Amazon Bedrock through the caller's session (verified live: \"Access denied when invoking Bedrock's InvokeModel API\" without the grant). The account must also have Bedrock model access enabled for the mapping model in the region."
+    },
+    "GetTransformerJob": {
+      "operation": "getTransformerJob",
+      "resource": "Transformer",
+      "request": {
+        "mode": "required",
+        "interface": "GetTransformerJobRequest",
+        "omit": ["transformerId"]
+      },
+      "builder": "makeTransformerScopedHttpBinding"
+    },
+    "StartTransformerJob": {
+      "operation": "startTransformerJob",
+      "resource": "Transformer",
+      "request": {
+        "mode": "required",
+        "interface": "StartTransformerJobRequest",
+        "omit": ["transformerId"]
+      },
+      "builder": "makeTransformerScopedHttpBinding",
+      "withTs": {
+        "companionStatements": "[{Effect: \"Allow\", Action: [\"s3:GetObject\", \"s3:GetObjectAttributes\", \"s3:PutObject\", \"s3:ListBucket\"], Resource: [\"*\"]}]"
+      },
+      "imports": {
+        "effect/Effect": "* as Effect"
+      },
+      "note": "B2BI reads `inputFile` and writes `outputLocation` through the caller's session (verified live: \"Access denied when getting object attributes from s3://…\" without these). The buckets are request-time values, so the grant cannot be resource-scoped here."
+    },
+    "TestConversion": {
+      "operation": "testConversion",
+      "request": {
+        "mode": "required"
+      },
+      "note": "`target.outputSampleFile` is read through the caller's session (forward-access), so the S3 read grants ride along."
+    },
+    "TestMapping": {
+      "operation": "testMapping",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "TestParsing": {
+      "operation": "testParsing",
+      "request": {
+        "mode": "required"
+      },
+      "note": "B2BI reads `inputFile` through the caller's session (verified live: \"Access denied when getting object attributes from s3://…\" without the S3 grants), so the documented companion permissions are granted alongside."
+    }
+  }
+}

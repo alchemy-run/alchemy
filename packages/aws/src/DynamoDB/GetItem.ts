@@ -1,6 +1,8 @@
-import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface GetItemRequest extends Omit<DynamoDB.GetItemInput, "TableName"> {}
@@ -34,3 +36,12 @@ export interface GetItem extends Binding.Service<
   >
 > {}
 export const GetItem = Binding.Service<GetItem>("AWS.DynamoDB.GetItem");
+
+export const GetItemHttp = Layer.effect(
+  GetItem,
+  makeTableHttpBinding({
+    tag: "AWS.DynamoDB.GetItem",
+    operation: DynamoDB.getItem,
+    actions: ["dynamodb:GetItem"],
+  }),
+);

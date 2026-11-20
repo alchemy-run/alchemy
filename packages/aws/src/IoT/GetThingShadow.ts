@@ -1,6 +1,8 @@
-import type * as iotdata from "@distilled.cloud/aws/iot-data-plane";
+import * as iotdata from "@distilled.cloud/aws/iot-data-plane";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotThingHttpBinding } from "./BindingHttp.ts";
 import type { Thing } from "./Thing.ts";
 
 export interface GetThingShadowRequest extends Omit<iotdata.GetThingShadowRequest, "thingName"> {}
@@ -45,3 +47,17 @@ export interface GetThingShadow extends Binding.Service<
 > {}
 
 export const GetThingShadow = Binding.Service<GetThingShadow>("AWS.IoT.GetThingShadow");
+
+/**
+ * HTTP implementation of the {@link GetThingShadow} capability — grants
+ * `iot:GetThingShadow` on the thing ARN and calls the IoT data-plane
+ * `GetThingShadow` API.
+ */
+export const GetThingShadowHttp = Layer.effect(
+  GetThingShadow,
+  makeIotThingHttpBinding({
+    tag: "AWS.IoT.GetThingShadow",
+    operation: iotdata.getThingShadow,
+    actions: ["iot:GetThingShadow"],
+  }),
+);

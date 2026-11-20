@@ -1,7 +1,9 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AlarmResource } from "./binding-common.ts";
+import { makeCloudWatchResourceSetHttpBinding } from "./BindingHttp.ts";
 
 type AlarmResources = [AlarmResource, ...AlarmResource[]];
 
@@ -36,4 +38,16 @@ export interface DisableAlarmActions extends Binding.Service<
 
 export const DisableAlarmActions = Binding.Service<DisableAlarmActions>(
   "AWS.CloudWatch.DisableAlarmActions",
+);
+
+export const DisableAlarmActionsHttp = Layer.effect(
+  DisableAlarmActions,
+  makeCloudWatchResourceSetHttpBinding({
+    tag: "AWS.CloudWatch.DisableAlarmActions",
+    operation: cloudwatch.disableAlarmActions,
+    action: "cloudwatch:DisableAlarmActions",
+    namesKey: "AlarmNames",
+    name: (alarm: AlarmResource) => alarm.alarmName,
+    arn: (alarm: AlarmResource) => alarm.alarmArn,
+  }),
 );

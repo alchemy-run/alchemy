@@ -1,7 +1,9 @@
 import type * as kv from "@distilled.cloud/aws/kinesis-video";
-import type * as kvs from "@distilled.cloud/aws/kinesis-video-signaling";
+import * as kvs from "@distilled.cloud/aws/kinesis-video-signaling";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeChannelSignalingHttpBinding } from "./BindingHttp.ts";
 import type { SignalingEndpointUnavailable } from "./internal.ts";
 import type { SignalingChannel } from "./SignalingChannel.ts";
 
@@ -57,4 +59,18 @@ export interface SendAlexaOfferToMaster extends Binding.Service<
 
 export const SendAlexaOfferToMaster = Binding.Service<SendAlexaOfferToMaster>(
   "AWS.KinesisVideo.SendAlexaOfferToMaster",
+);
+
+export const SendAlexaOfferToMasterHttp = Layer.effect(
+  SendAlexaOfferToMaster,
+  makeChannelSignalingHttpBinding({
+    tag: "AWS.KinesisVideo.SendAlexaOfferToMaster",
+    // SendAlexaOfferToMaster is served by the channel's HTTPS signaling
+    // endpoint; the offer is addressed to the MASTER peer.
+    protocol: "HTTPS",
+    role: "MASTER",
+    actions: ["kinesisvideo:SendAlexaOfferToMaster"],
+    key: "ChannelARN",
+    operation: kvs.sendAlexaOfferToMaster,
+  }),
 );

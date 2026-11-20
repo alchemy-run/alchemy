@@ -1,0 +1,56 @@
+{
+  "tag": "AWS.Chatbot",
+  "module": "chatbot",
+  "resources": {},
+  "builder": "makeChatbotAccountHttpBinding",
+  "builders": {
+    "makeChatbotAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "DeleteMicrosoftTeamsConfiguredTeam": {
+      "operation": "deleteMicrosoftTeamsConfiguredTeam",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteMicrosoftTeamsUserIdentity": {
+      "operation": "deleteMicrosoftTeamsUserIdentity",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteSlackUserIdentity": {
+      "operation": "deleteSlackUserIdentity",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteSlackWorkspaceAuthorization": {
+      "operation": "deleteSlackWorkspaceAuthorization",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeSlackUserIdentities": {
+      "operation": "describeSlackUserIdentities"
+    },
+    "DescribeSlackWorkspaces": {
+      "operation": "describeSlackWorkspaces"
+    },
+    "GetAccountPreferences": {
+      "operation": "getAccountPreferences"
+    },
+    "ListMicrosoftTeamsConfiguredTeams": {
+      "operation": "listMicrosoftTeamsConfiguredTeams"
+    },
+    "ListMicrosoftTeamsUserIdentities": {
+      "operation": "listMicrosoftTeamsUserIdentities"
+    },
+    "UpdateAccountPreferences": {
+      "operation": "updateAccountPreferences"
+    }
+  }
+}

@@ -1,7 +1,10 @@
 import type * as SVC from "@distilled.cloud/aws/kinesis-analytics-v2";
+import * as analytics from "@distilled.cloud/aws/kinesis-analytics-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeKinesisAnalyticsHttpBinding } from "./BindingHttp.ts";
 
 export interface StartApplicationRequest extends Omit<
   SVC.StartApplicationRequest,
@@ -42,4 +45,13 @@ export interface StartApplication extends Binding.Service<
 > {}
 export const StartApplication = Binding.Service<StartApplication>(
   "AWS.KinesisAnalyticsV2.StartApplication",
+);
+
+export const StartApplicationHttp = Layer.effect(
+  StartApplication,
+  makeKinesisAnalyticsHttpBinding({
+    tag: "AWS.KinesisAnalyticsV2.StartApplication",
+    operation: analytics.startApplication,
+    actions: ["kinesisanalytics:StartApplication"],
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as scheduler from "@distilled.cloud/aws/scheduler";
+import * as scheduler from "@distilled.cloud/aws/scheduler";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeScheduleGroupScopedHttpBinding } from "./BindingHttp.ts";
 import type { ScheduleGroup } from "./ScheduleGroup.ts";
 
 export interface ListSchedulesRequest extends Omit<scheduler.ListSchedulesInput, "GroupName"> {}
@@ -46,3 +48,18 @@ export interface ListSchedules extends Binding.Service<
   >
 > {}
 export const ListSchedules = Binding.Service<ListSchedules>("AWS.Scheduler.ListSchedules");
+
+export const ListSchedulesHttp = Layer.effect(
+  ListSchedules,
+  makeScheduleGroupScopedHttpBinding({
+    tag: "AWS.Scheduler.ListSchedules",
+    operation: scheduler.listSchedules,
+    actions: ["scheduler:ListSchedules"],
+    // An absent GroupName on ListSchedules means "all groups" — pin the
+    // default group so listing stays inside the bound group by default.
+    fallbackGroupName: "default",
+    // IAM evaluates scheduler:ListSchedules against the account-wide
+    // schedule/*/* pattern, so a group-scoped grant can never authorize it.
+    resourceScope: "all",
+  }),
+);

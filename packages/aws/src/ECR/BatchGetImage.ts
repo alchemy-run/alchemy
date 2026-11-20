@@ -1,6 +1,8 @@
-import type * as ecr from "@distilled.cloud/aws/ecr";
+import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcrRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -41,3 +43,13 @@ export interface BatchGetImage extends Binding.Service<
 > {}
 
 export const BatchGetImage = Binding.Service<BatchGetImage>("AWS.ECR.BatchGetImage");
+
+/** HTTP implementation of {@link BatchGetImage} over the ECR API. */
+export const BatchGetImageHttp = Layer.effect(
+  BatchGetImage,
+  makeEcrRepositoryHttpBinding({
+    capability: "BatchGetImage",
+    operation: ecr.batchGetImage,
+    iamActions: ["ecr:BatchGetImage"],
+  }),
+);

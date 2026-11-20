@@ -1,6 +1,7 @@
-import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import { makeImageBinding } from "./MicrovmBinding.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
 export interface RunMicrovmRequest extends Omit<microvms.RunMicrovmRequest, "imageIdentifier"> {}
@@ -41,3 +42,13 @@ export interface RunMicrovm extends Binding.Service<
   >
 > {}
 export const RunMicrovm = Binding.Service<RunMicrovm>("AWS.Lambda.RunMicrovm");
+
+export const RunMicrovmHttp = makeImageBinding({
+  binding: RunMicrovm,
+  name: "RunMicrovm",
+  actions: ["lambda:RunMicrovm"],
+  operation: microvms.runMicrovm,
+  scope: "image",
+  injectImageIdentifier: true,
+  passNetworkConnector: true,
+});

@@ -1,0 +1,132 @@
+{
+  "tag": "AWS.Glacier",
+  "module": "glacier",
+  "resources": {
+    "Vault": {
+      "file": "Vault.ts"
+    }
+  },
+  "builder": "makeGlacierVaultHttpBinding",
+  "builders": {
+    "makeGlacierVaultHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AbortMultipartUpload": {
+      "operation": "abortMultipartUpload",
+      "resource": "Vault",
+      "request": {
+        "mode": "required",
+        "interface": "AbortMultipartUploadRequest",
+        "omit": ["accountId", "vaultName"]
+      }
+    },
+    "CompleteMultipartUpload": {
+      "operation": "completeMultipartUpload",
+      "resource": "Vault",
+      "request": {
+        "mode": "required",
+        "interface": "CompleteMultipartUploadRequest",
+        "omit": ["accountId", "vaultName"]
+      }
+    },
+    "DeleteArchive": {
+      "operation": "deleteArchive",
+      "resource": "Vault",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteArchiveRequest",
+        "omit": ["accountId", "vaultName"]
+      }
+    },
+    "DescribeJob": {
+      "operation": "describeJob",
+      "resource": "Vault",
+      "request": {
+        "mode": "required",
+        "interface": "DescribeJobRequest",
+        "omit": ["accountId", "vaultName"]
+      }
+    },
+    "DescribeVault": {
+      "operation": "describeVault",
+      "resource": "Vault",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "GetJobOutput": {
+      "operation": "getJobOutput",
+      "resource": "Vault",
+      "request": {
+        "mode": "required",
+        "interface": "GetJobOutputRequest",
+        "omit": ["accountId", "vaultName"]
+      }
+    },
+    "InitiateJob": {
+      "operation": "initiateJob",
+      "resource": "Vault",
+      "request": {
+        "mode": "optional",
+        "interface": "InitiateJobRequest",
+        "omit": ["accountId", "vaultName"]
+      }
+    },
+    "InitiateMultipartUpload": {
+      "operation": "initiateMultipartUpload",
+      "resource": "Vault",
+      "request": {
+        "mode": "optional",
+        "interface": "InitiateMultipartUploadRequest",
+        "omit": ["accountId", "vaultName"]
+      }
+    },
+    "ListJobs": {
+      "operation": "listJobs",
+      "resource": "Vault",
+      "request": {
+        "mode": "optional",
+        "interface": "ListJobsRequest",
+        "omit": ["accountId", "vaultName"]
+      }
+    },
+    "ListMultipartUploads": {
+      "operation": "listMultipartUploads",
+      "resource": "Vault",
+      "request": {
+        "mode": "optional",
+        "interface": "ListMultipartUploadsRequest",
+        "omit": ["accountId", "vaultName"]
+      }
+    },
+    "ListParts": {
+      "operation": "listParts",
+      "resource": "Vault",
+      "request": {
+        "mode": "required",
+        "interface": "ListPartsRequest",
+        "omit": ["accountId", "vaultName"]
+      }
+    },
+    "UploadArchive": {
+      "operation": "uploadArchive",
+      "resource": "Vault",
+      "request": {
+        "mode": "optional",
+        "interface": "UploadArchiveRequest",
+        "omit": ["accountId", "vaultName"]
+      }
+    },
+    "UploadMultipartPart": {
+      "operation": "uploadMultipartPart",
+      "resource": "Vault",
+      "request": {
+        "mode": "required",
+        "interface": "UploadMultipartPartRequest",
+        "omit": ["accountId", "vaultName"]
+      }
+    }
+  }
+}

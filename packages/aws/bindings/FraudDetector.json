@@ -1,0 +1,123 @@
+{
+  "tag": "AWS.FraudDetector",
+  "module": "frauddetector",
+  "resources": {
+    "Detector": {
+      "file": "Detector.ts"
+    },
+    "EventType": {
+      "file": "EventType.ts"
+    },
+    "List": {
+      "file": "List.ts"
+    }
+  },
+  "builder": "makeFraudDetectorEventTypeHttpBinding",
+  "builders": {
+    "makeFraudDetectorDetectorHttpBinding": {
+      "grants": "resource"
+    },
+    "makeFraudDetectorEventTypeHttpBinding": {
+      "grants": "resource"
+    },
+    "makeFraudDetectorListHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "DeleteEvent": {
+      "operation": "deleteEvent",
+      "resource": "EventType",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteEventRequest",
+        "omit": ["eventTypeName"]
+      }
+    },
+    "DeleteEventsByEventType": {
+      "operation": "deleteEventsByEventType",
+      "resource": "EventType",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteEventsByEventTypeRequest",
+        "omit": ["eventTypeName"]
+      }
+    },
+    "GetDeleteEventsByEventTypeStatus": {
+      "operation": "getDeleteEventsByEventTypeStatus",
+      "resource": "EventType",
+      "request": {
+        "mode": "required",
+        "interface": "GetDeleteEventsByEventTypeStatusRequest",
+        "omit": ["eventTypeName"]
+      }
+    },
+    "GetEvent": {
+      "operation": "getEvent",
+      "resource": "EventType",
+      "request": {
+        "mode": "required",
+        "interface": "GetEventRequest",
+        "omit": ["eventTypeName"]
+      }
+    },
+    "GetEventPrediction": {
+      "operation": "getEventPrediction",
+      "resource": "Detector",
+      "request": {
+        "mode": "required",
+        "interface": "GetEventPredictionRequest",
+        "omit": ["detectorId"]
+      },
+      "builder": "makeFraudDetectorDetectorHttpBinding"
+    },
+    "GetEventPredictionMetadata": {
+      "operation": "getEventPredictionMetadata",
+      "resource": "Detector",
+      "request": {
+        "mode": "required",
+        "interface": "GetEventPredictionMetadataRequest",
+        "omit": ["detectorId"]
+      },
+      "builder": "makeFraudDetectorDetectorHttpBinding"
+    },
+    "GetListElements": {
+      "operation": "getListElements",
+      "resource": "List",
+      "request": {
+        "mode": "required",
+        "interface": "GetListElementsRequest",
+        "omit": ["name"]
+      },
+      "builder": "makeFraudDetectorListHttpBinding"
+    },
+    "SendEvent": {
+      "operation": "sendEvent",
+      "resource": "EventType",
+      "request": {
+        "mode": "required",
+        "interface": "SendEventRequest",
+        "omit": ["eventTypeName"]
+      }
+    },
+    "UpdateEventLabel": {
+      "operation": "updateEventLabel",
+      "resource": "EventType",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateEventLabelRequest",
+        "omit": ["eventTypeName"]
+      }
+    },
+    "UpdateList": {
+      "operation": "updateList",
+      "resource": "List",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateListRequest",
+        "omit": ["name"]
+      },
+      "builder": "makeFraudDetectorListHttpBinding"
+    }
+  }
+}

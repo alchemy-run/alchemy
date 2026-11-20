@@ -1,0 +1,100 @@
+{
+  "tag": "AWS.RAM",
+  "module": "ram",
+  "resources": {},
+  "builder": "makeRAMHttpBinding",
+  "builders": {
+    "makeRAMHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "AcceptResourceShareInvitation": {
+      "operation": "acceptResourceShareInvitation",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetPermission": {
+      "operation": "getPermission",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetResourcePolicies": {
+      "operation": "getResourcePolicies",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetResourceShareAssociations": {
+      "operation": "getResourceShareAssociations",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetResourceShareInvitations": {
+      "operation": "getResourceShareInvitations"
+    },
+    "GetResourceShares": {
+      "operation": "getResourceShares",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListPendingInvitationResources": {
+      "operation": "listPendingInvitationResources",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListPermissionAssociations": {
+      "operation": "listPermissionAssociations"
+    },
+    "ListPermissionVersions": {
+      "operation": "listPermissionVersions",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListPermissions": {
+      "operation": "listPermissions"
+    },
+    "ListPrincipals": {
+      "operation": "listPrincipals",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListResourceSharePermissions": {
+      "operation": "listResourceSharePermissions",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListResourceTypes": {
+      "operation": "listResourceTypes"
+    },
+    "ListResources": {
+      "operation": "listResources",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListSourceAssociations": {
+      "operation": "listSourceAssociations"
+    },
+    "RejectResourceShareInvitation": {
+      "operation": "rejectResourceShareInvitation",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

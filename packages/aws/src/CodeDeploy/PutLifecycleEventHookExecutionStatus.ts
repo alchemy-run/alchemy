@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codedeploy";
+import * as codedeploy from "@distilled.cloud/aws/codedeploy";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeDeployGroupHttpBinding } from "./BindingHttp.ts";
 import type { DeploymentGroup } from "./DeploymentGroup.ts";
 
 /**
@@ -42,3 +45,12 @@ export const PutLifecycleEventHookExecutionStatus =
   Binding.Service<PutLifecycleEventHookExecutionStatus>(
     "AWS.CodeDeploy.PutLifecycleEventHookExecutionStatus",
   );
+
+export const PutLifecycleEventHookExecutionStatusHttp = Layer.effect(
+  PutLifecycleEventHookExecutionStatus,
+  makeCodeDeployGroupHttpBinding({
+    tag: "AWS.CodeDeploy.PutLifecycleEventHookExecutionStatus",
+    operation: codedeploy.putLifecycleEventHookExecutionStatus,
+    actions: ["codedeploy:PutLifecycleEventHookExecutionStatus"],
+  }),
+);

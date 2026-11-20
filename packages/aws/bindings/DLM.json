@@ -1,0 +1,33 @@
+{
+  "tag": "AWS.DLM",
+  "module": "dlm",
+  "resources": {
+    "LifecyclePolicy": {
+      "file": "LifecyclePolicy.ts"
+    }
+  },
+  "builder": "makeDlmAccountHttpBinding",
+  "builders": {
+    "makeDlmAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeDlmPolicyHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "GetLifecyclePolicies": {
+      "operation": "getLifecyclePolicies"
+    },
+    "GetLifecyclePolicy": {
+      "operation": "getLifecyclePolicy",
+      "resource": "LifecyclePolicy",
+      "param": "policy",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDlmPolicyHttpBinding"
+    }
+  }
+}

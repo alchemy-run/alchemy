@@ -1,7 +1,9 @@
-import type * as sitewise from "@distilled.cloud/aws/iotsitewise";
+import * as sitewise from "@distilled.cloud/aws/iotsitewise";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Asset } from "./Asset.ts";
+import { makeSiteWiseAssetHttpBinding } from "./BindingHttp.ts";
 
 /**
  * One entry of a {@link BatchPutAssetPropertyValue} request. The bound
@@ -88,4 +90,21 @@ export interface BatchPutAssetPropertyValue extends Binding.Service<
 > {}
 export const BatchPutAssetPropertyValue = Binding.Service<BatchPutAssetPropertyValue>(
   "AWS.IoTSiteWise.BatchPutAssetPropertyValue",
+);
+
+export const BatchPutAssetPropertyValueHttp = Layer.effect(
+  BatchPutAssetPropertyValue,
+  makeSiteWiseAssetHttpBinding({
+    capability: "BatchPutAssetPropertyValue",
+    iamActions: ["iotsitewise:BatchPutAssetPropertyValue"],
+    operation: sitewise.batchPutAssetPropertyValue,
+    // Inject the bound asset's id into every entry that does not target a
+    // data stream by alias.
+    prepare: (request: BatchPutAssetPropertyValueRequest, assetId) => ({
+      ...request,
+      entries: request.entries.map((entry) =>
+        entry.propertyAlias === undefined ? { ...entry, assetId } : entry,
+      ),
+    }),
+  }),
 );

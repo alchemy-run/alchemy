@@ -1,6 +1,8 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface GetObjectRetentionRequest extends Omit<S3.GetObjectRetentionRequest, "Bucket"> {}
@@ -35,3 +37,12 @@ export interface GetObjectRetention extends Binding.Service<
   >
 > {}
 export const GetObjectRetention = Binding.Service<GetObjectRetention>("AWS.S3.GetObjectRetention");
+
+export const GetObjectRetentionHttp = Layer.effect(
+  GetObjectRetention,
+  makeBucketHttpBinding({
+    tag: "AWS.S3.GetObjectRetention",
+    operation: S3.getObjectRetention,
+    actions: ["s3:GetObjectRetention"],
+  }),
+);

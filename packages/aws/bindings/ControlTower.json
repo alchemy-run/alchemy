@@ -1,0 +1,154 @@
+{
+  "tag": "AWS.ControlTower",
+  "module": "controltower",
+  "resources": {
+    "EnabledBaseline": {
+      "file": "EnabledBaseline.ts"
+    },
+    "EnabledControl": {
+      "file": "EnabledControl.ts"
+    },
+    "LandingZone": {
+      "file": "LandingZone.ts"
+    }
+  },
+  "builder": "makeControlTowerAccountHttpBinding",
+  "builders": {
+    "makeControlTowerAccountHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    },
+    "makeControlTowerHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      }
+    }
+  },
+  "bindings": {
+    "GetBaseline": {
+      "operation": "getBaseline",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetBaselineOperation": {
+      "operation": "getBaselineOperation",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetControlOperation": {
+      "operation": "getControlOperation",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetEnabledBaseline": {
+      "operation": "getEnabledBaseline",
+      "resource": "EnabledBaseline",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeControlTowerHttpBinding",
+      "with": {
+        "requestKey": "enabledBaselineIdentifier"
+      },
+      "withTs": {
+        "identifier": "(enabledBaseline: EnabledBaseline) => enabledBaseline.enabledBaselineArn"
+      }
+    },
+    "GetEnabledControl": {
+      "operation": "getEnabledControl",
+      "resource": "EnabledControl",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeControlTowerHttpBinding",
+      "with": {
+        "requestKey": "enabledControlIdentifier"
+      },
+      "withTs": {
+        "identifier": "(enabledControl: EnabledControl) => enabledControl.enabledControlArn"
+      }
+    },
+    "GetLandingZone": {
+      "operation": "getLandingZone",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetLandingZoneOperation": {
+      "operation": "getLandingZoneOperation",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListBaselines": {
+      "operation": "listBaselines"
+    },
+    "ListControlOperations": {
+      "operation": "listControlOperations"
+    },
+    "ListEnabledBaselines": {
+      "operation": "listEnabledBaselines"
+    },
+    "ListEnabledControls": {
+      "operation": "listEnabledControls"
+    },
+    "ListLandingZoneOperations": {
+      "operation": "listLandingZoneOperations"
+    },
+    "ListLandingZones": {
+      "operation": "listLandingZones"
+    },
+    "ResetEnabledBaseline": {
+      "operation": "resetEnabledBaseline",
+      "resource": "EnabledBaseline",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeControlTowerHttpBinding",
+      "with": {
+        "requestKey": "enabledBaselineIdentifier"
+      },
+      "withTs": {
+        "identifier": "(enabledBaseline: EnabledBaseline) => enabledBaseline.enabledBaselineArn"
+      }
+    },
+    "ResetEnabledControl": {
+      "operation": "resetEnabledControl",
+      "resource": "EnabledControl",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeControlTowerHttpBinding",
+      "with": {
+        "requestKey": "enabledControlIdentifier"
+      },
+      "withTs": {
+        "identifier": "(enabledControl: EnabledControl) => enabledControl.enabledControlArn"
+      }
+    },
+    "ResetLandingZone": {
+      "operation": "resetLandingZone",
+      "resource": "LandingZone",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeControlTowerHttpBinding",
+      "with": {
+        "requestKey": "landingZoneIdentifier"
+      },
+      "withTs": {
+        "identifier": "(landingZone: LandingZone) => landingZone.landingZoneArn"
+      }
+    }
+  }
+}

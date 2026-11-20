@@ -1,6 +1,8 @@
-import type * as ecrpublic from "@distilled.cloud/aws/ecr-public";
+import * as ecrpublic from "@distilled.cloud/aws/ecr-public";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makePublicRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { PublicRepository } from "./Repository.ts";
 
 /** Request for {@link InitiateLayerUpload} — `repositoryName` is injected. */
@@ -43,4 +45,13 @@ export interface InitiateLayerUpload extends Binding.Service<
 
 export const InitiateLayerUpload = Binding.Service<InitiateLayerUpload>(
   "AWS.ECRPublic.InitiateLayerUpload",
+);
+
+export const InitiateLayerUploadHttp = Layer.effect(
+  InitiateLayerUpload,
+  makePublicRepositoryHttpBinding({
+    capability: "InitiateLayerUpload",
+    iamActions: ["ecr-public:InitiateLayerUpload"],
+    operation: ecrpublic.initiateLayerUpload,
+  }),
 );

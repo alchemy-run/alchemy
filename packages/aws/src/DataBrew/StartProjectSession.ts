@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/databrew";
+import * as databrew from "@distilled.cloud/aws/databrew";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataBrewProjectHttpBinding } from "./BindingHttp.ts";
 import type { Project } from "./Project.ts";
 
 export interface StartProjectSessionRequest extends Omit<SVC.StartProjectSessionRequest, "Name"> {}
@@ -37,4 +40,13 @@ export interface StartProjectSession extends Binding.Service<
 > {}
 export const StartProjectSession = Binding.Service<StartProjectSession>(
   "AWS.DataBrew.StartProjectSession",
+);
+
+export const StartProjectSessionHttp = Layer.effect(
+  StartProjectSession,
+  makeDataBrewProjectHttpBinding({
+    tag: "AWS.DataBrew.StartProjectSession",
+    operation: databrew.startProjectSession,
+    actions: ["databrew:StartProjectSession"],
+  }),
 );

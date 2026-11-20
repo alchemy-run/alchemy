@@ -12,6 +12,9 @@ import type { Providers } from "../Providers.ts";
 import type { AlarmArn } from "./Alarm.ts";
 import { createName, readResourceTags, retryConcurrent, updateResourceTags } from "./common.ts";
 
+/** A composite alarm as `DescribeAlarms` lists it. */
+type ListedCompositeAlarm = NonNullable<cloudwatch.DescribeAlarmsOutput["CompositeAlarms"]>[number];
+
 export class CompositeAlarmUnexpectedResponse extends Data.TaggedError(
   "CompositeAlarmUnexpectedResponse",
 )<{
@@ -20,9 +23,6 @@ export class CompositeAlarmUnexpectedResponse extends Data.TaggedError(
 }> {}
 
 export type CompositeAlarmName = string;
-
-/** A composite alarm as `describeAlarms` lists it. */
-type ListedCompositeAlarm = NonNullable<cloudwatch.DescribeAlarmsOutput["CompositeAlarms"]>[number];
 
 export interface CompositeAlarmProps extends Omit<
   cloudwatch.PutCompositeAlarmInput,

@@ -2,7 +2,9 @@ import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type * as SigV4 from "@distilled.cloud/aws/SigV4";
 import * as Binding from "alchemy/Binding";
 import type { SourceError } from "effect/ConfigProvider";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAmpWorkspaceHttpBinding, toPromTime } from "./BindingHttp.ts";
 import type { PrometheusApiError, PrometheusSeries, PrometheusTime } from "./PrometheusTypes.ts";
 import type { Workspace } from "./Workspace.ts";
 
@@ -45,3 +47,21 @@ export interface GetSeries extends Binding.Service<
   >
 > {}
 export const GetSeries = Binding.Service<GetSeries>("AWS.AMP.GetSeries");
+
+export const GetSeriesHttp = Layer.effect(
+  GetSeries,
+  makeAmpWorkspaceHttpBinding({
+    name: "GetSeries",
+    iamActions: ["aps:GetSeries"],
+    makeClient: (send) => (request: GetSeriesRequest) =>
+      send({
+        method: "GET",
+        path: "api/v1/series",
+        query: {
+          "match[]": request.match,
+          start: request.start !== undefined ? toPromTime(request.start) : undefined,
+          end: request.end !== undefined ? toPromTime(request.end) : undefined,
+        },
+      }).pipe(Effect.map((data) => data as PrometheusSeries[])),
+  }),
+);

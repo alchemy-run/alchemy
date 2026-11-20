@@ -1,6 +1,8 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudWatchResourceSetHttpBinding } from "./BindingHttp.ts";
 import type { MetricStream } from "./MetricStream.ts";
 
 type MetricStreams = [MetricStream, ...MetricStream[]];
@@ -36,4 +38,16 @@ export interface StopMetricStreams extends Binding.Service<
 
 export const StopMetricStreams = Binding.Service<StopMetricStreams>(
   "AWS.CloudWatch.StopMetricStreams",
+);
+
+export const StopMetricStreamsHttp = Layer.effect(
+  StopMetricStreams,
+  makeCloudWatchResourceSetHttpBinding({
+    tag: "AWS.CloudWatch.StopMetricStreams",
+    operation: cloudwatch.stopMetricStreams,
+    action: "cloudwatch:StopMetricStreams",
+    namesKey: "Names",
+    name: (metricStream: MetricStream) => metricStream.metricStreamName,
+    arn: (metricStream: MetricStream) => metricStream.metricStreamArn,
+  }),
 );

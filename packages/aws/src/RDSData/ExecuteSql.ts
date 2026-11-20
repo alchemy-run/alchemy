@@ -2,8 +2,10 @@ import * as rdsdata from "@distilled.cloud/aws/rds-data";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { DBCluster } from "../RDS/DBCluster.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
+import { makeRDSDataHttpBinding } from "./BindingHttp.ts";
 
 export interface ExecuteSqlOptions {
   secret: Secret;
@@ -52,3 +54,23 @@ export interface ExecuteSql extends Binding.Service<
 > {}
 
 export const ExecuteSql = Binding.Service<ExecuteSql>("AWS.RDSData.ExecuteSql");
+
+export const ExecuteSqlHttp = Layer.effect(
+  ExecuteSql,
+  makeRDSDataHttpBinding({
+    tag: "AWS.RDSData.ExecuteSql",
+    action: "rds-data:ExecuteSql",
+    operation: rdsdata.executeSql,
+    // the deprecated ExecuteSql API uses legacy wire keys for the same pair
+    makeInput: (
+      request: ExecuteSqlRequest,
+      { resourceArn, secretArn, database, schema },
+    ): rdsdata.ExecuteSqlRequest => ({
+      ...request,
+      dbClusterOrInstanceArn: resourceArn,
+      awsSecretStoreArn: secretArn,
+      database,
+      schema,
+    }),
+  }),
+);

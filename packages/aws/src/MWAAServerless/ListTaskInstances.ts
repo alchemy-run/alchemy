@@ -1,6 +1,8 @@
-import type * as mwaa from "@distilled.cloud/aws/mwaa-serverless";
+import * as mwaa from "@distilled.cloud/aws/mwaa-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeMwaaServerlessHttpBinding } from "./BindingHttp.ts";
 import type { Workflow } from "./Workflow.ts";
 
 /**
@@ -43,4 +45,13 @@ export interface ListTaskInstances extends Binding.Service<
 > {}
 export const ListTaskInstances = Binding.Service<ListTaskInstances>(
   "AWS.MWAAServerless.ListTaskInstances",
+);
+
+export const ListTaskInstancesHttp = Layer.effect(
+  ListTaskInstances,
+  makeMwaaServerlessHttpBinding({
+    tag: "AWS.MWAAServerless.ListTaskInstances",
+    operation: mwaa.listTaskInstances,
+    actions: ["airflow-serverless:ListTaskInstances"],
+  }),
 );

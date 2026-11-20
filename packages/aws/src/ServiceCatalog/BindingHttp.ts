@@ -1,3 +1,4 @@
+import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
@@ -38,6 +39,11 @@ export const makeServiceCatalogHttpBinding = <I, A, E, R>(options: {
    * The distilled operation implementing the capability.
    */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
+  /**
+   * ARN formats to grant the actions on instead of `*`, with `${Partition}`,
+   * `${Region}`, and `${Account}` filled in at deploy (`AWSBindings.accountArn`).
+   */
+  arns?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -45,14 +51,14 @@ export const makeServiceCatalogHttpBinding = <I, A, E, R>(options: {
 
     return Effect.fn(function* () {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        const policyStatements: PolicyStatement[] = [
+        const policyStatements: Input<PolicyStatement>[] = [
           {
             Effect: "Allow",
             Action: [...options.iamActions],
             // Access is governed by portfolio principal associations;
             // the target products / provisioned products are chosen per
             // request at runtime.
-            Resource: ["*"],
+            Resource: AWSBindings.grantResources(options.arns),
           },
         ];
         yield* bind`AWS.ServiceCatalog.${options.capability}()`({

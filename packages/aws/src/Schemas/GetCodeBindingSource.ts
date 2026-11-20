@@ -1,6 +1,8 @@
-import type * as schemas from "@distilled.cloud/aws/schemas";
+import * as schemas from "@distilled.cloud/aws/schemas";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSchemasSchemaHttpBinding } from "./BindingHttp.ts";
 import type { Schema } from "./Schema.ts";
 
 /**
@@ -39,4 +41,13 @@ export interface GetCodeBindingSource extends Binding.Service<
 > {}
 export const GetCodeBindingSource = Binding.Service<GetCodeBindingSource>(
   "AWS.Schemas.GetCodeBindingSource",
+);
+
+export const GetCodeBindingSourceHttp = Layer.effect(
+  GetCodeBindingSource,
+  makeSchemasSchemaHttpBinding({
+    tag: "AWS.Schemas.GetCodeBindingSource",
+    operation: schemas.getCodeBindingSource,
+    actions: ["schemas:GetCodeBindingSource"],
+  }),
 );

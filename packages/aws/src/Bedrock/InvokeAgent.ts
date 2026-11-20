@@ -1,7 +1,9 @@
-import type * as bedrock from "@distilled.cloud/aws/bedrock-agent-runtime";
+import * as bedrock from "@distilled.cloud/aws/bedrock-agent-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AgentAlias } from "./AgentAlias.ts";
+import { makeAgentAliasScopedHttpBinding } from "./BindingHttp.ts";
 
 /**
  * The `InvokeAgent` request with the binding-injected `agentId` and
@@ -73,3 +75,12 @@ export interface InvokeAgent extends Binding.Service<
   >
 > {}
 export const InvokeAgent = Binding.Service<InvokeAgent>("AWS.Bedrock.InvokeAgent");
+
+export const InvokeAgentHttp = Layer.effect(
+  InvokeAgent,
+  makeAgentAliasScopedHttpBinding({
+    tag: "AWS.Bedrock.InvokeAgent",
+    operation: bedrock.invokeAgent,
+    actions: ["bedrock:InvokeAgent"],
+  }),
+);

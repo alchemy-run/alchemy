@@ -1,7 +1,8 @@
-import type * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
-import type { EmailIdentityRef } from "./BindingHttp.ts";
+import * as Layer from "effect/Layer";
+import { type EmailIdentityRef, makeVerificationScopedHttpBinding } from "./BindingHttp.ts";
 import type { ConfigurationSet } from "./ConfigurationSet.ts";
 import type { EmailIdentity } from "./EmailIdentity.ts";
 
@@ -82,4 +83,13 @@ export interface SendCustomVerificationEmail extends Binding.Service<
 > {}
 export const SendCustomVerificationEmail = Binding.Service<SendCustomVerificationEmail>(
   "AWS.SES.SendCustomVerificationEmail",
+);
+
+export const SendCustomVerificationEmailHttp = Layer.effect(
+  SendCustomVerificationEmail,
+  makeVerificationScopedHttpBinding({
+    tag: "AWS.SES.SendCustomVerificationEmail",
+    operation: sesv2.sendCustomVerificationEmail,
+    actions: ["ses:SendCustomVerificationEmail"],
+  }),
 );

@@ -1,0 +1,91 @@
+{
+  "tag": "AWS.IVS",
+  "module": "ivs",
+  "resources": {
+    "Channel": {
+      "file": "Channel.ts"
+    }
+  },
+  "builder": "makeIvsChannelHttpBinding",
+  "builders": {
+    "makeIvsAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeIvsChannelHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "BatchStartViewerSessionRevocation": {
+      "operation": "batchStartViewerSessionRevocation",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeIvsAccountHttpBinding"
+    },
+    "GetStream": {
+      "operation": "getStream",
+      "resource": "Channel",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "GetStreamSession": {
+      "operation": "getStreamSession",
+      "resource": "Channel",
+      "request": {
+        "mode": "optional",
+        "interface": "GetStreamSessionRequest",
+        "omit": ["channelArn"]
+      }
+    },
+    "InsertAdBreak": {
+      "operation": "insertAdBreak",
+      "resource": "Channel",
+      "request": {
+        "mode": "required",
+        "interface": "InsertAdBreakRequest",
+        "omit": ["channelArn"]
+      }
+    },
+    "ListStreamSessions": {
+      "operation": "listStreamSessions",
+      "resource": "Channel",
+      "request": {
+        "mode": "optional",
+        "interface": "ListStreamSessionsRequest",
+        "omit": ["channelArn"]
+      }
+    },
+    "ListStreams": {
+      "operation": "listStreams",
+      "builder": "makeIvsAccountHttpBinding"
+    },
+    "PutMetadata": {
+      "operation": "putMetadata",
+      "resource": "Channel",
+      "request": {
+        "mode": "required",
+        "interface": "PutMetadataRequest",
+        "omit": ["channelArn"]
+      }
+    },
+    "StartViewerSessionRevocation": {
+      "operation": "startViewerSessionRevocation",
+      "resource": "Channel",
+      "request": {
+        "mode": "required",
+        "interface": "StartViewerSessionRevocationRequest",
+        "omit": ["channelArn"]
+      }
+    },
+    "StopStream": {
+      "operation": "stopStream",
+      "resource": "Channel",
+      "request": {
+        "mode": "none"
+      }
+    }
+  }
+}

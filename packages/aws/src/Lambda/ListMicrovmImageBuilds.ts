@@ -1,6 +1,7 @@
-import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import { makeImageBinding } from "./MicrovmBinding.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
 export interface ListMicrovmImageBuildsRequest extends Omit<
@@ -32,3 +33,12 @@ export interface ListMicrovmImageBuilds extends Binding.Service<
 export const ListMicrovmImageBuilds = Binding.Service<ListMicrovmImageBuilds>(
   "AWS.Lambda.ListMicrovmImageBuilds",
 );
+
+export const ListMicrovmImageBuildsHttp = makeImageBinding({
+  binding: ListMicrovmImageBuilds,
+  name: "ListMicrovmImageBuilds",
+  actions: ["lambda:ListMicrovmImageBuilds"],
+  operation: microvms.listMicrovmImageBuilds,
+  scope: "image",
+  injectImageIdentifier: true,
+});

@@ -1,0 +1,295 @@
+{
+  "tag": "AWS.FMS",
+  "module": "fms",
+  "resources": {},
+  "builder": "makeFmsHttpBinding",
+  "builders": {
+    "makeFmsHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "AssociateThirdPartyFirewall": {
+      "operation": "associateThirdPartyFirewall",
+      "request": {
+        "mode": "required",
+        "interface": "AssociateThirdPartyFirewallRequest",
+        "omit": []
+      }
+    },
+    "BatchAssociateResource": {
+      "operation": "batchAssociateResource",
+      "request": {
+        "mode": "required",
+        "interface": "BatchAssociateResourceRequest",
+        "omit": []
+      }
+    },
+    "BatchDisassociateResource": {
+      "operation": "batchDisassociateResource",
+      "request": {
+        "mode": "required",
+        "interface": "BatchDisassociateResourceRequest",
+        "omit": []
+      }
+    },
+    "DeleteAppsList": {
+      "operation": "deleteAppsList",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteAppsListRequest",
+        "omit": []
+      }
+    },
+    "DeleteNotificationChannel": {
+      "operation": "deleteNotificationChannel",
+      "request": {
+        "mode": "optional",
+        "interface": "DeleteNotificationChannelRequest",
+        "omit": []
+      }
+    },
+    "DeletePolicy": {
+      "operation": "deletePolicy",
+      "request": {
+        "mode": "required",
+        "interface": "DeletePolicyRequest",
+        "omit": []
+      }
+    },
+    "DeleteProtocolsList": {
+      "operation": "deleteProtocolsList",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteProtocolsListRequest",
+        "omit": []
+      }
+    },
+    "DeleteResourceSet": {
+      "operation": "deleteResourceSet",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteResourceSetRequest",
+        "omit": []
+      }
+    },
+    "DisassociateThirdPartyFirewall": {
+      "operation": "disassociateThirdPartyFirewall",
+      "request": {
+        "mode": "required",
+        "interface": "DisassociateThirdPartyFirewallRequest",
+        "omit": []
+      }
+    },
+    "GetAdminScope": {
+      "operation": "getAdminScope",
+      "request": {
+        "mode": "required",
+        "interface": "GetAdminScopeRequest",
+        "omit": []
+      },
+      "with": {
+        "pinToAdminRegion": true
+      }
+    },
+    "GetAppsList": {
+      "operation": "getAppsList",
+      "request": {
+        "mode": "required",
+        "interface": "GetAppsListRequest",
+        "omit": []
+      }
+    },
+    "GetComplianceDetail": {
+      "operation": "getComplianceDetail",
+      "request": {
+        "mode": "required",
+        "interface": "GetComplianceDetailRequest",
+        "omit": []
+      }
+    },
+    "GetNotificationChannel": {
+      "operation": "getNotificationChannel",
+      "request": {
+        "mode": "optional",
+        "interface": "GetNotificationChannelRequest",
+        "omit": []
+      }
+    },
+    "GetPolicy": {
+      "operation": "getPolicy",
+      "request": {
+        "mode": "required",
+        "interface": "GetPolicyRequest",
+        "omit": []
+      }
+    },
+    "GetProtectionStatus": {
+      "operation": "getProtectionStatus",
+      "request": {
+        "mode": "required",
+        "interface": "GetProtectionStatusRequest",
+        "omit": []
+      }
+    },
+    "GetProtocolsList": {
+      "operation": "getProtocolsList",
+      "request": {
+        "mode": "required",
+        "interface": "GetProtocolsListRequest",
+        "omit": []
+      }
+    },
+    "GetResourceSet": {
+      "operation": "getResourceSet",
+      "request": {
+        "mode": "required",
+        "interface": "GetResourceSetRequest",
+        "omit": []
+      }
+    },
+    "GetViolationDetails": {
+      "operation": "getViolationDetails",
+      "request": {
+        "mode": "required",
+        "interface": "GetViolationDetailsRequest",
+        "omit": []
+      }
+    },
+    "ListAdminAccountsForOrganization": {
+      "operation": "listAdminAccountsForOrganization",
+      "request": {
+        "mode": "optional",
+        "interface": "ListAdminAccountsForOrganizationRequest",
+        "omit": []
+      },
+      "with": {
+        "pinToAdminRegion": true
+      }
+    },
+    "ListAdminsManagingAccount": {
+      "operation": "listAdminsManagingAccount",
+      "request": {
+        "mode": "optional",
+        "interface": "ListAdminsManagingAccountRequest",
+        "omit": []
+      },
+      "with": {
+        "pinToAdminRegion": true
+      }
+    },
+    "ListAppsLists": {
+      "operation": "listAppsLists",
+      "request": {
+        "mode": "required",
+        "interface": "ListAppsListsRequest",
+        "omit": []
+      }
+    },
+    "ListComplianceStatus": {
+      "operation": "listComplianceStatus",
+      "request": {
+        "mode": "required",
+        "interface": "ListComplianceStatusRequest",
+        "omit": []
+      }
+    },
+    "ListDiscoveredResources": {
+      "operation": "listDiscoveredResources",
+      "request": {
+        "mode": "required",
+        "interface": "ListDiscoveredResourcesRequest",
+        "omit": []
+      }
+    },
+    "ListMemberAccounts": {
+      "operation": "listMemberAccounts",
+      "request": {
+        "mode": "optional",
+        "interface": "ListMemberAccountsRequest",
+        "omit": []
+      }
+    },
+    "ListPolicies": {
+      "operation": "listPolicies",
+      "request": {
+        "mode": "optional",
+        "interface": "ListPoliciesRequest",
+        "omit": []
+      }
+    },
+    "ListProtocolsLists": {
+      "operation": "listProtocolsLists",
+      "request": {
+        "mode": "required",
+        "interface": "ListProtocolsListsRequest",
+        "omit": []
+      }
+    },
+    "ListResourceSetResources": {
+      "operation": "listResourceSetResources",
+      "request": {
+        "mode": "required",
+        "interface": "ListResourceSetResourcesRequest",
+        "omit": []
+      }
+    },
+    "ListResourceSets": {
+      "operation": "listResourceSets",
+      "request": {
+        "mode": "optional",
+        "interface": "ListResourceSetsRequest",
+        "omit": []
+      }
+    },
+    "PutAppsList": {
+      "operation": "putAppsList",
+      "request": {
+        "mode": "required",
+        "interface": "PutAppsListRequest",
+        "omit": []
+      }
+    },
+    "PutNotificationChannel": {
+      "operation": "putNotificationChannel",
+      "request": {
+        "mode": "required",
+        "interface": "PutNotificationChannelRequest",
+        "omit": []
+      },
+      "with": {
+        "passRole": true
+      }
+    },
+    "PutPolicy": {
+      "operation": "putPolicy",
+      "request": {
+        "mode": "required",
+        "interface": "PutPolicyRequest",
+        "omit": []
+      }
+    },
+    "PutProtocolsList": {
+      "operation": "putProtocolsList",
+      "request": {
+        "mode": "required",
+        "interface": "PutProtocolsListRequest",
+        "omit": []
+      }
+    },
+    "PutResourceSet": {
+      "operation": "putResourceSet",
+      "request": {
+        "mode": "required",
+        "interface": "PutResourceSetRequest",
+        "omit": []
+      }
+    }
+  }
+}

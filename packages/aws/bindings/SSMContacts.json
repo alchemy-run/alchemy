@@ -1,0 +1,184 @@
+{
+  "tag": "AWS.SSMContacts",
+  "module": "ssm-contacts",
+  "alias": "ssm",
+  "resources": {
+    "Contact": {
+      "file": "Contact.ts"
+    },
+    "ContactChannel": {
+      "file": "ContactChannel.ts"
+    },
+    "Rotation": {
+      "file": "Rotation.ts"
+    }
+  },
+  "builder": "makeAccountHttpBinding",
+  "builders": {
+    "makeAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeContactChannelHttpBinding": {
+      "grants": "resource"
+    },
+    "makeContactHttpBinding": {
+      "grants": "resource"
+    },
+    "makeRotationHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AcceptPage": {
+      "operation": "acceptPage",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ActivateContactChannel": {
+      "operation": "activateContactChannel",
+      "resource": "ContactChannel",
+      "param": "channel",
+      "request": {
+        "mode": "required",
+        "omit": ["ContactChannelId"],
+        "inline": true
+      },
+      "builder": "makeContactChannelHttpBinding"
+    },
+    "CreateRotationOverride": {
+      "operation": "createRotationOverride",
+      "resource": "Rotation",
+      "request": {
+        "mode": "required",
+        "omit": ["RotationId"],
+        "inline": true
+      },
+      "builder": "makeRotationHttpBinding"
+    },
+    "DeactivateContactChannel": {
+      "operation": "deactivateContactChannel",
+      "resource": "ContactChannel",
+      "param": "channel",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeContactChannelHttpBinding"
+    },
+    "DeleteRotationOverride": {
+      "operation": "deleteRotationOverride",
+      "resource": "Rotation",
+      "request": {
+        "mode": "required",
+        "omit": ["RotationId"],
+        "inline": true
+      },
+      "builder": "makeRotationHttpBinding"
+    },
+    "DescribeEngagement": {
+      "operation": "describeEngagement",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribePage": {
+      "operation": "describePage",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetRotationOverride": {
+      "operation": "getRotationOverride",
+      "resource": "Rotation",
+      "request": {
+        "mode": "required",
+        "omit": ["RotationId"],
+        "inline": true
+      },
+      "builder": "makeRotationHttpBinding"
+    },
+    "ListEngagements": {
+      "operation": "listEngagements"
+    },
+    "ListPageReceipts": {
+      "operation": "listPageReceipts",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListPageResolutions": {
+      "operation": "listPageResolutions",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListPagesByContact": {
+      "operation": "listPagesByContact",
+      "resource": "Contact",
+      "request": {
+        "mode": "optional",
+        "omit": ["ContactId"],
+        "inline": true
+      },
+      "builder": "makeContactHttpBinding"
+    },
+    "ListPagesByEngagement": {
+      "operation": "listPagesByEngagement",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListPreviewRotationShifts": {
+      "operation": "listPreviewRotationShifts",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListRotationOverrides": {
+      "operation": "listRotationOverrides",
+      "resource": "Rotation",
+      "request": {
+        "mode": "required",
+        "omit": ["RotationId"],
+        "inline": true
+      },
+      "builder": "makeRotationHttpBinding"
+    },
+    "ListRotationShifts": {
+      "operation": "listRotationShifts",
+      "resource": "Rotation",
+      "request": {
+        "mode": "required",
+        "omit": ["RotationId"],
+        "inline": true
+      },
+      "builder": "makeRotationHttpBinding"
+    },
+    "SendActivationCode": {
+      "operation": "sendActivationCode",
+      "resource": "ContactChannel",
+      "param": "channel",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeContactChannelHttpBinding"
+    },
+    "StartEngagement": {
+      "operation": "startEngagement",
+      "resource": "Contact",
+      "request": {
+        "mode": "required",
+        "omit": ["ContactId"],
+        "inline": true
+      },
+      "builder": "makeContactHttpBinding"
+    },
+    "StopEngagement": {
+      "operation": "stopEngagement",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

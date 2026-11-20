@@ -1,0 +1,67 @@
+{
+  "tag": "AWS.CloudHSMV2",
+  "module": "cloudhsm-v2",
+  "alias": "cloudhsm",
+  "resources": {},
+  "builder": "makeCloudHsmHttpBinding",
+  "builders": {
+    "makeCloudHsmHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "CopyBackupToRegion": {
+      "operation": "copyBackupToRegion",
+      "request": {
+        "mode": "required"
+      },
+      "note": "TagResource lets the copy carry the source backup's user tags into the destination region."
+    },
+    "DeleteBackup": {
+      "operation": "deleteBackup",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DeleteResourcePolicy": {
+      "operation": "deleteResourcePolicy",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "DescribeBackups": {
+      "operation": "describeBackups"
+    },
+    "DescribeClusters": {
+      "operation": "describeClusters"
+    },
+    "GetResourcePolicy": {
+      "operation": "getResourcePolicy"
+    },
+    "InitializeCluster": {
+      "operation": "initializeCluster",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ModifyBackupAttributes": {
+      "operation": "modifyBackupAttributes",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "PutResourcePolicy": {
+      "operation": "putResourcePolicy",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "RestoreBackup": {
+      "operation": "restoreBackup",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

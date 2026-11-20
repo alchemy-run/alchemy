@@ -1,6 +1,8 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface UploadPartRequest extends Omit<S3.UploadPartRequest, "Bucket"> {}
@@ -40,3 +42,12 @@ export interface UploadPart extends Binding.Service<
   >
 > {}
 export const UploadPart = Binding.Service<UploadPart>("AWS.S3.UploadPart");
+
+export const UploadPartHttp = Layer.effect(
+  UploadPart,
+  makeBucketHttpBinding({
+    tag: "AWS.S3.UploadPart",
+    operation: S3.uploadPart,
+    actions: ["s3:PutObject"],
+  }),
+);

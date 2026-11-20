@@ -40,6 +40,17 @@ export const makeFmsHttpBinding = <I extends object, A, E, R>(options: {
    * {@link AdminAccount} resource APIs.
    */
   pinToAdminRegion?: boolean;
+  /**
+   * Also grant `iam:PassRole`, limited to roles passed to Firewall Manager
+   * (`iam:PassedToService`): `PutNotificationChannel` passes the role FMS
+   * publishes to SNS with (`SnsRoleName`).
+   */
+  passRole?: boolean;
+  /**
+   * ARN formats to grant the actions on instead of `*`, with `${Partition}`,
+   * `${Region}`, and `${Account}` filled in at deploy (`AWSBindings.accountArn`).
+   */
+  arns?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -54,8 +65,18 @@ export const makeFmsHttpBinding = <I extends object, A, E, R>(options: {
             {
               Effect: "Allow",
               Action: [...options.iamActions],
-              Resource: ["*"],
+              Resource: AWSBindings.grantResources(options.arns),
             },
+            ...(options.passRole
+              ? [
+                  {
+                    Effect: "Allow" as const,
+                    Action: ["iam:PassRole"],
+                    Resource: ["*"],
+                    Condition: { StringEquals: { "iam:PassedToService": "fms.amazonaws.com" } },
+                  },
+                ]
+              : []),
           ],
         });
       }

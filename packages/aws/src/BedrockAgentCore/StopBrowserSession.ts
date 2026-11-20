@@ -1,6 +1,8 @@
-import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import type { BrowserCustom } from "./BrowserCustom.ts";
 
 export interface StopBrowserSessionRequest extends Omit<
@@ -45,4 +47,16 @@ export interface StopBrowserSession extends Binding.Service<
 > {}
 export const StopBrowserSession = Binding.Service<StopBrowserSession>(
   "AWS.BedrockAgentCore.StopBrowserSession",
+);
+
+export const StopBrowserSessionHttp = Layer.effect(
+  StopBrowserSession,
+  makeAgentCoreHttpBinding({
+    tag: "AWS.BedrockAgentCore.StopBrowserSession",
+    operation: agentcore.stopBrowserSession,
+    actions: ["bedrock-agentcore:StopBrowserSession"],
+    requestKey: "browserIdentifier",
+    identifier: (browser: BrowserCustom) => browser.browserId,
+    arns: (browser: BrowserCustom) => [browser.browserArn],
+  }),
 );

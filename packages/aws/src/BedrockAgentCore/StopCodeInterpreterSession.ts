@@ -1,6 +1,8 @@
-import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import type { CodeInterpreter } from "./CodeInterpreter.ts";
 
 export interface StopCodeInterpreterSessionRequest extends Omit<
@@ -44,4 +46,16 @@ export interface StopCodeInterpreterSession extends Binding.Service<
 > {}
 export const StopCodeInterpreterSession = Binding.Service<StopCodeInterpreterSession>(
   "AWS.BedrockAgentCore.StopCodeInterpreterSession",
+);
+
+export const StopCodeInterpreterSessionHttp = Layer.effect(
+  StopCodeInterpreterSession,
+  makeAgentCoreHttpBinding({
+    tag: "AWS.BedrockAgentCore.StopCodeInterpreterSession",
+    operation: agentcore.stopCodeInterpreterSession,
+    actions: ["bedrock-agentcore:StopCodeInterpreterSession"],
+    requestKey: "codeInterpreterIdentifier",
+    identifier: (codeInterpreter: CodeInterpreter) => codeInterpreter.codeInterpreterId,
+    arns: (codeInterpreter: CodeInterpreter) => [codeInterpreter.codeInterpreterArn],
+  }),
 );

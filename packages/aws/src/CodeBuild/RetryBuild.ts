@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codebuild";
+import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeBuildProjectHttpBinding } from "./BindingHttp.ts";
 import type { Project } from "./Project.ts";
 
 /**
@@ -27,3 +30,12 @@ export interface RetryBuild extends Binding.Service<
   >
 > {}
 export const RetryBuild = Binding.Service<RetryBuild>("AWS.CodeBuild.RetryBuild");
+
+export const RetryBuildHttp = Layer.effect(
+  RetryBuild,
+  makeCodeBuildProjectHttpBinding({
+    tag: "AWS.CodeBuild.RetryBuild",
+    operation: codebuild.retryBuild,
+    actions: ["codebuild:RetryBuild"],
+  }),
+);

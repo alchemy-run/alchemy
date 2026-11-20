@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codepipeline";
+import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodePipelinePipelineNameHttpBinding } from "./BindingHttp.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 export interface OverrideStageConditionRequest extends Omit<
@@ -40,4 +43,14 @@ export interface OverrideStageCondition extends Binding.Service<
 > {}
 export const OverrideStageCondition = Binding.Service<OverrideStageCondition>(
   "AWS.CodePipeline.OverrideStageCondition",
+);
+
+export const OverrideStageConditionHttp = Layer.effect(
+  OverrideStageCondition,
+  makeCodePipelinePipelineNameHttpBinding({
+    tag: "AWS.CodePipeline.OverrideStageCondition",
+    operation: codepipeline.overrideStageCondition,
+    actions: ["codepipeline:OverrideStageCondition"],
+    subScoped: true,
+  }),
 );

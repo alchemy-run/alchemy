@@ -1,6 +1,8 @@
-import type * as cur from "@distilled.cloud/aws/cost-and-usage-report-service";
+import * as cur from "@distilled.cloud/aws/cost-and-usage-report-service";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeReportDefinitionHttpBinding } from "./BindingHttp.ts";
 import type { ReportDefinition } from "./ReportDefinition.ts";
 
 /**
@@ -38,4 +40,19 @@ export interface ListTagsForResource extends Binding.Service<
 
 export const ListTagsForResource = Binding.Service<ListTagsForResource>(
   "AWS.CostAndUsageReport.ListTagsForResource",
+);
+
+/**
+ * HTTP implementation of {@link ListTagsForResource}: grants
+ * `cur:ListTagsForResource` on the bound report definition's ARN and calls
+ * the us-east-1 CUR endpoint with the function's IAM credentials, injecting
+ * the report's name as the `ReportName`.
+ */
+export const ListTagsForResourceHttp = Layer.effect(
+  ListTagsForResource,
+  makeReportDefinitionHttpBinding({
+    capability: "ListTagsForResource",
+    iamActions: ["cur:ListTagsForResource"],
+    operation: cur.listTagsForResource,
+  }),
 );

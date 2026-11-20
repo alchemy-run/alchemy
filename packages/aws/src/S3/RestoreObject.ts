@@ -1,6 +1,8 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface RestoreObjectRequest extends Omit<S3.RestoreObjectRequest, "Bucket"> {}
@@ -39,3 +41,12 @@ export interface RestoreObject extends Binding.Service<
   >
 > {}
 export const RestoreObject = Binding.Service<RestoreObject>("AWS.S3.RestoreObject");
+
+export const RestoreObjectHttp = Layer.effect(
+  RestoreObject,
+  makeBucketHttpBinding({
+    tag: "AWS.S3.RestoreObject",
+    operation: S3.restoreObject,
+    actions: ["s3:RestoreObject"],
+  }),
+);

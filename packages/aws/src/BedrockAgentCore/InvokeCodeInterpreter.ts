@@ -1,6 +1,8 @@
-import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import type { CodeInterpreter } from "./CodeInterpreter.ts";
 
 export interface InvokeCodeInterpreterRequest extends Omit<
@@ -50,4 +52,16 @@ export interface InvokeCodeInterpreter extends Binding.Service<
 > {}
 export const InvokeCodeInterpreter = Binding.Service<InvokeCodeInterpreter>(
   "AWS.BedrockAgentCore.InvokeCodeInterpreter",
+);
+
+export const InvokeCodeInterpreterHttp = Layer.effect(
+  InvokeCodeInterpreter,
+  makeAgentCoreHttpBinding({
+    tag: "AWS.BedrockAgentCore.InvokeCodeInterpreter",
+    operation: agentcore.invokeCodeInterpreter,
+    actions: ["bedrock-agentcore:InvokeCodeInterpreter"],
+    requestKey: "codeInterpreterIdentifier",
+    identifier: (codeInterpreter: CodeInterpreter) => codeInterpreter.codeInterpreterId,
+    arns: (codeInterpreter: CodeInterpreter) => [codeInterpreter.codeInterpreterArn],
+  }),
 );

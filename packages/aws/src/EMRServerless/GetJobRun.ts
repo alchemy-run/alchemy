@@ -1,7 +1,9 @@
-import type * as emr from "@distilled.cloud/aws/emr-serverless";
+import * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeEmrServerlessHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request accepted by the {@link GetJobRun} runtime callable. The
@@ -39,3 +41,13 @@ export interface GetJobRun extends Binding.Service<
   >
 > {}
 export const GetJobRun = Binding.Service<GetJobRun>("AWS.EMRServerless.GetJobRun");
+
+export const GetJobRunHttp = Layer.effect(
+  GetJobRun,
+  makeEmrServerlessHttpBinding({
+    tag: "AWS.EMRServerless.GetJobRun",
+    operation: emr.getJobRun,
+    actions: ["emr-serverless:GetJobRun"],
+    subresources: ["/jobruns/*"],
+  }),
+);

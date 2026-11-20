@@ -1,6 +1,8 @@
-import type * as bedrock from "@distilled.cloud/aws/bedrock-agent-runtime";
+import * as bedrock from "@distilled.cloud/aws/bedrock-agent-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRagHttpBinding } from "./BindingHttp.ts";
 import type { KnowledgeBase } from "./KnowledgeBase.ts";
 
 /**
@@ -63,4 +65,12 @@ export interface RetrieveAndGenerate extends Binding.Service<
 > {}
 export const RetrieveAndGenerate = Binding.Service<RetrieveAndGenerate>(
   "AWS.Bedrock.RetrieveAndGenerate",
+);
+
+export const RetrieveAndGenerateHttp = Layer.effect(
+  RetrieveAndGenerate,
+  makeRagHttpBinding({
+    tag: "AWS.Bedrock.RetrieveAndGenerate",
+    operation: bedrock.retrieveAndGenerate,
+  }),
 );

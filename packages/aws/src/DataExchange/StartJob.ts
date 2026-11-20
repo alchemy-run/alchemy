@@ -1,6 +1,8 @@
-import type * as dataexchange from "@distilled.cloud/aws/dataexchange";
+import * as dataexchange from "@distilled.cloud/aws/dataexchange";
 import * as Binding from "alchemy/Binding";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as AWSBindings from "../AWSBindings.ts";
 
 /**
  * Runtime binding for `dataexchange:StartJob`.
@@ -33,3 +35,54 @@ export interface StartJob extends Binding.Service<
   >
 > {}
 export const StartJob = Binding.Service<StartJob>("AWS.DataExchange.StartJob");
+
+/**
+ * Bespoke implementation (not the shared account builder): a started job
+ * runs with the caller's forwarded permissions, so on top of the
+ * `dataexchange:*` actions it needs S3 access to AWS Data Exchange's own
+ * service buckets (`arn:aws:s3:::*aws-data-exchange*`) — import jobs write
+ * staged assets there (`s3:PutObject`/`s3:PutObjectAcl`), export jobs read
+ * them (`s3:GetObject`). Mirrors the AWS-managed
+ * `AWSDataExchangeProviderFullAccess` policy, including the `aws:CalledVia`
+ * condition that limits the S3 grant to calls made through Data Exchange.
+ */
+export const StartJobHttp = Layer.effect(
+  StartJob,
+  Effect.gen(function* () {
+    const bind = yield* AWSBindings.Bind;
+    const op = yield* AWSBindings.withCredentials(dataexchange.startJob);
+
+    return Effect.fn(function* () {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`AWS.DataExchange.StartJob()`({
+          policyStatements: [
+            {
+              Effect: "Allow",
+              Action: [
+                "dataexchange:StartJob",
+                "dataexchange:CreateAsset",
+                "dataexchange:GetAsset",
+              ],
+              Resource: ["*"],
+            },
+            {
+              Effect: "Allow",
+              Action: ["s3:GetObject", "s3:PutObject", "s3:PutObjectAcl"],
+              Resource: ["arn:aws:s3:::*aws-data-exchange*"],
+              Condition: {
+                "ForAnyValue:StringEquals": {
+                  "aws:CalledVia": ["dataexchange.amazonaws.com"],
+                },
+              },
+            },
+          ],
+        });
+      }
+      return Effect.fn("AWS.DataExchange.StartJob")(function* (
+        request: dataexchange.StartJobRequest,
+      ) {
+        return yield* op(request);
+      });
+    });
+  }),
+);

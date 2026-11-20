@@ -1,6 +1,8 @@
-import type * as sagemaker from "@distilled.cloud/aws/sagemaker";
+import * as sagemaker from "@distilled.cloud/aws/sagemaker";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEndpointHttpBinding } from "./BindingHttp.ts";
 import type { Endpoint } from "./Endpoint.ts";
 
 /**
@@ -33,3 +35,12 @@ export interface DescribeEndpoint extends Binding.Service<
   >
 > {}
 export const DescribeEndpoint = Binding.Service<DescribeEndpoint>("AWS.SageMaker.DescribeEndpoint");
+
+export const DescribeEndpointHttp = Layer.effect(
+  DescribeEndpoint,
+  makeEndpointHttpBinding({
+    tag: "AWS.SageMaker.DescribeEndpoint",
+    operation: sagemaker.describeEndpoint,
+    actions: ["sagemaker:DescribeEndpoint"],
+  }),
+);

@@ -1,0 +1,18 @@
+{
+  "tag": "AWS.ResourceExplorer",
+  "module": "resource-explorer-2",
+  "alias": "RE2",
+  "resources": {},
+  "builder": "makeResourceExplorerAccountHttpBinding",
+  "builders": {
+    "makeResourceExplorerAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "ListSupportedResourceTypes": {
+      "operation": "listSupportedResourceTypes"
+    }
+  }
+}

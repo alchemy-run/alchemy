@@ -1,7 +1,8 @@
-import type * as mwaa from "@distilled.cloud/aws/mwaa";
+import * as mwaa from "@distilled.cloud/aws/mwaa";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
-import type { AirflowRoleOptions } from "./BindingHttp.ts";
+import * as Layer from "effect/Layer";
+import { type AirflowRoleOptions, makeMWAAAirflowRoleHttpBinding } from "./BindingHttp.ts";
 import type { Environment } from "./Environment.ts";
 
 export interface InvokeRestApiRequest extends Omit<mwaa.InvokeRestApiRequest, "Name"> {}
@@ -56,3 +57,12 @@ export interface InvokeRestApi extends Binding.Service<
 > {}
 
 export const InvokeRestApi = Binding.Service<InvokeRestApi>("AWS.MWAA.InvokeRestApi");
+
+export const InvokeRestApiHttp = Layer.effect(
+  InvokeRestApi,
+  makeMWAAAirflowRoleHttpBinding({
+    tag: "AWS.MWAA.InvokeRestApi",
+    operation: mwaa.invokeRestApi,
+    actions: ["airflow:InvokeRestApi"],
+  }),
+);

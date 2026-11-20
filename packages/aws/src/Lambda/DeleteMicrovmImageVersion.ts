@@ -1,6 +1,7 @@
-import type * as microvms from "@distilled.cloud/aws/lambda-microvms";
+import * as microvms from "@distilled.cloud/aws/lambda-microvms";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import { makeImageBinding } from "./MicrovmBinding.ts";
 import type { MicrovmImage } from "./MicrovmImage.ts";
 
 export interface DeleteMicrovmImageVersionRequest extends Omit<
@@ -34,3 +35,12 @@ export interface DeleteMicrovmImageVersion extends Binding.Service<
 export const DeleteMicrovmImageVersion = Binding.Service<DeleteMicrovmImageVersion>(
   "AWS.Lambda.DeleteMicrovmImageVersion",
 );
+
+export const DeleteMicrovmImageVersionHttp = makeImageBinding({
+  binding: DeleteMicrovmImageVersion,
+  name: "DeleteMicrovmImageVersion",
+  actions: ["lambda:DeleteMicrovmImageVersion"],
+  operation: microvms.deleteMicrovmImageVersion,
+  scope: "image",
+  injectImageIdentifier: true,
+});

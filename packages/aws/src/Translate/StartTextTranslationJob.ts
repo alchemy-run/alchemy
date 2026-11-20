@@ -1,7 +1,9 @@
-import type * as translate from "@distilled.cloud/aws/translate";
+import * as translate from "@distilled.cloud/aws/translate";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Role } from "../IAM/Role.ts";
+import { makeTranslateStartJobHttpBinding } from "./BindingHttp.ts";
 
 /**
  * `StartTextTranslationJob` request with `DataAccessRoleArn` defaulting to
@@ -71,4 +73,13 @@ export interface StartTextTranslationJob extends Binding.Service<
 > {}
 export const StartTextTranslationJob = Binding.Service<StartTextTranslationJob>(
   "AWS.Translate.StartTextTranslationJob",
+);
+
+export const StartTextTranslationJobHttp = Layer.effect(
+  StartTextTranslationJob,
+  makeTranslateStartJobHttpBinding({
+    tag: "AWS.Translate.StartTextTranslationJob",
+    operation: translate.startTextTranslationJob,
+    actions: ["translate:StartTextTranslationJob"],
+  }),
 );

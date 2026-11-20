@@ -1,6 +1,9 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableIamHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface ExecuteStatementRequest extends DynamoDB.ExecuteStatementInput {}
@@ -36,3 +39,18 @@ export interface ExecuteStatement extends Binding.Service<
 > {}
 
 export const ExecuteStatement = Binding.Service<ExecuteStatement>("AWS.DynamoDB.ExecuteStatement");
+
+export const ExecuteStatementHttp = Layer.effect(
+  ExecuteStatement,
+  makeTableIamHttpBinding({
+    tag: "AWS.DynamoDB.ExecuteStatement",
+    operation: DynamoDB.executeStatement,
+    actions: [
+      "dynamodb:PartiQLDelete",
+      "dynamodb:PartiQLInsert",
+      "dynamodb:PartiQLSelect",
+      "dynamodb:PartiQLUpdate",
+    ],
+    resources: (table) => [table.tableArn, Output.interpolate`${table.tableArn}/index/*`],
+  }),
+);

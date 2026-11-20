@@ -1,6 +1,8 @@
-import type * as resourcegroups from "@distilled.cloud/aws/resource-groups";
+import * as resourcegroups from "@distilled.cloud/aws/resource-groups";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeResourceGroupsGroupHttpBinding } from "./BindingHttp.ts";
 import type { Group } from "./Group.ts";
 
 /** Request for {@link ListGroupingStatuses} — the group is injected from the binding. */
@@ -44,4 +46,13 @@ export interface ListGroupingStatuses extends Binding.Service<
 > {}
 export const ListGroupingStatuses = Binding.Service<ListGroupingStatuses>(
   "AWS.ResourceGroups.ListGroupingStatuses",
+);
+
+export const ListGroupingStatusesHttp = Layer.effect(
+  ListGroupingStatuses,
+  makeResourceGroupsGroupHttpBinding({
+    tag: "AWS.ResourceGroups.ListGroupingStatuses",
+    operation: resourcegroups.listGroupingStatuses,
+    actions: ["resource-groups:ListGroupingStatuses"],
+  }),
 );

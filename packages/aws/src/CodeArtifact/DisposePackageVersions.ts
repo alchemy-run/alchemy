@@ -1,6 +1,8 @@
-import type * as codeartifact from "@distilled.cloud/aws/codeartifact";
+import * as codeartifact from "@distilled.cloud/aws/codeartifact";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRepositoryHttpBinding, packageArns } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -50,4 +52,15 @@ export interface DisposePackageVersions extends Binding.Service<
 
 export const DisposePackageVersions = Binding.Service<DisposePackageVersions>(
   "AWS.CodeArtifact.DisposePackageVersions",
+);
+
+/** HTTP implementation of {@link DisposePackageVersions} over the CodeArtifact API. */
+export const DisposePackageVersionsHttp = Layer.effect(
+  DisposePackageVersions,
+  makeRepositoryHttpBinding({
+    tag: "AWS.CodeArtifact.DisposePackageVersions",
+    operation: codeartifact.disposePackageVersions,
+    actions: ["codeartifact:DisposePackageVersions"],
+    resources: packageArns,
+  }),
 );

@@ -1,6 +1,8 @@
 import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface DeleteItemRequest extends Omit<DynamoDB.DeleteItemInput, "TableName"> {}
@@ -39,3 +41,12 @@ export interface DeleteItem extends Binding.Service<
 > {}
 
 export const DeleteItem = Binding.Service<DeleteItem>("AWS.DynamoDB.DeleteItem");
+
+export const DeleteItemHttp = Layer.effect(
+  DeleteItem,
+  makeTableHttpBinding({
+    tag: "AWS.DynamoDB.DeleteItem",
+    operation: DynamoDB.deleteItem,
+    actions: ["dynamodb:DeleteItem"],
+  }),
+);

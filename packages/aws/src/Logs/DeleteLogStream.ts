@@ -1,6 +1,8 @@
-import type * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
+import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLogGroupHttpBinding } from "./BindingHttp.ts";
 import type { LogGroup } from "./LogGroup.ts";
 
 export interface DeleteLogStreamRequest extends Omit<Logs.DeleteLogStreamRequest, "logGroupName"> {}
@@ -36,3 +38,14 @@ export interface DeleteLogStream extends Binding.Service<
   >
 > {}
 export const DeleteLogStream = Binding.Service<DeleteLogStream>("AWS.Logs.DeleteLogStream");
+
+export const DeleteLogStreamHttp = Layer.effect(
+  DeleteLogStream,
+  makeLogGroupHttpBinding({
+    tag: "AWS.Logs.DeleteLogStream",
+    operation: Logs.deleteLogStream,
+    actions: ["logs:DeleteLogStream"],
+    // DeleteLogStream authorizes against the log-stream resource.
+    iamResources: "streams",
+  }),
+);

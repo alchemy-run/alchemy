@@ -1,6 +1,9 @@
-import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Binding from "alchemy/Binding";
+import * as Output from "alchemy/Output";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import type { Runtime } from "./Runtime.ts";
 
 export interface StopRuntimeSessionRequest extends Omit<
@@ -45,4 +48,20 @@ export interface StopRuntimeSession extends Binding.Service<
 > {}
 export const StopRuntimeSession = Binding.Service<StopRuntimeSession>(
   "AWS.BedrockAgentCore.StopRuntimeSession",
+);
+
+export const StopRuntimeSessionHttp = Layer.effect(
+  StopRuntimeSession,
+  makeAgentCoreHttpBinding({
+    tag: "AWS.BedrockAgentCore.StopRuntimeSession",
+    operation: agentcore.stopRuntimeSession,
+    actions: ["bedrock-agentcore:StopRuntimeSession"],
+    requestKey: "agentRuntimeArn",
+    identifier: (runtime: Runtime) => runtime.agentRuntimeArn,
+    arns: (runtime: Runtime) => [
+      runtime.agentRuntimeArn,
+      // qualified invocations target a runtime endpoint sub-resource.
+      Output.interpolate`${runtime.agentRuntimeArn}/runtime-endpoint/*`,
+    ],
+  }),
 );

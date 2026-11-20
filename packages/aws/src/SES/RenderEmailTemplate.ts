@@ -1,6 +1,8 @@
-import type * as sesv2 from "@distilled.cloud/aws/sesv2";
+import * as sesv2 from "@distilled.cloud/aws/sesv2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTemplateScopedHttpBinding } from "./BindingHttp.ts";
 import type { EmailTemplate } from "./EmailTemplate.ts";
 
 /**
@@ -47,4 +49,13 @@ export interface RenderEmailTemplate extends Binding.Service<
 > {}
 export const RenderEmailTemplate = Binding.Service<RenderEmailTemplate>(
   "AWS.SES.RenderEmailTemplate",
+);
+
+export const RenderEmailTemplateHttp = Layer.effect(
+  RenderEmailTemplate,
+  makeTemplateScopedHttpBinding({
+    tag: "AWS.SES.RenderEmailTemplate",
+    operation: sesv2.testRenderEmailTemplate,
+    actions: ["ses:TestRenderEmailTemplate"],
+  }),
 );

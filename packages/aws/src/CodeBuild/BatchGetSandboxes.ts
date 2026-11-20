@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codebuild";
+import * as codebuild from "@distilled.cloud/aws/codebuild";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodeBuildProjectHttpBinding } from "./BindingHttp.ts";
 import type { Project } from "./Project.ts";
 
 /**
@@ -29,4 +32,14 @@ export interface BatchGetSandboxes extends Binding.Service<
 > {}
 export const BatchGetSandboxes = Binding.Service<BatchGetSandboxes>(
   "AWS.CodeBuild.BatchGetSandboxes",
+);
+
+export const BatchGetSandboxesHttp = Layer.effect(
+  BatchGetSandboxes,
+  makeCodeBuildProjectHttpBinding({
+    tag: "AWS.CodeBuild.BatchGetSandboxes",
+    operation: codebuild.batchGetSandboxes,
+    actions: ["codebuild:BatchGetSandboxes"],
+    sandboxScoped: true,
+  }),
 );

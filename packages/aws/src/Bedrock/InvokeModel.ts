@@ -1,6 +1,8 @@
-import type * as bedrock from "@distilled.cloud/aws/bedrock-runtime";
+import * as bedrock from "@distilled.cloud/aws/bedrock-runtime";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeModelScopedHttpBinding } from "./BindingHttp.ts";
 
 /**
  * The `InvokeModel` request with the binding-injected `modelId` made
@@ -75,3 +77,12 @@ export interface InvokeModel extends Binding.Service<
   >
 > {}
 export const InvokeModel = Binding.Service<InvokeModel>("AWS.Bedrock.InvokeModel");
+
+export const InvokeModelHttp = Layer.effect(
+  InvokeModel,
+  makeModelScopedHttpBinding({
+    tag: "AWS.Bedrock.InvokeModel",
+    operation: bedrock.invokeModel,
+    actions: ["bedrock:InvokeModel"],
+  }),
+);

@@ -1,6 +1,8 @@
-import type * as TSW from "@distilled.cloud/aws/timestream-write";
+import * as TSW from "@distilled.cloud/aws/timestream-write";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWriteAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ResumeBatchLoadTaskRequest extends TSW.ResumeBatchLoadTaskRequest {}
 
@@ -41,4 +43,13 @@ export interface ResumeBatchLoadTask extends Binding.Service<
 
 export const ResumeBatchLoadTask = Binding.Service<ResumeBatchLoadTask>(
   "AWS.Timestream.ResumeBatchLoadTask",
+);
+
+export const ResumeBatchLoadTaskHttp = Layer.effect(
+  ResumeBatchLoadTask,
+  makeWriteAccountHttpBinding({
+    tag: "AWS.Timestream.ResumeBatchLoadTask",
+    operation: TSW.resumeBatchLoadTask,
+    actions: ["timestream:ResumeBatchLoadTask"],
+  }),
 );

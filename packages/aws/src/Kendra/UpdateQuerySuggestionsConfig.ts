@@ -1,7 +1,10 @@
-import type * as kendra from "@distilled.cloud/aws/kendra";
+import * as kendra from "@distilled.cloud/aws/kendra";
 import * as Binding from "alchemy/Binding";
+import { toWireDays } from "alchemy/Util/Duration";
 import type * as Duration from "effect/Duration";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeKendraIndexHttpBinding } from "./BindingHttp.ts";
 import type { Index } from "./SearchIndex.ts";
 
 /**
@@ -60,4 +63,17 @@ export interface UpdateQuerySuggestionsConfig extends Binding.Service<
 > {}
 export const UpdateQuerySuggestionsConfig = Binding.Service<UpdateQuerySuggestionsConfig>(
   "AWS.Kendra.UpdateQuerySuggestionsConfig",
+);
+
+export const UpdateQuerySuggestionsConfigHttp = Layer.effect(
+  UpdateQuerySuggestionsConfig,
+  makeKendraIndexHttpBinding({
+    tag: "AWS.Kendra.UpdateQuerySuggestionsConfig",
+    operation: kendra.updateQuerySuggestionsConfig,
+    actions: ["kendra:UpdateQuerySuggestionsConfig"],
+    prepare: ({ queryLogLookBackWindow, ...rest }: UpdateQuerySuggestionsConfigRequest = {}) => ({
+      ...rest,
+      QueryLogLookBackWindowInDays: toWireDays(queryLogLookBackWindow),
+    }),
+  }),
 );

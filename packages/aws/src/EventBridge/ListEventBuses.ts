@@ -1,6 +1,8 @@
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEventBridgeAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface ListEventBusesRequest extends eventbridge.ListEventBusesRequest {}
 
@@ -31,3 +33,18 @@ export interface ListEventBuses extends Binding.Service<
   >
 > {}
 export const ListEventBuses = Binding.Service<ListEventBuses>("AWS.EventBridge.ListEventBuses");
+
+/**
+ * HTTP implementation of {@link ListEventBuses}. At deploy time it grants
+ * `events:ListEventBuses`; at runtime it calls the EventBridge API with the
+ * host Function's credentials. Provide this layer on the Function using the
+ * binding.
+ */
+export const ListEventBusesHttp = Layer.effect(
+  ListEventBuses,
+  makeEventBridgeAccountHttpBinding({
+    tag: "AWS.EventBridge.ListEventBuses",
+    operation: eventbridge.listEventBuses,
+    actions: ["events:ListEventBuses"],
+  }),
+);

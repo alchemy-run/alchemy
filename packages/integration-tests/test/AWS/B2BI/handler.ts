@@ -12,8 +12,19 @@ import * as Stream from "effect/Stream";
 
 // Deterministic bucket for EDI input/output. B2BI accesses the bucket as the
 // service principal, authorized by the bucket policy below.
+// A short hash of the stage, like `testName` in test/names.ts (which this
+// handler can't import: it bundles into the Lambda): the full stage
+// (`test_$USER_<worktree>`) overflows S3's 63-character bucket names.
+const stageHash = (stage: string): string => {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < stage.length; i++) {
+    hash ^= stage.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0").slice(0, 6);
+};
 const stageSuffix = process.env.ALCHEMY_TEST_STAGE
-  ? `-${process.env.ALCHEMY_TEST_STAGE.toLowerCase().replaceAll("_", "-")}`
+  ? `-${stageHash(process.env.ALCHEMY_TEST_STAGE)}`
   : "";
 export const BUCKET = `alchemy-test-b2bi-bindings${stageSuffix}`;
 const BUCKET_ARN = `arn:aws:s3:::${BUCKET}`;

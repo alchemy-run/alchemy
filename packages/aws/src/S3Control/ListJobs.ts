@@ -1,7 +1,9 @@
-import type * as s3control from "@distilled.cloud/aws/s3-control";
+import * as s3control from "@distilled.cloud/aws/s3-control";
 import type * as sts from "@distilled.cloud/aws/sts";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeS3ControlAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `s3:ListJobs` (S3 Batch Operations).
@@ -36,3 +38,12 @@ export interface ListJobs extends Binding.Service<
   >
 > {}
 export const ListJobs = Binding.Service<ListJobs>("AWS.S3Control.ListJobs");
+
+export const ListJobsHttp = Layer.effect(
+  ListJobs,
+  makeS3ControlAccountHttpBinding({
+    tag: "AWS.S3Control.ListJobs",
+    operation: s3control.listJobs,
+    actions: ["s3:ListJobs"],
+  }),
+);

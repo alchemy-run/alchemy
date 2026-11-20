@@ -1,7 +1,9 @@
 import type * as kv from "@distilled.cloud/aws/kinesis-video";
-import type * as kvm from "@distilled.cloud/aws/kinesis-video-media";
+import * as kvm from "@distilled.cloud/aws/kinesis-video-media";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStreamMediaHttpBinding } from "./BindingHttp.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface GetMediaRequest extends Omit<kvm.GetMediaInput, "StreamName" | "StreamARN"> {}
@@ -58,3 +60,13 @@ export interface GetMedia extends Binding.Service<
 > {}
 
 export const GetMedia = Binding.Service<GetMedia>("AWS.KinesisVideo.GetMedia");
+
+export const GetMediaHttp = Layer.effect(
+  GetMedia,
+  makeStreamMediaHttpBinding({
+    tag: "AWS.KinesisVideo.GetMedia",
+    apiName: "GET_MEDIA",
+    actions: ["kinesisvideo:GetMedia"],
+    operation: kvm.getMedia,
+  }),
+);

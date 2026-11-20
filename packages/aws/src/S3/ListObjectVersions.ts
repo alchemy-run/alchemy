@@ -1,6 +1,8 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface ListObjectVersionsRequest extends Omit<S3.ListObjectVersionsRequest, "Bucket"> {}
@@ -35,3 +37,13 @@ export interface ListObjectVersions extends Binding.Service<
   >
 > {}
 export const ListObjectVersions = Binding.Service<ListObjectVersions>("AWS.S3.ListObjectVersions");
+
+export const ListObjectVersionsHttp = Layer.effect(
+  ListObjectVersions,
+  makeBucketHttpBinding({
+    tag: "AWS.S3.ListObjectVersions",
+    operation: S3.listObjectVersions,
+    actions: ["s3:ListBucketVersions"],
+    iamResources: "bucket",
+  }),
+);

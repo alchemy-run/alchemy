@@ -1,6 +1,8 @@
-import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import type { Memory } from "./Memory.ts";
 
 export interface BatchCreateMemoryRecordsRequest extends Omit<
@@ -59,4 +61,16 @@ export interface BatchCreateMemoryRecords extends Binding.Service<
 > {}
 export const BatchCreateMemoryRecords = Binding.Service<BatchCreateMemoryRecords>(
   "AWS.BedrockAgentCore.BatchCreateMemoryRecords",
+);
+
+export const BatchCreateMemoryRecordsHttp = Layer.effect(
+  BatchCreateMemoryRecords,
+  makeAgentCoreHttpBinding({
+    tag: "AWS.BedrockAgentCore.BatchCreateMemoryRecords",
+    operation: agentcore.batchCreateMemoryRecords,
+    actions: ["bedrock-agentcore:BatchCreateMemoryRecords"],
+    requestKey: "memoryId",
+    identifier: (memory: Memory) => memory.memoryId,
+    arns: (memory: Memory) => [memory.memoryArn],
+  }),
 );

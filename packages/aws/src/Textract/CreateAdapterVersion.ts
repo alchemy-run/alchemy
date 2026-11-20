@@ -1,7 +1,9 @@
-import type * as textract from "@distilled.cloud/aws/textract";
+import * as textract from "@distilled.cloud/aws/textract";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Adapter } from "./Adapter.ts";
+import { makeTextractAdapterHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `textract:CreateAdapterVersion` — train a new
@@ -40,4 +42,13 @@ export interface CreateAdapterVersion extends Binding.Service<
 > {}
 export const CreateAdapterVersion = Binding.Service<CreateAdapterVersion>(
   "AWS.Textract.CreateAdapterVersion",
+);
+
+export const CreateAdapterVersionHttp = Layer.effect(
+  CreateAdapterVersion,
+  makeTextractAdapterHttpBinding({
+    capability: "CreateAdapterVersion",
+    iamActions: ["textract:CreateAdapterVersion"],
+    operation: textract.createAdapterVersion,
+  }),
 );

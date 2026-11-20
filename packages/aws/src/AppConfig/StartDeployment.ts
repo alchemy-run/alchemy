@@ -1,7 +1,9 @@
-import type * as appconfig from "@distilled.cloud/aws/appconfig";
+import * as appconfig from "@distilled.cloud/aws/appconfig";
 import * as Binding from "alchemy/Binding";
+import * as Output from "alchemy/Output";
 import type * as Effect from "effect/Effect";
 import type { Application } from "./Application.ts";
+import { makeAppConfigHttpBinding } from "./BindingHttp.ts";
 import type { ConfigurationProfile } from "./ConfigurationProfile.ts";
 import type { DeploymentStrategy } from "./DeploymentStrategy.ts";
 import type { Environment } from "./Environment.ts";
@@ -52,3 +54,34 @@ export interface StartDeployment extends Binding.Service<
   >
 > {}
 export const StartDeployment = Binding.Service<StartDeployment>("AWS.AppConfig.StartDeployment");
+
+/**
+ * HTTP implementation of the {@link StartDeployment} binding. Calls
+ * `appconfig:StartDeployment` with the Lambda's IAM role, scoped to the bound
+ * application, environment, configuration profile, and deployment strategy.
+ */
+export const StartDeploymentHttp = makeAppConfigHttpBinding(StartDeployment, {
+  operation: appconfig.startDeployment,
+  spec: (
+    application: Application,
+    environment: Environment,
+    configurationProfile: ConfigurationProfile,
+    deploymentStrategy: DeploymentStrategy,
+  ) => ({
+    identifiers: {
+      ApplicationId: application.applicationId,
+      EnvironmentId: environment.environmentId,
+      ConfigurationProfileId: configurationProfile.configurationProfileId,
+      DeploymentStrategyId: deploymentStrategy.deploymentStrategyId,
+    },
+    iam: ({ region, accountId }) => ({
+      actions: ["appconfig:StartDeployment"],
+      resources: [
+        Output.interpolate`arn:aws:appconfig:${region}:${accountId}:application/${application.applicationId}`,
+        Output.interpolate`arn:aws:appconfig:${region}:${accountId}:application/${application.applicationId}/environment/${environment.environmentId}`,
+        Output.interpolate`arn:aws:appconfig:${region}:${accountId}:application/${application.applicationId}/configurationprofile/${configurationProfile.configurationProfileId}`,
+        Output.interpolate`arn:aws:appconfig:${region}:${accountId}:deploymentstrategy/${deploymentStrategy.deploymentStrategyId}`,
+      ],
+    }),
+  }),
+});

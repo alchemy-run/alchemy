@@ -1,6 +1,8 @@
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeBucketHttpBinding } from "./BindingHttp.ts";
 import type { Bucket } from "./Bucket.ts";
 
 export interface CompleteMultipartUploadRequest extends Omit<
@@ -50,4 +52,13 @@ export interface CompleteMultipartUpload extends Binding.Service<
 
 export const CompleteMultipartUpload = Binding.Service<CompleteMultipartUpload>(
   "AWS.S3.CompleteMultipartUpload",
+);
+
+export const CompleteMultipartUploadHttp = Layer.effect(
+  CompleteMultipartUpload,
+  makeBucketHttpBinding({
+    tag: "AWS.S3.CompleteMultipartUpload",
+    operation: S3.completeMultipartUpload,
+    actions: ["s3:PutObject"],
+  }),
 );

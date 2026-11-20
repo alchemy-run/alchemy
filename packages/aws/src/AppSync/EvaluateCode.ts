@@ -1,6 +1,8 @@
-import type * as appsync from "@distilled.cloud/aws/appsync";
+import * as appsync from "@distilled.cloud/aws/appsync";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAppSyncAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `appsync:EvaluateCode` — evaluate `APPSYNC_JS`
@@ -44,3 +46,18 @@ export interface EvaluateCode extends Binding.Service<
   >
 > {}
 export const EvaluateCode = Binding.Service<EvaluateCode>("AWS.AppSync.EvaluateCode");
+
+/**
+ * HTTP implementation of the {@link EvaluateCode} binding. Calls
+ * `appsync:EvaluateCode` with the host Function's IAM role. The action
+ * defines no IAM resource types, so the grant is necessarily
+ * `Resource: "*"`.
+ */
+export const EvaluateCodeHttp = Layer.effect(
+  EvaluateCode,
+  makeAppSyncAccountHttpBinding({
+    tag: "AWS.AppSync.EvaluateCode",
+    actions: ["appsync:EvaluateCode"],
+    operation: appsync.evaluateCode,
+  }),
+);

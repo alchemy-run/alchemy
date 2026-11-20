@@ -1,6 +1,8 @@
-import type * as lexr from "@distilled.cloud/aws/lex-runtime-v2";
+import * as lexr from "@distilled.cloud/aws/lex-runtime-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLexAliasHttpBinding } from "./BindingHttp.ts";
 import type { BotAlias } from "./BotAlias.ts";
 
 /**
@@ -42,3 +44,17 @@ export interface GetSession extends Binding.Service<
 > {}
 
 export const GetSession = Binding.Service<GetSession>("AWS.LexV2.GetSession");
+
+/**
+ * HTTP implementation of {@link GetSession} — calls the `lex-runtime-v2`
+ * `GetSession` operation with the Lambda role's credentials and grants the
+ * host `lex:GetSession` on the alias.
+ */
+export const GetSessionHttp = Layer.effect(
+  GetSession,
+  makeLexAliasHttpBinding<GetSessionRequest, lexr.GetSessionResponse, lexr.GetSessionError>({
+    capability: "GetSession",
+    iamActions: ["lex:GetSession"],
+    operation: lexr.getSession,
+  }),
+);

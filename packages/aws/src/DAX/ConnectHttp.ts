@@ -1,8 +1,17 @@
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
+import { connectEnvPrefix as makeConnectEnvPrefix } from "../Connection/internal.ts";
 import type { Cluster } from "./Cluster.ts";
-import { connectEnvPrefix } from "./Connect.ts";
+
+/**
+ * Environment variable prefix under which the connect bindings publish the
+ * cluster endpoint on the host Function, derived from the cluster's logical
+ * ID. A cluster with logical ID `Cache` yields `DAX_CACHE` and the variables
+ * `DAX_CACHE_HOST`, `DAX_CACHE_PORT`, `DAX_CACHE_URL`, and `DAX_CACHE_TLS`.
+ */
+export const connectEnvPrefix = (logicalId: string): string =>
+  makeConnectEnvPrefix("DAX", logicalId);
 
 /**
  * Shared scaffolding for the DAX connect bindings.

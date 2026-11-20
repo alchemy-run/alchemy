@@ -1,6 +1,8 @@
-import type * as location from "@distilled.cloud/aws/location";
+import * as location from "@distilled.cloud/aws/location";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLocationMapHttpBinding } from "./BindingHttp.ts";
 import type { Map as LocationMap } from "./Map.ts";
 
 /**
@@ -39,3 +41,12 @@ export interface GetMapSprites extends Binding.Service<
   >
 > {}
 export const GetMapSprites = Binding.Service<GetMapSprites>("AWS.Location.GetMapSprites");
+
+export const GetMapSpritesHttp = Layer.effect(
+  GetMapSprites,
+  makeLocationMapHttpBinding({
+    tag: "AWS.Location.GetMapSprites",
+    operation: location.getMapSprites,
+    actions: ["geo:GetMapSprites"],
+  }),
+);

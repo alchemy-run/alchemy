@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codepipeline";
+import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodePipelinePipelineNameHttpBinding } from "./BindingHttp.ts";
 import type { Pipeline } from "./Pipeline.ts";
 
 export interface RollbackStageRequest extends Omit<SVC.RollbackStageInput, "pipelineName"> {}
@@ -33,3 +36,13 @@ export interface RollbackStage extends Binding.Service<
   >
 > {}
 export const RollbackStage = Binding.Service<RollbackStage>("AWS.CodePipeline.RollbackStage");
+
+export const RollbackStageHttp = Layer.effect(
+  RollbackStage,
+  makeCodePipelinePipelineNameHttpBinding({
+    tag: "AWS.CodePipeline.RollbackStage",
+    operation: codepipeline.rollbackStage,
+    actions: ["codepipeline:RollbackStage"],
+    subScoped: true,
+  }),
+);

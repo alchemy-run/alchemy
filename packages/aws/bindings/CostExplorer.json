@@ -1,0 +1,226 @@
+{
+  "tag": "AWS.CostExplorer",
+  "module": "cost-explorer",
+  "alias": "ce",
+  "resources": {
+    "AnomalyMonitor": {
+      "file": "AnomalyMonitor.ts"
+    }
+  },
+  "builder": "makeCostExplorerHttpBinding",
+  "builders": {
+    "makeAnomalyMonitorHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      }
+    },
+    "makeCostExplorerHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "GetAnomalies": {
+      "operation": "getAnomalies",
+      "resource": "AnomalyMonitor",
+      "param": "monitor",
+      "request": {
+        "mode": "required",
+        "interface": "GetAnomaliesRequest",
+        "omit": ["MonitorArn"]
+      },
+      "builder": "makeAnomalyMonitorHttpBinding"
+    },
+    "GetApproximateUsageRecords": {
+      "operation": "getApproximateUsageRecords",
+      "request": {
+        "mode": "required",
+        "interface": "GetApproximateUsageRecordsRequest",
+        "omit": []
+      }
+    },
+    "GetCommitmentPurchaseAnalysis": {
+      "operation": "getCommitmentPurchaseAnalysis",
+      "request": {
+        "mode": "required",
+        "interface": "GetCommitmentPurchaseAnalysisRequest",
+        "omit": []
+      }
+    },
+    "GetCostAndUsage": {
+      "operation": "getCostAndUsage",
+      "request": {
+        "mode": "required",
+        "interface": "GetCostAndUsageRequest",
+        "omit": []
+      }
+    },
+    "GetCostAndUsageComparisons": {
+      "operation": "getCostAndUsageComparisons",
+      "request": {
+        "mode": "required",
+        "interface": "GetCostAndUsageComparisonsRequest",
+        "omit": []
+      }
+    },
+    "GetCostAndUsageWithResources": {
+      "operation": "getCostAndUsageWithResources",
+      "request": {
+        "mode": "required",
+        "interface": "GetCostAndUsageWithResourcesRequest",
+        "omit": []
+      }
+    },
+    "GetCostCategories": {
+      "operation": "getCostCategories",
+      "request": {
+        "mode": "required",
+        "interface": "GetCostCategoriesRequest",
+        "omit": []
+      }
+    },
+    "GetCostComparisonDrivers": {
+      "operation": "getCostComparisonDrivers",
+      "request": {
+        "mode": "required",
+        "interface": "GetCostComparisonDriversRequest",
+        "omit": []
+      }
+    },
+    "GetCostForecast": {
+      "operation": "getCostForecast",
+      "request": {
+        "mode": "required",
+        "interface": "GetCostForecastRequest",
+        "omit": []
+      }
+    },
+    "GetDimensionValues": {
+      "operation": "getDimensionValues",
+      "request": {
+        "mode": "required",
+        "interface": "GetDimensionValuesRequest",
+        "omit": []
+      }
+    },
+    "GetReservationCoverage": {
+      "operation": "getReservationCoverage",
+      "request": {
+        "mode": "required",
+        "interface": "GetReservationCoverageRequest",
+        "omit": []
+      }
+    },
+    "GetReservationUtilization": {
+      "operation": "getReservationUtilization",
+      "request": {
+        "mode": "required",
+        "interface": "GetReservationUtilizationRequest",
+        "omit": []
+      }
+    },
+    "GetRightsizingRecommendation": {
+      "operation": "getRightsizingRecommendation",
+      "request": {
+        "mode": "required",
+        "interface": "GetRightsizingRecommendationRequest",
+        "omit": []
+      }
+    },
+    "GetSavingsPlansCoverage": {
+      "operation": "getSavingsPlansCoverage",
+      "request": {
+        "mode": "required",
+        "interface": "GetSavingsPlansCoverageRequest",
+        "omit": []
+      }
+    },
+    "GetSavingsPlansUtilization": {
+      "operation": "getSavingsPlansUtilization",
+      "request": {
+        "mode": "required",
+        "interface": "GetSavingsPlansUtilizationRequest",
+        "omit": []
+      }
+    },
+    "GetSavingsPlansUtilizationDetails": {
+      "operation": "getSavingsPlansUtilizationDetails",
+      "request": {
+        "mode": "required",
+        "interface": "GetSavingsPlansUtilizationDetailsRequest",
+        "omit": []
+      }
+    },
+    "GetTags": {
+      "operation": "getTags",
+      "request": {
+        "mode": "required",
+        "interface": "GetTagsRequest",
+        "omit": []
+      }
+    },
+    "GetUsageForecast": {
+      "operation": "getUsageForecast",
+      "request": {
+        "mode": "required",
+        "interface": "GetUsageForecastRequest",
+        "omit": []
+      }
+    },
+    "ListCommitmentPurchaseAnalyses": {
+      "operation": "listCommitmentPurchaseAnalyses",
+      "request": {
+        "mode": "optional",
+        "interface": "ListCommitmentPurchaseAnalysesRequest",
+        "omit": []
+      }
+    },
+    "ListCostAllocationTags": {
+      "operation": "listCostAllocationTags",
+      "request": {
+        "mode": "optional",
+        "interface": "ListCostAllocationTagsRequest",
+        "omit": []
+      }
+    },
+    "ProvideAnomalyFeedback": {
+      "operation": "provideAnomalyFeedback",
+      "request": {
+        "mode": "required",
+        "interface": "ProvideAnomalyFeedbackRequest",
+        "omit": []
+      }
+    },
+    "StartCommitmentPurchaseAnalysis": {
+      "operation": "startCommitmentPurchaseAnalysis",
+      "request": {
+        "mode": "required",
+        "interface": "StartCommitmentPurchaseAnalysisRequest",
+        "omit": []
+      }
+    },
+    "StartCostAllocationTagBackfill": {
+      "operation": "startCostAllocationTagBackfill",
+      "request": {
+        "mode": "required",
+        "interface": "StartCostAllocationTagBackfillRequest",
+        "omit": []
+      }
+    },
+    "UpdateCostAllocationTagsStatus": {
+      "operation": "updateCostAllocationTagsStatus",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateCostAllocationTagsStatusRequest",
+        "omit": []
+      }
+    }
+  }
+}

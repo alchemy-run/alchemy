@@ -1,6 +1,8 @@
-import type * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
+import * as agentcore from "@distilled.cloud/aws/bedrock-agentcore";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeAgentCoreHttpBinding } from "./BindingHttp.ts";
 import type { Memory } from "./Memory.ts";
 
 export interface CreateEventRequest extends Omit<agentcore.CreateEventInput, "memoryId"> {}
@@ -65,3 +67,15 @@ export interface CreateEvent extends Binding.Service<
   >
 > {}
 export const CreateEvent = Binding.Service<CreateEvent>("AWS.BedrockAgentCore.CreateEvent");
+
+export const CreateEventHttp = Layer.effect(
+  CreateEvent,
+  makeAgentCoreHttpBinding({
+    tag: "AWS.BedrockAgentCore.CreateEvent",
+    operation: agentcore.createEvent,
+    actions: ["bedrock-agentcore:CreateEvent"],
+    requestKey: "memoryId",
+    identifier: (memory: Memory) => memory.memoryId,
+    arns: (memory: Memory) => [memory.memoryArn],
+  }),
+);

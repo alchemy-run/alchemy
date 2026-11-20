@@ -1,6 +1,8 @@
-import type * as lexr from "@distilled.cloud/aws/lex-runtime-v2";
+import * as lexr from "@distilled.cloud/aws/lex-runtime-v2";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeLexAliasHttpBinding } from "./BindingHttp.ts";
 import type { BotAlias } from "./BotAlias.ts";
 
 /**
@@ -45,3 +47,21 @@ export interface DeleteSession extends Binding.Service<
 > {}
 
 export const DeleteSession = Binding.Service<DeleteSession>("AWS.LexV2.DeleteSession");
+
+/**
+ * HTTP implementation of {@link DeleteSession} — calls the `lex-runtime-v2`
+ * `DeleteSession` operation with the Lambda role's credentials and grants
+ * the host `lex:DeleteSession` on the alias.
+ */
+export const DeleteSessionHttp = Layer.effect(
+  DeleteSession,
+  makeLexAliasHttpBinding<
+    DeleteSessionRequest,
+    lexr.DeleteSessionResponse,
+    lexr.DeleteSessionError
+  >({
+    capability: "DeleteSession",
+    iamActions: ["lex:DeleteSession"],
+    operation: lexr.deleteSession,
+  }),
+);

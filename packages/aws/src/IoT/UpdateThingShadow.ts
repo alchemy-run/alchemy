@@ -1,6 +1,8 @@
-import type * as iotdata from "@distilled.cloud/aws/iot-data-plane";
+import * as iotdata from "@distilled.cloud/aws/iot-data-plane";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeIotThingHttpBinding } from "./BindingHttp.ts";
 import type { Thing } from "./Thing.ts";
 
 export interface UpdateThingShadowRequest extends Omit<
@@ -48,3 +50,17 @@ export interface UpdateThingShadow extends Binding.Service<
 > {}
 
 export const UpdateThingShadow = Binding.Service<UpdateThingShadow>("AWS.IoT.UpdateThingShadow");
+
+/**
+ * HTTP implementation of the {@link UpdateThingShadow} capability — grants
+ * `iot:UpdateThingShadow` on the thing ARN and calls the IoT data-plane
+ * `UpdateThingShadow` API.
+ */
+export const UpdateThingShadowHttp = Layer.effect(
+  UpdateThingShadow,
+  makeIotThingHttpBinding({
+    tag: "AWS.IoT.UpdateThingShadow",
+    operation: iotdata.updateThingShadow,
+    actions: ["iot:UpdateThingShadow"],
+  }),
+);

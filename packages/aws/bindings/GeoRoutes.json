@@ -1,0 +1,50 @@
+{
+  "tag": "AWS.GeoRoutes",
+  "module": "geo-routes",
+  "alias": "geoRoutes",
+  "resources": {},
+  "builder": "makeGeoRoutesHttpBinding",
+  "builders": {
+    "makeGeoRoutesHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "CalculateIsolines": {
+      "operation": "calculateIsolines",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CalculateRouteMatrix": {
+      "operation": "calculateRouteMatrix",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CalculateRoutes": {
+      "operation": "calculateRoutes",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "OptimizeWaypoints": {
+      "operation": "optimizeWaypoints",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "SnapToRoads": {
+      "operation": "snapToRoads",
+      "request": {
+        "mode": "required"
+      }
+    }
+  }
+}

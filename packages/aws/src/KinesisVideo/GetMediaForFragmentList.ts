@@ -1,7 +1,9 @@
 import type * as kv from "@distilled.cloud/aws/kinesis-video";
-import type * as kvam from "@distilled.cloud/aws/kinesis-video-archived-media";
+import * as kvam from "@distilled.cloud/aws/kinesis-video-archived-media";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeStreamMediaHttpBinding } from "./BindingHttp.ts";
 import type { Stream } from "./Stream.ts";
 
 export interface GetMediaForFragmentListRequest extends Omit<
@@ -50,4 +52,14 @@ export interface GetMediaForFragmentList extends Binding.Service<
 
 export const GetMediaForFragmentList = Binding.Service<GetMediaForFragmentList>(
   "AWS.KinesisVideo.GetMediaForFragmentList",
+);
+
+export const GetMediaForFragmentListHttp = Layer.effect(
+  GetMediaForFragmentList,
+  makeStreamMediaHttpBinding({
+    tag: "AWS.KinesisVideo.GetMediaForFragmentList",
+    apiName: "GET_MEDIA_FOR_FRAGMENT_LIST",
+    actions: ["kinesisvideo:GetMediaForFragmentList"],
+    operation: kvam.getMediaForFragmentList,
+  }),
 );

@@ -1,6 +1,8 @@
-import type * as ecr from "@distilled.cloud/aws/ecr";
+import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcrRepositoryHttpBinding } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -42,4 +44,14 @@ export interface GetDownloadUrlForLayer extends Binding.Service<
 
 export const GetDownloadUrlForLayer = Binding.Service<GetDownloadUrlForLayer>(
   "AWS.ECR.GetDownloadUrlForLayer",
+);
+
+/** HTTP implementation of {@link GetDownloadUrlForLayer} over the ECR API. */
+export const GetDownloadUrlForLayerHttp = Layer.effect(
+  GetDownloadUrlForLayer,
+  makeEcrRepositoryHttpBinding({
+    capability: "GetDownloadUrlForLayer",
+    operation: ecr.getDownloadUrlForLayer,
+    iamActions: ["ecr:GetDownloadUrlForLayer"],
+  }),
 );

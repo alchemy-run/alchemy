@@ -1,6 +1,8 @@
-import type * as codeartifact from "@distilled.cloud/aws/codeartifact";
+import * as codeartifact from "@distilled.cloud/aws/codeartifact";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeRepositoryHttpBinding, packageArns } from "./BindingHttp.ts";
 import type { Repository } from "./Repository.ts";
 
 /**
@@ -50,4 +52,15 @@ export interface DescribePackageVersion extends Binding.Service<
 
 export const DescribePackageVersion = Binding.Service<DescribePackageVersion>(
   "AWS.CodeArtifact.DescribePackageVersion",
+);
+
+/** HTTP implementation of {@link DescribePackageVersion} over the CodeArtifact API. */
+export const DescribePackageVersionHttp = Layer.effect(
+  DescribePackageVersion,
+  makeRepositoryHttpBinding({
+    tag: "AWS.CodeArtifact.DescribePackageVersion",
+    operation: codeartifact.describePackageVersion,
+    actions: ["codeartifact:DescribePackageVersion"],
+    resources: packageArns,
+  }),
 );

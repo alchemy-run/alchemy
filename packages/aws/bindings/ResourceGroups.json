@@ -1,0 +1,42 @@
+{
+  "tag": "AWS.ResourceGroups",
+  "module": "resource-groups",
+  "resources": {},
+  "builder": "makeResourceGroupsAccountHttpBinding",
+  "builders": {
+    "makeResourceGroupsAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "CancelTagSyncTask": {
+      "operation": "cancelTagSyncTask",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetAccountSettings": {
+      "operation": "getAccountSettings",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "GetTagSyncTask": {
+      "operation": "getTagSyncTask",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListTagSyncTasks": {
+      "operation": "listTagSyncTasks"
+    },
+    "SearchResources": {
+      "operation": "searchResources",
+      "request": {
+        "mode": "required"
+      },
+      "note": "Documented minimum permissions: the search reads through the Resource Groups Tagging API and (for stack queries) CloudFormation."
+    }
+  }
+}

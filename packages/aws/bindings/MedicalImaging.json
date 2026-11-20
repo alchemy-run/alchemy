@@ -1,0 +1,107 @@
+{
+  "tag": "AWS.MedicalImaging",
+  "module": "medical-imaging",
+  "resources": {
+    "Datastore": {
+      "file": "Datastore.ts"
+    }
+  },
+  "builder": "makeMedicalImagingDatastoreHttpBinding",
+  "builders": {
+    "makeMedicalImagingDatastoreHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "CopyImageSet": {
+      "operation": "copyImageSet",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "CopyImageSetRequest",
+        "omit": ["datastoreId"]
+      }
+    },
+    "DeleteImageSet": {
+      "operation": "deleteImageSet",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "DeleteImageSetRequest",
+        "omit": ["datastoreId"]
+      }
+    },
+    "GetDICOMImportJob": {
+      "operation": "getDICOMImportJob",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "GetDICOMImportJobRequest",
+        "omit": ["datastoreId"]
+      }
+    },
+    "GetImageFrame": {
+      "operation": "getImageFrame",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "GetImageFrameRequest",
+        "omit": ["datastoreId"]
+      }
+    },
+    "GetImageSet": {
+      "operation": "getImageSet",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "GetImageSetRequest",
+        "omit": ["datastoreId"]
+      }
+    },
+    "GetImageSetMetadata": {
+      "operation": "getImageSetMetadata",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "GetImageSetMetadataRequest",
+        "omit": ["datastoreId"]
+      }
+    },
+    "ListDICOMImportJobs": {
+      "operation": "listDICOMImportJobs",
+      "resource": "Datastore",
+      "request": {
+        "mode": "optional",
+        "interface": "ListDICOMImportJobsRequest",
+        "omit": ["datastoreId"]
+      }
+    },
+    "ListImageSetVersions": {
+      "operation": "listImageSetVersions",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "ListImageSetVersionsRequest",
+        "omit": ["datastoreId"]
+      }
+    },
+    "SearchImageSets": {
+      "operation": "searchImageSets",
+      "resource": "Datastore",
+      "request": {
+        "mode": "optional",
+        "interface": "SearchImageSetsRequest",
+        "omit": ["datastoreId"]
+      }
+    },
+    "UpdateImageSetMetadata": {
+      "operation": "updateImageSetMetadata",
+      "resource": "Datastore",
+      "request": {
+        "mode": "required",
+        "interface": "UpdateImageSetMetadataRequest",
+        "omit": ["datastoreId"]
+      }
+    }
+  }
+}

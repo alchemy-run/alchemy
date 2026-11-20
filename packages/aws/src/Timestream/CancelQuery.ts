@@ -1,6 +1,8 @@
-import type * as TSQ from "@distilled.cloud/aws/timestream-query";
+import * as TSQ from "@distilled.cloud/aws/timestream-query";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeQueryAccountHttpBinding } from "./BindingHttp.ts";
 
 export interface CancelQueryRequest extends TSQ.CancelQueryRequest {}
 
@@ -38,3 +40,12 @@ export interface CancelQuery extends Binding.Service<
 > {}
 
 export const CancelQuery = Binding.Service<CancelQuery>("AWS.Timestream.CancelQuery");
+
+export const CancelQueryHttp = Layer.effect(
+  CancelQuery,
+  makeQueryAccountHttpBinding({
+    tag: "AWS.Timestream.CancelQuery",
+    operation: TSQ.cancelQuery,
+    actions: ["timestream:CancelQuery"],
+  }),
+);

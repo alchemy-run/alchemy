@@ -101,6 +101,11 @@ export const makeControlTowerAccountHttpBinding = <I extends object, A, E, R>(op
    * The distilled operation implementing the capability.
    */
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
+  /**
+   * ARN formats to grant the actions on instead of `*`, with `${Partition}`,
+   * `${Region}`, and `${Account}` filled in at deploy (`AWSBindings.accountArn`).
+   */
+  arns?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -113,7 +118,7 @@ export const makeControlTowerAccountHttpBinding = <I extends object, A, E, R>(op
             {
               Effect: "Allow",
               Action: [...options.iamActions],
-              Resource: ["*"],
+              Resource: AWSBindings.grantResources(options.arns),
             },
           ],
         });

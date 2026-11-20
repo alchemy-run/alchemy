@@ -1,6 +1,8 @@
-import type * as SD from "@distilled.cloud/aws/servicediscovery";
+import * as SD from "@distilled.cloud/aws/servicediscovery";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCloudMapServiceHttpBinding } from "./BindingHttp.ts";
 import type { Service } from "./Service.ts";
 
 /**
@@ -33,4 +35,13 @@ export interface GetServiceAttributes extends Binding.Service<
 > {}
 export const GetServiceAttributes = Binding.Service<GetServiceAttributes>(
   "AWS.CloudMap.GetServiceAttributes",
+);
+
+export const GetServiceAttributesHttp = Layer.effect(
+  GetServiceAttributes,
+  makeCloudMapServiceHttpBinding({
+    tag: "AWS.CloudMap.GetServiceAttributes",
+    operation: SD.getServiceAttributes,
+    actions: ["servicediscovery:GetServiceAttributes"],
+  }),
 );

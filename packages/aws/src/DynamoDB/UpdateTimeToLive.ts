@@ -1,6 +1,8 @@
-import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface UpdateTimeToLiveRequest extends Omit<
@@ -41,3 +43,12 @@ export interface UpdateTimeToLive extends Binding.Service<
   >
 > {}
 export const UpdateTimeToLive = Binding.Service<UpdateTimeToLive>("AWS.DynamoDB.UpdateTimeToLive");
+
+export const UpdateTimeToLiveHttp = Layer.effect(
+  UpdateTimeToLive,
+  makeTableHttpBinding({
+    tag: "AWS.DynamoDB.UpdateTimeToLive",
+    operation: DynamoDB.updateTimeToLive,
+    actions: ["dynamodb:UpdateTimeToLive"],
+  }),
+);

@@ -1,7 +1,9 @@
-import type * as sdb from "@distilled.cloud/aws/simpledb";
+import * as sdb from "@distilled.cloud/aws/simpledb";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSimpleDbBinding } from "./Binding.ts";
 import type { Domain } from "./Domain.ts";
 
 export interface PutAttributesRequest extends Omit<sdb.PutAttributesRequest, "DomainName"> {}
@@ -39,3 +41,11 @@ export interface PutAttributes extends Binding.Service<
   >
 > {}
 export const PutAttributes = Binding.Service<PutAttributes>("AWS.SimpleDB.PutAttributes");
+
+export const PutAttributesHttp = Layer.effect(
+  PutAttributes,
+  makeSimpleDbBinding({
+    operation: "PutAttributes",
+    method: sdb.putAttributes,
+  }),
+);

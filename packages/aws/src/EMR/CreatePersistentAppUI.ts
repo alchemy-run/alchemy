@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/emr";
+import * as emr from "@distilled.cloud/aws/emr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEmrClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -28,4 +31,14 @@ export interface CreatePersistentAppUI extends Binding.Service<
 > {}
 export const CreatePersistentAppUI = Binding.Service<CreatePersistentAppUI>(
   "AWS.EMR.CreatePersistentAppUI",
+);
+
+export const CreatePersistentAppUIHttp = Layer.effect(
+  CreatePersistentAppUI,
+  makeEmrClusterHttpBinding({
+    tag: "AWS.EMR.CreatePersistentAppUI",
+    operation: emr.createPersistentAppUI,
+    actions: ["elasticmapreduce:CreatePersistentAppUI"],
+    inject: "TargetResourceArn",
+  }),
 );

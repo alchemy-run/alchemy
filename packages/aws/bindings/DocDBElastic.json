@@ -1,0 +1,95 @@
+{
+  "tag": "AWS.DocDBElastic",
+  "module": "docdb-elastic",
+  "resources": {
+    "Cluster": {
+      "file": "Cluster.ts"
+    }
+  },
+  "builder": "makeDocDBElasticAccountHttpBinding",
+  "builders": {
+    "makeDocDBElasticAccountHttpBinding": {},
+    "makeDocDBElasticClusterHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "ApplyPendingMaintenanceAction": {
+      "operation": "applyPendingMaintenanceAction",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "CopyClusterSnapshot": {
+      "operation": "copyClusterSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "note": "Copying authorizes the creation of the target snapshot as a CreateClusterSnapshot on `cluster-snapshot/*` (verified live: without it the service returns AccessDeniedException naming this action)."
+    },
+    "CreateClusterSnapshot": {
+      "operation": "createClusterSnapshot",
+      "resource": "Cluster",
+      "request": {
+        "mode": "required",
+        "omit": ["clusterArn"],
+        "inline": true
+      },
+      "builder": "makeDocDBElasticClusterHttpBinding",
+      "withTs": {
+        "extraResources": "[SNAPSHOT_ARN_WILDCARD]"
+      },
+      "imports": {
+        "./BindingHttp.ts": ["SNAPSHOT_ARN_WILDCARD"]
+      },
+      "note": "The action authorizes against both the source cluster and the to-be-created snapshot (whose UUID-based ARN is server-generated)."
+    },
+    "DeleteClusterSnapshot": {
+      "operation": "deleteClusterSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetClusterSnapshot": {
+      "operation": "getClusterSnapshot",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetPendingMaintenanceAction": {
+      "operation": "getPendingMaintenanceAction",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListClusterSnapshots": {
+      "operation": "listClusterSnapshots"
+    },
+    "ListPendingMaintenanceActions": {
+      "operation": "listPendingMaintenanceActions"
+    },
+    "RestoreClusterFromSnapshot": {
+      "operation": "restoreClusterFromSnapshot",
+      "request": {
+        "mode": "required"
+      },
+      "note": "Restoring authorizes the creation of the new cluster as a CreateCluster on `cluster/*` (verified live: without it the service returns AccessDeniedException naming this action). Restoring provisions a new cluster, which attaches to the VPC via a service-managed VPC endpoint using the caller's EC2 permissions."
+    },
+    "StartCluster": {
+      "operation": "startCluster",
+      "resource": "Cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDocDBElasticClusterHttpBinding"
+    },
+    "StopCluster": {
+      "operation": "stopCluster",
+      "resource": "Cluster",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDocDBElasticClusterHttpBinding"
+    }
+  }
+}

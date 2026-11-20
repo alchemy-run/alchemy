@@ -1,6 +1,9 @@
-import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
+import * as Output from "alchemy/Output";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface QueryRequest extends Omit<DynamoDB.QueryInput, "TableName"> {}
@@ -35,3 +38,13 @@ export interface Query extends Binding.Service<
   >
 > {}
 export const Query = Binding.Service<Query>("AWS.DynamoDB.Query");
+
+export const QueryHttp = Layer.effect(
+  Query,
+  makeTableHttpBinding({
+    tag: "AWS.DynamoDB.Query",
+    operation: DynamoDB.query,
+    actions: ["dynamodb:Query"],
+    resources: (table) => [table.tableArn, Output.interpolate`${table.tableArn}/index/*`],
+  }),
+);

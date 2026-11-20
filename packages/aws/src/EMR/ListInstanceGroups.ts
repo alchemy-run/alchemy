@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/emr";
+import * as emr from "@distilled.cloud/aws/emr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEmrClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -30,3 +33,12 @@ export interface ListInstanceGroups extends Binding.Service<
   >
 > {}
 export const ListInstanceGroups = Binding.Service<ListInstanceGroups>("AWS.EMR.ListInstanceGroups");
+
+export const ListInstanceGroupsHttp = Layer.effect(
+  ListInstanceGroups,
+  makeEmrClusterHttpBinding({
+    tag: "AWS.EMR.ListInstanceGroups",
+    operation: emr.listInstanceGroups,
+    actions: ["elasticmapreduce:ListInstanceGroups"],
+  }),
+);

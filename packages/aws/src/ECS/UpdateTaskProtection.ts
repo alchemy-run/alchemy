@@ -1,7 +1,10 @@
-import type * as ECS from "@distilled.cloud/aws/ecs";
+import * as ECS from "@distilled.cloud/aws/ecs";
 import * as Binding from "alchemy/Binding";
+import { toWireMinutes } from "alchemy/Util/Duration";
 import type * as Duration from "effect/Duration";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEcsClusterHttpBinding } from "./BindingHttp.ts";
 import type { Cluster } from "./Cluster.ts";
 
 export interface UpdateTaskProtectionRequest extends Omit<
@@ -53,4 +56,28 @@ export interface UpdateTaskProtection extends Binding.Service<
 > {}
 export const UpdateTaskProtection = Binding.Service<UpdateTaskProtection>(
   "AWS.ECS.UpdateTaskProtection",
+);
+
+export const UpdateTaskProtectionHttp = Layer.effect(
+  UpdateTaskProtection,
+  makeEcsClusterHttpBinding({
+    tag: "AWS.ECS.UpdateTaskProtection",
+    // Wrap the distilled operation so the binding accepts a Duration.Input
+    // `expiresIn` and converts it to the wire's whole minutes.
+    //
+    // The operation must be *yielded* (its `Symbol.iterator`/`asEffect`
+    // protocol), never passed to `Effect.map`: an `API.OperationMethod` is a
+    // plain callable that is not `Effect.isEffect`, so `Effect.map` wraps it
+    // into an invalid effect that crashes the fiber at run time with
+    // "Not a valid effect: function ...".
+    operation: Effect.gen(function* () {
+      const op = yield* ECS.updateTaskProtection;
+      return ({ expiresIn, ...request }: UpdateTaskProtectionRequest & { cluster: string }) =>
+        op({ ...request, expiresInMinutes: toWireMinutes(expiresIn) });
+    }),
+    actions: ["ecs:UpdateTaskProtection"],
+    // Authorizes against the task resource:
+    // arn:aws:ecs:{region}:{account}:task/{clusterName}/*
+    resources: ["task"],
+  }),
 );

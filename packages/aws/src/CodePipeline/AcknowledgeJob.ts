@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/codepipeline";
+import * as codepipeline from "@distilled.cloud/aws/codepipeline";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCodePipelineJobHttpBinding } from "./BindingHttp.ts";
 
 export interface AcknowledgeJobRequest extends SVC.AcknowledgeJobInput {}
 
@@ -33,3 +36,12 @@ export interface AcknowledgeJob extends Binding.Service<
   >
 > {}
 export const AcknowledgeJob = Binding.Service<AcknowledgeJob>("AWS.CodePipeline.AcknowledgeJob");
+
+export const AcknowledgeJobHttp = Layer.effect(
+  AcknowledgeJob,
+  makeCodePipelineJobHttpBinding({
+    tag: "AWS.CodePipeline.AcknowledgeJob",
+    operation: codepipeline.acknowledgeJob,
+    actions: ["codepipeline:AcknowledgeJob"],
+  }),
+);

@@ -1,0 +1,100 @@
+{
+  "tag": "AWS.LakeFormation",
+  "module": "lakeformation",
+  "alias": "lf",
+  "resources": {},
+  "builder": "makeLakeFormationHttpBinding",
+  "builders": {
+    "makeLakeFormationHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "GetDataLakePrincipal": {
+      "operation": "getDataLakePrincipal",
+      "request": {
+        "mode": "optional",
+        "interface": "GetDataLakePrincipalRequest",
+        "omit": []
+      }
+    },
+    "GetEffectivePermissionsForPath": {
+      "operation": "getEffectivePermissionsForPath",
+      "request": {
+        "mode": "required",
+        "interface": "GetEffectivePermissionsForPathRequest",
+        "omit": []
+      }
+    },
+    "GetLFTag": {
+      "operation": "getLFTag",
+      "request": {
+        "mode": "required",
+        "interface": "GetLFTagRequest",
+        "omit": []
+      }
+    },
+    "GetResourceLFTags": {
+      "operation": "getResourceLFTags",
+      "request": {
+        "mode": "required",
+        "interface": "GetResourceLFTagsRequest",
+        "omit": []
+      }
+    },
+    "GetTemporaryDataLocationCredentials": {
+      "operation": "getTemporaryDataLocationCredentials",
+      "request": {
+        "mode": "required",
+        "interface": "GetTemporaryDataLocationCredentialsRequest",
+        "omit": []
+      }
+    },
+    "GetTemporaryGlueTableCredentials": {
+      "operation": "getTemporaryGlueTableCredentials",
+      "request": {
+        "mode": "required",
+        "interface": "GetTemporaryGlueTableCredentialsRequest",
+        "omit": []
+      }
+    },
+    "ListLFTags": {
+      "operation": "listLFTags",
+      "request": {
+        "mode": "optional",
+        "interface": "ListLFTagsRequest",
+        "omit": []
+      }
+    },
+    "ListPermissions": {
+      "operation": "listPermissions",
+      "request": {
+        "mode": "optional",
+        "interface": "ListPermissionsRequest",
+        "omit": []
+      }
+    },
+    "SearchDatabasesByLFTags": {
+      "operation": "searchDatabasesByLFTags",
+      "request": {
+        "mode": "required",
+        "interface": "SearchDatabasesByLFTagsRequest",
+        "omit": []
+      }
+    },
+    "SearchTablesByLFTags": {
+      "operation": "searchTablesByLFTags",
+      "request": {
+        "mode": "required",
+        "interface": "SearchTablesByLFTagsRequest",
+        "omit": []
+      }
+    }
+  }
+}

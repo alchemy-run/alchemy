@@ -1,0 +1,204 @@
+{
+  "tag": "AWS.Detective",
+  "module": "detective",
+  "resources": {
+    "Graph": {
+      "file": "Graph.ts"
+    }
+  },
+  "builder": "makeDetectiveGraphHttpBinding",
+  "builders": {
+    "makeDetectiveAccountHttpBinding": {
+      "grants": "*",
+      "arns": true
+    },
+    "makeDetectiveGraphHttpBinding": {
+      "grants": "resource"
+    }
+  },
+  "bindings": {
+    "AcceptInvitation": {
+      "operation": "acceptInvitation",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeDetectiveAccountHttpBinding"
+    },
+    "BatchGetGraphMemberDatasources": {
+      "operation": "batchGetGraphMemberDatasources",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    },
+    "BatchGetMembershipDatasources": {
+      "operation": "batchGetMembershipDatasources",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeDetectiveAccountHttpBinding"
+    },
+    "CreateMembers": {
+      "operation": "createMembers",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    },
+    "DeleteMembers": {
+      "operation": "deleteMembers",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    },
+    "DescribeOrganizationConfiguration": {
+      "operation": "describeOrganizationConfiguration",
+      "resource": "Graph",
+      "request": {
+        "mode": "none"
+      }
+    },
+    "DisableOrganizationAdminAccount": {
+      "operation": "disableOrganizationAdminAccount",
+      "request": {
+        "mode": "none"
+      },
+      "builder": "makeDetectiveAccountHttpBinding"
+    },
+    "DisassociateMembership": {
+      "operation": "disassociateMembership",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeDetectiveAccountHttpBinding"
+    },
+    "EnableOrganizationAdminAccount": {
+      "operation": "enableOrganizationAdminAccount",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeDetectiveAccountHttpBinding"
+    },
+    "GetInvestigation": {
+      "operation": "getInvestigation",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    },
+    "GetMembers": {
+      "operation": "getMembers",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    },
+    "ListDatasourcePackages": {
+      "operation": "listDatasourcePackages",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    },
+    "ListIndicators": {
+      "operation": "listIndicators",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    },
+    "ListInvestigations": {
+      "operation": "listInvestigations",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    },
+    "ListInvitations": {
+      "operation": "listInvitations",
+      "builder": "makeDetectiveAccountHttpBinding"
+    },
+    "ListMembers": {
+      "operation": "listMembers",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    },
+    "ListOrganizationAdminAccounts": {
+      "operation": "listOrganizationAdminAccounts",
+      "builder": "makeDetectiveAccountHttpBinding"
+    },
+    "RejectInvitation": {
+      "operation": "rejectInvitation",
+      "request": {
+        "mode": "required"
+      },
+      "builder": "makeDetectiveAccountHttpBinding"
+    },
+    "StartInvestigation": {
+      "operation": "startInvestigation",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    },
+    "StartMonitoringMember": {
+      "operation": "startMonitoringMember",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    },
+    "UpdateDatasourcePackages": {
+      "operation": "updateDatasourcePackages",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    },
+    "UpdateInvestigationState": {
+      "operation": "updateInvestigationState",
+      "resource": "Graph",
+      "request": {
+        "mode": "required",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    },
+    "UpdateOrganizationConfiguration": {
+      "operation": "updateOrganizationConfiguration",
+      "resource": "Graph",
+      "request": {
+        "mode": "optional",
+        "omit": ["GraphArn"],
+        "inline": true
+      }
+    }
+  }
+}

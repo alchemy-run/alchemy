@@ -1,6 +1,8 @@
-import type * as bedrock from "@distilled.cloud/aws/bedrock-agent";
+import * as bedrock from "@distilled.cloud/aws/bedrock-agent";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeDataSourceScopedHttpBinding } from "./BindingHttp.ts";
 import type { DataSource } from "./DataSource.ts";
 
 /**
@@ -54,3 +56,12 @@ export interface GetIngestionJob extends Binding.Service<
   >
 > {}
 export const GetIngestionJob = Binding.Service<GetIngestionJob>("AWS.Bedrock.GetIngestionJob");
+
+export const GetIngestionJobHttp = Layer.effect(
+  GetIngestionJob,
+  makeDataSourceScopedHttpBinding({
+    tag: "AWS.Bedrock.GetIngestionJob",
+    operation: bedrock.getIngestionJob,
+    actions: ["bedrock:GetIngestionJob"],
+  }),
+);

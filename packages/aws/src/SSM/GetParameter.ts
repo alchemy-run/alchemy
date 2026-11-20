@@ -1,6 +1,8 @@
-import type * as SSM from "@distilled.cloud/aws/ssm";
+import * as SSM from "@distilled.cloud/aws/ssm";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeParameterHttpBinding } from "./BindingHttp.ts";
 import type { Parameter } from "./Parameter.ts";
 
 export interface GetParameterRequest extends Omit<SSM.GetParameterRequest, "Name"> {}
@@ -40,3 +42,14 @@ export interface GetParameter extends Binding.Service<
   >
 > {}
 export const GetParameter = Binding.Service<GetParameter>("AWS.SSM.GetParameter");
+
+export const GetParameterHttp = Layer.effect(
+  GetParameter,
+  makeParameterHttpBinding({
+    tag: "AWS.SSM.GetParameter",
+    operation: SSM.getParameter,
+    actions: ["ssm:GetParameter"],
+    // kms:Decrypt so `WithDecryption: true` works on SecureString parameters.
+    kmsActions: ["kms:Decrypt"],
+  }),
+);

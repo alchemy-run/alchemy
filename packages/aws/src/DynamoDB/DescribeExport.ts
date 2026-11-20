@@ -1,6 +1,9 @@
-import type * as DynamoDB from "@distilled.cloud/aws/dynamodb";
+import * as DynamoDB from "@distilled.cloud/aws/dynamodb";
 import * as Binding from "alchemy/Binding";
+import * as Output from "alchemy/Output";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableIamHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface DescribeExportRequest extends DynamoDB.DescribeExportInput {}
@@ -36,3 +39,13 @@ export interface DescribeExport extends Binding.Service<
   >
 > {}
 export const DescribeExport = Binding.Service<DescribeExport>("AWS.DynamoDB.DescribeExport");
+
+export const DescribeExportHttp = Layer.effect(
+  DescribeExport,
+  makeTableIamHttpBinding({
+    tag: "AWS.DynamoDB.DescribeExport",
+    operation: DynamoDB.describeExport,
+    actions: ["dynamodb:DescribeExport"],
+    resources: (table) => [Output.interpolate`${table.tableArn}/export/*`],
+  }),
+);

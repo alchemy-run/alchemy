@@ -1,7 +1,9 @@
-import type * as emr from "@distilled.cloud/aws/emr-serverless";
+import * as emr from "@distilled.cloud/aws/emr-serverless";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Application } from "./Application.ts";
+import { makeEmrServerlessHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Request accepted by the {@link StartSession} runtime callable. The
@@ -47,3 +49,13 @@ export interface StartSession extends Binding.Service<
   >
 > {}
 export const StartSession = Binding.Service<StartSession>("AWS.EMRServerless.StartSession");
+
+export const StartSessionHttp = Layer.effect(
+  StartSession,
+  makeEmrServerlessHttpBinding({
+    tag: "AWS.EMRServerless.StartSession",
+    operation: emr.startSession,
+    actions: ["emr-serverless:StartSession"],
+    passRole: true,
+  }),
+);

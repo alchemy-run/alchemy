@@ -1,7 +1,9 @@
 import * as cloudwatch from "@distilled.cloud/aws/cloudwatch";
 import * as Binding from "alchemy/Binding";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { InsightRuleResource } from "./binding-common.ts";
+import { makeCloudWatchResourceSetHttpBinding } from "./BindingHttp.ts";
 
 type InsightRules = [InsightRuleResource, ...InsightRuleResource[]];
 
@@ -36,4 +38,16 @@ export interface EnableInsightRules extends Binding.Service<
 
 export const EnableInsightRules = Binding.Service<EnableInsightRules>(
   "AWS.CloudWatch.EnableInsightRules",
+);
+
+export const EnableInsightRulesHttp = Layer.effect(
+  EnableInsightRules,
+  makeCloudWatchResourceSetHttpBinding({
+    tag: "AWS.CloudWatch.EnableInsightRules",
+    operation: cloudwatch.enableInsightRules,
+    action: "cloudwatch:EnableInsightRules",
+    namesKey: "RuleNames",
+    name: (rule: InsightRuleResource) => rule.ruleName,
+    arn: (rule: InsightRuleResource) => rule.ruleArn,
+  }),
 );

@@ -27,6 +27,11 @@ export const makeProfilesHttpBinding = <I extends { ProfileId?: string }, A, E, 
   operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** IAM actions granted by the binding. */
   actions: readonly string[];
+  /**
+   * ARN formats to grant the actions on instead of `*`, with `${Partition}`,
+   * `${Region}`, and `${Account}` filled in at deploy (`AWSBindings.accountArn`).
+   */
+  arns?: readonly string[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
@@ -40,7 +45,7 @@ export const makeProfilesHttpBinding = <I extends { ProfileId?: string }, A, E, 
             {
               Effect: "Allow",
               Action: [...options.actions],
-              Resource: ["*"],
+              Resource: AWSBindings.grantResources(options.arns),
             },
           ],
         });

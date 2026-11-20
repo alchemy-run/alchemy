@@ -1,0 +1,112 @@
+{
+  "tag": "AWS.IoTSiteWise",
+  "module": "iotsitewise",
+  "alias": "sitewise",
+  "resources": {
+    "Asset": {
+      "file": "Asset.ts"
+    }
+  },
+  "builder": "makeSiteWiseAssetHttpBinding",
+  "builders": {
+    "makeSiteWiseAccountHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    },
+    "makeSiteWiseAssetHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      }
+    }
+  },
+  "bindings": {
+    "DescribeAsset": {
+      "operation": "describeAsset",
+      "resource": "Asset",
+      "request": {
+        "mode": "optional",
+        "interface": "DescribeAssetRequest",
+        "omit": ["assetId"]
+      },
+      "withTs": {
+        "prepare": "(request: DescribeAssetRequest | undefined, assetId) => ({...request, assetId})"
+      }
+    },
+    "ExecuteQuery": {
+      "operation": "executeQuery",
+      "request": {
+        "mode": "required",
+        "interface": "ExecuteQueryRequest",
+        "omit": []
+      },
+      "builder": "makeSiteWiseAccountHttpBinding"
+    },
+    "GetAssetPropertyAggregates": {
+      "operation": "getAssetPropertyAggregates",
+      "resource": "Asset",
+      "request": {
+        "mode": "required",
+        "interface": "GetAssetPropertyAggregatesRequest",
+        "omit": ["assetId"]
+      },
+      "withTs": {
+        "prepare": "(request: GetAssetPropertyAggregatesRequest, assetId) => ({...request, assetId})"
+      }
+    },
+    "GetAssetPropertyValue": {
+      "operation": "getAssetPropertyValue",
+      "resource": "Asset",
+      "request": {
+        "mode": "required",
+        "interface": "GetAssetPropertyValueRequest",
+        "omit": ["assetId"]
+      },
+      "withTs": {
+        "prepare": "(request: GetAssetPropertyValueRequest, assetId) => ({...request, assetId})"
+      }
+    },
+    "GetAssetPropertyValueHistory": {
+      "operation": "getAssetPropertyValueHistory",
+      "resource": "Asset",
+      "request": {
+        "mode": "required",
+        "interface": "GetAssetPropertyValueHistoryRequest",
+        "omit": ["assetId"]
+      },
+      "withTs": {
+        "prepare": "(request: GetAssetPropertyValueHistoryRequest, assetId) => ({...request, assetId})"
+      }
+    },
+    "GetInterpolatedAssetPropertyValues": {
+      "operation": "getInterpolatedAssetPropertyValues",
+      "resource": "Asset",
+      "request": {
+        "mode": "required",
+        "interface": "GetInterpolatedAssetPropertyValuesRequest",
+        "omit": ["assetId"]
+      },
+      "withTs": {
+        "prepare": "(request: GetInterpolatedAssetPropertyValuesRequest, assetId) => ({...request, assetId})"
+      }
+    },
+    "ListAssetProperties": {
+      "operation": "listAssetProperties",
+      "resource": "Asset",
+      "request": {
+        "mode": "optional",
+        "interface": "ListAssetPropertiesRequest",
+        "omit": ["assetId"]
+      },
+      "withTs": {
+        "prepare": "(request: ListAssetPropertiesRequest | undefined, assetId) => ({...request, assetId})"
+      }
+    }
+  }
+}

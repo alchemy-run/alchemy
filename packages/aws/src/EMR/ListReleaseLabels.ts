@@ -1,6 +1,9 @@
 import type * as SVC from "@distilled.cloud/aws/emr";
+import * as emr from "@distilled.cloud/aws/emr";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEmrAccountHttpBinding } from "./BindingHttp.ts";
 
 /**
  * Runtime binding for `elasticmapreduce:ListReleaseLabels` — lists the EMR release labels available in the region, newest first.
@@ -25,3 +28,12 @@ export interface ListReleaseLabels extends Binding.Service<
   >
 > {}
 export const ListReleaseLabels = Binding.Service<ListReleaseLabels>("AWS.EMR.ListReleaseLabels");
+
+export const ListReleaseLabelsHttp = Layer.effect(
+  ListReleaseLabels,
+  makeEmrAccountHttpBinding({
+    tag: "AWS.EMR.ListReleaseLabels",
+    operation: emr.listReleaseLabels,
+    actions: ["elasticmapreduce:ListReleaseLabels"],
+  }),
+);

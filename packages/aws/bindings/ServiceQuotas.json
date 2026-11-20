@@ -1,0 +1,79 @@
+{
+  "tag": "AWS.ServiceQuotas",
+  "module": "service-quotas",
+  "resources": {},
+  "builder": "makeServiceQuotasHttpBinding",
+  "builders": {
+    "makeServiceQuotasHttpBinding": {
+      "options": {
+        "capability": "name",
+        "iamActions": "actions",
+        "operation": "operation"
+      },
+      "grants": "*",
+      "arns": true
+    }
+  },
+  "bindings": {
+    "GetAWSDefaultServiceQuota": {
+      "operation": "getAWSDefaultServiceQuota",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetAutoManagementConfiguration": {
+      "operation": "getAutoManagementConfiguration"
+    },
+    "GetQuotaUtilizationReport": {
+      "operation": "getQuotaUtilizationReport",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetRequestedServiceQuotaChange": {
+      "operation": "getRequestedServiceQuotaChange",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "GetServiceQuota": {
+      "operation": "getServiceQuota",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListAWSDefaultServiceQuotas": {
+      "operation": "listAWSDefaultServiceQuotas",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListRequestedServiceQuotaChangeHistory": {
+      "operation": "listRequestedServiceQuotaChangeHistory"
+    },
+    "ListRequestedServiceQuotaChangeHistoryByQuota": {
+      "operation": "listRequestedServiceQuotaChangeHistoryByQuota",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListServiceQuotas": {
+      "operation": "listServiceQuotas",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "ListServices": {
+      "operation": "listServices"
+    },
+    "RequestServiceQuotaIncrease": {
+      "operation": "requestServiceQuotaIncrease",
+      "request": {
+        "mode": "required"
+      }
+    },
+    "StartQuotaUtilizationReport": {
+      "operation": "startQuotaUtilizationReport"
+    }
+  }
+}
