@@ -10,8 +10,8 @@ import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
-import type { Answer, Reset } from "./fixtures/batches.ts";
 import makeStack from "./fixtures/batches-stack.ts";
+import type { Answer, Reset } from "./fixtures/batches.ts";
 
 /** A route answered with something other than 200. */
 class BatchRequestFailed extends Data.TaggedError("BatchRequestFailed")<{
@@ -179,4 +179,3 @@ describe.concurrent.each([
     { tags, timeout: 180_000 },
   );
 });
-
