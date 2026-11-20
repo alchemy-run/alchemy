@@ -239,7 +239,7 @@ catalog:
   tsdown: "0.23.5"
   tsrs: "7.1.0-beta.tsrs3"
   tsx: "^4.23.15"
-  typescript: "^7.1.0-dev.20261105.1"
+  typescript: "7.1.0-beta"
   unenv: "^2.0.0-rc.24"
   uuid: "^14.0.3"
   vinext: "^1.3.1"
