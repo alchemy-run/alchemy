@@ -174,20 +174,26 @@ describe("hashInput tree", () => {
     expect((await hash(app, [], memo)).hash).toBe(before.hash);
   });
 
-  it("never hashes alchemy's runtime directory, moved by ALCHEMY_DIR or not", async () => {
-    const { app } = await makeMonorepo();
-    const runtime = NodePath.join(app, ".alchemy-ci");
+  it.each([
+    ["inside the app", "app/.alchemy-ci"],
+    ["with glob characters in its name", "app/.runtime[ci]"],
+    ["inside a workspace", "lib/.alchemy-ci"],
+  ])("never hashes alchemy's runtime directory %s", async (_, runtimeDir) => {
+    const { app, lib } = await makeMonorepo();
+    const runtime = NodePath.join(NodePath.dirname(app), runtimeDir);
     const hashIn = () =>
       run(
-        hashInput({ rootDir: app, outputDirs: ["dist"], memo: undefined, workspaces: [] }).pipe(
+        hashInput({ rootDir: app, outputDirs: ["dist"], memo: undefined, workspaces: [lib] }).pipe(
           Effect.provideService(AlchemyContext, { dotAlchemy: runtime, dev: false, adopt: false }),
         ),
       );
     const before = await hashIn();
-    for (const file of [".alchemy-ci/log/run.ndjson", ".alchemy/state/app.json"]) {
-      const full = NodePath.join(app, file);
-      await NodeFsPromises.mkdir(NodePath.dirname(full), { recursive: true });
-      await NodeFsPromises.writeFile(full, "x");
+    for (const file of [
+      NodePath.join(runtime, "log/run.ndjson"),
+      NodePath.join(app, ".alchemy/state/app.json"),
+    ]) {
+      await NodeFsPromises.mkdir(NodePath.dirname(file), { recursive: true });
+      await NodeFsPromises.writeFile(file, "x");
     }
     expect((await hashIn()).hash).toBe(before.hash);
   });
