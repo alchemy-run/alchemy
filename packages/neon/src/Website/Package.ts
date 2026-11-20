@@ -1,3 +1,4 @@
+import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import { logChildLine } from "alchemy/Util/LogRecord";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
@@ -41,7 +42,15 @@ export const packageWebsiteInChild = Effect.fn(
         inputPath,
         outputPath,
       ],
-      { stdin: "ignore", stdout: "ignore", stderr: "pipe" },
+      {
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "pipe",
+        // The runner has no AlchemyContext; hand it the resolved runtime
+        // directory so it treats the same one as state.
+        env: { ALCHEMY_DIR: path.resolve(yield* dotAlchemyDirectory) },
+        extendEnv: true,
+      },
     );
     // The runner's diagnostics become log records instead of raw terminal writes.
     const [code] = yield* Effect.all(
