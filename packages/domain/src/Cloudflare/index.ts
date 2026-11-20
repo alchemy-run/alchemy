@@ -1,17 +1,11 @@
+import { DurableObjectCallbacks } from "@alchemy.run/cloudflare/Workers/AlarmCallback";
 import {
-  DurableObjectCallbacks,
-  outsideAlarmPass,
-} from "@alchemy.run/cloudflare/Workers/AlarmCallback";
-import {
-  DurableObject as CloudflareDurableObject,
-  type DurableObjectGetDurableObjectOptions,
   type DurableObjectJurisdiction,
   type DurableObjectLocationHint,
   type InlineDurableObjectProps,
 } from "@alchemy.run/cloudflare/Workers/DurableObject";
 import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import { makeRpcStub } from "@alchemy.run/cloudflare/Workers/Rpc";
-import { upgrade } from "@alchemy.run/cloudflare/Workers/WebSocket";
 import { Worker as CloudflareWorker, type Worker } from "@alchemy.run/cloudflare/Workers/Worker";
 import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import {
@@ -25,7 +19,7 @@ import { makeDurableObjectEngine, provideCallbacks } from "alchemy/Workers/Durab
 import { StorageName } from "alchemy/Workflows";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import type * as SecureRandom from "effect/crypto/SecureRandom";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -34,7 +28,6 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import type * as Scope from "effect/Scope";
 import { WorkflowEngine } from "effect/workflow";
 import * as Backfill from "../Backfill.ts";
 import {
@@ -44,12 +37,10 @@ import {
   generationOfTarget,
   type Host,
   makePlatform,
+  type ModelLayout,
   type Namespace,
-  type ObjectImpl,
   ObjectState,
-  type ObjectStateShape,
   RUN_ROOT,
-  type Stub,
   runClass,
   SUBSCRIPTION_HEADER,
   TRANSIT_RETRY,
@@ -57,45 +48,22 @@ import {
 } from "../DurableObjects.ts";
 import { type Platform, type Subscription } from "../Platform.ts";
 import { Backfill as BackfillRun } from "./Backfill.ts";
+import {
+  type Namespace as CloudflareNamespace,
+  type ObjectImpl as CloudflareImpl,
+  declare,
+  domainClass,
+  domainClassName,
+  objectState,
+  onCloudflare,
+  routeView,
+} from "./DomainClass.ts";
+import type { RetiringDomainClass } from "./Migration.ts";
 import type { Providers } from "./Providers.ts";
 import { DeployVersion } from "./Version.ts";
 
 export { Backfill, BackfillFailed, BackfillStillRunning } from "./Backfill.ts";
 export { providers, Providers, type ProviderRequirements } from "./Providers.ts";
-
-/** A Cloudflare Durable Object namespace: Domain's, plus fetch, jurisdictions and placement. */
-interface CloudflareNamespace extends Namespace {
-  readonly getByName: (
-    name: string,
-    options?: DurableObjectGetDurableObjectOptions,
-  ) => Stub & {
-    readonly fetch: (
-      request: HttpServerRequest,
-    ) => Effect.Effect<HttpServerResponse.HttpServerResponse, unknown>;
-  };
-  readonly jurisdiction: (jurisdiction: DurableObjectJurisdiction) => CloudflareNamespace;
-}
-
-/** What a Cloudflare instance's methods and constructor run with. */
-type InstanceServices = DurableObjectState | RuntimeContext | Scope.Scope;
-
-/** The usual outer (construction) / inner (instance) pair. */
-type CloudflareImpl = Effect.Effect<
-  Effect.Effect<Record<string, unknown>, never, InstanceServices>,
-  never,
-  DurableObjectState
->;
-
-/**
- * Declare a Durable Object class on the host Worker from inside a factory.
- * The inline form of `Cloudflare.DurableObject` is typed for single-stage
- * implementations, so it is re-typed here for the two-stage form it runs.
- */
-const declare = CloudflareDurableObject as unknown as (
-  name: string,
-  props: InlineDurableObjectProps,
-  impl: CloudflareImpl,
-) => Effect.Effect<CloudflareNamespace, never, Worker>;
 
 /** Where the platform keeps the model's Durable Objects. */
 interface Placement {
@@ -125,47 +93,6 @@ const hinted = (
   getByName: (name, options) => namespace.getByName(name, { locationHint, ...options }),
   jurisdiction: (inside) => hinted(namespace.jurisdiction(inside), locationHint),
 });
-
-/** Domain's view of a Cloudflare Durable Object's state. */
-const objectState = (
-  state: DurableObjectState["Service"],
-  runtime: RuntimeContext["Service"],
-): ObjectStateShape => ({
-  storage: state.storage as unknown as ObjectStateShape["storage"],
-  // Durable Objects run each event in its own I/O context, so in-memory
-  // coordination across events is unsafe; the platform's gate is not.
-  exclusive: (effect) =>
-    Effect.flatMap(
-      state.blockConcurrencyWhile(() => Effect.exit(effect)),
-      (exit) => exit,
-    ).pipe(Effect.provideService(RuntimeContext, runtime)),
-  // Background work outside the alarm pass, so a callback's alarm isn't held open by it.
-  waitUntil: (effect) =>
-    state.waitUntil(outsideAlarmPass(effect)).pipe(Effect.provideService(RuntimeContext, runtime)),
-  sockets: {
-    accept: () =>
-      Effect.provideService(upgrade(), DurableObjectState, state) as unknown as ReturnType<
-        NonNullable<ObjectStateShape["sockets"]>["accept"]
-      >,
-    all: () =>
-      state.getWebSockets() as unknown as ReturnType<
-        NonNullable<ObjectStateShape["sockets"]>["all"]
-      >,
-  },
-});
-
-/** Run a Domain object on a Cloudflare Durable Object class. */
-const onCloudflare = (impl: ObjectImpl): CloudflareImpl =>
-  Effect.succeed(
-    Effect.gen(function* () {
-      const state = yield* DurableObjectState;
-      const runtime = yield* RuntimeContext;
-      return yield* impl.pipe(
-        Effect.provideService(ObjectState, objectState(state, runtime)),
-        Effect.provide(DurableObjectCallbacks),
-      );
-    }),
-  );
 
 /**
  * Forward a WebSocket upgrade (the current request) to the instance that owns
@@ -237,6 +164,91 @@ const renamedFrom = (
 ): InlineDurableObjectProps =>
   version !== undefined && legacyData ? { renamedFrom: legacyName } : {};
 
+/** A model's one class on the Worker, as `domainClass` hands it back. */
+type SharedClass = Effect.Success<ReturnType<typeof domainClass>>;
+
+/**
+ * What Domain version 1 keeps of each model while its Layer is built: its
+ * class, where its objects live (for the deploy's migration), and the class
+ * each saga's runs move from.
+ */
+interface OneClass {
+  readonly random: SecureRandom.SecureRandom["Service"];
+  readonly shared: Map<string, SharedClass>;
+  readonly layouts: Map<string, ModelLayout>;
+  /** Each saga's class in version 0 (`Billing.ApproveWorkflow`): its model, its saga, and the class it was before versions. */
+  readonly sagas: Map<
+    string,
+    { readonly modelName: string; readonly saga: string; readonly renamedFrom?: string }
+  >;
+}
+
+/** The model's class, declared the first time and remembered for `lookup`. */
+const sharedOf = (oneClass: OneClass, modelName: string) =>
+  Effect.tap(domainClass(oneClass.random, modelName), (shared) =>
+    Effect.sync(() => oneClass.shared.set(modelName, shared)),
+  );
+
+/**
+ * Tell the Worker deploy that `route`'s version 0 class is kept only while
+ * its objects move into the model's class: the deploy moves them between its
+ * two uploads, then deletes the class (see `DurableObjectRetirement`).
+ */
+const retiring = (modelName: string, route: string, timeoutSeconds: number | undefined) =>
+  globalThis.__ALCHEMY_RUNTIME__
+    ? Effect.void
+    : Effect.gen(function* () {
+        const worker = yield* CloudflareWorker;
+        const data: RetiringDomainClass = {
+          route,
+          domainClass: domainClassName(modelName),
+          ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }),
+        };
+        yield* worker.bind`${route}.Retiring`({
+          retiringClasses: [
+            { group: modelName, className: route, binding: route, data: { ...data } },
+          ],
+        });
+      });
+
+/**
+ * A saga's run objects, listed in their model's directory as they start, like
+ * every other object of the model: a later layout change finds each run
+ * exactly. The workflow engine stays as it is; only `start` is wrapped.
+ */
+const listedRuns = (
+  oneClass: OneClass,
+  modelName: string,
+  saga: string,
+  impl: CloudflareImpl,
+): CloudflareImpl =>
+  Effect.map(impl, (make) =>
+    Effect.gen(function* () {
+      const instance = yield* make;
+      const start = instance.start as
+        | ((executionId: string, ...rest: ReadonlyArray<unknown>) => Effect.Effect<unknown>)
+        | undefined;
+      if (typeof start !== "function") return instance;
+      const state = yield* DurableObjectState;
+      const runtime = yield* RuntimeContext;
+      return {
+        ...instance,
+        start: (executionId: string, ...rest: ReadonlyArray<unknown>) =>
+          Effect.andThen(
+            Effect.suspend(() => {
+              const layout = oneClass.layouts.get(modelName);
+              return layout === undefined
+                ? Effect.void
+                : layout
+                    .register("Workflow", saga, executionId)
+                    .pipe(Effect.provideService(ObjectState, objectState(state, runtime)));
+            }),
+            start(executionId, ...rest),
+          ),
+      };
+    }),
+  );
+
 /** The Domain host over a Worker's Durable Objects. */
 const cloudflareHost = (
   placement: Placement,
@@ -247,6 +259,8 @@ const cloudflareHost = (
   legacySagas: Map<string, string>,
   /** The class each saga's runs live on, by its name before Domain version 0. */
   sagaRenames: Map<string, InlineDurableObjectProps>,
+  /** Version 1: every object of a model in one class, `Billing.Domain` (see `DomainClass.ts`). */
+  oneClass: OneClass | undefined,
 ): Layer.Layer<Platform, never, Worker | SecureRandom.SecureRandom> =>
   Layer.unwrap(
     Effect.gen(function* () {
@@ -272,25 +286,95 @@ const cloudflareHost = (
           ? fromBinding(namespace)
           : undefined;
       };
+      /** A class of the model from the Worker's bindings: a route of its one class in version 1. */
+      const classIn = (
+        workerEnv: Record<string, any> | undefined,
+        modelName: string,
+        name: string,
+      ): CloudflareNamespace | undefined => {
+        if (oneClass === undefined) return fromEnv(workerEnv, named(modelName, name));
+        const namespace = fromEnv(workerEnv, domainClassName(modelName));
+        return namespace === undefined
+          ? undefined
+          : routeView(namespace, className(modelName, name));
+      };
       const host: Host<Worker> = {
         // Every kind of object is declared through here, so none is left
         // outside the jurisdiction or the location hint.
         declare: ({ modelName, legacyData }, name, impl) =>
-          Effect.map(
-            declare(
-              named(modelName, name),
-              renamedFrom(version, legacyData, name),
-              onCloudflare(impl),
-            ),
-            (namespace) => placed(namespace, placement),
-          ),
-        lookup: ({ modelName }, name) => fromEnv(env, named(modelName, name)),
+          oneClass === undefined
+            ? Effect.map(
+                declare(
+                  named(modelName, name),
+                  renamedFrom(version, legacyData, name),
+                  onCloudflare(impl),
+                ),
+                (namespace) => placed(namespace, placement),
+              )
+            : Effect.gen(function* () {
+                const shared = yield* sharedOf(oneClass, modelName);
+                const route = className(modelName, name);
+                // The version 0 class stays declared while its objects move over.
+                yield* retiring(modelName, route, backfillTimeoutSeconds);
+                const namespace = yield* shared.object(route, onCloudflare(impl), {
+                  className: route,
+                  ...renamedFrom(0, legacyData, name),
+                });
+                return placed(namespace, placement);
+              }),
+        lookup: ({ modelName }, name) => {
+          // A route this isolate's model hosts, or (code that doesn't build the model) any.
+          const shared = oneClass?.shared.get(modelName);
+          if (shared === undefined) return classIn(env, modelName, name);
+          const view = shared.bound(className(modelName, name));
+          return view === undefined ? undefined : placed(view, placement);
+        },
+        // How the deploy's migration finds every object of a model in version 1.
+        layout: ({ modelName }, layout) =>
+          oneClass === undefined
+            ? Effect.void
+            : Effect.gen(function* () {
+                const shared = yield* sharedOf(oneClass, modelName);
+                oneClass.layouts.set(modelName, layout);
+                const route = (name: string) => className(modelName, name);
+                yield* shared.resolve({
+                  namespace: placed(shared.namespace, placement),
+                  directory: route(layout.directory),
+                  entry: (ref) => {
+                    const entry = layout.entry(ref);
+                    if (entry !== undefined)
+                      return { route: route(entry.name), source: entry.source };
+                    // Saga runs: the engine declares their classes, not the platform.
+                    const run = route(ref.source);
+                    return shared.bound(run) === undefined
+                      ? undefined
+                      : { route: run, source: false };
+                  },
+                  consumer: (target) => {
+                    const consumer = layout.consumer(target);
+                    return { keys: route(consumer.keys), run: route(consumer.run) };
+                  },
+                  streams: (projection) => layout.streams(projection).map(route),
+                  runs: () => layout.runs().map(route),
+                  scanner: layout.scanner,
+                });
+              }),
         // Each saga's runs live on a Durable Object class of the workflow
         // engine, named after the model too.
         hosted: (model) =>
           Effect.sync(() => {
             for (const saga of model.sagas) {
               if (version === undefined) legacySagas.set(`${model.modelName}.${saga}`, saga);
+              else if (oneClass !== undefined)
+                oneClass.sagas.set(className(model.modelName, `${saga}Workflow`), {
+                  modelName: model.modelName,
+                  saga,
+                  ...renamedFrom(
+                    0,
+                    model.legacyData,
+                    `${saga.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
+                  ),
+                });
               else
                 sagaRenames.set(
                   className(model.modelName, `${saga}Workflow`),
@@ -322,16 +406,14 @@ const cloudflareHost = (
                     const workerEnv = yield* WorkerEnvironment;
                     const root = (target: string) =>
                       Effect.suspend(() => {
-                        const namespace = fromEnv(
+                        const namespace = classIn(
                           workerEnv,
-                          named(
-                            modelName,
-                            runClass(
-                              consumerClass(
-                                Backfill.consumerOf(target).kind,
-                                Backfill.consumerOf(target).name,
-                                generationOfTarget(target),
-                              ),
+                          modelName,
+                          runClass(
+                            consumerClass(
+                              Backfill.consumerOf(target).kind,
+                              Backfill.consumerOf(target).name,
+                              generationOfTarget(target),
                             ),
                           ),
                         );
@@ -531,10 +613,19 @@ export function layerDurableObjects({
         Effect.gen(function* () {
           const version = yield* DeployVersion;
           const sagaRenames = new Map<string, InlineDurableObjectProps>();
-          const engine = sagaEngine(placement, sagaRenames);
+          const oneClass: OneClass | undefined =
+            version !== undefined && version >= 1
+              ? {
+                  random: yield* SecureRandom.SecureRandom,
+                  shared: new Map(),
+                  layouts: new Map(),
+                  sagas: new Map(),
+                }
+              : undefined;
+          const engine = sagaEngine(placement, sagaRenames, oneClass, timeoutSeconds);
           const legacySagas = new Map<string, string>();
           return Layer.merge(
-            cloudflareHost(placement, timeoutSeconds, version, legacySagas, sagaRenames),
+            cloudflareHost(placement, timeoutSeconds, version, legacySagas, sagaRenames, oneClass),
             version === undefined ? legacyEngine(legacySagas).pipe(Layer.provide(engine)) : engine,
           );
         }),
@@ -556,17 +647,35 @@ export function layerDurableObjects({
 const sagaEngine = (
   placement: Placement,
   sagaRenames: ReadonlyMap<string, InlineDurableObjectProps>,
+  oneClass: OneClass | undefined,
+  timeoutSeconds: number | undefined,
 ): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =>
   makeDurableObjectEngine({
-    declare: (name, impl) =>
-      Effect.map(
-        declare(
+    declare: (name, impl) => {
+      const cloudflareImpl = provideCallbacks(
+        impl,
+        DurableObjectCallbacks,
+      ) as unknown as CloudflareImpl;
+      // Version 1: a saga's runs are objects of its model's class too, on a route of their own.
+      const saga = oneClass?.sagas.get(name);
+      if (oneClass === undefined || saga === undefined)
+        return Effect.map(declare(name, sagaRenames.get(name) ?? {}, cloudflareImpl), (namespace) =>
+          placed(namespace, placement),
+        );
+      return Effect.gen(function* () {
+        const shared = yield* sharedOf(oneClass, saga.modelName);
+        yield* retiring(saga.modelName, name, timeoutSeconds);
+        const namespace = yield* shared.object(
           name,
-          sagaRenames.get(name) ?? {},
-          provideCallbacks(impl, DurableObjectCallbacks) as unknown as CloudflareImpl,
-        ),
-        (namespace) => placed(namespace, placement),
-      ),
+          listedRuns(oneClass, saga.modelName, saga.saga, cloudflareImpl),
+          {
+            className: name,
+            ...(saga.renamedFrom === undefined ? {} : { renamedFrom: saga.renamedFrom }),
+          },
+        );
+        return placed(namespace, placement);
+      });
+    },
     state: DurableObjectState,
   });
 
