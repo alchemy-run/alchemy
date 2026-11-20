@@ -12,6 +12,12 @@ const decoders = {
   jsonl: (input: Stream.Stream<Uint8Array>) => Rpc.decodeRpcByteStream(input, "jsonl"),
   response: Rpc.decodeRpcResponseStream,
 };
+const codecs = {
+  jsrpc: (stream: Stream.Stream<unknown, unknown>) =>
+    Stream.unwrap(Effect.map(Rpc.toRpcStream(stream), Rpc.fromRpcStreamEnvelope)),
+  response: (stream: Stream.Stream<unknown, unknown>) =>
+    Rpc.decodeRpcResponseStream(Rpc.encodeRpcResponseStream(stream) as Stream.Stream<Uint8Array>),
+};
 
 const expectedBase64 = (value: unknown): Uint8Array => {
   const binary = atob(value as string);
@@ -95,6 +101,16 @@ describe("RPC stream codecs", { tags: ["unit", "local"] }, () => {
         const result = yield* decode(source).pipe(Stream.take(3), Stream.runCollect);
         expect(result).toEqual([0, 1, 2]);
         expect(finalized).toBe(true);
+      }),
+    );
+  }
+
+  for (const [name, roundTrip] of Object.entries(codecs)) {
+    it.effect(`${name}: a defect after the first element fails the stream`, () =>
+      Effect.gen(function* () {
+        const source = Stream.make(1).pipe(Stream.concat(Stream.die(new Error("boom"))));
+        const result = yield* roundTrip(source).pipe(Stream.runCollect, Effect.flip);
+        expect(result).toBeInstanceOf(Rpc.RpcRemoteStreamError);
       }),
     );
   }
