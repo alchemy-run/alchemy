@@ -50,7 +50,7 @@ Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destro
 
 Use `--profile` with `deploy`, `plan`, `destroy`, `dev`, `logs`, `drift`, or `state`.
 
-Set `ALCHEMY_DIR` in the shell to move the project's `.alchemy` directory, where local state, run logs and build caches live. A relative path resolves from the working directory. `--env-file` does not apply to it.
+Set `ALCHEMY_DIR` in the shell to move the project's `.alchemy` directory, where local state, run logs, build caches and local emulator data live. A relative path resolves from the working directory. `--env-file` does not apply to it. Add the new directory to `.gitignore`, as you would `.alchemy`.
 
 ```sh
 ALCHEMY_DIR=.alchemy-ci alchemy deploy
