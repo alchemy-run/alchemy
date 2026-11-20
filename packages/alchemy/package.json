@@ -91,14 +91,14 @@
         "default": "./lib/DNS/index.js"
       },
       "./Runtime/Bootstrap": {
-        "types": "./src/Runtime/Bootstrap.ts",
+        "types": "./lib/Runtime/Bootstrap.d.ts",
         "bun": "./src/Runtime/Bootstrap.ts",
-        "default": "./src/Runtime/Bootstrap.ts"
+        "default": "./lib/Runtime/Bootstrap.js"
       },
       "./Runtime/ManagedHttpShutdown": {
-        "types": "./src/Runtime/ManagedHttpShutdown.ts",
+        "types": "./lib/Runtime/ManagedHttpShutdown.d.ts",
         "bun": "./src/Runtime/ManagedHttpShutdown.ts",
-        "default": "./src/Runtime/ManagedHttpShutdown.ts"
+        "default": "./lib/Runtime/ManagedHttpShutdown.js"
       },
       "./Secrets": {
         "types": "./lib/Secrets/index.d.ts",
