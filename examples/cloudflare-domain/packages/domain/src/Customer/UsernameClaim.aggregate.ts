@@ -1,13 +1,13 @@
 import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
-import { ClaimUsername, UsernameClaimed, UsernameTaken } from "./ClaimUsername.command.ts";
 import { CustomerId } from "./Customer.id.ts";
+import { UsernameClaimed } from "./RegisterCustomer.command.ts";
 import { Username } from "./Username.ts";
 
 /**
  * One username, and who holds it. Uniqueness spans every customer, so the
- * invariant is its own aggregate, keyed by the username: two customers
- * claiming the same name race on this one instance, and one of them wins.
+ * invariant has an aggregate of its own, keyed by the username: every
+ * registration that asks for a name reads this one instance.
  */
 export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
   id: Username,
@@ -16,15 +16,13 @@ export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
     Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
   ]),
   initial: { _tag: "Free" },
-  commands: [ClaimUsername],
-  decide: {
-    ClaimUsername: (usernameClaim, cmd) =>
-      usernameClaim._tag === "Free"
-        ? [new UsernameClaimed({ customerId: cmd.customerId })]
-        : usernameClaim.customerId === cmd.customerId
-          ? []
-          : new UsernameTaken(),
+  transitions: {
+    /** Once somebody holds a name, nobody else gets it. */
+    AClaimedNameStaysWithItsHolder: ({ before, after }) =>
+      before._tag === "Free" ||
+      (after._tag === "Claimed" && after.customerId === before.customerId),
   },
+  events: [UsernameClaimed],
   evolve: {
     UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }),
   },

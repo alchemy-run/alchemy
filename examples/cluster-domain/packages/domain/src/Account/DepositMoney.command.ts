@@ -12,9 +12,8 @@ export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
 
 /** Pay money into one of your accounts. */
 export class DepositMoney extends Domain.Command("DepositMoney", {
-  target: AccountId,
   middleware: [Session],
-  input: { amount: Cents },
+  input: { accountId: AccountId, amount: Cents },
   events: [MoneyDeposited],
   rejects: [NotOpen, NotOwner],
   reply: { balance: Cents },

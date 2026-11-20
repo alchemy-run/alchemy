@@ -65,6 +65,18 @@ export type HealthCheckProtocol = "tcp" | "http";
 
 export type TargetHealthStatus = "healthy" | "unhealthy" | "unknown";
 
+/**
+ * Deletion was refused because the load balancer has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class LoadBalancerDeleteProtected extends Data.TaggedError(
+  "Hetzner.LoadBalancerDeleteProtected",
+)<{
+  readonly id: number;
+  readonly message: string;
+}> {}
+
 export interface LoadBalancerHealthCheckHttp {
   /**
    * Host header sent with the HTTP health check. `null` omits the header.
@@ -273,8 +285,8 @@ export interface LoadBalancerProps {
   publicInterface?: boolean;
   /**
    * Prevent the Load Balancer from being deleted in the Cloud Console /
-   * API until this is cleared. The provider disables protection before
-   * delete.
+   * API. While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   deleteProtection?: boolean;
@@ -1483,11 +1495,19 @@ export const LoadBalancerProvider = () =>
       return toAttrs(yield* refresh(current.id));
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getById(output.id);
       if (current === undefined) return;
 
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new LoadBalancerDeleteProtected({
+            id: current.id,
+            message: `Hetzner load balancer '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* runAction(
           Hetzner.loadBalancerActions.changeLoadBalancerProtection({
             id: current.id,
