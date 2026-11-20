@@ -12,5 +12,9 @@
     "allowImportingTsExtensions": true
   },
   "include": ["alchemy.run.ts", "test"],
-  "references": [{ "path": "../../packages/alchemy" }, { "path": "../../packages/gcp" }]
+  "references": [
+    { "path": "../../packages/alchemy" },
+    { "path": "../../packages/gcp" },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
+  ]
 }

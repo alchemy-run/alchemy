@@ -24,7 +24,11 @@ let functionArn: string;
 class TransientUpstream extends Data.TaggedError("TransientUpstream")<{
   readonly status: number;
   readonly body: string;
-}> {}
+}> {
+  override get message() {
+    return `${this.status}: ${this.body}`;
+  }
+}
 
 // Retry transient 5xx only; genuine 4xx/assertion failures surface
 // immediately.

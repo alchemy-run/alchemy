@@ -84,10 +84,6 @@ export type UnitKindProps = {
    */
   defaultRelease?: string;
   /**
-   * Default flag revisions applied to newly created units.
-   */
-  defaultFlagRevisions?: string[];
-  /**
    * Other unit kinds this kind depends on. Immutable — changing them
    * replaces the unit kind.
    */
@@ -128,8 +124,6 @@ export type UnitKind = Resource<
     saasId: string | undefined;
     /** Default release resource name. */
     defaultRelease: string | undefined;
-    /** Default flag revisions. */
-    defaultFlagRevisions: ReadonlyArray<string>;
     /** Declared dependencies. */
     dependencies: UnitKindDependency[];
     /** Input variable mappings. */
@@ -251,7 +245,6 @@ const toAttrs = (item: saasservicemgmt.UnitKind, project: string) => {
     saas: item.saas,
     saasId: item.saas ? lastSegment(item.saas) : undefined,
     defaultRelease: item.defaultRelease,
-    defaultFlagRevisions: item.defaultFlagRevisions ?? [],
     dependencies: (item.dependencies ?? []).map((dependency) => ({
       unitKind: dependency.unitKind,
       alias: dependency.alias,
@@ -375,7 +368,6 @@ export const UnitKindProvider = () =>
             body: {
               saas,
               defaultRelease,
-              defaultFlagRevisions: news.defaultFlagRevisions,
               dependencies,
               inputVariableMappings: news.inputVariableMappings,
               outputVariableMappings: news.outputVariableMappings,
@@ -408,9 +400,6 @@ export const UnitKindProvider = () =>
         fingerprint(userAnnotations(current.annotations)) !== fingerprint(annotations);
       const defaultReleaseChanged =
         news.defaultRelease !== undefined && !sameRef(current.defaultRelease, defaultRelease);
-      const flagRevisionsChanged =
-        news.defaultFlagRevisions !== undefined &&
-        fingerprint(current.defaultFlagRevisions) !== fingerprint(news.defaultFlagRevisions);
       const inputChanged =
         news.inputVariableMappings !== undefined &&
         fingerprint(current.inputVariableMappings) !== fingerprint(news.inputVariableMappings);
@@ -421,7 +410,6 @@ export const UnitKindProvider = () =>
         labelsChanged && "labels",
         annotationsChanged && "annotations",
         defaultReleaseChanged && "defaultRelease",
-        flagRevisionsChanged && "defaultFlagRevisions",
         inputChanged && "inputVariableMappings",
         outputChanged && "outputVariableMappings",
       ]);
@@ -434,7 +422,6 @@ export const UnitKindProvider = () =>
             name: current.name ?? name,
             etag: current.etag,
             defaultRelease,
-            defaultFlagRevisions: news.defaultFlagRevisions,
             inputVariableMappings: news.inputVariableMappings,
             outputVariableMappings: news.outputVariableMappings,
             labels: desiredLabels,

@@ -2,9 +2,10 @@ import type * as Rpc from "effect/rpc/Rpc";
 import type * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 
 /**
- * The middleware a Command or View declares, applied in order: the first
- * entry runs first (e.g. `[Session, MfaChallenge]` authenticates, then
- * challenges).
+ * The middleware a Command or View declares, run in list order: the first
+ * entry is the outermost and runs first, and what it provides reaches every
+ * later entry and the handler (e.g. `[Session, MfaChallenge]` authenticates,
+ * then challenges).
  */
 export type List = ReadonlyArray<RpcMiddleware.AnyService>;
 
@@ -22,17 +23,24 @@ export type Errors<Ms extends List> = Ms[number] extends infer M
     : never
   : never;
 
-/** An RPC with a list of middleware applied, in order. */
+/**
+ * An RPC with a list of middleware applied, added last entry first like
+ * {@link apply}: what an entry provides satisfies what a later entry requires.
+ */
 export type Apply<R extends Rpc.Any, Ms extends List> = Ms extends readonly [
-  infer Head extends RpcMiddleware.AnyService,
-  ...infer Tail extends List,
+  ...infer Init extends List,
+  infer Last extends RpcMiddleware.AnyService,
 ]
-  ? Apply<Rpc.AddMiddleware<R, Head>, Tail>
+  ? Apply<Rpc.AddMiddleware<R, Last>, Init>
   : R;
 
-/** Apply a list of middleware to an RPC, in order. @internal */
+/**
+ * Apply a list of middleware to an RPC so it runs in list order. The RPC
+ * server wraps the handler once per middleware in the order they were added,
+ * so the last one added is the outermost: add the list in reverse. @internal
+ */
 export const apply = (rpc: Rpc.Any, middleware: List): Rpc.Any =>
-  middleware.reduce<Rpc.Any>(
+  middleware.reduceRight<Rpc.Any>(
     (current, service) => (current as Rpc.Rpc<string>).middleware(service),
     rpc,
   );

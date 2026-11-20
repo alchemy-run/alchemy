@@ -151,6 +151,18 @@ export interface TaskDefinitionProps {
   enableFaultInjection?: boolean;
 
   /**
+   * Run each task in its own Nitro Sandbox, a lightweight VM isolated by the
+   * AWS Nitro hypervisor. `ISOLATED_SANDBOX` isolates tasks from each other;
+   * `CONFIDENTIAL_SANDBOX` also hides the task's memory from the instance and
+   * needs an `attestationPolicy`.
+   *
+   * Requires `requiresCompatibilities: ["MANAGED_INSTANCES"]` and a Managed
+   * Instances capacity provider with `nitroEnclavesEnabled`.
+   * @default { isolationMode: "SHARED" }
+   */
+  trustedExecutionConfiguration?: ecs.TrustedExecutionConfiguration;
+
+  /**
    * User-defined tags applied to each registered revision.
    */
   tags?: Record<string, string>;
@@ -462,6 +474,7 @@ export const TaskDefinitionProvider = () =>
           ephemeralStorage: props.ephemeralStorage,
           runtimePlatform: props.runtimePlatform,
           enableFaultInjection: props.enableFaultInjection,
+          trustedExecutionConfiguration: props.trustedExecutionConfiguration,
         };
       };
 
@@ -498,6 +511,7 @@ export const TaskDefinitionProvider = () =>
             ephemeralStorage: observed.ephemeralStorage,
             runtimePlatform: observed.runtimePlatform,
             enableFaultInjection: observed.enableFaultInjection,
+            trustedExecutionConfiguration: observed.trustedExecutionConfiguration,
           }),
         );
 

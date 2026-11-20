@@ -12,14 +12,15 @@ Take one host: a Worker serving git over HTTP, with each repository in a Durable
 <Shell
   shell={{
     label: "Worker",
+    icon: "brand:cloudflare",
     children: [{
       label: "Git.Api",
-      tone: "accent",
+      icon: "brand:git",
       children: [
-        { label: "Repository", type: "Durable Object" },
-        { label: "Registry", type: "Durable Object · D1" },
-        { label: "Blob Store", type: "R2 · S3" },
-        { label: "Hasher", type: "inline · Lambda" },
+        { label: "Repository", type: "Durable Object", icon: "book-marked" },
+        { label: "Registry", type: "Durable Object · D1", icon: "list" },
+        { label: "Blob Store", type: "R2 · S3", icon: "archive" },
+        { label: "Hasher", type: "inline · Lambda", icon: "hash" },
       ],
     }],
   }}

@@ -126,6 +126,7 @@ export const toProduceError = (error: { code: number; message: string }): Produc
     case 10212:
       return k2.K2AppendOutcomeUnknown.make(fields);
     default:
-      return UnknownCloudflareError.make(fields);
+      // The binding answers in-process, so there is no HTTP status.
+      return UnknownCloudflareError.make({ ...fields, status: 0, body: error });
   }
 };

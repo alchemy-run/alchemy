@@ -40,11 +40,11 @@ Changing `name` replaces the volume and loses its files.
 
 ```typescript title="src/Builder.ts"
 import * as E2B from "@alchemy.run/e2b";
-import { Agent } from "./Agent.ts";
+import { MyTemplate } from "./MyTemplate.ts";
 import { Cache } from "./Storage.ts";
 
 export const Builder = E2B.Sandbox("Builder", {
-  template: Agent,
+  template: MyTemplate,
   mounts: [{ volume: Cache, path: "/cache" }],
 });
 ```
@@ -56,7 +56,7 @@ E2B attaches volumes only when a sandbox is created, so changing `mounts` replac
 ```typescript
 // in the Worker's construction
 const cache = yield* E2B.MountVolume(Cache, { path: "/cache" });
-const sandboxes = yield* E2B.CreateSandbox(Agent);
+const sandboxes = yield* E2B.CreateSandbox(MyTemplate);
 // in fetch
 const sandbox = yield* sandboxes.create({ mounts: [cache] });
 ```

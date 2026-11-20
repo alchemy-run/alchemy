@@ -81,7 +81,7 @@ A volume created at runtime mounts the same way: `{ volume: home, path: "/home/u
 A `bucket` entry mounts an S3, R2 or GCS bucket. Pass a bucket name, or a bucket resource of another provider; a Cloudflare R2 bucket's account endpoint is filled in. `secret` is a `Modal.Secret` holding the bucket's keys.
 
 ```typescript
-// src/Agent.ts
+// src/MySandbox.ts
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Modal from "@alchemy.run/modal";
 import * as Effect from "effect/Effect";
@@ -91,8 +91,8 @@ import { Coder, R2Keys } from "./Storage.ts";
 
 export const Uploads = Cloudflare.R2.Bucket("Uploads", {});
 
-export default class Agent extends Modal.Sandbox<Agent>()(
-  "Agent",
+export default class MySandbox extends Modal.Sandbox<MySandbox>()(
+  "MySandbox",
   { main: import.meta.url, app: Coder, mounts: [{ bucket: Uploads, path: "/uploads", secret: R2Keys }] },
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -146,7 +146,7 @@ yield* models.removeFile("/backup", { recursive: true });
 ## One volume per user
 
 ```typescript
-const volumes = yield* Modal.CreateVolume(Agents);
+const volumes = yield* Modal.CreateVolume(MyEnv);
 const home = yield* volumes.getOrCreate(`home-${user}`);
 yield* home.writeFile("/notes.md", notes);
 ```
@@ -158,5 +158,5 @@ const prefix = Modal.runtimePrefix({ stack: "my-app", stage: "prod", id: "Api" }
 ```
 
 ```sh
-modal volume list --env agents | grep "$PREFIX"
+modal volume list --env "$ENV" | grep "$PREFIX"
 ```

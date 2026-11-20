@@ -13,7 +13,7 @@ Install pnpm in the template:
 
 ```diff lang="typescript"
 // src/Sandbox.ts
-export const Agent = E2B.Template("Agent", {
+export const MyTemplate = E2B.Template("MyTemplate", {
   dockerfile: Dockerfile.inline`
     FROM node:22-bookworm
     RUN apt-get update && apt-get install -y git
@@ -28,7 +28,7 @@ export const Agent = E2B.Template("Agent", {
 
 <PackageManagers run="alchemy deploy" />
 
-The Dockerfile changed, so E2B builds `Agent` again. `Warm` starts from `Agent`, so Alchemy snapshots it again on the new build, and clones the repository into it. The Worker is unchanged and isn't redeployed.
+The Dockerfile changed, so E2B builds `MyTemplate` again. `Warm` starts from `MyTemplate`, so Alchemy snapshots it again on the new build, and clones the repository into it. The Worker is unchanged and isn't redeployed.
 
 <PackageManagers script={`curl -X POST "$URL/run" --data 'pnpm --version'`} />
 

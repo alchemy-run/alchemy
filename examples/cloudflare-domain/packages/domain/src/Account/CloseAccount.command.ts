@@ -12,7 +12,7 @@ export class AccountClosed extends Domain.Event("AccountClosed") {}
 
 /** Close an empty account. */
 export class CloseAccount extends Domain.Command("CloseAccount", {
-  target: AccountId,
+  input: { accountId: AccountId },
   middleware: [Session],
   events: [AccountClosed],
   rejects: [NotOpen, NotOwner, BalanceNotZero],

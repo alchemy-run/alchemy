@@ -19,7 +19,7 @@ An **API key** can do only what you give it. It carries the **actions** it may t
     { id: "cmd", label: "exec", type: "action", parent: "box" },
     { id: "files", label: "file.read · file.write", type: "action", parent: "box" },
     { id: "task", label: "task-42", type: "sandbox", parent: "account" },
-    { id: "agents", label: "Agents", type: "environment", parent: "account" },
+    { id: "env", label: "MyEnv", type: "environment", parent: "account" },
   ]}
   scopes={[
     { on: "account", label: "your key · admin" },
@@ -37,6 +37,37 @@ Alchemy deploys with the credentials in a [profile](/environments/profiles):
 Pick **Browser sign-in** for most setups. It works with every way you can sign in to Boat: GitHub, Google or an email code. Boat issues an API key that lasts a year, and Alchemy renews it before it runs out.
 
 Pick **API key** to paste one from the dashboard's **API Keys** tab. Deploying creates keys for your hosts, which takes `account.admin`, so give it the `admin` preset.
+
+## Work in an organization
+
+An organization has its own plan, its own wallet, and its own shared environments and credential profiles. You work in one the way the dashboard's organization select or `boat --org` do: the sandboxes you create bill it, and the environments and [credential profiles](/boat/security/credential-profiles) you manage are its shared ones.
+
+When you sign in, Alchemy picks your organization; it asks only when your account belongs to more than one. It stores the organization's id, so renaming the organization doesn't break the profile. Every call sends it, and so do the hosts Alchemy deploys.
+
+You can also follow your **active wallet**, the one `boat org switch` picks. Sandboxes then bill whatever it is when they are created, and environments stay personal, so most teams pin the organization.
+
+A Stack can pick its own organization, which overrides the profile's:
+
+```typescript title="alchemy.run.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "Team",
+  { providers: Boat.providers({ org: "acme" }) },
+  Effect.gen(function* () {
+    yield* Boat.Environment("Shared", { env: { REGION: "us" } });
+    yield* Boat.Sandbox("TeamBox", { noEnv: true, visibility: "shared" });
+  }),
+);
+```
+
+A sandbox's wallet is fixed when it is created, so changing the organization later leaves existing sandboxes where they are; their `org` attribute says which. An environment belongs to one organization for life, so changing the organization replaces it.
+
+`visibility: "shared"` lets every member use a sandbox. Sharing one that holds your logins wipes them at its next start, so share sandboxes with `noEnv`, or on an environment that passes none of your credentials, which is how a declared one starts.
+
+Creating organizations, inviting members and buying seats stay on the dashboard and `boat org`. Boat doesn't offer them in its public API.
 
 ## Give production its own profile
 
@@ -80,7 +111,7 @@ When `BOAT_API_KEY` is set, Alchemy uses it instead of the profile:
 
 <PackageManagers script={`BOAT_API_KEY=boat_... {run} alchemy deploy --stage prod`} />
 
-Give the key the `admin` preset if the Stack has bindings: they create keys. `BOAT_API_BASE_URL` overrides Boat's API URL. See [CI](/environments/ci).
+Give the key the `admin` preset if the Stack has bindings: they create keys. `BOAT_ORG` picks the organization, and `BOAT_API_BASE_URL` overrides Boat's API URL. See [CI](/environments/ci).
 
 ## Your plan caps how many sandboxes start
 

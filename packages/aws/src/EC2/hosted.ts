@@ -15,6 +15,7 @@ import type { ScopedPlanStatusSession } from "alchemy/Report";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import { createInternalTags, createTagsList, hasTags } from "alchemy/Tags";
+import { containerEnvFile, DOCKER_ENV, systemdEnvFile } from "alchemy/Util/envFile";
 import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";
 import * as Data from "effect/Data";
@@ -77,6 +78,18 @@ export interface InstanceMetadataOptions {
 }
 
 /**
+ * AWS Nitro Enclaves options for launched instances. Enabling them also lets
+ * the instance run Nitro Sandboxes, lightweight VMs isolated by the Nitro
+ * hypervisor, on instance types that support them.
+ */
+export interface InstanceEnclaveOptions {
+  /**
+   * Whether the instance can run Nitro Enclaves and Nitro Sandboxes.
+   */
+  enabled: boolean;
+}
+
+/**
  * Shared props for EC2-backed hosted runtimes (an Instance that bundles and
  * runs an application entrypoint).
  */
@@ -105,6 +118,8 @@ export interface Ec2HostedProps extends PlatformProps {
   tags?: Record<string, string>;
   /** Instance Metadata Service options applied at launch. */
   metadataOptions?: InstanceMetadataOptions;
+  /** Nitro Enclaves and Nitro Sandboxes options applied at launch. */
+  enclaveOptions?: InstanceEnclaveOptions;
   /** Path to the application entrypoint to bundle and run on the instance. */
   main?: string;
   /**
@@ -148,6 +163,8 @@ export interface Ec2HostedRuntimeState {
   assetPrefix?: string;
   code?: {
     hash: string;
+    /** {@link CONTAINER_UNIT_VERSION} a container instance was launched with. */
+    unit?: number;
   };
 }
 
@@ -167,6 +184,22 @@ export interface Ec2HostedCleanupState {
 export type Ec2HostRuntimeContext = HostRuntimeContext;
 
 export const createEc2HostRuntimeContext = createHostRuntimeContext;
+
+/**
+ * Version of the systemd unit a container instance's user data installs.
+ * User data runs once per instance, so an instance whose stored version
+ * differs is replaced: version 2 reads its env file through systemd, which
+ * a version 1 unit (`docker run --env-file`) can't.
+ */
+export const CONTAINER_UNIT_VERSION = 2;
+
+/**
+ * The unit's setup step, run with an empty environment: `EnvironmentFile=`
+ * applies to every command, and the app's env (a `PATH`, AWS credentials)
+ * must not change how setup reaches S3 and Docker.
+ */
+const setupCommand = (unitName: string) =>
+  `/usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/root /usr/local/bin/${unitName}-setup.sh`;
 
 export const createEc2HostedSupport = ({
   stackName,
@@ -322,27 +355,6 @@ await bootstrap(entrypoint);
     return { archive, hash: bundleOutput.hash };
   });
 
-  const quoteEnvValue = (value: any) => {
-    const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
-    return `'${text.replaceAll(/'/g, `'""'`).replaceAll(/\n/g, "\\n")}'`;
-  };
-
-  /** A `docker run --env-file`: one literal `NAME=value` per line, no quoting. */
-  const renderDockerEnvFile = (env: Record<string, any>) =>
-    Object.entries(env)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => {
-        const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
-        return `${key}=${text.replaceAll("\n", " ")}`;
-      })
-      .join("\n");
-
-  const renderEnvFile = (env: Record<string, any>) =>
-    Object.entries(env)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => `${key}=${quoteEnvValue(value)}`)
-      .join("\n");
-
   const renderHostedUserData = Effect.fn(function* ({
     unitName,
     bundleKey,
@@ -415,7 +427,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${appDir}
-ExecStartPre=/usr/local/bin/${unitName}-setup.sh
+ExecStartPre=${setupCommand(unitName)}
 EnvironmentFile=-${appDir}/env
 # --no-install: the uploaded bundle is self-contained; bun must never fall
 # into its auto-install path (which hangs startup on network package
@@ -481,7 +493,6 @@ set -e
 aws s3 cp "s3://${bucket}/${bundleKey}" "${appDir}/image.tar" --region "${region}"
 aws s3 cp "s3://${bucket}/${envKey}" "${appDir}/env" --region "${region}"
 ${loadImageArchiveScript(`${appDir}/image.tar`)}
-echo "$IMAGE" > "${appDir}/image"
 docker rm -f ${unitName} >/dev/null 2>&1 || true
 SETUP_EOF
 chmod +x /usr/local/bin/${unitName}-setup.sh
@@ -494,8 +505,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStartPre=/usr/local/bin/${unitName}-setup.sh
-ExecStart=/bin/sh -c 'exec docker run --rm --name ${unitName} --network host --env-file ${appDir}/env "$(cat ${appDir}/image)"'
+ExecStartPre=${setupCommand(unitName)}
+EnvironmentFile=-${appDir}/env
+ExecStart=/usr/bin/docker run --rm --name ${unitName} --network host $${DOCKER_ENV} alchemy-${unitName}:latest
 ExecStop=/usr/bin/docker stop ${unitName}
 Restart=always
 RestartSec=5
@@ -694,14 +706,12 @@ systemctl enable --now ${unitName}.service
     bundleKey,
     envKey,
     archive,
-    env,
-    image,
+    envFile,
   }: {
     bundleKey: string;
     envKey: string;
     archive: Uint8Array<ArrayBufferLike>;
-    env: Record<string, any>;
-    image: boolean;
+    envFile: string;
   }) {
     const assets = yield* Assets;
     const contentHash = yield* sha256(archive);
@@ -714,7 +724,7 @@ systemctl enable --now ${unitName}.service
     yield* s3.putObject({
       Bucket: yield* assets.bucketName,
       Key: envKey,
-      Body: image ? renderDockerEnvFile(env) : renderEnvFile(env),
+      Body: envFile,
       ContentType: "text/plain; charset=utf-8",
     });
   });
@@ -815,6 +825,8 @@ systemctl enable --now ${unitName}.service
       ...(news.port !== undefined ? { PORT: news.port } : {}),
       ...news.env,
     };
+    // Before anything is built or published: a key systemd can't hold fails here.
+    const envFile = yield* image ? containerEnvFile(env) : systemdEnvFile(env);
 
     const { archive, hash } = image
       ? yield* Effect.gen(function* () {
@@ -832,8 +844,7 @@ systemctl enable --now ${unitName}.service
       bundleKey,
       envKey,
       archive,
-      env,
-      image,
+      envFile,
     });
 
     const hostedUserData = yield* renderHostedUserData({
@@ -856,6 +867,7 @@ systemctl enable --now ${unitName}.service
       assetPrefix,
       code: {
         hash,
+        ...(image ? { unit: CONTAINER_UNIT_VERSION } : {}),
       },
     } satisfies Ec2HostedRuntimeState;
   });
@@ -981,6 +993,7 @@ systemctl enable --now ${unitName}.service
       | "availabilityZone"
       | "tags"
       | "metadataOptions"
+      | "enclaveOptions"
     >,
     runtime: Pick<Ec2HostedRuntimeState, "userData" | "instanceProfileName">,
   ) => {
@@ -1024,6 +1037,7 @@ systemctl enable --now ${unitName}.service
             InstanceMetadataTags: news.metadataOptions.instanceMetadataTags,
           }
         : undefined,
+      EnclaveOptions: news.enclaveOptions ? { Enabled: news.enclaveOptions.enabled } : undefined,
       TagSpecifications:
         Object.keys(instanceTags).length > 0
           ? [

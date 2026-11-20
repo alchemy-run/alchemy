@@ -1,18 +1,20 @@
 import { createHash } from "node:crypto";
 import * as AWS from "@alchemy.run/aws";
-import { makeDynamoDBState } from "@alchemy.run/aws";
+import { makeDynamoDBState, type DynamoDBStateOptions } from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { createOverflowBucketName } from "@alchemy.run/aws/StateStore/DynamoDBState";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
+import * as kms from "@distilled.cloud/aws/kms";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as sqs from "@distilled.cloud/aws/sqs";
 import { TelemetryDebug } from "@distilled.cloud/core/telemetry-debug";
 import * as Alchemy from "alchemy";
 import * as Alchemist from "alchemy/Alchemist";
 import { StateStoreError, type ResourceState, type StateService } from "alchemy/State";
+import { SEALED_PREFIX } from "alchemy/State/StateEncryption";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -21,6 +23,7 @@ import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Redacted from "effect/Redacted";
 import * as References from "effect/References";
+import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -28,21 +31,39 @@ const STACK = "DynamoDBStateStoreTestStack";
 
 const tags = ["provider:aws", "provider:aws:dynamodb", "provider:aws:statestore", "live"];
 
-/** A table with the store's key schema, and a bucket for overflow records. */
+/**
+ * A table with the store's key schema and a bucket for overflow records,
+ * both encrypted with a KMS key the store is given. A table moved to a new
+ * key stays DELETING for many minutes after its delete, so no case here
+ * moves one.
+ */
 const StateStorage = Effect.gen(function* () {
+  const key = yield* AWS.KMS.Key("StateKey", {
+    description: "DynamoDB state store test",
+    deletionWindow: "7 days",
+  });
   const table = yield* AWS.DynamoDB.Table("StateTable", {
     partitionKey: "PK",
     sortKey: "SK",
     attributes: { PK: "S", SK: "S" },
+    sseSpecification: { Enabled: true, SSEType: "KMS", KMSMasterKeyId: key.keyArn },
   });
-  const bucket = yield* AWS.S3.Bucket("OverflowBucket", { forceDestroy: true });
+  const bucket = yield* AWS.S3.Bucket("OverflowBucket", {
+    forceDestroy: true,
+    encryption: { sseAlgorithm: "aws:kms", kmsMasterKeyId: key.keyArn, bucketKeyEnabled: true },
+  });
   return {
     tableName: table.tableName,
     overflowBucketName: bucket.bucketName,
+    kmsKeyId: key.keyArn,
     // These cases exercise the store alone; Migration.test.ts covers the S3 handover.
     migrateFrom: false as const,
   };
 });
+
+/** The store under test, encrypting with the given KMS key. */
+const makeStore = ({ kmsKeyId, ...options }: DynamoDBStateOptions & { kmsKeyId: string }) =>
+  makeDynamoDBState(options).pipe(Effect.provide(AWS.stateEncryption({ kmsKeyId })));
 
 const resource = (fqn: string, attr: Record<string, unknown>): ResourceState =>
   ({
@@ -84,7 +105,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const storage = yield* stack.deploy(StateStorage);
-      const state = yield* makeDynamoDBState(storage);
+      const state = yield* makeStore(storage);
       const stage = "round-trip";
 
       yield* state.deleteStack({ stack: STACK, stage });
@@ -123,6 +144,203 @@ test.provider(
   { tags, timeout: 120_000 },
 );
 
+const recordItem = (tableName: string, stage: string, fqn: string) =>
+  dynamodb
+    .getItem({
+      TableName: tableName,
+      Key: {
+        PK: { S: `STAGE#${STACK}#${stage}` },
+        SK: { S: `RECORD#${createHash("sha256").update(fqn).digest("hex")}` },
+      },
+      ConsistentRead: true,
+    })
+    .pipe(Effect.map((result) => result.Item));
+
+const objectText = (bucketName: string, key: string) =>
+  s3
+    .getObject({ Bucket: bucketName, Key: key })
+    .pipe(Effect.flatMap((result) => result.Body!.pipe(Stream.decodeText, Stream.mkString)));
+
+test.provider(
+  "secrets are sealed under the store's KMS key",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(StateStorage);
+      const stage = "sealed";
+      const secret = "dynamodb-sealed-secret-0123456789";
+      const sealed = resource("Sealed", { password: Redacted.make(secret), name: "visible" });
+      // Large enough to overflow to S3.
+      const large = resource("Large", {
+        token: Redacted.make(secret),
+        padding: "x".repeat(2048),
+      });
+      const options = { ...storage, overflowThreshold: 1024 };
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const state = yield* makeStore(options);
+          yield* state.set({ stack: STACK, stage, fqn: sealed.fqn, value: sealed });
+          yield* state.set({ stack: STACK, stage, fqn: large.fqn, value: large });
+        }),
+      );
+
+      // In the item and the overflow object, the secret is sealed and the
+      // rest is readable.
+      const item = yield* recordItem(storage.tableName, stage, sealed.fqn);
+      const text = item?.data?.S ?? "";
+      expect(text.startsWith(SEALED_PREFIX)).toBe(true);
+      expect(text).not.toContain(secret);
+      expect(text).toContain('"name":"visible"');
+      const ref = (yield* recordItem(storage.tableName, stage, large.fqn))?.ref?.S;
+      expect(ref).toBeDefined();
+      const overflow = yield* objectText(storage.overflowBucketName, ref!);
+      expect(overflow.startsWith(SEALED_PREFIX)).toBe(true);
+      expect(overflow).not.toContain(secret);
+
+      // The data key is bound to its stage: KMS refuses it for another.
+      const wrapped = Buffer.from(text.slice(SEALED_PREFIX.length, text.indexOf("\n")), "base64");
+      const refused = yield* kms
+        .decrypt({
+          CiphertextBlob: wrapped,
+          EncryptionContext: { "alchemy:stack": STACK, "alchemy:stage": "other" },
+        })
+        .pipe(Effect.flip);
+      expect(refused._tag).toBe("InvalidCiphertextException");
+
+      // A new store opens them.
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const state = yield* makeStore(options);
+          const read = (yield* state.get({
+            stack: STACK,
+            stage,
+            fqn: sealed.fqn,
+          })) as ResourceState;
+          expect(Redacted.value(read.attr!.password as Redacted.Redacted<string>)).toBe(secret);
+          expect(read.attr!.name).toBe("visible");
+          const big = (yield* state.get({ stack: STACK, stage, fqn: large.fqn })) as ResourceState;
+          expect(Redacted.value(big.attr!.token as Redacted.Redacted<string>)).toBe(secret);
+          yield* state.deleteStack({ stack: STACK, stage });
+        }),
+      );
+      yield* stack.destroy();
+    }),
+  { tags: [...tags, "provider:aws:s3", "provider:aws:kms"], timeout: 180_000 },
+);
+
+// State written before the store sealed secrets holds them in plaintext.
+// The store seals such a record when it loads the stage, so the secret
+// doesn't wait for the resource to change.
+test.provider(
+  "a record written with a plaintext secret is sealed when its stage loads",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(StateStorage);
+      const stage = "reseal";
+      const secret = "dynamodb-plaintext-secret-0123456789";
+      const legacy = resource("Legacy", { password: Redacted.make(secret) });
+
+      // Created through the store, so the stage is cataloged and the
+      // table is moved to the key.
+      yield* Effect.scoped(
+        Effect.flatMap(makeStore(storage), (state) =>
+          state.set({ stack: STACK, stage, fqn: "Other", value: resource("Other", { v: 1 }) }),
+        ),
+      );
+      // What an earlier version wrote: the secret in plaintext.
+      yield* dynamodb.putItem({
+        TableName: storage.tableName,
+        Item: {
+          PK: { S: `STAGE#${STACK}#${stage}` },
+          SK: { S: `RECORD#${createHash("sha256").update(legacy.fqn).digest("hex")}` },
+          fqn: { S: legacy.fqn },
+          data: {
+            S: JSON.stringify({ ...legacy, attr: { password: { __redacted__: secret } } }),
+          },
+        },
+      });
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const state = yield* makeStore(storage);
+          const read = (yield* state.get({
+            stack: STACK,
+            stage,
+            fqn: legacy.fqn,
+          })) as ResourceState;
+          expect(Redacted.value(read.attr!.password as Redacted.Redacted<string>)).toBe(secret);
+        }),
+      );
+      const text = (yield* recordItem(storage.tableName, stage, legacy.fqn))?.data?.S ?? "";
+      expect(text.startsWith(SEALED_PREFIX)).toBe(true);
+      expect(text).not.toContain(secret);
+
+      yield* Effect.scoped(
+        Effect.flatMap(makeStore(storage), (state) => state.deleteStack({ stack: STACK, stage })),
+      );
+      yield* stack.destroy();
+    }),
+  { tags: [...tags, "provider:aws:kms"], timeout: 180_000 },
+);
+
+// Turning encryption off: with the layer set to disable, a stage's secrets
+// are decrypted as it loads and written in plaintext from then on.
+test.provider(
+  "a store given AWS.stateEncryption({ disable: true }) decrypts a stage as it loads",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(StateStorage);
+      const stage = "disable";
+      const secret = "dynamodb-disable-secret-0123456789";
+      const sealed = resource("Sealed", { password: Redacted.make(secret) });
+      const { kmsKeyId, ...options } = storage;
+
+      yield* Effect.scoped(
+        Effect.flatMap(makeStore(storage), (state) =>
+          state.set({ stack: STACK, stage, fqn: sealed.fqn, value: sealed }),
+        ),
+      );
+      expect((yield* recordItem(storage.tableName, stage, sealed.fqn))?.data?.S).not.toContain(
+        secret,
+      );
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const state = yield* makeDynamoDBState(options).pipe(
+            Effect.provide(AWS.stateEncryption({ kmsKeyId, disable: true })),
+          );
+          const read = (yield* state.get({
+            stack: STACK,
+            stage,
+            fqn: sealed.fqn,
+          })) as ResourceState;
+          expect(Redacted.value(read.attr!.password as Redacted.Redacted<string>)).toBe(secret);
+          yield* state.set({
+            stack: STACK,
+            stage,
+            fqn: "Fresh",
+            value: resource("Fresh", { token: Redacted.make(secret) }),
+          });
+        }),
+      );
+      // Both the loaded record and a new one are in plaintext.
+      for (const fqn of [sealed.fqn, "Fresh"]) {
+        const text = (yield* recordItem(storage.tableName, stage, fqn))?.data?.S ?? "";
+        expect(text.startsWith(SEALED_PREFIX)).toBe(false);
+        expect(text).toContain(secret);
+      }
+
+      yield* Effect.scoped(
+        Effect.flatMap(makeStore(storage), (state) => state.deleteStack({ stack: STACK, stage })),
+      );
+      yield* stack.destroy();
+    }),
+  { tags: [...tags, "provider:aws:kms"], timeout: 180_000 },
+);
+
 test.provider(
   "a new store loads the state another store wrote",
   (stack) =>
@@ -138,7 +356,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const writer = yield* makeDynamoDBState(storage);
+          const writer = yield* makeStore(storage);
           yield* writer.set({ stack: STACK, stage, fqn: a.fqn, value: a });
           yield* writer.set({ stack: STACK, stage, fqn: replaced.fqn, value: replaced });
         }),
@@ -146,7 +364,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const reader = yield* makeDynamoDBState(storage);
+          const reader = yield* makeStore(storage);
           expect(yield* reader.get({ stack: STACK, stage, fqn: a.fqn })).toEqual(a);
           expect([...(yield* reader.list({ stack: STACK, stage }))].sort()).toEqual([
             "Replaced",
@@ -179,7 +397,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* makeDynamoDBState(options);
+          const state = yield* makeStore(options);
           yield* state.set({ stack: STACK, stage, fqn: large.fqn, value: large });
           yield* state.setOutput({ stack: STACK, stage, value: output });
 
@@ -199,7 +417,7 @@ test.provider(
       yield* Effect.scoped(
         Effect.gen(function* () {
           // A fresh store reads the overflow bodies back.
-          const state = yield* makeDynamoDBState(options);
+          const state = yield* makeStore(options);
           expect(yield* state.get({ stack: STACK, stage, fqn: large.fqn })).toEqual(large);
 
           // Shrinking the record stores it inline and deletes its old body.
@@ -235,7 +453,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* makeDynamoDBState(options);
+          const state = yield* makeStore(options);
           yield* state.set({ stack: STACK, stage, fqn: large.fqn, value: large });
         }),
       );
@@ -245,7 +463,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const state = yield* makeDynamoDBState(options);
+          const state = yield* makeStore(options);
           const error = yield* state.get({ stack: STACK, stage, fqn: large.fqn }).pipe(Effect.flip);
           expect(error).toBeInstanceOf(StateStoreError);
           expect(error.message).toContain("references missing overflow object");
@@ -263,7 +481,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const storage = yield* stack.deploy(StateStorage);
-      const state = yield* makeDynamoDBState(storage);
+      const state = yield* makeStore(storage);
       const stage = "outputs";
 
       yield* state.deleteStack({ stack: STACK, stage });
@@ -285,6 +503,60 @@ test.provider(
   { tags, timeout: 120_000 },
 );
 
+const formatRecord = (tableName: string) =>
+  dynamodb
+    .getItem({
+      TableName: tableName,
+      Key: { PK: { S: "STORE" }, SK: { S: "FORMAT" } },
+      ConsistentRead: true,
+    })
+    .pipe(Effect.map((result) => result.Item?.format?.N));
+
+test.provider(
+  "the format record is written before the first write, and a newer one is refused",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(StateStorage);
+      const stage = "format";
+
+      // Reading, as a stack reference to another stage's output does,
+      // leaves the table as it was.
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const state = yield* makeStore(storage);
+          expect(yield* state.getOutput({ stack: STACK, stage })).toBeUndefined();
+          expect(yield* state.listStages(STACK)).toEqual([]);
+          expect(yield* formatRecord(storage.tableName)).toBeUndefined();
+
+          yield* state.setOutput({ stack: STACK, stage, value: { url: "u" } });
+          expect(yield* formatRecord(storage.tableName)).toBe("1");
+        }),
+      );
+
+      // A store a later version wrote is refused before anything is read.
+      yield* dynamodb.putItem({
+        TableName: storage.tableName,
+        Item: { PK: { S: "STORE" }, SK: { S: "FORMAT" }, format: { N: "2" } },
+      });
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const state = yield* makeStore(storage);
+          const error = yield* state.getOutput({ stack: STACK, stage }).pipe(Effect.flip);
+          expect(error.message).toContain("format 2, newer than this version of alchemy's");
+          const refused = yield* state
+            .setOutput({ stack: STACK, stage, value: { url: "v" } })
+            .pipe(Effect.flip);
+          expect(refused.message).toContain("format 2, newer than this version of alchemy's");
+          expect(yield* formatRecord(storage.tableName)).toBe("2");
+        }),
+      );
+
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 120_000 },
+);
+
 test.provider(
   "a second DynamoDB state store cannot write a stage another deploy holds",
   (stack) =>
@@ -297,9 +569,9 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const held = yield* makeDynamoDBState(storage);
+          const held = yield* makeStore(storage);
           yield* held.set(request);
-          const other = yield* makeDynamoDBState(storage);
+          const other = yield* makeStore(storage);
           const error = yield* other
             .set({ ...request, value: { ...created, attr: { vpcId: "vpc-bbbb" } } })
             .pipe(Effect.flip);
@@ -316,7 +588,7 @@ test.provider(
       // The first store's scope has closed and released the lease.
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const next = yield* makeDynamoDBState(storage);
+          const next = yield* makeStore(storage);
           yield* next.set({ ...request, value: { ...created, attr: { vpcId: "vpc-cccc" } } });
           expect(yield* next.get({ stack: STACK, stage, fqn: created.fqn })).toMatchObject({
             attr: { vpcId: "vpc-cccc" },
@@ -325,7 +597,7 @@ test.provider(
         }),
       );
 
-      const after = yield* makeDynamoDBState(storage);
+      const after = yield* makeStore(storage);
       expect(yield* after.listStages(STACK)).not.toContain(stage);
       yield* stack.destroy();
     }),
@@ -338,7 +610,7 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const storage = yield* stack.deploy(StateStorage);
-      const state = yield* makeDynamoDBState(storage);
+      const state = yield* makeStore(storage);
       const expiredStage = "expired";
       const heldStage = "held";
       const leaseKey = (stage: string) => ({
@@ -397,7 +669,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const held = yield* makeDynamoDBState(storage);
+          const held = yield* makeStore(storage);
           yield* held.set(request);
           yield* lapse;
           yield* pastCheck;
@@ -410,7 +682,7 @@ test.provider(
           yield* lapse;
           yield* Effect.scoped(
             Effect.gen(function* () {
-              const other = yield* makeDynamoDBState(storage);
+              const other = yield* makeStore(storage);
               yield* other.list({ stack: STACK, stage });
               yield* pastCheck;
               const lost = yield* held.set(request).pipe(Effect.flip);
@@ -442,7 +714,7 @@ test.provider(
       });
       const atDebug = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         effect.pipe(
-          // Distilled writes its debug lines only with TelemetryDebug.
+          // SDKs write their Debug lines only with TelemetryDebug provided.
           Effect.provide(Layer.mergeAll(Logger.layer([logger]), TelemetryDebug.layer)),
           Effect.provideService(References.MinimumLogLevel, "Debug"),
         );
@@ -450,7 +722,7 @@ test.provider(
       yield* atDebug(
         Effect.scoped(
           Effect.gen(function* () {
-            const state = yield* makeDynamoDBState(storage);
+            const state = yield* makeStore(storage);
             const value = resource("SecretHolder", { token: secret });
             yield* state.set({ stack: STACK, stage, fqn: value.fqn, value });
             expect(yield* state.get({ stack: STACK, stage, fqn: value.fqn })).toEqual(value);
@@ -577,7 +849,7 @@ test.provider(
 
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const stalled = yield* makeDynamoDBState(storage);
+          const stalled = yield* makeStore(storage);
           // Takes the lease; its check is now trusted for a few seconds.
           yield* stalled.list({ stack: STACK, stage });
           // Another deploy takes the lease over.
@@ -626,7 +898,7 @@ test.provider(
       const stage = "overflow-up-front";
       const small = resource("Small", { value: "small" });
       const write = Effect.scoped(
-        Effect.flatMap(makeDynamoDBState(options), (state) =>
+        Effect.flatMap(makeStore(options), (state) =>
           state.set({ stack: STACK, stage, fqn: small.fqn, value: small }),
         ),
       );
@@ -648,9 +920,7 @@ test.provider(
         yield* withCIConfig(false)(write);
         expect(yield* bucketExists(overflowBucketName)).toBe(true);
         yield* Effect.scoped(
-          Effect.flatMap(makeDynamoDBState(options), (state) =>
-            state.deleteStack({ stack: STACK, stage }),
-          ),
+          Effect.flatMap(makeStore(options), (state) => state.deleteStack({ stack: STACK, stage })),
         );
       }).pipe(Effect.ensuring(removeBucket));
       yield* stack.destroy();
@@ -659,7 +929,7 @@ test.provider(
 );
 
 test.provider(
-  "a store created on first use has deletion protection and the given KMS key",
+  "a store created on first use has deletion protection and the provided KMS key",
   (stack) =>
     Effect.gen(function* () {
       const { accountId, region } = yield* AWSEnvironment.current;
@@ -681,9 +951,8 @@ test.provider(
       yield* Effect.gen(function* () {
         yield* withCIConfig(false)(
           Effect.scoped(
-            Effect.flatMap(
-              makeDynamoDBState({ name, kmsKeyId: keyArn, migrateFrom: false }),
-              (state) => state.listStacks(),
+            Effect.flatMap(makeStore({ name, kmsKeyId: keyArn, migrateFrom: false }), (state) =>
+              state.listStacks(),
             ),
           ),
         );
@@ -740,9 +1009,22 @@ test.provider(
       const store = yield* Alchemist.State.store(target).pipe(Effect.provide(alchemist));
       expect(yield* store.listStacks()).toEqual([]);
 
+      // The store's own KMS key, shared with the S3 store of the name.
+      const alias = `alias/alchemy-state-${name}`;
+      const key = (yield* kms.describeKey({ KeyId: alias })).KeyMetadata;
+      expect(key?.KeyState).toBe("Enabled");
+      expect(key?.Description).toContain("Alchemy state store key");
+      expect((yield* kms.getKeyRotationStatus({ KeyId: key!.KeyId })).KeyRotationEnabled).toBe(
+        true,
+      );
+      const described = (yield* dynamodb.describeTable({ TableName: table })).Table;
+      expect(described?.SSEDescription?.KMSMasterKeyArn).toBe(key?.Arn);
+
       const torn = yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
       expect([...torn.deleted].sort()).toEqual([table, bucket].sort());
       expect(yield* tableExists(table)).toBe(false);
+      // Kept: state stored elsewhere may be sealed under it.
+      expect((yield* kms.describeKey({ KeyId: alias })).KeyMetadata?.KeyState).toBe("Enabled");
 
       const again = yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
       expect(again.deleted).toEqual([]);

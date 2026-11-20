@@ -1,4 +1,4 @@
-import { withRequestOptions, type StripeOpError } from "@distilled.cloud/stripe";
+import type { StripeOpError } from "@distilled.cloud/stripe";
 import {
   GetBillingCreditGrants,
   GetBillingCreditGrant,
@@ -561,11 +561,8 @@ export const CreditGrantProvider = () =>
           ...(news.effectiveAt !== undefined ? { effective_at: news.effectiveAt } : {}),
           ...(news.expiresAt !== undefined ? { expires_at: news.expiresAt } : {}),
           ...(news.priority !== undefined ? { priority: news.priority } : {}),
-        }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-credit-grant-${instanceId}`,
-          }),
-        );
+          idempotencyKey: `alchemy-credit-grant-${instanceId}`,
+        });
       }
 
       if (current === undefined) {

@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { jsonStrings } from "../../JsonStrings.ts";
 import EffectFunction, { Marker, Pings } from "./fixtures/effect-function.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -71,6 +72,17 @@ test.provider.skipIf(!!process.env.FAST)(
       const body = (yield* response.json) as { read: string; node: string };
       expect(body.read).toEqual("from-function");
       expect(body.node).toMatch(/^22\./);
+
+      // `env` strings that parse as JSON deploy and read back unchanged
+      // (#2269, #2847, #3497).
+      const strings = yield* client
+        .get(`${out.url}/json-strings`)
+        .pipe(Effect.flatMap((response) => response.json));
+      expect(strings).toEqual({
+        init: { ...jsonStrings, JSON_FALSE_BOOL: false, JSON_NUM_NUMBER: 42 },
+        runtime: { ...jsonStrings, JSON_FALSE_BOOL: false, JSON_NUM_NUMBER: 42 },
+        env: jsonStrings,
+      });
 
       // A published message is pushed to the function and recorded.
       const published = yield* pubsub.publishProjectsTopics({

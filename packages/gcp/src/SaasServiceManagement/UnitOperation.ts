@@ -45,11 +45,6 @@ export type UnitOperationProvision = {
   inputVariables?: UnitOperationVariable[];
 };
 
-export type UnitOperationFlagUpdate = {
-  /** Flag release to apply. */
-  flagRelease?: string;
-};
-
 export type UnitOperationSchedule = {
   /** RFC3339 start time. If omitted, the next maintenance window is used. */
   startTime?: string;
@@ -84,8 +79,8 @@ export type UnitOperationProps = {
    */
   unit: string;
   /**
-   * Provision the unit. Mutually exclusive with `upgrade`,
-   * `deprovision`, and `flagUpdate`. Immutable.
+   * Provision the unit. Mutually exclusive with `upgrade` and
+   * `deprovision`. Immutable.
    */
   provision?: UnitOperationProvision;
   /**
@@ -98,11 +93,6 @@ export type UnitOperationProps = {
    * operation types. Immutable.
    */
   deprovision?: boolean;
-  /**
-   * Push a flag release. Mutually exclusive with the other operation
-   * types. Immutable.
-   */
-  flagUpdate?: UnitOperationFlagUpdate;
   /**
    * Parent unit operation, for tracing child work.
    */
@@ -152,8 +142,6 @@ export type UnitOperation = Resource<
     upgrade: UnitOperationProvision | undefined;
     /** Whether this is a deprovision. */
     deprovision: boolean;
-    /** Flag-update payload, if this is a flag update. */
-    flagUpdate: UnitOperationFlagUpdate | undefined;
     /** Parent unit operation. */
     parentUnitOperation: string | undefined;
     /** Creating rollout. */
@@ -213,8 +201,8 @@ export interface UnitOperationLookup {
 }
 
 /**
- * An App Lifecycle Manager unit operation — one provision, upgrade,
- * deprovision, or flag-update of a Unit.
+ * An App Lifecycle Manager unit operation — one provision, upgrade, or
+ * deprovision of a Unit.
  *
  * `unitOperationId`, `location`, `unit`, and the chosen operation type
  * replace the resource. `cancel`, labels, and annotations update in
@@ -271,12 +259,10 @@ const operationKind = (props: {
   provision?: UnitOperationProvision;
   upgrade?: UnitOperationProvision;
   deprovision?: boolean;
-  flagUpdate?: UnitOperationFlagUpdate;
 }) => {
   if (props.provision !== undefined) return "provision";
   if (props.upgrade !== undefined) return "upgrade";
   if (props.deprovision === true) return "deprovision";
-  if (props.flagUpdate !== undefined) return "flagUpdate";
   return "";
 };
 
@@ -308,7 +294,6 @@ const toAttrs = (item: saasservicemgmt.UnitOperation, project: string) => {
     provision: item.provision,
     upgrade: item.upgrade,
     deprovision: item.deprovision !== undefined,
-    flagUpdate: item.flagUpdate,
     parentUnitOperation: item.parentUnitOperation,
     rollout: item.rollout,
     schedule: item.schedule,
@@ -374,7 +359,6 @@ export const UnitOperationProvider = () =>
         provision: olds?.provision ?? output?.provision,
         upgrade: olds?.upgrade ?? output?.upgrade,
         deprovision: olds?.deprovision ?? output?.deprovision,
-        flagUpdate: olds?.flagUpdate ?? output?.flagUpdate,
       });
       const nextKind = operationKind(news) || previousKind;
       return replaceOnIdentity({
@@ -457,7 +441,6 @@ export const UnitOperationProvider = () =>
               provision,
               upgrade,
               deprovision: news.deprovision === true ? {} : undefined,
-              flagUpdate: news.flagUpdate,
               parentUnitOperation,
               rollout: news.rollout,
               schedule: news.schedule,

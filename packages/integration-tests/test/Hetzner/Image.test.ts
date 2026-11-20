@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
 import { hetznerPrimaryIps } from "./limit.ts";
 import { expectFound } from "./lookup.ts";
 
@@ -96,6 +97,43 @@ test.provider(
       expect(found).toBeDefined();
       expect(found?.description).toEqual("alchemy-image-golden-v2");
       expect(found?.type).toEqual("snapshot");
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const server = yield* Hetzner.Server("Web", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+          });
+          return yield* Hetzner.Image("Golden", {
+            server,
+            description: "alchemy-image-golden-v2",
+            labels: { env: "prod", role: "golden" },
+            deleteProtection: true,
+          });
+        }),
+      );
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Golden",
+        tag: "Hetzner.ImageDeleteProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const server = yield* Hetzner.Server("Web", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+          });
+          return yield* Hetzner.Image("Golden", {
+            server,
+            description: "alchemy-image-golden-v2",
+            labels: { env: "prod", role: "golden" },
+            deleteProtection: false,
+          });
+        }),
+      );
 
       yield* stack.destroy();
 

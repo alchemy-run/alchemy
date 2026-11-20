@@ -12,8 +12,8 @@ A **snapshot** saves a sandbox, memory and disk, as a template of its own. Sandb
 <BranchGraph
   end={10}
   branches={[
-    { id: "agent", label: "Agent", type: "template" },
-    { id: "warm", label: "Warm", type: "snapshot", from: { branch: "agent", at: 1 } },
+    { id: "template", label: "MyTemplate", type: "template" },
+    { id: "warm", label: "Warm", type: "snapshot", from: { branch: "template", at: 1 } },
     { id: "s42", label: "user-42", type: "sandbox", from: { branch: "warm", at: 3 }, tone: "accent" },
     { id: "f1", label: "fork 1", type: "sandbox", from: { branch: "s42", at: 6 }, until: 9 },
     { id: "f2", label: "fork 2", type: "sandbox", from: { branch: "s42", at: 6 }, until: 9 },
@@ -24,14 +24,14 @@ A **snapshot** saves a sandbox, memory and disk, as a template of its own. Sandb
     { branch: "f1", at: 7.5, label: "test shard 1" },
     { branch: "f2", at: 7.5, label: "test shard 2" },
   ]}
-  caption="Warm is Agent after npm ci. user-42 starts from Warm, and two forks copy user-42 as it is, edits included, to run test shards side by side."
+  caption="Warm is MyTemplate after npm ci. user-42 starts from Warm, and two forks copy user-42 as it is, edits included, to run test shards side by side."
 />
 
 ## Build a warm base at deploy
 
 ```typescript title="alchemy.run.ts"
 const warm = yield* E2B.Snapshot("Warm", {
-  template: Agent,
+  template: MyTemplate,
   run: [
     "git clone https://github.com/my-org/app /home/user/app",
     "cd /home/user/app && npm ci",

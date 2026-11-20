@@ -30,7 +30,7 @@ You create sandboxes while your app runs, with `E2B.CreateSandbox`. Pass a templ
 
 ```typescript
 // in the Worker's construction
-const sandboxes = yield* E2B.CreateSandbox(Agent);
+const sandboxes = yield* E2B.CreateSandbox(MyTemplate);
 ```
 
 Provide `E2B.CreateSandboxHttp` on the Worker. The Worker gets its own E2B API key as a secret, deleted when the Worker is destroyed.
@@ -61,12 +61,12 @@ With `autoPause`, E2B pauses the sandbox instead of killing it when the timeout 
 
 ```typescript title="src/DevBox.ts"
 import * as E2B from "@alchemy.run/e2b";
-import { Agent } from "./Agent.ts";
+import { MyTemplate } from "./MyTemplate.ts";
 
-export const DevBox = E2B.Sandbox("DevBox", { template: Agent, timeout: "10 minutes" });
+export const DevBox = E2B.Sandbox("DevBox", { template: MyTemplate, timeout: "10 minutes" });
 ```
 
-`E2B.Sandbox` declares one sandbox that lives as long as the stack. It runs for `timeout` after it starts or resumes, then E2B pauses it with its memory and files. The next request to it resumes it. A rebuilt `Agent` replaces it.
+`E2B.Sandbox` declares one sandbox that lives as long as the stack. It runs for `timeout` after it starts or resumes, then E2B pauses it with its memory and files. The next request to it resumes it. A rebuilt `MyTemplate` replaces it.
 
 ```typescript
 // in the Worker's construction

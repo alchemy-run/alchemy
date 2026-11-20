@@ -17,7 +17,7 @@ A template and a snapshot of it are built once, at deploy: the image with the to
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import * as E2B from "@alchemy.run/e2b";
 
-export const Agent = E2B.Template("Agent", {
+export const MyTemplate = E2B.Template("MyTemplate", {
   dockerfile: Dockerfile.inline`
     FROM node:22-bookworm
     RUN apt-get update && apt-get install -y git
@@ -25,7 +25,7 @@ export const Agent = E2B.Template("Agent", {
 });
 
 export const Warm = E2B.Snapshot("Warm", {
-  template: Agent,
+  template: MyTemplate,
   run: ["git clone --depth 1 https://github.com/sindresorhus/is repo"],
 });
 ```

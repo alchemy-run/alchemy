@@ -20,6 +20,12 @@ export interface MachinePoolOptions extends PoolSettings {
    * @default { cpus: 1, memoryMb: 1024 }
    */
   guest?: Fly.MachineGuest;
+  /**
+   * The Fly private network runners join when the database is on none,
+   * such as `Cluster.Database.fromUrl`. Ignored when the database is on one.
+   * @default a network for the stack and stage
+   */
+  network?: string;
 }
 
 /**
@@ -27,7 +33,8 @@ export interface MachinePoolOptions extends PoolSettings {
  * host every class given this pool, on the database's private
  * network. Runners talk to each other and the database over the network;
  * the Service serves their gateway at `https://{name}.fly.dev` to callers
- * anywhere. Requires a database on a Fly network — `ClusterFly.Database`.
+ * anywhere. With a database on no Fly network (`Cluster.Database.fromUrl`),
+ * runners join the pool's `network`, or one for the stack and stage.
  *
  * ### Running on Fly
  * **Example:** Two runners in Ashburn
@@ -49,6 +56,10 @@ export const MachinePool = (id: string, options: MachinePoolOptions = {}) =>
     // Fly App names are at most 30 characters.
     nameLength: 30,
     network: (database) => (database.network?.kind === "fly" ? database.network : undefined),
+    ownNetwork: Effect.map(
+      options.network === undefined ? Fly.stackNetwork : Effect.succeed(options.network),
+      (network) => ({ kind: "fly" as const, network }),
+    ),
     // The Service's App is named after the pool.
     gateway: (name) => Effect.succeed({ url: `https://${name}.fly.dev` }),
     nodes: ({ network, name, program, environment }) =>

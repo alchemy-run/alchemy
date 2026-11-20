@@ -251,12 +251,17 @@ export const DnssecProvider = () =>
       if (observed === undefined) return undefined;
       if (output !== undefined) {
         // Owned path — refresh, keeping the captured pre-management state.
-        return toAttributes(zoneId, observed, {
-          status: output.initialStatus,
-          multiSigner: output.initialMultiSigner,
-          presigned: output.initialPresigned,
-          useNsec3: output.initialUseNsec3,
-        });
+        // `modifiedOn` keeps the recorded value: Cloudflare moves it on its
+        // own, and drift compares everything `read` returns (#3182).
+        return {
+          ...toAttributes(zoneId, observed, {
+            status: output.initialStatus,
+            multiSigner: output.initialMultiSigner,
+            presigned: output.initialPresigned,
+            useNsec3: output.initialUseNsec3,
+          }),
+          modifiedOn: output.modifiedOn ?? undef(observed.modifiedOn),
+        };
       }
       // Cold read: DNSSEC disabled means "not created" for this resource.
       if (statusFamily(observed.status) === "disabled") return undefined;

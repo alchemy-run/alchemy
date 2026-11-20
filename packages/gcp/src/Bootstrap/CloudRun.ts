@@ -9,14 +9,13 @@
  */
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
   entrypointLayer,
   resolveProgram,
   runProcess,
   stackFromEnv,
 } from "alchemy/Runtime/Bootstrap";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -38,19 +37,14 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
     Logger.layer([Logger.consolePretty()]),
   );
 
-  const program = resolveProgram("program", { telemetry: true }).pipe(
+  const program = resolveProgram("program").pipe(
     Effect.provide(
       entrypointLayer(entrypoint).pipe(
         Layer.provideMerge(stackFromEnv),
         Layer.provideMerge(fromMetadataServer()),
         Layer.provideMerge(BunHttpServer({ hostname: "0.0.0.0" })),
         Layer.provideMerge(platform),
-        Layer.provideMerge(
-          Layer.succeed(
-            ConfigProvider.ConfigProvider,
-            reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
-          ),
-        ),
+        Layer.provideMerge(RuntimeConfigProviderLive),
       ),
     ),
     Effect.scoped,
