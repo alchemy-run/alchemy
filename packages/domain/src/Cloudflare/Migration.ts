@@ -388,20 +388,23 @@ export const migrationObject = (classes: Classes): DomainObjectImpl =>
         entryKey,
         {
           label: "move",
-          firstPhase: "move",
-          nextPhase: () => "complete",
+          // The directory and the runs first, then the ids Cloudflare listed: an object the
+          // walk moved by name is sealed by then, so its listed id answers as moved. Reached
+          // by id first, it may not know its name (Cloudflare doesn't always give it).
+          firstPhase: "walk",
+          nextPhase: (state) => (state.phase === "walk" ? "move" : "complete"),
           pass: (target, _, deadline) => ({ target, deadline }),
           // The root lists the directory into its frontier, so its levels never nest relay
           // calls (Cloudflare limits how deep calls within a Worker go). Pages and a source's
           // consumers stay subtrees: the relays list and split them, a fan-out under each.
           expand: (path) =>
             !path.includes(CONSUMERS) && (path.includes(DIRECTORY) || path.endsWith(RUNS)),
-          roots: (pass, state) => [
-            ...state.plan.pages.map((page) => ({ path: `${pass.target}#${page.n}` })),
-            ...(state.plan.walk
-              ? [{ path: `${pass.target}${DIRECTORY}` }, { path: `${pass.target}${RUNS}` }]
-              : []),
-          ],
+          roots: (pass, state) =>
+            state.phase === "walk"
+              ? state.plan.walk
+                ? [{ path: `${pass.target}${DIRECTORY}` }, { path: `${pass.target}${RUNS}` }]
+                : []
+              : state.plan.pages.map((page) => ({ path: `${pass.target}#${page.n}` })),
           samePlan: (a, b) =>
             a.walk === b.walk &&
             a.pages.map((page) => `${page.cls}#${page.n}`).join(",") ===
