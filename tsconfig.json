@@ -133,6 +133,9 @@
       "path": "./packages/1password/tsconfig.json"
     },
     {
+      "path": "./packages/proton-pass/tsconfig.json"
+    },
+    {
       "path": "./packages/turso/tsconfig.json"
     },
     {
