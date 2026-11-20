@@ -7,6 +7,7 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import pathe from "pathe";
 import type * as rolldown from "rolldown";
 import { dotAlchemyDirectory } from "../AlchemyContext.ts";
 import { encodeFqn } from "../FQN.ts";
@@ -229,6 +230,45 @@ const withDceDefault = (outputOptions?: rolldown.OutputOptions): rolldown.Output
   minify: outputOptions?.minify ?? "dce-only",
 });
 
+/** Where pnpm and bun keep their one copy of each installed package. */
+const PACKAGE_STORES = ["/node_modules/.pnpm/", "/node_modules/.bun/"];
+
+/**
+ * Names a source in a source map without this machine's directories: a
+ * dependency from its `node_modules` directory onward (from the package
+ * manager's store when it lives in one), anything else relative to the bundle
+ * `cwd`.
+ *
+ * Rolldown's default is the path from the output directory to the source,
+ * which spells out where the checkout and the package store sit. The bundle
+ * hash covers the map, so the same sources built from another location (a CI
+ * job with a freshly named store, a second checkout) hashed differently and
+ * every bundle was deployed again.
+ */
+const stableSourcePath =
+  (cwd: string) =>
+  (source: string, sourcemapPath: string): string => {
+    const file = pathe.resolve(pathe.dirname(sourcemapPath), source);
+    const store = Math.max(...PACKAGE_STORES.map((directory) => file.lastIndexOf(directory)));
+    const dependency = store === -1 ? file.lastIndexOf("/node_modules/") : store;
+    return dependency === -1 ? pathe.relative(cwd, file) : file.slice(dependency + 1);
+  };
+
+/**
+ * Default `sourcemapPathTransform` to {@link stableSourcePath} for a one-shot
+ * build, so its source map, and with it the bundle hash, is the same wherever
+ * it is built. `watch` keeps rolldown's paths: they lead from the map to the
+ * files on disk, which a debugger attached to a dev session needs.
+ */
+const withStableSourcePaths = (
+  inputOptions: rolldown.InputOptions,
+  outputOptions?: rolldown.OutputOptions,
+): rolldown.OutputOptions => ({
+  ...outputOptions,
+  sourcemapPathTransform:
+    outputOptions?.sourcemapPathTransform ?? stableSourcePath(inputOptions.cwd ?? process.cwd()),
+});
+
 /** Whether the caller chose where the bundle is written (`dir` or `file`). */
 export const hasOutputLocation = (outputOptions?: Partial<rolldown.OutputOptions>): boolean =>
   outputOptions?.dir !== undefined || outputOptions?.file !== undefined;
@@ -340,7 +380,10 @@ export const build = (
   outputOptions?: rolldown.OutputOptions,
   extra?: BundleExtraOptions,
 ): Effect.Effect<BundleOutput, BundleError> =>
-  Effect.zip(resolveOutputOptions(outputOptions), Effect.context<never>()).pipe(
+  Effect.zip(
+    resolveOutputOptions(withStableSourcePaths(inputOptions, outputOptions)),
+    Effect.context<never>(),
+  ).pipe(
     Effect.flatMap(([options, context]) =>
       Effect.tryPromise({
         try: async () => {
