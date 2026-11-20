@@ -1,6 +1,8 @@
+import * as Prisma from "@alchemy.run/prisma";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { Retry } from "@distilled.cloud/prisma";
+import { getProject, getWorkspaceDomainOwnerships } from "@distilled.cloud/prisma/management";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
@@ -29,6 +31,7 @@ import {
   unhandled,
   WIRE_CREATED_AT,
 } from "./fixtures/FakeManagementApi.ts";
+import { failureOf as failuresOf } from "./fixtures/Live.ts";
 
 const HOSTNAME = "app.example.com";
 const RECORD = {
@@ -185,28 +188,6 @@ const failureOf = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.result,
     Effect.map((result) => (Result.isFailure(result) ? String(result.failure) : undefined)),
   );
-
-const absent = makeOwnershipCloud();
-testFor(absent).test.provider(
-  "fails with the record to publish and creates nothing when the record is absent",
-  (stack) =>
-    Effect.gen(function* () {
-      absent.reset();
-      yield* stack.destroy();
-
-      const failure = yield* failureOf(stack.deploy(ownershipStack()));
-
-      expect(failure).toContain("PrismaDomainOwnershipRequired");
-      expect(failure).toContain(RECORD.name);
-      expect(failure).toContain(RECORD.value);
-      expect(absent.routes()).not.toContain(CREATE);
-      expect(absent.deleted()).toBe(false);
-      expect(absent.rows.size).toBe(0);
-
-      yield* stack.destroy();
-    }),
-  { tags },
-);
 
 const created = makeOwnershipCloud();
 testFor(created).test.provider(
@@ -461,4 +442,45 @@ testFor(expiring, true).test.provider(
       yield* stack.destroy();
     }),
   { tags },
+);
+
+const live = Test.make({ providers: Prisma.providers() });
+
+live.test.provider(
+  "fails with the record to publish and creates nothing while the TXT record is absent",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const domain = `do-absent-${stack.stage.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.example.com`;
+      const { project } = yield* stack.deploy(
+        Effect.gen(function* () {
+          return { project: yield* Prisma.Project("Project", { createDatabase: false }) };
+        }),
+      );
+      const workspaceId = (yield* getProject({ id: project.projectId })).data.workspace.id;
+
+      const refused = yield* failuresOf(
+        stack.deploy(
+          Effect.gen(function* () {
+            const project = yield* Prisma.Project("Project", { createDatabase: false });
+            return yield* Prisma.DomainOwnership("Ownership", { project, domain });
+          }),
+        ),
+      );
+
+      const required = refused.errors.find(
+        (error): error is Prisma.PrismaDomainOwnershipRequired =>
+          error instanceof Prisma.PrismaDomainOwnershipRequired,
+      );
+      expect(required?.recordName).toBe(`_prisma-verification.${domain}`);
+      expect(required?.recordValue).toMatch(/^prisma-verification=[0-9a-f]{64}$/);
+      const left = (yield* getWorkspaceDomainOwnerships({ workspaceId, domain })).data;
+      expect(left.filter((row) => row.domain === domain)).toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["live", "provider:prisma", "provider:prisma:domainownership", "provider:prisma:project"],
+    timeout: 300_000,
+  },
 );

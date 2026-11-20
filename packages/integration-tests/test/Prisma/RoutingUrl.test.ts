@@ -6,6 +6,7 @@ import * as Prisma from "@alchemy.run/prisma";
 import {
   RoutingUrl,
   type RoutingUrlHostnameChangeRefused,
+  RoutingUrlHostnameTaken,
   RoutingUrlInvalidHostname,
   RoutingUrlLogicalIdTaken,
   RoutingUrlOperationFailed,
@@ -15,8 +16,17 @@ import {
 } from "@alchemy.run/prisma/RoutingUrl";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { createUrlCheck, getUrl } from "@distilled.cloud/prisma/management";
-import { adopt } from "alchemy/AdoptPolicy";
+import {
+  createServiceUrl,
+  createUrlCheck,
+  deleteDomainOwnership,
+  deleteUrl,
+  getProject,
+  getUrl,
+  getWorkspaceDomainOwnerships,
+  updateUrl,
+} from "@distilled.cloud/prisma/management";
+import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as DNS from "alchemy/DNS/Adapter";
 import * as Output from "alchemy/Output";
@@ -53,7 +63,12 @@ import {
   WIRE_CREATED_AT,
   wireProject,
 } from "./fixtures/FakeManagementApi.ts";
-import { failureOf as failuresOf } from "./fixtures/Live.ts";
+import {
+  expectGone,
+  expectProjectGone,
+  failureOf as failuresOf,
+  forgetState,
+} from "./fixtures/Live.ts";
 import {
   AppRef,
   HOSTNAME,
@@ -90,40 +105,6 @@ const SWITCHBOARD = "switchboard.us-east-1.prisma.build";
 
 const PATCHES = (cloud: UrlCloud) => cloud.routes().filter((route) => route.startsWith("PATCH"));
 const tags = ["unit", "provider:prisma", "provider:prisma:routingurl"];
-
-const lifecycle = makeUrlCloud();
-testFor(lifecycle).test.provider(
-  "saves a hostname with no DNS, redeploys without a PATCH, and destroy deletes only the row",
-  (stack) =>
-    Effect.gen(function* () {
-      lifecycle.reset();
-      yield* stack.destroy();
-
-      const url = yield* stack.deploy(urlStack());
-
-      expect(url.status).toBe("pending");
-      expect(url.logicalId).toBe("Url");
-      expect(url.firstUnmetCondition).toBe("ownershipVerified");
-      expect(url.conditions.ownershipVerified).toBe("unmet");
-      expect(url.records.map((record) => record.type)).toEqual(["TXT", "CNAME"]);
-      expect(url.setupUrl).toContain(url.routingUrlId);
-      const create = lifecycle.fake.captured.find((request) => request.method === "POST");
-      expect(create?.bodyJson).toEqual({ hostname: HOSTNAME, logicalId: "Url" });
-      expect(lifecycle.zone.publishes).toBe(0);
-      expect(lifecycle.routes().some((route) => route.includes("domain-ownerships"))).toBe(false);
-
-      lifecycle.fake.captured.length = 0;
-      yield* stack.deploy(urlStack());
-      expect(PATCHES(lifecycle)).toEqual([]);
-
-      lifecycle.fake.captured.length = 0;
-      yield* stack.destroy();
-      expect(lifecycle.routes()).toContain(`DELETE /v1/urls/${url.routingUrlId}`);
-      expect(lifecycle.routes().some((route) => route.includes("domain-ownerships"))).toBe(false);
-      expect(lifecycle.rows.size).toBe(0);
-    }),
-  { tags },
-);
 
 const ownershipWrites = (cloud: UrlCloud) =>
   cloud.routes().filter((route) => route.includes("domain-ownerships") && !route.startsWith("GET"));
@@ -383,28 +364,6 @@ testFor(noBranch).test.provider(
   { tags },
 );
 
-const serviceChange = makeUrlCloud();
-testFor(serviceChange).test.provider(
-  "moves a row to another service with a PATCH of the service alone",
-  (stack) =>
-    Effect.gen(function* () {
-      serviceChange.reset({}, routingUrl("url-1", { status: "active" }));
-      yield* stack.destroy();
-      yield* stack.deploy(urlStack());
-
-      serviceChange.fake.captured.length = 0;
-      const url = yield* stack.deploy(RoutingUrl("Url", { app: "svc-2", hostname: HOSTNAME }));
-
-      expect(url.serviceId).toBe("svc-2");
-      const patch = serviceChange.fake.captured.find((request) => request.method === "PATCH");
-      expect(patch?.bodyJson).toEqual({ serviceId: "svc-2" });
-      expect(serviceChange.state.checked).toEqual([]);
-
-      yield* stack.destroy();
-    }),
-  { tags },
-);
-
 const inDev = makeUrlCloud();
 testFor(inDev, { dev: true }).test.provider(
   "with dns, publishes nothing under alchemy dev",
@@ -419,60 +378,6 @@ testFor(inDev, { dev: true }).test.provider(
       expect(inDev.zone.publishes).toBe(0);
       expect(inDev.routes()).toEqual([]);
 
-      yield* stack.destroy();
-    }),
-  { tags },
-);
-
-const byLogicalId = makeUrlCloud();
-testFor(byLogicalId).test.provider(
-  "updates a row on its own service found by logicalId in place",
-  (stack) =>
-    Effect.gen(function* () {
-      byLogicalId.reset({}, routingUrl("url-existing", { hostname: "old.example.com" }));
-      yield* stack.destroy();
-
-      const url = yield* stack.deploy(urlStack());
-
-      expect(url.routingUrlId).toBe("url-existing");
-      expect(url.hostname).toBe(HOSTNAME);
-      expect(byLogicalId.routes()).toEqual(expect.arrayContaining(["PATCH /v1/urls/url-existing"]));
-      expect(byLogicalId.routes().some((route) => route.startsWith("POST"))).toBe(false);
-
-      yield* stack.destroy();
-    }),
-  { tags },
-);
-
-const otherStage = makeUrlCloud();
-testFor(otherStage).test.provider(
-  "refuses, without --adopt, a row another stage on the Branch made with the same logicalId",
-  (stack) =>
-    Effect.gen(function* () {
-      // What another stage of this stack leaves on the shared Branch: its own
-      // App and hostname, under the same resource path.
-      otherStage.reset(
-        {},
-        routingUrl("url-other-stage", {
-          serviceId: "svc-other-stage",
-          hostname: "other-stage.example.com",
-        }),
-      );
-      yield* stack.destroy();
-
-      const failure = yield* failureOf(stack.deploy(urlStack()));
-
-      expect(failure).toContain("OwnedBySomeoneElse");
-      expect(PATCHES(otherStage)).toEqual([]);
-      expect(otherStage.rows.get("url-other-stage")?.hostname).toBe("other-stage.example.com");
-      expect(otherStage.rows.get("url-other-stage")?.serviceId).toBe("svc-other-stage");
-
-      // With --adopt the row is taken over on purpose.
-      const adopted = yield* stack.deploy(urlStack().pipe(adopt(true)));
-      expect(adopted.routingUrlId).toBe("url-other-stage");
-      expect(adopted.serviceId).toBe("svc-1");
-
-      otherStage.reset();
       yield* stack.destroy();
     }),
   { tags },
@@ -493,26 +398,6 @@ testFor(backfilled).test.provider(
       const patch = backfilled.fake.captured.find((request) => request.method === "PATCH");
       expect(patch?.bodyJson).toEqual({ logicalId: "Url" });
 
-      yield* stack.destroy();
-    }),
-  { tags },
-);
-
-const taken = makeUrlCloud();
-testFor(taken).test.provider(
-  "fails, naming the row, when another row on the Branch has the hostname",
-  (stack) =>
-    Effect.gen(function* () {
-      taken.reset({}, routingUrl("url-other", { serviceId: "svc-2", logicalId: "other" }));
-      yield* stack.destroy();
-
-      const failure = yield* failureOf(stack.deploy(urlStack()));
-
-      expect(failure).toContain("RoutingUrlHostnameTaken");
-      expect(failure).toContain("url-other");
-      expect(taken.routes().some((route) => route.startsWith("POST"))).toBe(false);
-
-      taken.reset();
       yield* stack.destroy();
     }),
   { tags },
@@ -707,29 +592,6 @@ testFor(wildcard).test.provider(
   { tags },
 );
 
-const pendingChange = makeUrlCloud();
-testFor(pendingChange).test.provider(
-  "changes a pending row's hostname without checking it",
-  (stack) =>
-    Effect.gen(function* () {
-      pendingChange.reset({}, routingUrl("url-1"));
-      yield* stack.destroy();
-      yield* stack.deploy(urlStack());
-
-      pendingChange.fake.captured.length = 0;
-      const url = yield* stack.deploy(urlStack("new.example.com"));
-
-      expect(url.hostname).toBe("new.example.com");
-      expect(PATCHES(pendingChange)).toEqual(["PATCH /v1/urls/url-1"]);
-      expect(pendingChange.routes().some((route) => route.includes("domain-ownerships"))).toBe(
-        false,
-      );
-
-      yield* stack.destroy();
-    }),
-  { tags },
-);
-
 const flattenedApex = makeUrlCloud();
 testFor(flattenedApex).test.provider(
   "accepts a hostname whose A or AAAA answers include a switchboard address, with no CNAME",
@@ -796,12 +658,6 @@ const refusalCases: ReadonlyArray<{
     status: 409,
     code: "logical-id-taken",
     expected: RoutingUrlLogicalIdTaken,
-  },
-  {
-    operation: "create",
-    status: 422,
-    code: "invalid-hostname",
-    expected: RoutingUrlInvalidHostname,
   },
   {
     operation: "create",
@@ -888,40 +744,263 @@ for (const { operation, status, code, expected } of refusalCases) {
 
 const live = Test.make({ providers: Prisma.providers() });
 
-live.test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
-  "saves a RoutingUrl for a hostname with no DNS and deletes it on destroy",
+const liveTags = [
+  "live",
+  "provider:prisma",
+  "provider:prisma:routingurl",
+  "provider:prisma:app",
+  "provider:prisma:project",
+];
+
+/** A hostname under `example.com` that is unique to this test and stage. */
+const liveHostname = (stack: Test.ScratchStack, label: string) =>
+  `${label}-${stack.stage.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.example.com`;
+
+const observeUrl = (id: string) => getUrl({ id }).pipe(Effect.map(({ data }) => data));
+
+const expectUrlGone = (id: string) =>
+  expectGone(
+    getUrl({ id }).pipe(
+      Effect.as(false),
+      Effect.catchTag("NotFound", () => Effect.succeed(true)),
+    ),
+  );
+
+/** The domain ownerships Prisma holds for exactly `domain`. */
+const ownershipsFor = (projectId: string, domain: string) =>
+  Effect.gen(function* () {
+    const workspaceId = (yield* getProject({ id: projectId })).data.workspace.id;
+    const { data } = yield* getWorkspaceDomainOwnerships({ workspaceId, domain });
+    return { workspaceId, ownerships: data.filter((row) => row.domain === domain) };
+  });
+
+/** Delete the domain ownerships Prisma created for this test's hostnames. */
+const deleteOwnerships = (workspaceId: string, domains: ReadonlyArray<string>) =>
+  Effect.forEach(domains, (domain) =>
+    getWorkspaceDomainOwnerships({ workspaceId, domain }).pipe(
+      Effect.flatMap(({ data }) =>
+        Effect.forEach(
+          data.filter((row) => row.domain === domain),
+          (row) =>
+            deleteDomainOwnership({ domainOwnershipId: row.id }).pipe(
+              Effect.catchTag("NotFound", () => Effect.void),
+            ),
+        ),
+      ),
+    ),
+  );
+
+const twoApps = Effect.gen(function* () {
+  const project = yield* Prisma.Project("Project", { createDatabase: false });
+  const web = yield* Prisma.App("Web", { project });
+  const admin = yield* Prisma.App("Admin", { project });
+  return { project, web, admin };
+});
+
+live.test.provider(
+  "saves a RoutingUrl with no DNS, redeploys without an update, moves it to another App, and destroy deletes it",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
-      const hostname = `routing-url-${stack.stage.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.example.com`;
+      const hostname = liveHostname(stack, "rul-life");
+      const declare = (app: "web" | "admin") =>
+        Effect.gen(function* () {
+          const apps = yield* twoApps;
+          const url = yield* Prisma.RoutingUrl("Url", { app: apps[app], hostname });
+          return { ...apps, url };
+        });
 
-      const { url } = yield* stack.deploy(
+      const first = yield* stack.deploy(declare("web"));
+      const created = yield* observeUrl(first.url.routingUrlId);
+      expect(created.status).toBe("pending");
+      expect(created.hostname).toBe(hostname);
+      expect(created.serviceId).toBe(first.web.appId);
+      expect(created.logicalId).toBe("Url");
+      expect(created.firstUnmetCondition).not.toBe(null);
+      expect(created.records.map((record) => record.type).sort()).toEqual(["CNAME", "TXT"]);
+
+      yield* stack.deploy(declare("web"));
+      expect((yield* observeUrl(first.url.routingUrlId)).updatedAt).toBe(created.updatedAt);
+
+      const moved = yield* stack.deploy(declare("admin"));
+      expect(moved.url.routingUrlId).toBe(first.url.routingUrlId);
+      const observed = yield* observeUrl(first.url.routingUrlId);
+      expect(observed.serviceId).toBe(first.admin.appId);
+      expect(observed.hostname).toBe(hostname);
+
+      const { workspaceId, ownerships } = yield* ownershipsFor(first.project.projectId, hostname);
+      // Prisma creates an unverified domain ownership for the exact hostname.
+      expect(ownerships.map((row) => row.status)).toEqual(["unverified"]);
+      yield* stack.destroy();
+      yield* expectUrlGone(first.url.routingUrlId);
+      yield* expectProjectGone(first.project.projectId);
+      // Prisma created a domain ownership for the hostname; the resource leaves it.
+      const left = (yield* getWorkspaceDomainOwnerships({ workspaceId, domain: hostname })).data;
+      expect(left.map((row) => row.id)).toEqual(ownerships.map((row) => row.id));
+      yield* deleteOwnerships(workspaceId, [hostname]);
+    }),
+  { tags: liveTags, timeout: 300_000 },
+);
+
+live.test.provider(
+  "changes a pending RoutingUrl's hostname in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const before = liveHostname(stack, "rul-before");
+      const after = liveHostname(stack, "rul-after");
+      const declare = (hostname: string) =>
         Effect.gen(function* () {
           const project = yield* Prisma.Project("Project", { createDatabase: false });
           const app = yield* Prisma.App("Web", { project });
           const url = yield* Prisma.RoutingUrl("Url", { app, hostname });
-          return { url };
+          return { project, url };
+        });
+
+      const first = yield* stack.deploy(declare(before));
+      const second = yield* stack.deploy(declare(after));
+
+      expect(second.url.routingUrlId).toBe(first.url.routingUrlId);
+      const observed = yield* observeUrl(first.url.routingUrlId);
+      expect(observed.hostname).toBe(after);
+      expect(observed.status).toBe("pending");
+
+      const { workspaceId } = yield* ownershipsFor(first.project.projectId, after);
+      yield* stack.destroy();
+      yield* expectUrlGone(first.url.routingUrlId);
+      yield* deleteOwnerships(workspaceId, [before, after]);
+    }),
+  { tags: liveTags, timeout: 300_000 },
+);
+
+live.test.provider(
+  "finds its own row again after losing its state, and refuses another App's row with the same logicalId without --adopt",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const hostname = liveHostname(stack, "rul-own");
+      const otherHostname = liveHostname(stack, "rul-other-stage");
+      const declare = Effect.gen(function* () {
+        const apps = yield* twoApps;
+        const url = yield* Prisma.RoutingUrl("Url", { app: apps.web, hostname });
+        return { ...apps, url };
+      });
+
+      const first = yield* stack.deploy(declare);
+      const { workspaceId } = yield* ownershipsFor(first.project.projectId, hostname);
+      yield* forgetState(stack, "Url");
+      const found = yield* stack.deploy(declare);
+      expect(found.url.routingUrlId).toBe(first.url.routingUrlId);
+
+      // Another stage of this stack on the same Branch: its own App, its own
+      // hostname, the same resource path.
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* twoApps;
         }),
       );
+      const otherStage = (yield* createServiceUrl({
+        serviceId: first.admin.appId,
+        hostname: otherHostname,
+        logicalId: "Url",
+      })).data;
 
-      expect(url.status).toBe("pending");
-      expect(url.hostname).toBe(hostname);
-      expect(url.records.map((record) => record.type).sort()).toEqual(["CNAME", "TXT"]);
-      const observed = yield* getUrl({ id: url.routingUrlId });
-      expect(observed.data.logicalId).toBe(url.logicalId);
+      const refused = yield* failuresOf(
+        stack.deploy(
+          Effect.gen(function* () {
+            const apps = yield* twoApps;
+            return yield* Prisma.RoutingUrl("Url", { app: apps.web, hostname });
+          }),
+        ),
+      );
+      expect(refused.errors.some((error) => error instanceof OwnedBySomeoneElse)).toBe(true);
+      const untouched = yield* observeUrl(otherStage.id);
+      expect(untouched.serviceId).toBe(first.admin.appId);
+      expect(untouched.hostname).toBe(otherHostname);
+
+      yield* deleteUrl({ id: otherStage.id });
+      yield* stack.destroy();
+      yield* deleteOwnerships(workspaceId, [hostname, otherHostname]);
+    }),
+  { tags: liveTags, timeout: 300_000 },
+);
+
+live.test.provider(
+  "turns Prisma's real refusals into typed errors",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const hostname = liveHostname(stack, "rul-refused");
+      const second = liveHostname(stack, "rul-refused-2");
+      const { project, web, admin, url } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const apps = yield* twoApps;
+          const url = yield* Prisma.RoutingUrl("Url", { app: apps.web, hostname });
+          return { ...apps, url };
+        }),
+      );
+      const { workspaceId } = yield* ownershipsFor(project.projectId, hostname);
+      const tagOf = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
+        effect.pipe(
+          Effect.flip,
+          Effect.map((error) => error._tag),
+        );
+
+      // Through the resource: Prisma's 422 for a hostname it refuses.
+      const invalid = yield* failuresOf(
+        stack.deploy(
+          Effect.gen(function* () {
+            const apps = yield* twoApps;
+            yield* Prisma.RoutingUrl("Url", { app: apps.web, hostname });
+            return yield* Prisma.RoutingUrl("Wildcard", {
+              app: apps.admin,
+              hostname: `*.${hostname}`,
+            });
+          }),
+        ),
+      );
+      expect(invalid.errors.some((error) => error instanceof RoutingUrlInvalidHostname)).toBe(true);
+
+      // Through the resource: another row on the Branch has the hostname.
+      const taken = yield* failuresOf(
+        stack.deploy(
+          Effect.gen(function* () {
+            const apps = yield* twoApps;
+            yield* Prisma.RoutingUrl("Url", { app: apps.web, hostname });
+            return yield* Prisma.RoutingUrl("Copy", { app: apps.admin, hostname });
+          }),
+        ),
+      );
+      expect(taken.errors.some((error) => error instanceof RoutingUrlHostnameTaken)).toBe(true);
+
+      // Prisma's own answers, read through the SDK, match the generated errors.
+      expect(
+        yield* tagOf(
+          createServiceUrl({ serviceId: admin.appId, hostname: second, logicalId: "Url" }),
+        ),
+      ).toBe("RoutingUrlLogicalIdTaken");
+      expect(
+        yield* tagOf(createServiceUrl({ serviceId: admin.appId, hostname: `*.${second}` })),
+      ).toBe("RoutingUrlInvalidHostname");
+      expect(yield* tagOf(updateUrl({ id: url.routingUrlId, hostname: `*.${second}` }))).toBe(
+        "RoutingUrlInvalidHostname",
+      );
+      const other = (yield* createServiceUrl({
+        serviceId: admin.appId,
+        hostname: second,
+        logicalId: "Other",
+      })).data;
+      expect(yield* tagOf(updateUrl({ id: other.id, logicalId: "Url" }))).toBe(
+        "RoutingUrlLogicalIdTaken",
+      );
+      yield* deleteUrl({ id: other.id });
+      expect(web.appId).not.toBe(admin.appId);
 
       yield* stack.destroy();
-      expect(
-        yield* getUrl({ id: url.routingUrlId }).pipe(
-          Effect.as("found" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-        ),
-      ).toBe("gone");
+      yield* expectUrlGone(url.routingUrlId);
+      yield* deleteOwnerships(workspaceId, [hostname, second]);
     }),
-  {
-    tags: ["live", "provider:prisma", "provider:prisma:routingurl", "provider:prisma:app"],
-    timeout: 300_000,
-  },
+  { tags: liveTags, timeout: 300_000 },
 );
 
 const ZONE = "alchemy-test-2.us";
