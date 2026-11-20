@@ -5679,7 +5679,26 @@ export const LiveWorkerProvider = () =>
               );
             });
           // Retiring classes: their objects move out between two uploads (see `DurableObjectRetirement`).
-          const deployedClasses = hostedClasses(existingSettings?.bindings, bindings, name);
+          // Right after the upload that deleted them, the settings can still answer for
+          // the version before it: this Worker's last deploy left none of them, so read
+          // again until they are gone, a few times.
+          const had = output?.durableObjectNamespaces;
+          const stale = (settings: typeof existingSettings) =>
+            had !== undefined &&
+            retiring.some(
+              ({ className }) =>
+                !(className in had) && hostedClasses(settings?.bindings, [], name).has(className),
+            );
+          const observed = stale(existingSettings)
+            ? yield* getScriptSettings(accountId, name, dispatchNamespace).pipe(
+                Effect.repeat({
+                  schedule: Schedule.spaced("2 seconds"),
+                  until: (settings) => !stale(settings),
+                  times: 15,
+                }),
+              )
+            : existingSettings;
+          const deployedClasses = hostedClasses(observed?.bindings, bindings, name);
           // A class the Worker doesn't have yet is never created just to retire it.
           const unknown = new Set(
             retiring
@@ -5687,7 +5706,7 @@ export const LiveWorkerProvider = () =>
               .map(({ className }) => className),
           );
           const live = retiring.filter(({ className }) => deployedClasses.has(className));
-          if (live.length === 0) return yield* upload(unknown, existingSettings);
+          if (live.length === 0) return yield* upload(unknown, observed);
           const retirement = yield* Effect.serviceOption(DurableObjectRetirement);
           if (Option.isNone(retirement))
             return yield* new MissingDurableObjectRetirement({
@@ -5708,7 +5727,7 @@ export const LiveWorkerProvider = () =>
             namespaces,
             session,
           });
-          const before = getDurableObjects(existingSettings?.bindings);
+          const before = getDurableObjects(observed?.bindings);
           const settled = new Set(
             (yield* Effect.forEach(
               [...groups],
@@ -5717,7 +5736,7 @@ export const LiveWorkerProvider = () =>
             )).flatMap((classes) => [...classes]),
           );
           const dropped = new Set([...unknown, ...settled]);
-          const uploaded = yield* upload(dropped, existingSettings);
+          const uploaded = yield* upload(dropped, observed);
           const moving = [...groups]
             .map(
               ([group, classes]) =>
