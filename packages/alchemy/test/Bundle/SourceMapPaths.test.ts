@@ -220,6 +220,30 @@ layer(NodeServices.layer)("Bundle source map paths", (it) => {
   );
 
   it.effect(
+    "a colon in a checkout's directory name is not taken for a module id",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-bundle-source-map-" });
+
+        const first = yield* build(root, {
+          directory: "job:1/checkout",
+          store: "job:1/store/aaaaaaaa",
+          manager: "pnpm",
+        });
+        const second = yield* build(root, {
+          directory: "job:2/checkout",
+          store: "job:2/store/bbbbbbbb",
+          manager: "pnpm",
+        });
+
+        expect(sources(first)).toEqual(stableSources("pnpm", "../"));
+        expect(second.hash).toBe(first.hash);
+      }).pipe(Effect.scoped),
+    { tags: ["unit", "local"] },
+  );
+
+  it.effect(
     "a caller's own sourcemapPathTransform wins",
     () =>
       Effect.gen(function* () {
