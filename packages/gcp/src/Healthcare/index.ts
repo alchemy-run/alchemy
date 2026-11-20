@@ -8,3 +8,4 @@ export * from "./DatasetsDicomStore.ts";
 export * from "./DatasetsFhirStore.ts";
 export * from "./DatasetsHl7V2Store.ts";
 export * from "./DatasetsHl7V2StoresMessage.ts";
+export * from "./generated.ts";

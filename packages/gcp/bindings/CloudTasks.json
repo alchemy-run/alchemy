@@ -1,0 +1,19 @@
+{
+  "discovery": "cloudtasks-v2",
+  "module": "cloudtasks_v2",
+  "resources": {
+    "Queue": {
+      "pattern": "projects/*/locations/*/queues/*",
+      "iamKind": "cloudtasks.queue"
+    }
+  },
+  "names": {
+    "BatchTaskCreate": "BatchCreateTasks",
+    "BatchTaskDelete": "BatchDeleteTasks",
+    "BufferQueueTask": "BufferTask"
+  },
+  "probes": {
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
+  }
+}

@@ -10,3 +10,4 @@ export * from "./SfdcInstance.ts";
 export * from "./SfdcInstancesSfdcChannel.ts";
 export * from "./shared.ts";
 export * from "./Template.ts";
+export * from "./generated.ts";

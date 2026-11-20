@@ -10,6 +10,8 @@ import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 
 export const DEFAULT_LOCATION = "global";
 export const MAX_NAME_LENGTH = 63;
+/** Gateway ids match `^[a-z0-9]([a-z0-9-]{0,47}[a-z0-9])?$`. */
+export const MAX_GATEWAY_ID_LENGTH = 49;
 export const MIN_NAME_LENGTH = 4;
 
 export type ApiConfigFile = {
@@ -58,20 +60,20 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const rfc1035 = (name: string, fallback = "apigw"): string => {
+export const rfc1035 = (name: string, fallback = "apigw", maxLength = MAX_NAME_LENGTH): string => {
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "");
   if (!/^[a-z]/.test(next)) next = `${fallback[0] ?? "a"}${next}`;
-  next = next.slice(0, MAX_NAME_LENGTH).replace(/-+$/g, "");
+  next = next.slice(0, maxLength).replace(/-+$/g, "");
   if (next.length === 0) return fallback;
-  if (!/[a-z0-9]$/.test(next)) next = `${next.slice(0, MAX_NAME_LENGTH - 1)}0`;
+  if (!/[a-z0-9]$/.test(next)) next = `${next.slice(0, maxLength - 1)}0`;
   if (next.length < MIN_NAME_LENGTH) {
     next = `${next}${"x".repeat(MIN_NAME_LENGTH)}`.slice(0, MIN_NAME_LENGTH);
   }
-  return next.slice(0, MAX_NAME_LENGTH);
+  return next.slice(0, maxLength);
 };
 
 export const locationParent = (project: string) =>
@@ -90,6 +92,8 @@ export const toPhysicalId = (
   explicit: string | undefined,
   existing: string | undefined,
   fallback = "apigw",
+  /** Gateway ids allow 49 characters; APIs and configs 63. */
+  maxLength = MAX_NAME_LENGTH,
 ) =>
   Effect.gen(function* () {
     if (explicit !== undefined) return explicit;
@@ -97,10 +101,11 @@ export const toPhysicalId = (
     return rfc1035(
       yield* createPhysicalName({
         id,
-        maxLength: MAX_NAME_LENGTH,
+        maxLength,
         lowercase: true,
       }),
       fallback,
+      maxLength,
     );
   });
 

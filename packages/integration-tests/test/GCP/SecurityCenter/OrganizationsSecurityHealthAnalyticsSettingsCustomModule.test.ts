@@ -58,7 +58,7 @@ test.provider(
           name: `${organization}/securityHealthAnalyticsSettings/customModules/alchemy-missing`,
         }),
       );
-      expect(["ServiceDisabled", "Forbidden"]).toContain(error._tag);
+      expect(error._tag).toEqual("Forbidden");
 
       yield* stack.destroy();
     }).pipe(logLevel),

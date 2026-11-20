@@ -1,7 +1,9 @@
-import type * as spanner from "@distilled.cloud/gcp/spanner_v1";
+import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSpannerInstanceHttpBinding } from "./BindingHttp.ts";
 import type { Instance } from "./Instance.ts";
 
 export interface GetInstanceRequest extends Omit<spanner.GetProjectsInstancesRequest, "name"> {}
@@ -35,3 +37,18 @@ export interface GetInstance extends Binding.Service<
 > {}
 
 export const GetInstance = Binding.Service<GetInstance>("GCP.Spanner.GetInstance");
+
+/**
+ * HTTP implementation of {@link GetInstance}.
+ *
+ * @layer
+ * @provides GCP.Spanner.GetInstance
+ */
+export const GetInstanceHttp = Layer.effect(
+  GetInstance,
+  makeSpannerInstanceHttpBinding({
+    tag: "GCP.Spanner.GetInstance",
+    iam: { role: "roles/spanner.viewer", on: "spanner.instance" },
+    operation: spanner.getProjectsInstances,
+  }),
+);

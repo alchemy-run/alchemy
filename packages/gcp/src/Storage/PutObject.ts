@@ -1,9 +1,16 @@
 import type * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Bucket } from "./Bucket.ts";
-import type { ObjectNotFound, ObjectRequestFailed, PutObjectContent } from "./ObjectMedia.ts";
+import { GrantOnBucket } from "./ObjectHttp.ts";
+import {
+  type ObjectNotFound,
+  type ObjectRequestFailed,
+  type PutObjectContent,
+  makeObjectMedia,
+} from "./ObjectMedia.ts";
 
 export type PutObjectRequest = PutObjectContent;
 
@@ -49,3 +56,27 @@ export interface PutObject extends Binding.Service<
 > {}
 
 export const PutObject = Binding.Service<PutObject>("GCP.Storage.PutObject");
+
+/**
+ * HTTP implementation of {@link PutObject}.
+ *
+ * @layer
+ * @provides GCP.Storage.PutObject
+ */
+export const PutObjectHttp = Layer.effect(
+  PutObject,
+  Effect.gen(function* () {
+    const grantOnBucket = yield* GrantOnBucket;
+    const media = yield* makeObjectMedia;
+    return Effect.fn(function* (bucket: Bucket) {
+      yield* grantOnBucket("GCP.Storage.PutObject", bucket, "roles/storage.objectUser");
+      const bucketName = yield* bucket.bucketName;
+      return Effect.fn(`GCP.Storage.PutObject(${bucket.LogicalId})`)(function* (
+        request: PutObjectRequest,
+      ) {
+        const name = yield* bucketName;
+        return yield* media.upload(name, request);
+      });
+    });
+  }),
+);

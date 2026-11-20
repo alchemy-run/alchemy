@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantsFor } from "../HttpBinding.ts";
 import type { Node } from "./Node.ts";
 import type { QueuedResource } from "./QueuedResource.ts";
 
@@ -19,7 +19,7 @@ export const makeTpuNodeHttpBinding = <I extends { name?: string }, A, E>(option
     return Effect.fn(function* (node: Node) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${node})`({
-          iam: [grantFor(options.iam, node.name)],
+          iam: grantsFor(options.iam, node.name),
         });
       }
       const name = yield* node.name;
@@ -47,7 +47,7 @@ export const makeTpuQueuedResourceHttpBinding = <I extends { name?: string }, A,
     return Effect.fn(function* (resource: QueuedResource) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${resource})`({
-          iam: [grantFor(options.iam, resource.name)],
+          iam: grantsFor(options.iam, resource.name),
         });
       }
       const name = yield* resource.name;

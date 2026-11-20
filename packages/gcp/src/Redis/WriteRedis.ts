@@ -1,7 +1,9 @@
-import type { WriteClient } from "@alchemy.run/redis";
+import { type WriteClient, makeWrite } from "@alchemy.run/redis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Instance } from "./Instance.ts";
+import { makeRedisBinding } from "./RedisBinding.ts";
 
 /**
  * Bind a Memorystore {@link Instance} with write access.
@@ -21,3 +23,17 @@ export interface WriteRedis extends Binding.Service<
 export const WriteRedis = Binding.Service<WriteRedis>("GCP.Redis.WriteRedis");
 
 export type WriteRedisClient = WriteClient;
+
+/**
+ * HTTP/RESP implementation of {@link WriteRedis}.
+ *
+ * @layer
+ * @provides GCP.Redis.WriteRedis
+ */
+export const WriteRedisHttp = Layer.effect(
+  WriteRedis,
+  makeRedisBinding({
+    tag: "GCP.Redis.WriteRedis",
+    makeClient: makeWrite,
+  }),
+);

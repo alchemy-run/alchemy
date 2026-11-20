@@ -7,15 +7,15 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { expectFound } from "../lookup.ts";
+import { fleetMembership } from "./fixtures/fleet.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const membership = process.env.GCP_TEST_GKE_MEMBERSHIP;
-// The full lifecycle needs a registered Fleet membership; set
-// GCP_TEST_GKE_MEMBERSHIP to run it.
-const runLifecycle = !!membership;
+// The lifecycle registers its own GKE cluster with the fleet (about 10
+// minutes to create), so `--fast` skips it.
+const runLifecycle = !process.env.FAST;
 
 const missingMembershipOf = (project: string) =>
   `projects/${project}/locations/global/memberships/alchemy-missing-membership`;
@@ -61,7 +61,7 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:gkehub", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(runLifecycle)(
+test.provider(
   "create against a missing membership fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
@@ -100,8 +100,9 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const membership = yield* fleetMembership({ env: "test" });
           return yield* GCP.GKEHub.MembershipsFeature("ConfigSync", {
-            membership: membership!,
+            membership: membership.name,
             featureId: "configmanagement",
             spec: {
               configmanagement: {
@@ -123,11 +124,7 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(created.name).toContain("/features/");
       expect(created.featureId).toEqual("configmanagement");
-      expect(created.membership).toEqual(
-        membership!.includes("/")
-          ? membership!.replace(/\/+$/, "")
-          : expect.stringContaining(`/memberships/${membership}`),
-      );
+      expect(created.membership).toContain("/memberships/");
       expect(created.labels).toMatchObject({ env: "test" });
 
       const fetched = yield* gkehub.getProjectsLocationsMembershipsFeatures({
@@ -137,8 +134,9 @@ test.provider.skipIf(!runLifecycle)(
       expect(fetched.labels?.env).toEqual("test");
       expect(fetched.labels?.["alchemy-id"]).toEqual(expect.any(String));
 
-      const updated = yield* stack.deploy(
+      const feature = (labels: Record<string, string>) =>
         Effect.gen(function* () {
+          yield* fleetMembership({ env: "test" });
           return yield* GCP.GKEHub.MembershipsFeature("ConfigSync", {
             membership: created.membership,
             featureId: created.featureId,
@@ -148,17 +146,25 @@ test.provider.skipIf(!runLifecycle)(
                 configSync: { enabled: false, preventDrift: true },
               },
             },
-            labels: { env: "prod", role: "hub" },
+            labels,
           });
-        }),
-      );
+        });
 
+      // The spec updates in place.
+      const updated = yield* stack.deploy(feature({ env: "test" }));
       expect(updated.name).toEqual(created.name);
-      expect(updated.labels).toMatchObject({ env: "prod", role: "hub" });
+      const refetched = yield* gkehub.getProjectsLocationsMembershipsFeatures({
+        name: created.name,
+      });
+      expect(refetched.spec?.configmanagement?.configSync?.preventDrift).toEqual(true);
+
+      // Labels are set only at create, so changing them replaces the feature.
+      const relabel = yield* stack.plan(feature({ env: "prod", role: "hub" }));
+      expect(relabel.resources.ConfigSync?.action).toEqual("replace");
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:gkehub", "live"], timeout: 120_000 },
+  { tags: ["provider:gcp", "provider:gcp:gkehub", "live"], timeout: 2_700_000 },
 );

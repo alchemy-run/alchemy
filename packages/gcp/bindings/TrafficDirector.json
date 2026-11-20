@@ -1,0 +1,9 @@
+{
+  "discovery": "trafficdirector-v3",
+  "module": "trafficdirector_v3",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["trafficdirector.googleapis.com"]
+  }
+}

@@ -1,8 +1,10 @@
-import type * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
+import * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AdminTopic } from "./AdminTopic.ts";
+import { makeTopicStatsHttpBinding } from "./BindingHttp.ts";
 
 export interface ComputeHeadCursorRequest extends Omit<
   pubsublite.ComputeHeadCursorTopicStatsProjectsLocationsTopicsRequest,
@@ -48,4 +50,19 @@ export interface ComputeHeadCursor extends Binding.Service<
 
 export const ComputeHeadCursor = Binding.Service<ComputeHeadCursor>(
   "GCP.PubSubLite.ComputeHeadCursor",
+);
+
+/**
+ * HTTP implementation of {@link ComputeHeadCursor}.
+ *
+ * @layer
+ * @provides GCP.PubSubLite.ComputeHeadCursor
+ */
+export const ComputeHeadCursorHttp = Layer.effect(
+  ComputeHeadCursor,
+  makeTopicStatsHttpBinding({
+    tag: "GCP.PubSubLite.ComputeHeadCursor",
+    iam: { role: "roles/pubsublite.subscriber" },
+    operation: pubsublite.computeHeadCursorTopicStatsProjectsLocationsTopics,
+  }),
 );

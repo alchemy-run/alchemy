@@ -24,7 +24,7 @@ test.provider(
           name: missing,
         }),
       );
-      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

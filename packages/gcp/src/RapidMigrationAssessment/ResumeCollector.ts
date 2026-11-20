@@ -1,7 +1,11 @@
-import type * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
+import { Credentials } from "@distilled.cloud/gcp/Credentials";
+import * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import { makeCollectorHttpBinding } from "./BindingHttp.ts";
 import type { Collector } from "./Collector.ts";
 
 export interface ResumeCollectorRequest extends Omit<
@@ -44,4 +48,27 @@ export interface ResumeCollector extends Binding.Service<
 
 export const ResumeCollector = Binding.Service<ResumeCollector>(
   "GCP.RapidMigrationAssessment.ResumeCollector",
+);
+
+/**
+ * HTTP implementation of {@link ResumeCollector}.
+ *
+ * @layer
+ * @provides GCP.RapidMigrationAssessment.ResumeCollector
+ */
+export const ResumeCollectorHttp: Layer.Layer<
+  ResumeCollector,
+  never,
+  Credentials | HttpClient.HttpClient
+> = Layer.effect(
+  ResumeCollector,
+  makeCollectorHttpBinding<
+    rma.ResumeProjectsLocationsCollectorsRequest,
+    rma.Operation,
+    rma.ResumeProjectsLocationsCollectorsError
+  >({
+    tag: "GCP.RapidMigrationAssessment.ResumeCollector",
+    iam: { role: "roles/rma.runner" },
+    operation: rma.resumeProjectsLocationsCollectors,
+  }),
 );

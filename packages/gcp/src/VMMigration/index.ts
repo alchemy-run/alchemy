@@ -6,3 +6,4 @@ export * from "./SourcesDiskMigrationJob.ts";
 export * from "./SourcesMigratingVm.ts";
 export * from "./SourcesUtilizationReport.ts";
 export * from "./Target.ts";
+export * from "./generated.ts";

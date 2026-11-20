@@ -1,7 +1,9 @@
-import type * as speech from "@distilled.cloud/gcp/speech_v1";
+import * as speech from "@distilled.cloud/gcp/speech_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCustomClassHttpBinding } from "./BindingHttp.ts";
 import type { CustomClass } from "./CustomClass.ts";
 
 export interface GetCustomClassRequest extends Omit<
@@ -45,3 +47,24 @@ export interface GetCustomClass extends Binding.Service<
 > {}
 
 export const GetCustomClass = Binding.Service<GetCustomClass>("GCP.Speech.GetCustomClass");
+
+/**
+ * HTTP implementation of {@link GetCustomClass}.
+ *
+ * @layer
+ * @provides GCP.Speech.GetCustomClass
+ */
+export const GetCustomClassHttp = Layer.effect(
+  GetCustomClass,
+  makeCustomClassHttpBinding<
+    speech.GetProjectsLocationsCustomClassesRequest,
+    speech.CustomClass,
+    speech.GetProjectsLocationsCustomClassesError,
+    GetCustomClassRequest
+  >({
+    tag: "GCP.Speech.GetCustomClass",
+    operation: speech.getProjectsLocationsCustomClasses,
+    iam: { role: "roles/speech.client" },
+    toInput: (name) => ({ name }),
+  }),
+);

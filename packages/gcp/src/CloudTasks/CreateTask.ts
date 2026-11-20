@@ -1,7 +1,10 @@
-import type * as cloudtasks from "@distilled.cloud/gcp/cloudtasks_v2";
+import * as cloudtasks from "@distilled.cloud/gcp/cloudtasks_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as GCPBindings from "../GCPBindings.ts";
+import { grantFor } from "../HttpBinding.ts";
 import type { Queue } from "./Queue.ts";
 
 export interface CreateTaskRequest extends Omit<
@@ -52,3 +55,37 @@ export interface CreateTask extends Binding.Service<
 > {}
 
 export const CreateTask = Binding.Service<CreateTask>("GCP.CloudTasks.CreateTask");
+
+/**
+ * HTTP implementation of {@link CreateTask}.
+ *
+ * @layer
+ * @provides GCP.CloudTasks.CreateTask
+ */
+export const CreateTaskHttp = Layer.effect(
+  CreateTask,
+  Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
+    const createTask = yield* GCPBindings.withCredentials(
+      cloudtasks.createProjectsLocationsQueuesTasks,
+    );
+    return Effect.fn(function* (queue: Queue) {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`GCP.CloudTasks.CreateTask(${queue})`({
+          iam: [
+            grantFor({ role: "roles/cloudtasks.enqueuer", on: "cloudtasks.queue" }, queue.name),
+          ],
+        });
+      }
+      const name = yield* queue.name;
+      return Effect.fn(`GCP.CloudTasks.CreateTask(${queue.LogicalId})`)(function* (
+        request: CreateTaskRequest,
+      ) {
+        return yield* createTask({
+          ...request,
+          parent: yield* name,
+        });
+      });
+    });
+  }),
+);

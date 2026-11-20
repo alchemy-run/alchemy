@@ -1,0 +1,15 @@
+{
+  "discovery": "vpcaccess-v1",
+  "module": "vpcaccess_v1",
+  "resources": {
+    "Connector": {
+      "pattern": "projects/*/locations/*/connectors/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Connector": "ProbeConnector"
+    },
+    "untestable": {}
+  }
+}

@@ -1,7 +1,9 @@
-import type * as translate from "@distilled.cloud/gcp/translate_v3";
+import * as translate from "@distilled.cloud/gcp/translate_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeModelHttpBinding } from "./BindingHttp.ts";
 import type { Model } from "./Model.ts";
 
 export interface GetModelRequest extends Omit<
@@ -38,3 +40,18 @@ export interface GetModel extends Binding.Service<
 > {}
 
 export const GetModel = Binding.Service<GetModel>("GCP.Translate.GetModel");
+
+/**
+ * HTTP implementation of {@link GetModel}.
+ *
+ * @layer
+ * @provides GCP.Translate.GetModel
+ */
+export const GetModelHttp = Layer.effect(
+  GetModel,
+  makeModelHttpBinding({
+    tag: "GCP.Translate.GetModel",
+    operation: translate.getProjectsLocationsModels,
+    iam: { role: "roles/cloudtranslate.viewer" },
+  }),
+);

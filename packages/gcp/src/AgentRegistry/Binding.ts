@@ -88,7 +88,9 @@ export type BindingProps = {
    */
   description?: string;
   /**
-   * Optional auth-provider binding for delegated permissions.
+   * Auth provider the binding delegates permissions through. The API
+   * requires one: without it create answers BadRequest "auth_provider is
+   * required".
    */
   authProviderBinding?: AuthProviderBinding;
 };
@@ -162,11 +164,16 @@ export interface BindingLookup {
  * ### Creating a Binding
  * **Example:** Generated name
  * ```typescript
+ * const keys = yield* GCP.AgentIdentity.AuthProvider("Keys", {
+ *   location: "us-central1",
+ *   authProviderTypeParams: { apiKey: { apiKey: "..." } },
+ * });
  * const binding = yield* GCP.AgentRegistry.Binding("Orchestrator", {
  *   sourceIdentifier:
  *     "urn:agent:projects-123:projects:123:locations:us-central1:agentregistry:source",
  *   targetIdentifier:
  *     "urn:mcp:projects-123:projects:123:locations:us-central1:agentregistry:tools",
+ *   authProviderBinding: { authProvider: keys.name },
  * });
  * ```
  *
@@ -179,6 +186,7 @@ export interface BindingLookup {
  *   description: "routes the orchestrator to the tools MCP server",
  *   sourceIdentifier: source.agentId,
  *   targetIdentifier: tools.mcpServerId,
+ *   authProviderBinding: { authProvider: keys.name },
  * });
  * ```
  *
@@ -190,6 +198,7 @@ export interface BindingLookup {
  * const binding = yield* GCP.AgentRegistry.Binding("Orchestrator", {
  *   sourceIdentifier: source.agentId,
  *   targetIdentifier: tools.mcpServerId,
+ *   authProviderBinding: { authProvider: keys.name },
  *   displayName: "orchestrator tools v2",
  *   description: "updated routing",
  * });

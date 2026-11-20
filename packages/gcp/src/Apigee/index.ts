@@ -43,3 +43,4 @@ export * from "./Sharedflow.ts";
 export * from "./SitesApicategory.ts";
 export * from "./SitesApidoc.ts";
 export * from "./Space.ts";
+export * from "./generated.ts";

@@ -2,7 +2,9 @@ import type * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { SecretBindingTarget } from "./BindingHttp.ts";
+import { makeSecretAccessBinding, writeSecretGrants } from "./SecretHttp.ts";
 
 /** Version-management client for one Secret Manager secret. */
 export interface WriteSecretClient {
@@ -48,3 +50,19 @@ export interface WriteSecret extends Binding.Service<
 > {}
 
 export const WriteSecret = Binding.Service<WriteSecret>("GCP.SecretManager.WriteSecret");
+
+/**
+ * HTTP implementation of {@link WriteSecret} over the Secret Manager REST API.
+ *
+ * @layer
+ * @provides GCP.SecretManager.WriteSecret
+ * @category SecretManager
+ */
+export const WriteSecretHttp = Layer.effect(
+  WriteSecret,
+  makeSecretAccessBinding({
+    tag: "GCP.SecretManager.WriteSecret",
+    grants: writeSecretGrants,
+    makeClient: (helpers, name) => helpers.makeWrite(name),
+  }),
+);

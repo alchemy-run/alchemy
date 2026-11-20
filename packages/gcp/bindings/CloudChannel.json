@@ -1,0 +1,21 @@
+{
+  "discovery": "cloudchannel-v1",
+  "module": "cloudchannel_v1",
+  "resources": {
+    "ChannelPartnerLinksChannelPartnerRepricingConfig": {
+      "pattern": "accounts/*/channelPartnerLinks/*/channelPartnerRepricingConfigs/*"
+    },
+    "ChannelPartnerLinksCustomer": {
+      "pattern": "accounts/*/channelPartnerLinks/*/customers/*"
+    },
+    "Customer": {
+      "pattern": "accounts/*/channelPartnerLinks/*/customers/*"
+    },
+    "CustomersCustomerRepricingConfig": {
+      "pattern": "accounts/*/customers/*/customerRepricingConfigs/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

@@ -1,7 +1,9 @@
-import type * as cw from "@distilled.cloud/gcp/contentwarehouse_v1";
+import * as cw from "@distilled.cloud/gcp/contentwarehouse_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSynonymSetHttpBinding } from "./BindingHttp.ts";
 import type { SynonymSet } from "./SynonymSet.ts";
 
 export interface GetSynonymSetRequest extends Omit<
@@ -46,3 +48,22 @@ export interface GetSynonymSet extends Binding.Service<
 > {}
 
 export const GetSynonymSet = Binding.Service<GetSynonymSet>("GCP.ContentWarehouse.GetSynonymSet");
+
+/**
+ * HTTP implementation of {@link GetSynonymSet}.
+ *
+ * Grants `roles/contentwarehouse.admin` on the project because
+ * `contentwarehouse.synonymSets.get` is in no narrower predefined role.
+ *
+ * @layer
+ * @provides GCP.ContentWarehouse.GetSynonymSet
+ */
+export const GetSynonymSetHttp = Layer.effect(
+  GetSynonymSet,
+  makeSynonymSetHttpBinding({
+    tag: "GCP.ContentWarehouse.GetSynonymSet",
+    operation: cw.getProjectsLocationsSynonymSets,
+    // contentwarehouse.synonymSets.get is only in contentwarehouse.admin.
+    iam: { role: "roles/contentwarehouse.admin" },
+  }),
+);

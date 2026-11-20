@@ -2,7 +2,9 @@ import type * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Database } from "./Database.ts";
+import { makeFirestoreDatabaseBinding, readDatabaseIam } from "./DatabaseHttp.ts";
 
 /**
  * A Firestore document read through a {@link ReadDatabase} client. `fields`
@@ -115,3 +117,19 @@ export interface ReadDatabase extends Binding.Service<
 > {}
 
 export const ReadDatabase = Binding.Service<ReadDatabase>("GCP.Firestore.ReadDatabase");
+
+/**
+ * HTTP implementation of {@link ReadDatabase} over the Firestore REST API.
+ *
+ * @layer
+ * @provides GCP.Firestore.ReadDatabase
+ * @category Firestore
+ */
+export const ReadDatabaseHttp = Layer.effect(
+  ReadDatabase,
+  makeFirestoreDatabaseBinding({
+    tag: "GCP.Firestore.ReadDatabase",
+    iam: readDatabaseIam,
+    makeClient: (helpers, name) => helpers.makeRead(name),
+  }),
+);

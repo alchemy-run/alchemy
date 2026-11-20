@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantsFor } from "../HttpBinding.ts";
 import type { Backup } from "./Backup.ts";
 import type { Instance } from "./Instance.ts";
 import type { InstancesSnapshot } from "./InstancesSnapshot.ts";
@@ -20,7 +20,7 @@ export const makeFilestoreInstanceHttpBinding = <I extends { name?: string }, A,
     return Effect.fn(function* (instance: Instance) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${instance})`({
-          iam: [grantFor(options.iam, instance.name)],
+          iam: grantsFor(options.iam, instance.name),
         });
       }
       const name = yield* instance.name;
@@ -46,7 +46,7 @@ export const makeFilestoreBackupHttpBinding = <I extends { name?: string }, A, E
     return Effect.fn(function* (backup: Backup) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${backup})`({
-          iam: [grantFor(options.iam, backup.name)],
+          iam: grantsFor(options.iam, backup.name),
         });
       }
       const name = yield* backup.name;
@@ -72,7 +72,7 @@ export const makeFilestoreSnapshotHttpBinding = <I extends { name?: string }, A,
     return Effect.fn(function* (snapshot: InstancesSnapshot) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${snapshot})`({
-          iam: [grantFor(options.iam, snapshot.name)],
+          iam: grantsFor(options.iam, snapshot.name),
         });
       }
       const name = yield* snapshot.name;

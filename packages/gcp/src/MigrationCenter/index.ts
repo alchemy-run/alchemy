@@ -7,3 +7,4 @@ export * from "./PreferenceSet.ts";
 export * from "./ReportConfig.ts";
 export * from "./ReportConfigsReport.ts";
 export * from "./Source.ts";
+export * from "./generated.ts";

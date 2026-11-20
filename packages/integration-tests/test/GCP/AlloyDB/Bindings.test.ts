@@ -14,7 +14,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "AlloyDbBindings");
 
 // AlloyDB clusters and instances take well over 5 minutes to provision.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 let baseUrl: string;
 let hostAccount: string;

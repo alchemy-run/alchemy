@@ -1,0 +1,10 @@
+{
+  "discovery": "policytroubleshooter-v3",
+  "module": "policytroubleshooter_v3",
+  "defaultPermission": "serviceusage.services.use",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["policytroubleshooter.googleapis.com"]
+  }
+}

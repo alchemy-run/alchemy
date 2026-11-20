@@ -1,7 +1,9 @@
-import type * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
+import * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOracleNameHttpBinding } from "./BindingHttp.ts";
 import type { DbSystem } from "./DbSystem.ts";
 
 export interface GetDbSystemRequest extends Omit<
@@ -35,3 +37,18 @@ export interface GetDbSystem extends Binding.Service<
 > {}
 
 export const GetDbSystem = Binding.Service<GetDbSystem>("GCP.OracleDatabase.GetDbSystem");
+
+/**
+ * HTTP implementation of {@link GetDbSystem}.
+ *
+ * @layer
+ * @provides GCP.OracleDatabase.GetDbSystem
+ */
+export const GetDbSystemHttp = Layer.effect(
+  GetDbSystem,
+  makeOracleNameHttpBinding({
+    tag: "GCP.OracleDatabase.GetDbSystem",
+    operation: oracle.getProjectsLocationsDbSystems,
+    iam: { role: "roles/oracledatabase.dbSystemViewer" },
+  }),
+);

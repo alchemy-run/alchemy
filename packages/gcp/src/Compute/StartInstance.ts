@@ -1,7 +1,9 @@
-import type * as compute from "@distilled.cloud/gcp/compute_v1";
+import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeInstanceHttpBinding } from "./BindingHttp.ts";
 import type { Instance } from "./Instance.ts";
 
 export interface StartInstanceRequest extends Omit<
@@ -38,3 +40,21 @@ export interface StartInstance extends Binding.Service<
 > {}
 
 export const StartInstance = Binding.Service<StartInstance>("GCP.Compute.StartInstance");
+
+/**
+ * HTTP implementation of {@link StartInstance}.
+ *
+ * Grants `roles/compute.instanceAdmin.v1` on the bound instance only,
+ * because no narrower predefined role contains `compute.instances.start`.
+ *
+ * @layer
+ * @provides GCP.Compute.StartInstance
+ */
+export const StartInstanceHttp = Layer.effect(
+  StartInstance,
+  makeInstanceHttpBinding({
+    tag: "GCP.Compute.StartInstance",
+    iam: { role: "roles/compute.instanceAdmin.v1", on: "compute.instance" },
+    operation: compute.startInstances,
+  }),
+);

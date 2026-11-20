@@ -1,0 +1,46 @@
+{
+  "discovery": "dataproc-v1",
+  "module": "dataproc_v1",
+  "resources": {
+    "AutoscalingPolicy": {
+      "pattern": "projects/*/locations/*/autoscalingPolicies/*"
+    },
+    "Batch": {
+      "pattern": "projects/*/locations/*/batches/*"
+    },
+    "Cluster": {
+      "pattern": "projects/*/regions/*/clusters/*",
+      "iamKind": "dataproc.cluster",
+      "attributes": ["project", "region", "clusterName"]
+    },
+    "RegionsAutoscalingPolicy": {
+      "pattern": "projects/*/regions/*/autoscalingPolicies/*"
+    },
+    "RegionsWorkflowTemplate": {
+      "pattern": "projects/*/regions/*/workflowTemplates/*"
+    },
+    "Session": {
+      "pattern": "projects/*/locations/*/sessions/*"
+    },
+    "SessionTemplate": {
+      "pattern": "projects/*/locations/*/sessionTemplates/*"
+    },
+    "WorkflowTemplate": {
+      "pattern": "projects/*/locations/*/workflowTemplates/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Cluster": "Jobs",
+      "AutoscalingPolicy": "ProbeScaling",
+      "RegionsAutoscalingPolicy": "ProbeRegionScaling",
+      "SessionTemplate": "ProbeSessionTemplate",
+      "WorkflowTemplate": "ProbeWorkflow",
+      "RegionsWorkflowTemplate": "ProbeRegionWorkflow"
+    },
+    "untestable": {
+      "Batch": "a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
+      "Session": "a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)"
+    }
+  }
+}

@@ -19,3 +19,4 @@ export * from "./OrganizationsLocationsJobTrigger.ts";
 export * from "./OrganizationsLocationsStoredInfoType.ts";
 export * from "./OrganizationStoredInfoType.ts";
 export * from "./StoredInfoType.ts";
+export * from "./generated.ts";

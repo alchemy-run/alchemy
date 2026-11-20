@@ -16,7 +16,7 @@ const sharedStack = Core.scratchStack(testOptions, "FilestoreBindings");
 const snapshotStack = Core.scratchStack(testOptions, "FilestoreSnapshotBindings");
 
 // Filestore instances take 5–20 minutes to provision.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 // Snapshot-capable tiers draw on `EnterpriseStorageGibPerRegion`, which the
 // testing project lacks (limit 0); InstancesSnapshot.test.ts pins the typed
 // StorageQuotaExceeded rejection.

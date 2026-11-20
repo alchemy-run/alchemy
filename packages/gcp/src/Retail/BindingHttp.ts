@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
+import { grantsFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { CatalogsServingConfig } from "./CatalogsServingConfig.ts";
 
 /**
@@ -18,7 +18,7 @@ export const makeServingConfigHttpBinding = <I extends { placement: string }, A,
     return Effect.fn(function* (servingConfig: CatalogsServingConfig) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${servingConfig})`({
-          iam: [grantFor(options.iam, servingConfig.name)],
+          iam: grantsFor(options.iam, servingConfig.name),
         });
       }
       const name = yield* servingConfig.name;

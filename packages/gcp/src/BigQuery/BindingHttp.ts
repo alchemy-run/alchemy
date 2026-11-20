@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantsFor } from "../HttpBinding.ts";
 import type { Table } from "./Table.ts";
 
 /**
@@ -22,7 +22,7 @@ export const makeTableHttpBinding = <
     return Effect.fn(function* (table: Table) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${table})`({
-          iam: [grantFor(options.iam, table.name)],
+          iam: grantsFor(options.iam, table.name),
         });
       }
       const project = yield* table.project;

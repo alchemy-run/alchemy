@@ -2,7 +2,7 @@ import type { GcpOpContext } from "@distilled.cloud/gcp/composer_v1";
 import type { Output } from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, grantsFor } from "../HttpBinding.ts";
 import type { Environment } from "./Environment.ts";
 import type { EnvironmentsUserWorkloadsConfigMap } from "./EnvironmentsUserWorkloadsConfigMap.ts";
 import type { EnvironmentsUserWorkloadsSecret } from "./EnvironmentsUserWorkloadsSecret.ts";
@@ -36,7 +36,7 @@ export const makeNamedHttpBinding = <Resource extends NamedResource, I, A, E>(op
     return Effect.fn(function* (resource: Resource) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${resource})`({
-          iam: [grantFor(options.iam, resource.name)],
+          iam: grantsFor(options.iam, resource.name),
         });
       }
       const name = yield* resource.name;

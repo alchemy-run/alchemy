@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantsFor } from "../HttpBinding.ts";
 import type { Cluster } from "./Cluster.ts";
 
 /**
@@ -22,7 +22,7 @@ export const makeDataprocClusterHttpBinding = <
     return Effect.fn(function* (cluster: Cluster) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${cluster})`({
-          iam: [grantFor(options.iam, cluster.name)],
+          iam: grantsFor(options.iam, cluster.name),
         });
       }
       const clusterName = yield* cluster.clusterName;

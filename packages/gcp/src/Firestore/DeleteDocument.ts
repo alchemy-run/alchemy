@@ -1,8 +1,10 @@
-import type * as firestore from "@distilled.cloud/gcp/firestore_v1";
+import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Database } from "./Database.ts";
+import { makeDocumentHttpBinding } from "./DocumentHttp.ts";
 
 export interface DeleteDocumentRequest extends Omit<
   firestore.DeleteProjectsDatabasesDocumentsRequest,
@@ -47,3 +49,18 @@ export interface DeleteDocument extends Binding.Service<
 > {}
 
 export const DeleteDocument = Binding.Service<DeleteDocument>("GCP.Firestore.DeleteDocument");
+
+/**
+ * HTTP implementation of {@link DeleteDocument}.
+ *
+ * @layer
+ * @provides GCP.Firestore.DeleteDocument
+ */
+export const DeleteDocumentHttp = Layer.effect(
+  DeleteDocument,
+  makeDocumentHttpBinding({
+    tag: "GCP.Firestore.DeleteDocument",
+    iam: { role: "roles/datastore.user", scopeByCondition: true },
+    operation: firestore.deleteProjectsDatabasesDocuments,
+  }),
+);

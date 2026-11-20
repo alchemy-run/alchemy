@@ -19,3 +19,4 @@ export * from "./LakesEntity.ts";
 export * from "./LakesTask.ts";
 export * from "./LakesZone.ts";
 export * from "./MetadataFeed.ts";
+export * from "./generated.ts";

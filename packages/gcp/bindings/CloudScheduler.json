@@ -1,0 +1,13 @@
+{
+  "discovery": "cloudscheduler-v1",
+  "module": "cloudscheduler_v1",
+  "resources": {
+    "Job": {
+      "pattern": "projects/*/locations/*/jobs/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
+  }
+}

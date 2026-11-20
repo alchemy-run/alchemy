@@ -1,0 +1,32 @@
+{
+  "discovery": "clouddeploy-v1",
+  "module": "clouddeploy_v1",
+  "resources": {
+    "CustomTargetType": {
+      "pattern": "projects/*/locations/*/customTargetTypes/*"
+    },
+    "DeliveryPipeline": {
+      "pattern": "projects/*/locations/*/deliveryPipelines/*"
+    },
+    "DeliveryPipelinesAutomation": {
+      "pattern": "projects/*/locations/*/deliveryPipelines/*/automations/*"
+    },
+    "DeployPolicy": {
+      "pattern": "projects/*/locations/*/deployPolicies/*"
+    },
+    "Target": {
+      "pattern": "projects/*/locations/*/targets/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "CustomTargetType": "ProbeCustomTargetType",
+      "Target": "ProbeTarget",
+      "DeliveryPipeline": "ProbePipeline",
+      "DeployPolicy": "ProbePolicy"
+    },
+    "untestable": {
+      "DeliveryPipelinesAutomation": "needs GCP_TEST_CLOUDDEPLOY_SA (an external prerequisite the testing project lacks)"
+    }
+  }
+}

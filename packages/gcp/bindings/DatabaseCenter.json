@@ -1,0 +1,12 @@
+{
+  "discovery": "databasecenter-v1beta",
+  "module": "databasecenter_v1beta",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["databasecenter.googleapis.com"],
+    "untestable": {
+      "project": "Database Center answers Forbidden \"The caller does not have permission\" to a project-level grant of roles/databasecenter.viewer"
+    }
+  }
+}

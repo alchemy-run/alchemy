@@ -4,8 +4,12 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as Effect from "effect/Effect";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { expectProbe } from "../bindingHost.ts";
 import SecretManagerBindingsHost, {
+  AuditMarkers,
+  GenRegionalSecret,
+  GenSecret,
   OpsSecret,
   ReadOnlySecret,
   ReadWriteOnlySecret,
@@ -19,6 +23,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "SecretManagerBindings");
 
 let baseUrl: string;
+let auditMarkers: string;
 let hostAccount: string;
 let secrets: {
   ops: string;
@@ -26,6 +31,8 @@ let secrets: {
   readOnly: string;
   writeOnly: string;
   readWrite: string;
+  gen: string;
+  genRegional: string;
 };
 
 const hostRoles = (policy: secretmanager.Policy) =>
@@ -77,15 +84,19 @@ describe(
             return {
               uri: host.uri,
               serviceAccount: host.serviceAccount,
+              auditMarkers: (yield* AuditMarkers).bucketName,
               ops: (yield* OpsSecret).name,
               regional: (yield* RegionalSecret).name,
               readOnly: (yield* ReadOnlySecret).name,
               writeOnly: (yield* WriteOnlySecret).name,
               readWrite: (yield* ReadWriteOnlySecret).name,
+              gen: (yield* GenSecret).name,
+              genRegional: (yield* GenRegionalSecret).name,
             };
           }),
         );
         baseUrl = out.uri!;
+        auditMarkers = out.auditMarkers;
         hostAccount = out.serviceAccount!;
         secrets = {
           ops: out.ops,
@@ -93,6 +104,8 @@ describe(
           readOnly: out.readOnly,
           writeOnly: out.writeOnly,
           readWrite: out.readWrite,
+          gen: out.gen,
+          genRegional: out.genRegional,
         };
       }),
       { timeout: 900_000 },
@@ -248,6 +261,145 @@ describe(
           tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
           timeout: 600_000,
         },
+      );
+    });
+    const live = {
+      tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
+      timeout: 600_000,
+    };
+
+    describe("GetSecret / ListSecretVersions / GetSecretVersion / EnableSecretVersion", () => {
+      test.provider(
+        "reads secrets and versions and re-enables a version, granted on each secret only",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Seed one version per secret and disable the global one, out of band.
+            const version = yield* secretmanager.addVersionProjectsSecrets({
+              parent: secrets.gen,
+              body: { payload: { data: btoa("generated") } },
+            });
+            yield* secretmanager.addVersionProjectsLocationsSecrets({
+              parent: secrets.genRegional,
+              body: { payload: { data: btoa("generated") } },
+            });
+            yield* secretmanager.disableProjectsSecretsVersions({ name: version.name! });
+
+            const got = yield* expectProbe<{
+              global: { name?: string };
+              regional: { name?: string };
+            }>(baseUrl, "getSecret");
+            expect(got.global.name).toEqual(secrets.gen);
+            expect(got.regional.name).toEqual(secrets.genRegional);
+
+            const listed = yield* expectProbe<{
+              global: { versions?: { name?: string }[] };
+              regional: { versions?: { name?: string }[] };
+            }>(baseUrl, "listSecretVersions");
+            expect(listed.global.versions?.map((v) => v.name)).toEqual([version.name]);
+            expect(listed.regional.versions).toHaveLength(1);
+
+            const one = yield* expectProbe<{ name?: string; state?: string }>(
+              baseUrl,
+              "getSecretVersion",
+            );
+            expect(one).toMatchObject({ name: version.name, state: "DISABLED" });
+
+            const enabled = yield* expectProbe<{ state?: string }>(baseUrl, "enableSecretVersion");
+            expect(enabled.state).toEqual("ENABLED");
+            expect((yield* versionStates(secrets.gen))[version.name!]).toEqual("ENABLED");
+
+            expect(yield* secretRoles(secrets.gen)).toEqual([
+              "roles/secretmanager.editor",
+              "roles/secretmanager.secretVersionAdder",
+              "roles/secretmanager.secretVersionManager",
+              "roles/secretmanager.viewer",
+            ]);
+            expect(yield* regionalSecretRoles(secrets.genRegional)).toEqual([
+              "roles/secretmanager.viewer",
+            ]);
+          }),
+        live,
+      );
+    });
+
+    describe("RotateSecret / EnableSecretManagedRotation", () => {
+      test.provider(
+        "reach the API as the host and are refused on a secret without managed rotation",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{ rotate: string; enable: string }>(
+              baseUrl,
+              "managedRotation",
+            );
+            expect(out).toEqual({ rotate: "BadRequest", enable: "BadRequest" });
+          }),
+        live,
+      );
+    });
+
+    describe("consumeSecretAuditLogs / consumeLocationsSecretAuditLogs", () => {
+      test.provider(
+        "deliver each resource's audit log entries to the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Admin Activity calls that change nothing (or only a description).
+            const cases = [
+              {
+                key: "secret",
+                name: secrets.gen,
+                method: "SetIamPolicy",
+                trigger: secretmanager.getIamPolicyProjectsSecrets({ resource: secrets.gen }).pipe(
+                  Effect.flatMap((policy) =>
+                    secretmanager.setIamPolicyProjectsSecrets({
+                      resource: secrets.gen,
+                      body: { policy },
+                    }),
+                  ),
+                ),
+              },
+              {
+                key: "locationsSecret",
+                name: secrets.genRegional,
+                method: "SetIamPolicy",
+                trigger: secretmanager
+                  .getIamPolicyProjectsLocationsSecrets({ resource: secrets.genRegional })
+                  .pipe(
+                    Effect.flatMap((policy) =>
+                      secretmanager.setIamPolicyProjectsLocationsSecrets({
+                        resource: secrets.genRegional,
+                        body: { policy },
+                      }),
+                    ),
+                  ),
+              },
+            ];
+            for (const { key, name, method, trigger } of cases) {
+              const entry = yield* expectAuditEntry({ bucket: auditMarkers, key, method, trigger });
+              expect(entry.serviceName).toEqual("secretmanager.googleapis.com");
+              // Audit logs may name the project by number.
+              const path = (value: string) => value.replace(/^projects\/[^/]+/, "");
+              expect(path(entry.resourceName)).toContain(path(name));
+            }
+          }),
+        { tags: ["provider:gcp", "live"], timeout: 900_000 },
+      );
+    });
+
+    describe("ListSecrets", () => {
+      test.provider(
+        "lists the project's secrets and a location's, granted viewer on the project",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{ global: string[]; regional: string[] }>(
+              baseUrl,
+              "listSecrets",
+            );
+            // Listed names may carry the project number.
+            const ids = (names: string[]) => names.map((name) => name.split("/").at(-1));
+            expect(ids(out.global)).toContain(secrets.gen.split("/").at(-1));
+            expect(ids(out.regional)).toContain(secrets.genRegional.split("/").at(-1));
+          }),
+        { tags: ["provider:gcp", "provider:gcp:secretmanager", "live"], timeout: 600_000 },
       );
     });
   },

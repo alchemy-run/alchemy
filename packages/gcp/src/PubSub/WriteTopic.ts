@@ -2,6 +2,8 @@ import type * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeWriteTopicBinding } from "./AccessHttp.ts";
 import type { Topic } from "./Topic.ts";
 
 /** A message to publish. `data` is base64-encoded for you. */
@@ -58,3 +60,12 @@ export interface WriteTopic extends Binding.Service<
 > {}
 
 export const WriteTopic = Binding.Service<WriteTopic>("GCP.PubSub.WriteTopic");
+
+/**
+ * HTTP implementation of {@link WriteTopic} over the Pub/Sub REST API.
+ *
+ * @layer
+ * @provides GCP.PubSub.WriteTopic
+ * @category PubSub
+ */
+export const WriteTopicHttp = Layer.effect(WriteTopic, makeWriteTopicBinding);

@@ -1,8 +1,10 @@
-import type * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
+import * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AdminSubscription } from "./AdminSubscription.ts";
+import { makeSubscriptionHttpBinding } from "./BindingHttp.ts";
 
 export interface GetSubscriptionRequest extends Omit<
   pubsublite.GetAdminProjectsLocationsSubscriptionsRequest,
@@ -45,3 +47,19 @@ export interface GetSubscription extends Binding.Service<
 > {}
 
 export const GetSubscription = Binding.Service<GetSubscription>("GCP.PubSubLite.GetSubscription");
+
+/**
+ * HTTP implementation of {@link GetSubscription}.
+ *
+ * @layer
+ * @provides GCP.PubSubLite.GetSubscription
+ */
+export const GetSubscriptionHttp = Layer.effect(
+  GetSubscription,
+  makeSubscriptionHttpBinding({
+    tag: "GCP.PubSubLite.GetSubscription",
+    iam: { role: "roles/pubsublite.viewer" },
+    field: "name",
+    operation: pubsublite.getAdminProjectsLocationsSubscriptions,
+  }),
+);

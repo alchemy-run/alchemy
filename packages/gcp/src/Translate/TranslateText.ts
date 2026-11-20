@@ -1,7 +1,9 @@
-import type * as translate from "@distilled.cloud/gcp/translate_v3";
+import * as translate from "@distilled.cloud/gcp/translate_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { locationParentOf, makeTranslateTextBinding } from "./BindingHttp.ts";
 import type { Model } from "./Model.ts";
 
 export interface TranslateTextRequest {
@@ -52,3 +54,25 @@ export interface TranslateText extends Binding.Service<
 > {}
 
 export const TranslateText = Binding.Service<TranslateText>("GCP.Translate.TranslateText");
+
+/**
+ * HTTP implementation of {@link TranslateText}.
+ *
+ * @layer
+ * @provides GCP.Translate.TranslateText
+ */
+export const TranslateTextHttp = Layer.effect(
+  TranslateText,
+  makeTranslateTextBinding({
+    tag: "GCP.Translate.TranslateText",
+    operation: translate.translateTextProjectsLocations,
+    iam: { role: "roles/cloudtranslate.user" },
+    withBody: (name, request) => ({
+      parent: locationParentOf(name),
+      body: {
+        ...request?.body,
+        model: name,
+      },
+    }),
+  }),
+);

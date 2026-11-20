@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantsFor } from "../HttpBinding.ts";
 import type { Cluster } from "./Cluster.ts";
 import type { ClustersNodePool } from "./ClustersNodePool.ts";
 import type { NodePool } from "./NodePool.ts";
@@ -20,7 +20,7 @@ export const makeContainerClusterHttpBinding = <I extends { name?: string }, A, 
     return Effect.fn(function* (cluster: Cluster) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${cluster})`({
-          iam: [grantFor(options.iam, cluster.name)],
+          iam: grantsFor(options.iam, cluster.name),
         });
       }
       const name = yield* cluster.name;
@@ -46,7 +46,7 @@ export const makeContainerNodePoolHttpBinding = <I extends { name?: string }, A,
     return Effect.fn(function* (nodePool: NodePool) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${nodePool})`({
-          iam: [grantFor(options.iam, nodePool.name)],
+          iam: grantsFor(options.iam, nodePool.name),
         });
       }
       const name = yield* nodePool.name;
@@ -82,7 +82,7 @@ export const makeContainerClustersNodePoolHttpBinding = <
     return Effect.fn(function* (nodePool: ClustersNodePool) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${nodePool})`({
-          iam: [grantFor(options.iam, nodePool.name)],
+          iam: grantsFor(options.iam, nodePool.name),
         });
       }
       const name = yield* nodePool.name;

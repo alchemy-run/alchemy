@@ -1,7 +1,9 @@
-import type * as composer from "@distilled.cloud/gcp/composer_v1";
+import * as composer from "@distilled.cloud/gcp/composer_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeUserWorkloadsSecretHttpBinding } from "./BindingHttp.ts";
 import type { EnvironmentsUserWorkloadsSecret } from "./EnvironmentsUserWorkloadsSecret.ts";
 
 export interface GetUserWorkloadsSecretRequest extends Omit<
@@ -44,4 +46,19 @@ export interface GetUserWorkloadsSecret extends Binding.Service<
 
 export const GetUserWorkloadsSecret = Binding.Service<GetUserWorkloadsSecret>(
   "GCP.Composer.GetUserWorkloadsSecret",
+);
+
+/**
+ * HTTP implementation of {@link GetUserWorkloadsSecret}.
+ *
+ * @layer
+ * @provides GCP.Composer.GetUserWorkloadsSecret
+ */
+export const GetUserWorkloadsSecretHttp = Layer.effect(
+  GetUserWorkloadsSecret,
+  makeUserWorkloadsSecretHttpBinding({
+    tag: "GCP.Composer.GetUserWorkloadsSecret",
+    iam: { role: "roles/composer.viewer" },
+    operation: composer.getProjectsLocationsEnvironmentsUserWorkloadsSecrets,
+  }),
 );

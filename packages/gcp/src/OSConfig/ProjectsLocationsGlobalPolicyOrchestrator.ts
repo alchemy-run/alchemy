@@ -15,6 +15,7 @@ import {
   OsconfigNotResolved,
   collectOrchestrators,
   defaultOrchestratedResource,
+  ensureOsConfigServiceIdentity,
   fieldMask,
   fingerprint,
   globalParent,
@@ -117,6 +118,11 @@ export type ProjectsLocationsGlobalPolicyOrchestrator = Resource<
  * zones in a project. Id is identity — changing `policyOrchestratorId`
  * replaces the resource. Action, state, description, labels, the
  * orchestrated payload, and scope update in place.
+ *
+ * Orchestrators roll out through Progressive Rollout: enable both
+ * `osconfig.googleapis.com` and `progressiverollout.googleapis.com` (for
+ * example with `GCP.ServiceUsage.ProjectService`). Alchemy creates the
+ * service agents they run as.
  *
  * ### Creating a Policy Orchestrator
  * **Example:** Generated name, stopped
@@ -268,6 +274,7 @@ export const ProjectsLocationsGlobalPolicyOrchestratorProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
+        yield* ensureOsConfigServiceIdentity(env.project);
         const created = yield* osconfig
           .createProjectsLocationsGlobalPolicyOrchestrators({
             parent,

@@ -1,0 +1,10 @@
+{
+  "discovery": "airquality-v1",
+  "module": "airquality_v1",
+  "defaultPermission": "serviceusage.services.use",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["airquality.googleapis.com"]
+  }
+}

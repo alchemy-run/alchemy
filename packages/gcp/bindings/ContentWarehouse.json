@@ -1,0 +1,24 @@
+{
+  "discovery": "contentwarehouse-v1",
+  "module": "contentwarehouse_v1",
+  "resources": {
+    "Document": {
+      "pattern": "projects/*/locations/*/documents/*"
+    },
+    "DocumentSchema": {
+      "pattern": "projects/*/locations/*/documentSchemas/*"
+    },
+    "RuleSet": {
+      "pattern": "projects/*/locations/*/ruleSets/*"
+    },
+    "SynonymSet": {
+      "pattern": "projects/*/locations/*/synonymSets/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)"
+    }
+  }
+}

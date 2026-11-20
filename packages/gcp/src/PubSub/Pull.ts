@@ -1,7 +1,9 @@
-import type * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
+import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSubscriptionHttpBinding } from "./BindingHttp.ts";
 import type { Subscription } from "./Subscription.ts";
 
 export interface PullRequest extends Omit<
@@ -40,3 +42,18 @@ export interface Pull extends Binding.Service<
 > {}
 
 export const Pull = Binding.Service<Pull>("GCP.PubSub.Pull");
+
+/**
+ * HTTP implementation of {@link Pull}.
+ *
+ * @layer
+ * @provides GCP.PubSub.Pull
+ */
+export const PullHttp = Layer.effect(
+  Pull,
+  makeSubscriptionHttpBinding({
+    tag: "GCP.PubSub.Pull",
+    iam: { role: "roles/pubsub.subscriber", on: "pubsub.subscription" },
+    operation: pubsub.pullProjectsSubscriptions,
+  }),
+);

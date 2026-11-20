@@ -1,0 +1,9 @@
+{
+  "discovery": "toolresults-v1beta3",
+  "module": "toolresults_v1beta3",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["toolresults.googleapis.com"]
+  }
+}

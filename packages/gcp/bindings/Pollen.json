@@ -1,0 +1,10 @@
+{
+  "discovery": "pollen-v1",
+  "module": "pollen_v1",
+  "defaultPermission": "serviceusage.services.use",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["pollen.googleapis.com"]
+  }
+}

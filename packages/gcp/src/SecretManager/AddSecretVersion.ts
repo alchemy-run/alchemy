@@ -1,7 +1,9 @@
-import type * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
+import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSecretHttpBinding } from "./BindingHttp.ts";
 import type { LocationsSecret } from "./LocationsSecret.ts";
 import type { Secret } from "./Secret.ts";
 
@@ -48,4 +50,31 @@ export interface AddSecretVersion extends Binding.Service<
 
 export const AddSecretVersion = Binding.Service<AddSecretVersion>(
   "GCP.SecretManager.AddSecretVersion",
+);
+
+/**
+ * HTTP implementation of {@link AddSecretVersion}.
+ *
+ * @layer
+ * @provides GCP.SecretManager.AddSecretVersion
+ */
+export const AddSecretVersionHttp = Layer.effect(
+  AddSecretVersion,
+  makeSecretHttpBinding<
+    secretmanager.AddVersionProjectsSecretsRequest,
+    secretmanager.SecretVersion,
+    secretmanager.AddVersionProjectsSecretsError,
+    AddSecretVersionRequest
+  >({
+    tag: "GCP.SecretManager.AddSecretVersion",
+    iam: {
+      role: "roles/secretmanager.secretVersionAdder",
+      on: "secretmanager.secret",
+    },
+    operation: secretmanager.addVersionProjectsSecrets,
+    toInput: (secretName, request) => ({
+      parent: secretName,
+      body: { payload: request?.payload },
+    }),
+  }),
 );

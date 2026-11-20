@@ -1,0 +1,9 @@
+{
+  "discovery": "testing-v1",
+  "module": "testing_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["testing.googleapis.com"]
+  }
+}

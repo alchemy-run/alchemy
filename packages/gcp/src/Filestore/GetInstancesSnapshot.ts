@@ -1,7 +1,9 @@
-import type * as file from "@distilled.cloud/gcp/file_v1";
+import * as file from "@distilled.cloud/gcp/file_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeFilestoreSnapshotHttpBinding } from "./BindingHttp.ts";
 import type { InstancesSnapshot } from "./InstancesSnapshot.ts";
 
 export interface GetInstancesSnapshotRequest extends Omit<
@@ -43,4 +45,19 @@ export interface GetInstancesSnapshot extends Binding.Service<
 
 export const GetInstancesSnapshot = Binding.Service<GetInstancesSnapshot>(
   "GCP.Filestore.GetInstancesSnapshot",
+);
+
+/**
+ * HTTP implementation of {@link GetInstancesSnapshot}.
+ *
+ * @layer
+ * @provides GCP.Filestore.GetInstancesSnapshot
+ */
+export const GetInstancesSnapshotHttp = Layer.effect(
+  GetInstancesSnapshot,
+  makeFilestoreSnapshotHttpBinding({
+    tag: "GCP.Filestore.GetInstancesSnapshot",
+    iam: { role: "roles/file.viewer" },
+    operation: file.getProjectsLocationsInstancesSnapshots,
+  }),
 );

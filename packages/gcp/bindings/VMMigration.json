@@ -1,0 +1,44 @@
+{
+  "discovery": "vmmigration-v1",
+  "module": "vmmigration_v1",
+  "resources": {
+    "Group": {
+      "pattern": "projects/*/locations/*/groups/*"
+    },
+    "ImageImport": {
+      "pattern": "projects/*/locations/*/imageImports/*"
+    },
+    "Source": {
+      "pattern": "projects/*/locations/*/sources/*"
+    },
+    "SourcesDatacenterConnector": {
+      "pattern": "projects/*/locations/*/sources/*/datacenterConnectors/*"
+    },
+    "SourcesDiskMigrationJob": {
+      "pattern": "projects/*/locations/*/sources/*/diskMigrationJobs/*"
+    },
+    "SourcesMigratingVm": {
+      "pattern": "projects/*/locations/*/sources/*/migratingVms/*"
+    },
+    "SourcesUtilizationReport": {
+      "pattern": "projects/*/locations/*/sources/*/utilizationReports/*"
+    },
+    "Target": {
+      "pattern": "projects/*/locations/*/targetProjects/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Group": "ProbeGroup"
+    },
+    "untestable": {
+      "ImageImport": "An image import validates its source object up front (NotFound: Resource \"gs://.../disk.vmdk\" was not found), and a project holds a single target (GCP_TEST_VMMIGRATION_IMAGE_URI)",
+      "Source": "An AWS source only finishes creating once Migrate to VMs can reach AWS with the credentials: with placeholder keys the create operation never completes (GCP_TEST_VMMIGRATION_AWS_ACCESS_KEY_ID)",
+      "SourcesDatacenterConnector": "An AWS source only finishes creating once Migrate to VMs can reach AWS with the credentials: with placeholder keys the create operation never completes (GCP_TEST_VMMIGRATION_AWS_ACCESS_KEY_ID)",
+      "SourcesDiskMigrationJob": "An AWS source only finishes creating once Migrate to VMs can reach AWS with the credentials: with placeholder keys the create operation never completes (GCP_TEST_VMMIGRATION_AWS_ACCESS_KEY_ID)",
+      "SourcesMigratingVm": "An AWS source only finishes creating once Migrate to VMs can reach AWS with the credentials: with placeholder keys the create operation never completes (GCP_TEST_VMMIGRATION_AWS_ACCESS_KEY_ID)",
+      "SourcesUtilizationReport": "An AWS source only finishes creating once Migrate to VMs can reach AWS with the credentials: with placeholder keys the create operation never completes (GCP_TEST_VMMIGRATION_AWS_ACCESS_KEY_ID)",
+      "Target": "Migrate to VMs registers the host project as a target on first use, and a project can be a target only once (BadRequest \"failed precondition: an existing target project exists for project ...\"). Set (GCP_TEST_VMMIGRATION_TARGET_PROJECT)"
+    }
+  }
+}

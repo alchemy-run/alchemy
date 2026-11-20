@@ -27,3 +27,4 @@ export * from "./SecurityProfileGroup.ts";
 export * from "./ServerTlsPolicy.ts";
 export * from "./TlsInspectionPolicy.ts";
 export * from "./UrlList.ts";
+export * from "./generated.ts";

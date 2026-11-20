@@ -1,7 +1,9 @@
-import type * as ml from "@distilled.cloud/gcp/ml_v1";
+import * as ml from "@distilled.cloud/gcp/ml_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeVersionHttpBinding } from "./BindingHttp.ts";
 import type { ModelsVersion } from "./ModelsVersion.ts";
 
 export interface GetVersionRequest extends Omit<ml.GetProjectsModelsVersionsRequest, "name"> {}
@@ -39,3 +41,18 @@ export interface GetVersion extends Binding.Service<
 > {}
 
 export const GetVersion = Binding.Service<GetVersion>("GCP.ML.GetVersion");
+
+/**
+ * HTTP implementation of {@link GetVersion}.
+ *
+ * @layer
+ * @provides GCP.ML.GetVersion
+ */
+export const GetVersionHttp = Layer.effect(
+  GetVersion,
+  makeVersionHttpBinding({
+    tag: "GCP.ML.GetVersion",
+    operation: ml.getProjectsModelsVersions,
+    iam: { role: "roles/ml.modelUser", on: "ml.model" },
+  }),
+);

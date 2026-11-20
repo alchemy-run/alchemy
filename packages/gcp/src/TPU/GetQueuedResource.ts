@@ -1,7 +1,9 @@
-import type * as tpu from "@distilled.cloud/gcp/tpu_v2";
+import * as tpu from "@distilled.cloud/gcp/tpu_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTpuQueuedResourceHttpBinding } from "./BindingHttp.ts";
 import type { QueuedResource } from "./QueuedResource.ts";
 
 export interface GetQueuedResourceRequest extends Omit<
@@ -45,3 +47,18 @@ export interface GetQueuedResource extends Binding.Service<
 > {}
 
 export const GetQueuedResource = Binding.Service<GetQueuedResource>("GCP.TPU.GetQueuedResource");
+
+/**
+ * HTTP implementation of {@link GetQueuedResource}.
+ *
+ * @layer
+ * @provides GCP.TPU.GetQueuedResource
+ */
+export const GetQueuedResourceHttp = Layer.effect(
+  GetQueuedResource,
+  makeTpuQueuedResourceHttpBinding({
+    tag: "GCP.TPU.GetQueuedResource",
+    iam: { role: "roles/tpu.viewer" },
+    operation: tpu.getProjectsLocationsQueuedResources,
+  }),
+);

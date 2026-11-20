@@ -50,7 +50,7 @@ test.provider(
           domainMappingsId: "alchemy-missing.example.com",
         }),
       );
-      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -73,7 +73,7 @@ test.provider.skipIf(runLifecycle)(
           },
         }),
       );
-      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

@@ -1,0 +1,9 @@
+{
+  "discovery": "recommender-v1",
+  "module": "recommender_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["recommender.googleapis.com"]
+  }
+}

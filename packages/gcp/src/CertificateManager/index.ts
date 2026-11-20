@@ -4,3 +4,4 @@ export * from "./DnsAuthorization.ts";
 export * from "./CertificateMap.ts";
 export * from "./CertificateMapEntry.ts";
 export * from "./CertificateIssuanceConfig.ts";
+export * from "./generated.ts";

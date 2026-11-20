@@ -1,0 +1,15 @@
+{
+  "discovery": "looker-v1",
+  "module": "looker_v1",
+  "resources": {
+    "InstancesBackup": {
+      "pattern": "projects/*/locations/*/instances/*/backups/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "InstancesBackup": "Backups need an ACTIVE Looker instance, which bills hourly. Set (GCP_TEST_LOOKER_INSTANCE)"
+    }
+  }
+}

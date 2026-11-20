@@ -1,0 +1,16 @@
+{
+  "discovery": "bigqueryconnection-v1",
+  "module": "bigqueryconnection_v1",
+  "resources": {
+    "Connection": {
+      "pattern": "projects/*/locations/*/connections/*",
+      "iamKind": "bigqueryconnection.connection"
+    }
+  },
+  "permissionService": "bigquery",
+  "probes": {
+    "resources": {
+      "Connection": "Cloud"
+    }
+  }
+}

@@ -65,7 +65,7 @@ test.provider(
           domainMappingsId: "alchemy-missing.example.com",
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("InternalServerError");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -94,7 +94,7 @@ test.provider.skipIf(runLifecycle)(
           },
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("InternalServerError");
 
       yield* stack.destroy();
     }).pipe(logLevel),

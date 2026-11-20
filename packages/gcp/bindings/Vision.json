@@ -1,0 +1,25 @@
+{
+  "discovery": "vision-v1",
+  "module": "vision_v1",
+  "resources": {
+    "Product": {
+      "pattern": "projects/*/locations/*/products/*"
+    },
+    "ProductSet": {
+      "pattern": "projects/*/locations/*/productSets/*"
+    },
+    "ProductsReferenceImage": {
+      "pattern": "projects/*/locations/*/products/*/referenceImages/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "Product": "Product Search is closed to new projects: creates fail with BadRequest \"Product Search doesn't onboard new projects. For image search, please use (GCP_TEST_VISION_PRODUCT_SEARCH)",
+      "ProductSet": "Product Search is closed to new projects: creates fail with BadRequest \"Product Search doesn't onboard new projects. For image search, please use (GCP_TEST_VISION_PRODUCT_SEARCH)",
+      "ProductsReferenceImage": "Product Search is closed to new projects: creates fail with BadRequest \"Product Search doesn't onboard new projects. For image search, please use (GCP_TEST_VISION_PRODUCT_SEARCH)"
+    },
+    "location": "us-west1"
+  },
+  "defaultPermission": "serviceusage.services.use"
+}

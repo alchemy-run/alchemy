@@ -1,9 +1,10 @@
-import type * as datastore from "@distilled.cloud/gcp/datastore_v1";
+import * as datastore from "@distilled.cloud/gcp/datastore_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Database } from "../Firestore/Database.ts";
-import type { DatastoreDatabaseRequest } from "./BindingHttp.ts";
+import { type DatastoreDatabaseRequest, makeDatastoreHttpBinding } from "./BindingHttp.ts";
 
 /** Request for {@link Commit}; project and database come from the bound database. */
 export type CommitRequest = DatastoreDatabaseRequest<datastore.CommitProjectsRequest>;
@@ -55,3 +56,18 @@ export interface Commit extends Binding.Service<
 > {}
 
 export const Commit = Binding.Service<Commit>("GCP.Datastore.Commit");
+
+/**
+ * HTTP implementation of {@link Commit}.
+ *
+ * @layer
+ * @provides GCP.Datastore.Commit
+ */
+export const CommitHttp = Layer.effect(
+  Commit,
+  makeDatastoreHttpBinding({
+    tag: "GCP.Datastore.Commit",
+    iam: { role: "roles/datastore.user", scopeByCondition: true },
+    operation: datastore.commitProjects,
+  }),
+);

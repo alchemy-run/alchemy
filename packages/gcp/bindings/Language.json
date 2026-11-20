@@ -1,0 +1,10 @@
+{
+  "discovery": "language-v2",
+  "module": "language_v2",
+  "defaultPermission": "serviceusage.services.use",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["language.googleapis.com"]
+  }
+}

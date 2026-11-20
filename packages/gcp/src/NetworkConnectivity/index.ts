@@ -11,3 +11,4 @@ export * from "./ServiceConnectionMap.ts";
 export * from "./ServiceConnectionPolicy.ts";
 export * from "./ServiceConnectionToken.ts";
 export * from "./SpokesGatewayAdvertisedRoute.ts";
+export * from "./generated.ts";

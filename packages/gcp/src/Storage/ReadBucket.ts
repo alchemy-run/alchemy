@@ -2,7 +2,9 @@ import type * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Bucket } from "./Bucket.ts";
+import { makeStorageBucketBinding } from "./BucketHttp.ts";
 import type { ObjectContent, ObjectRequestFailed } from "./ObjectMedia.ts";
 
 export interface ListBucketOptions {
@@ -65,3 +67,19 @@ export interface ReadBucket extends Binding.Service<
 > {}
 
 export const ReadBucket = Binding.Service<ReadBucket>("GCP.Storage.ReadBucket");
+
+/**
+ * HTTP implementation of {@link ReadBucket} over the Cloud Storage JSON API.
+ *
+ * @layer
+ * @provides GCP.Storage.ReadBucket
+ * @category Storage
+ */
+export const ReadBucketHttp = Layer.effect(
+  ReadBucket,
+  makeStorageBucketBinding({
+    tag: "GCP.Storage.ReadBucket",
+    role: "roles/storage.objectViewer",
+    makeClient: (helpers, name) => helpers.makeRead(name),
+  }),
+);

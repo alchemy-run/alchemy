@@ -65,8 +65,11 @@ export type FederationProps = {
   version?: string;
   /**
    * Ranked backends used to resolve database names at query time. Keys
-   * are ranks (`0`, `1`, …); lower ranks are evaluated first. When
-   * omitted, a BigQuery backend for the current project is used.
+   * are ranks (`0`, `1`, …); lower ranks are evaluated first. At least one
+   * must be a Dataproc Metastore service, ACTIVE and serving gRPC
+   * (`hiveMetastoreConfig.endpointProtocol: "GRPC"`); BigQuery can join it.
+   * When omitted, only a BigQuery backend for the current project is
+   * sent, which the API rejects.
    */
   backendMetastores?: Record<string, BackendMetastore>;
   /**
@@ -144,15 +147,13 @@ export interface FederationLookup {
  * federation. Labels and `backendMetastores` update in place.
  *
  * ### Creating a Federation
- * **Example:** BigQuery backend
+ * **Example:** A Dataproc Metastore service and BigQuery
  * ```typescript
  * const federation = yield* GCP.Metastore.Federation("Lakehouse", {
  *   version: "3.1.2",
  *   backendMetastores: {
- *     "1": {
- *       name: "projects/my-project",
- *       metastoreType: "BIGQUERY",
- *     },
+ *     "1": { name: hive.name, metastoreType: "DATAPROC_METASTORE" },
+ *     "2": { name: "projects/my-project", metastoreType: "BIGQUERY" },
  *   },
  *   labels: { env: "prod" },
  * });
@@ -268,6 +269,13 @@ const listOwned = (project: string) =>
     ),
   );
 
+// A backend service that is briefly UPDATING (a backup or config change in
+// flight) rejects federation until it is ACTIVE again: `BadRequest: Only
+// ACTIVE DPMS instances can be configured for federation`.
+const isBackendNotActive = (error: { readonly _tag: string; readonly message?: string }) =>
+  error._tag === "BadRequest" &&
+  (error.message ?? "").includes("Only ACTIVE DPMS instances can be configured for federation");
+
 export const FederationProvider = () =>
   Provider.succeed(Federation, {
     stables: ["name", "federationId", "project", "location", "version", "uid", "createTime"],
@@ -351,7 +359,14 @@ export const FederationProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
+          .pipe(
+            Effect.catchTag("Conflict", () => Effect.undefined),
+            Effect.retry({
+              while: isBackendNotActive,
+              times: 20,
+              schedule: Schedule.spaced("15 seconds"),
+            }),
+          );
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(

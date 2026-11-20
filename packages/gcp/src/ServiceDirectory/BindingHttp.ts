@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantsFor } from "../HttpBinding.ts";
 import type { Endpoint } from "./Endpoint.ts";
 
 /**
@@ -18,7 +18,7 @@ export const makeEndpointHttpBinding = <I extends { name?: string }, A, E>(optio
     return Effect.fn(function* (endpoint: Endpoint) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${endpoint})`({
-          iam: [grantFor(options.iam, endpoint.service)],
+          iam: grantsFor(options.iam, endpoint.service),
         });
       }
       const name = yield* endpoint.name;

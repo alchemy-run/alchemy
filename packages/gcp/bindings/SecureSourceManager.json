@@ -1,0 +1,34 @@
+{
+  "discovery": "securesourcemanager-v1",
+  "module": "securesourcemanager_v1",
+  "resources": {
+    "RepositoriesBranchRule": {
+      "pattern": "projects/*/locations/*/repositories/*/branchRules/*"
+    },
+    "RepositoriesHook": {
+      "pattern": "projects/*/locations/*/repositories/*/hooks/*"
+    },
+    "RepositoriesIssue": {
+      "pattern": "projects/*/locations/*/repositories/*/issues/*"
+    },
+    "RepositoriesIssuesIssueComment": {
+      "pattern": "projects/*/locations/*/repositories/*/issues/*/issueComments/*"
+    },
+    "RepositoriesPullRequestsPullRequestComment": {
+      "pattern": "projects/*/locations/*/repositories/*/pullRequests/*/pullRequestComments/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "RepositoriesBranchRule": "needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
+      "RepositoriesHook": "needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
+      "RepositoriesIssue": "needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
+      "RepositoriesIssuesIssueComment": "needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
+      "RepositoriesPullRequestsPullRequestComment": "needs GCP_TEST_SECURE_SOURCE_MANAGER_PULL_REQUEST (an external prerequisite the testing project lacks)"
+    },
+    "args": {
+      "ListRepositories": "{ location: \"us-central1\", instance: `projects/${yield* hostProject}/locations/us-central1/instances/alchemy-missing` }"
+    }
+  }
+}

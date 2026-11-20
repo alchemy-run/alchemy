@@ -1,0 +1,9 @@
+{
+  "discovery": "accessapproval-v1",
+  "module": "accessapproval_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["accessapproval.googleapis.com"]
+  }
+}

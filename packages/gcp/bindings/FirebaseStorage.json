@@ -1,0 +1,9 @@
+{
+  "discovery": "firebasestorage-v1beta",
+  "module": "firebasestorage_v1beta",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["firebasestorage.googleapis.com"]
+  }
+}

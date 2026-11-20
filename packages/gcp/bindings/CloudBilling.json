@@ -1,0 +1,17 @@
+{
+  "discovery": "cloudbilling-v1",
+  "module": "cloudbilling_v1",
+  "resources": {},
+  "skip": {
+    "cloudbilling.getCard": "the Gemini billing assistant's UI card, not an API for user code",
+    "cloudbilling.message.send": "the Gemini billing assistant's chat, not an API for user code",
+    "cloudbilling.message.stream": "the Gemini billing assistant's chat, not an API for user code"
+  },
+  "probes": {
+    "resources": {},
+    "enable": ["cloudbilling.googleapis.com"],
+    "skip": {
+      "UpdateProjectBillingInfo": "links or unlinks the testing project's billing account; a probe with a placeholder body unlinked it on 2026-11-03"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "discovery": "advisorynotifications-v1",
+  "module": "advisorynotifications_v1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["advisorynotifications.googleapis.com"],
+    "skip": {
+      "ListNotifications": "answers BadRequest \"Request contains an invalid argument.\" for every location of the testing project (notifications are sent to organizations)"
+    }
+  }
+}

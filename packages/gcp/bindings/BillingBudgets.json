@@ -1,0 +1,8 @@
+{
+  "discovery": "billingbudgets-v1",
+  "module": "billingbudgets_v1",
+  "resources": {},
+  "probes": {
+    "resources": {}
+  }
+}

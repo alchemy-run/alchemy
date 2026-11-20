@@ -1,0 +1,24 @@
+{
+  "discovery": "file-v1",
+  "module": "file_v1",
+  "resources": {
+    "Backup": {
+      "pattern": "projects/*/locations/*/backups/*"
+    },
+    "Instance": {
+      "pattern": "projects/*/locations/*/instances/*"
+    },
+    "InstancesSnapshot": {
+      "pattern": "projects/*/locations/*/instances/*/snapshots/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Instance": "Nfs",
+      "Backup": "Nightly"
+    },
+    "untestable": {
+      "InstancesSnapshot": "snapshots need an Enterprise-tier instance; the testing project has no EnterpriseStorageGibPerRegion quota"
+    }
+  }
+}

@@ -6,6 +6,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 
 export interface ServiceAccountKey {
   readonly type?: string;
@@ -66,6 +67,9 @@ export const mintAccessToken = (sa: ServiceAccountKey): Effect.Effect<MintedToke
         ),
       )
       .pipe(
+        // A refresh mid-deploy can land on a dropped connection; one failed
+        // request must not fail a deploy that has run for an hour.
+        Effect.retry({ times: 5, schedule: Schedule.exponential("500 millis") }),
         Effect.mapError((cause) =>
           AuthError.make({
             message: "Failed to mint Google access token",

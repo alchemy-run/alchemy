@@ -1,0 +1,12 @@
+{
+  "discovery": "authorizedbuyersmarketplace-v1",
+  "module": "authorizedbuyersmarketplace_v1",
+  "resources": {
+    "BuyersClientsUser": {
+      "pattern": "buyers/*/clients/*/users/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

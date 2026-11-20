@@ -1,0 +1,30 @@
+{
+  "discovery": "artifactregistry-v1",
+  "module": "artifactregistry_v1",
+  "resources": {
+    "Repository": {
+      "pattern": "projects/*/locations/*/repositories/*",
+      "iamKind": "artifactregistry.repository"
+    }
+  },
+  "skip": {
+    "artifactregistry.projects.locations.repositories.prewarmArtifact": "checks a permission no predefined Artifact Registry role grants (preview)",
+    "artifactregistry.projects.locations.repositories.checkPrewarmedArtifact": "checks a permission no predefined Artifact Registry role grants (preview)",
+    "artifactregistry.projects.locations.repositories.removePrewarmedArtifact": "checks a permission no predefined Artifact Registry role grants (preview)",
+    "artifactregistry.projects.locations.repositories.googetArtifacts.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.genericArtifacts.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.yumArtifacts.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.aptArtifacts.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.kfpArtifacts.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.goModules.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.files.upload": "a media upload; distilled sends only the request metadata, not the file body",
+    "artifactregistry.projects.locations.repositories.prewarmedArtifacts.list": "checks a permission no predefined Artifact Registry role grants (preview)"
+  },
+  "names": {
+    "BatchVersionDelete": "BatchDeleteRepositoryPackageVersions"
+  },
+  "probes": {
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
+  }
+}

@@ -1,0 +1,1 @@
+../../../.agents/skills/alchemy-bindings/SKILL.md

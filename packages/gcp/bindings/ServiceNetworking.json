@@ -1,0 +1,12 @@
+{
+  "discovery": "servicenetworking-v1",
+  "module": "servicenetworking_v1",
+  "resources": {
+    "Connection": {
+      "pattern": "projects/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

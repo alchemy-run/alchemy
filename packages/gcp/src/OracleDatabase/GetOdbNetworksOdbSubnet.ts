@@ -1,7 +1,9 @@
-import type * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
+import * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeOracleNameHttpBinding } from "./BindingHttp.ts";
 import type { OdbNetworksOdbSubnet } from "./OdbNetworksOdbSubnet.ts";
 
 export interface GetOdbNetworksOdbSubnetRequest extends Omit<
@@ -40,4 +42,19 @@ export interface GetOdbNetworksOdbSubnet extends Binding.Service<
 
 export const GetOdbNetworksOdbSubnet = Binding.Service<GetOdbNetworksOdbSubnet>(
   "GCP.OracleDatabase.GetOdbNetworksOdbSubnet",
+);
+
+/**
+ * HTTP implementation of {@link GetOdbNetworksOdbSubnet}.
+ *
+ * @layer
+ * @provides GCP.OracleDatabase.GetOdbNetworksOdbSubnet
+ */
+export const GetOdbNetworksOdbSubnetHttp = Layer.effect(
+  GetOdbNetworksOdbSubnet,
+  makeOracleNameHttpBinding({
+    tag: "GCP.OracleDatabase.GetOdbNetworksOdbSubnet",
+    operation: oracle.getProjectsLocationsOdbNetworksOdbSubnets,
+    iam: { role: "roles/oracledatabase.odbSubnetViewer" },
+  }),
 );

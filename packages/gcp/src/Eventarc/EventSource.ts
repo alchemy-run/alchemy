@@ -42,7 +42,7 @@ export interface EventarcEventSourceProps {
    * region for Storage, `global` for Audit Log events of global services).
    * @default the host's region
    */
-  location?: string;
+  location?: Input<string>;
   /**
    * Payload encoding for events that support more than one, e.g.
    * `application/json` or `application/protobuf` for Firestore events.

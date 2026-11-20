@@ -6,3 +6,4 @@ export * from "./AppsGuardrail.ts";
 export * from "./AppsTool.ts";
 export * from "./AppsToolset.ts";
 export * from "./AppsVersion.ts";
+export * from "./generated.ts";

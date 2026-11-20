@@ -1,0 +1,29 @@
+{
+  "discovery": "apphub-v1",
+  "module": "apphub_v1",
+  "resources": {
+    "Application": {
+      "pattern": "projects/*/locations/*/applications/*"
+    },
+    "ApplicationsService": {
+      "pattern": "projects/*/locations/*/applications/*/services/*"
+    },
+    "ApplicationsWorkload": {
+      "pattern": "projects/*/locations/*/applications/*/workloads/*"
+    },
+    "ServiceProjectAttachment": {
+      "pattern": "projects/*/locations/*/serviceProjectAttachments/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Application": "ProbeApplication"
+    },
+    "untestable": {
+      "ApplicationsService": "registers a service App Hub discovered in the project; the testing project has no discovered services",
+      "ApplicationsWorkload": "registers a workload App Hub discovered in the project; the testing project has no discovered workloads",
+      "ServiceProjectAttachment": "attaches a service project to an App Hub host project; the testing account has a single project"
+    },
+    "enable": ["apphub.googleapis.com"]
+  }
+}

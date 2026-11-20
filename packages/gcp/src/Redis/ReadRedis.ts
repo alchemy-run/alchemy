@@ -1,7 +1,9 @@
-import type { ReadClient } from "@alchemy.run/redis";
+import { type ReadClient, makeRead } from "@alchemy.run/redis";
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Instance } from "./Instance.ts";
+import { makeRedisBinding } from "./RedisBinding.ts";
 
 // Clients' runtime effects require redis's `RuntimeContext` twin, so it shows
 // up in users' inferred types. Exporting it here lets TypeScript name it
@@ -37,3 +39,17 @@ export interface ReadRedis extends Binding.Service<
 export const ReadRedis = Binding.Service<ReadRedis>("GCP.Redis.ReadRedis");
 
 export type ReadRedisClient = ReadClient;
+
+/**
+ * HTTP/RESP implementation of {@link ReadRedis}.
+ *
+ * @layer
+ * @provides GCP.Redis.ReadRedis
+ */
+export const ReadRedisHttp = Layer.effect(
+  ReadRedis,
+  makeRedisBinding({
+    tag: "GCP.Redis.ReadRedis",
+    makeClient: makeRead,
+  }),
+);

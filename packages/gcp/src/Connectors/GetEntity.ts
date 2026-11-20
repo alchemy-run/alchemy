@@ -1,7 +1,9 @@
-import type * as connectors from "@distilled.cloud/gcp/connectors_v2";
+import * as connectors from "@distilled.cloud/gcp/connectors_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeEntityHttpBinding } from "./BindingHttp.ts";
 import type { ConnectionsEntityTypesEntity } from "./ConnectionsEntityTypesEntity.ts";
 
 export interface GetEntityRequest extends Omit<
@@ -42,3 +44,18 @@ export interface GetEntity extends Binding.Service<
 > {}
 
 export const GetEntity = Binding.Service<GetEntity>("GCP.Connectors.GetEntity");
+
+/**
+ * HTTP implementation of {@link GetEntity}.
+ *
+ * @layer
+ * @provides GCP.Connectors.GetEntity
+ */
+export const GetEntityHttp = Layer.effect(
+  GetEntity,
+  makeEntityHttpBinding({
+    tag: "GCP.Connectors.GetEntity",
+    iam: { role: "roles/connectors.invoker" },
+    operation: connectors.getProjectsLocationsConnectionsEntityTypesEntities,
+  }),
+);

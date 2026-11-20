@@ -1,8 +1,10 @@
-import type * as firestore from "@distilled.cloud/gcp/firestore_v1";
+import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Database } from "./Database.ts";
+import { makeDocumentHttpBinding } from "./DocumentHttp.ts";
 
 export interface PatchDocumentRequest extends Omit<
   firestore.PatchProjectsDatabasesDocumentsRequest,
@@ -53,3 +55,18 @@ export interface PatchDocument extends Binding.Service<
 > {}
 
 export const PatchDocument = Binding.Service<PatchDocument>("GCP.Firestore.PatchDocument");
+
+/**
+ * HTTP implementation of {@link PatchDocument}.
+ *
+ * @layer
+ * @provides GCP.Firestore.PatchDocument
+ */
+export const PatchDocumentHttp = Layer.effect(
+  PatchDocument,
+  makeDocumentHttpBinding({
+    tag: "GCP.Firestore.PatchDocument",
+    iam: { role: "roles/datastore.user", scopeByCondition: true },
+    operation: firestore.patchProjectsDatabasesDocuments,
+  }),
+);

@@ -1,0 +1,30 @@
+{
+  "discovery": "analyticshub-v1",
+  "module": "analyticshub_v1",
+  "resources": {
+    "DataExchange": {
+      "pattern": "projects/*/locations/*/dataExchanges/*"
+    },
+    "DataExchangesListing": {
+      "pattern": "projects/*/locations/*/dataExchanges/*/listings/*"
+    },
+    "DataExchangesQueryTemplate": {
+      "pattern": "projects/*/locations/*/dataExchanges/*/queryTemplates/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "DataExchange": "ProbeDataExchange",
+      "DataExchangesListing": "ProbeListing",
+      "DataExchangesQueryTemplate": "ProbeQueryTemplate"
+    },
+    "untestable": {},
+    "skip": {
+      "SubmitQueryTemplate": "moves the template out of DRAFTED, which can't be undone: the template then can't be deleted on its own",
+      "ApproveQueryTemplate": "moves the template out of DRAFTED, which can't be undone: the template then can't be deleted on its own"
+    },
+    "args": {
+      "SubscribeDataExchange": "{ body: { destination: `projects/${yield* hostProject}/locations/us-central1`, subscription: \"alchemy probe invalid\" } }"
+    }
+  }
+}

@@ -1,7 +1,9 @@
-import type * as documentai from "@distilled.cloud/gcp/documentai_v1";
+import * as documentai from "@distilled.cloud/gcp/documentai_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeProcessorHttpBinding } from "./BindingHttp.ts";
 import type { Processor } from "./Processor.ts";
 
 export interface GetProcessorRequest extends Omit<
@@ -42,3 +44,18 @@ export interface GetProcessor extends Binding.Service<
 > {}
 
 export const GetProcessor = Binding.Service<GetProcessor>("GCP.DocumentAI.GetProcessor");
+
+/**
+ * HTTP implementation of {@link GetProcessor}.
+ *
+ * @layer
+ * @provides GCP.DocumentAI.GetProcessor
+ */
+export const GetProcessorHttp = Layer.effect(
+  GetProcessor,
+  makeProcessorHttpBinding({
+    tag: "GCP.DocumentAI.GetProcessor",
+    operation: documentai.getProjectsLocationsProcessors,
+    iam: { role: "roles/documentai.viewer" },
+  }),
+);

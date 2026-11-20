@@ -4,11 +4,10 @@ import { serveProbes } from "../../bindingHost.ts";
 
 /**
  * Memorystore instance create + delete runs well past 5 minutes, so the
- * instance (and every binding on it) is only declared with
- * `GCP_TEST_SLOW=1`. The flag is forwarded to the host's environment so the
+ * instance (and every binding on it) is skipped under `--fast`. `FAST` is forwarded to the host's environment so the
  * deployed runtime binds the same set.
  */
-export const slow = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+export const slow = !process.env.FAST;
 
 /** AUTH-enabled instance: data-plane bindings fetch the AUTH string. */
 export const Cache = GCP.Redis.Instance("Cache", {
@@ -67,7 +66,7 @@ export default class RedisBindingsHost extends GCP.Function<RedisBindingsHost>()
     main: import.meta.url,
     location: "us-central1",
     invokerIamDisabled: true,
-    env: { GCP_TEST_SLOW: slow ? "1" : "" },
+    env: { FAST: slow ? "" : "1" },
     template: {
       vpcAccess: {
         egress: "PRIVATE_RANGES_ONLY",

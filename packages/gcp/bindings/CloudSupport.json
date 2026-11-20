@@ -1,0 +1,12 @@
+{
+  "discovery": "cloudsupport-v2",
+  "module": "cloudsupport_v2",
+  "resources": {
+    "SupportEventSubscription": {
+      "pattern": "organizations/*/supportEventSubscriptions/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

@@ -1,8 +1,10 @@
-import type * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
+import * as oracle from "@distilled.cloud/gcp/oracledatabase_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AutonomousDatabase } from "./AutonomousDatabase.ts";
+import { makeOracleNameHttpBinding } from "./BindingHttp.ts";
 
 export interface GenerateWalletRequest extends Omit<
   oracle.GenerateWalletProjectsLocationsAutonomousDatabasesRequest,
@@ -45,3 +47,19 @@ export interface GenerateWallet extends Binding.Service<
 > {}
 
 export const GenerateWallet = Binding.Service<GenerateWallet>("GCP.OracleDatabase.GenerateWallet");
+
+/**
+ * HTTP implementation of {@link GenerateWallet}.
+ *
+ * @layer
+ * @provides GCP.OracleDatabase.GenerateWallet
+ */
+export const GenerateWalletHttp = Layer.effect(
+  GenerateWallet,
+  makeOracleNameHttpBinding({
+    tag: "GCP.OracleDatabase.GenerateWallet",
+    operation: oracle.generateWalletProjectsLocationsAutonomousDatabases,
+    // Narrowest predefined role with this autonomousDatabases permission.
+    iam: { role: "roles/oracledatabase.autonomousDatabaseAdmin" },
+  }),
+);

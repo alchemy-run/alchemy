@@ -1,8 +1,10 @@
-import type * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
+import * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AdminReservation } from "./AdminReservation.ts";
+import { makeReservationHttpBinding } from "./BindingHttp.ts";
 
 export interface GetReservationRequest extends Omit<
   pubsublite.GetAdminProjectsLocationsReservationsRequest,
@@ -45,3 +47,18 @@ export interface GetReservation extends Binding.Service<
 > {}
 
 export const GetReservation = Binding.Service<GetReservation>("GCP.PubSubLite.GetReservation");
+
+/**
+ * HTTP implementation of {@link GetReservation}.
+ *
+ * @layer
+ * @provides GCP.PubSubLite.GetReservation
+ */
+export const GetReservationHttp = Layer.effect(
+  GetReservation,
+  makeReservationHttpBinding({
+    tag: "GCP.PubSubLite.GetReservation",
+    iam: { role: "roles/pubsublite.viewer" },
+    operation: pubsublite.getAdminProjectsLocationsReservations,
+  }),
+);

@@ -14,7 +14,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Composer environments take 20-45 minutes to provision.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 const missingParentOf = (project: string) =>
   `projects/${project}/locations/${CAPACITY_REGION}/environments/alchemy-composer-missing`;

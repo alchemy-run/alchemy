@@ -23,3 +23,4 @@ export * from "./DataStoresSession.ts";
 export * from "./DataStoresSiteSearchEngineTargetSite.ts";
 export * from "./IdentityMappingStore.ts";
 export { resourceNameFromOperation, waitForOperation } from "./operations.ts";
+export * from "./generated.ts";

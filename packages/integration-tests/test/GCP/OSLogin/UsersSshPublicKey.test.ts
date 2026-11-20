@@ -1,4 +1,5 @@
 import * as GCP from "@alchemy.run/gcp";
+import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as oslogin from "@distilled.cloud/gcp/oslogin_v1";
@@ -17,9 +18,11 @@ const EXPIRY_A = "4102444800000000";
 const EXPIRY_B = "4133980800000000";
 
 // OS Login keys belong to the authenticated account. A service account
-// must name itself (`users/me` fails with UserCredentialMismatch), so set
-// GCP_TEST_OSLOGIN_USER to the test credentials' email.
-const user = process.env.GCP_TEST_OSLOGIN_USER?.trim();
+// must name itself (`users/me` fails with UserCredentialMismatch): the
+// testing profile's own service account, derived from the project.
+const userOf = GcpEnvironment.current.pipe(
+  Effect.map(({ project }) => `alchemy-testing@${project}.iam.gserviceaccount.com`),
+);
 
 const waitUntilGone = (name: string) =>
   oslogin.getUsersSshPublicKeys({ name }).pipe(
@@ -50,10 +53,11 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:oslogin", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!user || !!process.env.FAST)(
+test.provider(
   "create, update, and delete an SSH public key",
   (stack) =>
     Effect.gen(function* () {
+      const user = yield* userOf;
       yield* stack.destroy();
 
       const created = yield* stack.deploy(

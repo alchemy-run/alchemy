@@ -1,8 +1,10 @@
-import type * as translate from "@distilled.cloud/gcp/translate_v3";
+import * as translate from "@distilled.cloud/gcp/translate_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { AdaptiveMtDataset } from "./AdaptiveMtDataset.ts";
+import { locationParentOf, makeAdaptiveMtTranslateBinding } from "./BindingHttp.ts";
 
 export interface AdaptiveMtTranslateRequest {
   /**
@@ -48,4 +50,26 @@ export interface AdaptiveMtTranslate extends Binding.Service<
 
 export const AdaptiveMtTranslate = Binding.Service<AdaptiveMtTranslate>(
   "GCP.Translate.AdaptiveMtTranslate",
+);
+
+/**
+ * HTTP implementation of {@link AdaptiveMtTranslate}.
+ *
+ * @layer
+ * @provides GCP.Translate.AdaptiveMtTranslate
+ */
+export const AdaptiveMtTranslateHttp = Layer.effect(
+  AdaptiveMtTranslate,
+  makeAdaptiveMtTranslateBinding({
+    tag: "GCP.Translate.AdaptiveMtTranslate",
+    operation: translate.adaptiveMtTranslateProjectsLocations,
+    iam: { role: "roles/cloudtranslate.user" },
+    withBody: (name, request) => ({
+      parent: locationParentOf(name),
+      body: {
+        ...request?.body,
+        dataset: name,
+      },
+    }),
+  }),
 );

@@ -1,0 +1,10 @@
+{
+  "discovery": "videointelligence-v1",
+  "module": "videointelligence_v1",
+  "defaultPermission": "serviceusage.services.use",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["videointelligence.googleapis.com"]
+  }
+}

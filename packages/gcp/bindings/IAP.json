@@ -1,0 +1,22 @@
+{
+  "discovery": "iap-v1",
+  "module": "iap_v1",
+  "resources": {
+    "BrandsIdentityAwareProxyClient": {
+      "pattern": "projects/*/brands/*/identityAwareProxyClients/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "BrandsIdentityAwareProxyClient": "IAP OAuth clients hang off an OAuth brand, which only an org-internal project with a Workspace support email can create (createProjectsBrands otherwise (GCP_TEST_IAP_BRAND)"
+    }
+  },
+  "permissionService": "clientauthconfig",
+  "permissionCollections": {
+    "identityAwareProxyClients": "clients"
+  },
+  "verbPermissions": {
+    "resetSecret": "getWithSecret"
+  }
+}

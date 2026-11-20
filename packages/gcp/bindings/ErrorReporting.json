@@ -1,0 +1,12 @@
+{
+  "discovery": "clouderrorreporting-v1beta1",
+  "module": "clouderrorreporting_v1beta1",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["clouderrorreporting.googleapis.com"],
+    "args": {
+      "ListEvents": "{ groupId: \"alchemy-missing-group\" }"
+    }
+  }
+}

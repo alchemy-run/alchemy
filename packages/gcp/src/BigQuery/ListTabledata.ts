@@ -1,7 +1,9 @@
-import type * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
+import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface ListTabledataRequest extends Omit<
@@ -38,3 +40,19 @@ export interface ListTabledata extends Binding.Service<
 > {}
 
 export const ListTabledata = Binding.Service<ListTabledata>("GCP.BigQuery.ListTabledata");
+
+/**
+ * HTTP implementation of {@link ListTabledata}.
+ *
+ * @layer
+ * @provides GCP.BigQuery.ListTabledata
+ */
+export const ListTabledataHttp = Layer.effect(
+  ListTabledata,
+  makeTableHttpBinding({
+    tag: "GCP.BigQuery.ListTabledata",
+    // bigquery.tables.getData
+    iam: { role: "roles/bigquery.dataViewer", on: "bigquery.table" },
+    operation: bigquery.listTabledata,
+  }),
+);

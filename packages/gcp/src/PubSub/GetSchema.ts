@@ -1,7 +1,10 @@
-import type * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
+import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as GCPBindings from "../GCPBindings.ts";
+import { grantFor } from "../HttpBinding.ts";
 import type { Schema } from "./Schema.ts";
 
 export interface GetSchemaRequest extends Omit<pubsub.GetProjectsSchemasRequest, "name"> {}
@@ -35,3 +38,34 @@ export interface GetSchema extends Binding.Service<
 > {}
 
 export const GetSchema = Binding.Service<GetSchema>("GCP.PubSub.GetSchema");
+
+/**
+ * HTTP implementation of {@link GetSchema}.
+ *
+ * @layer
+ * @provides GCP.PubSub.GetSchema
+ */
+export const GetSchemaHttp = Layer.effect(
+  GetSchema,
+  Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
+    const getSchema = yield* GCPBindings.withCredentials(pubsub.getProjectsSchemas);
+    return Effect.fn(function* (schema: Schema) {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`GCP.PubSub.GetSchema(${schema})`({
+          iam: [grantFor({ role: "roles/pubsub.viewer", on: "pubsub.schema" }, schema.name)],
+        });
+      }
+      const name = yield* schema.name;
+      return Effect.fn(`GCP.PubSub.GetSchema(${schema.LogicalId})`)(function* (
+        request?: GetSchemaRequest,
+      ) {
+        return yield* getSchema({
+          view: "FULL",
+          ...request,
+          name: yield* name,
+        });
+      });
+    });
+  }),
+);

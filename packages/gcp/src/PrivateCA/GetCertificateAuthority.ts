@@ -1,7 +1,9 @@
-import type * as privateca from "@distilled.cloud/gcp/privateca_v1";
+import * as privateca from "@distilled.cloud/gcp/privateca_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeCertificateAuthorityHttpBinding } from "./BindingHttp.ts";
 import type { CertificateAuthority } from "./CertificateAuthority.ts";
 
 export interface GetCertificateAuthorityRequest extends Omit<
@@ -44,4 +46,19 @@ export interface GetCertificateAuthority extends Binding.Service<
 
 export const GetCertificateAuthority = Binding.Service<GetCertificateAuthority>(
   "GCP.PrivateCA.GetCertificateAuthority",
+);
+
+/**
+ * HTTP implementation of {@link GetCertificateAuthority}.
+ *
+ * @layer
+ * @provides GCP.PrivateCA.GetCertificateAuthority
+ */
+export const GetCertificateAuthorityHttp = Layer.effect(
+  GetCertificateAuthority,
+  makeCertificateAuthorityHttpBinding({
+    tag: "GCP.PrivateCA.GetCertificateAuthority",
+    iam: { role: "roles/privateca.auditor", on: "privateca.caPool" },
+    operation: privateca.getProjectsLocationsCaPoolsCertificateAuthorities,
+  }),
 );

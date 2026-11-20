@@ -1,6 +1,8 @@
 import * as Binding from "alchemy/Binding";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { Database } from "./Database.ts";
+import { makeFirestoreDatabaseBinding, readWriteDatabaseIam } from "./DatabaseHttp.ts";
 import type { ReadDatabaseClient } from "./ReadDatabase.ts";
 import type { WriteDatabaseClient } from "./WriteDatabase.ts";
 
@@ -32,4 +34,23 @@ export interface ReadWriteDatabase extends Binding.Service<
 
 export const ReadWriteDatabase = Binding.Service<ReadWriteDatabase>(
   "GCP.Firestore.ReadWriteDatabase",
+);
+
+/**
+ * HTTP implementation of {@link ReadWriteDatabase} over the Firestore REST API.
+ *
+ * @layer
+ * @provides GCP.Firestore.ReadWriteDatabase
+ * @category Firestore
+ */
+export const ReadWriteDatabaseHttp = Layer.effect(
+  ReadWriteDatabase,
+  makeFirestoreDatabaseBinding({
+    tag: "GCP.Firestore.ReadWriteDatabase",
+    iam: readWriteDatabaseIam,
+    makeClient: (helpers, name) => ({
+      ...helpers.makeRead(name),
+      ...helpers.makeWrite(name),
+    }),
+  }),
 );

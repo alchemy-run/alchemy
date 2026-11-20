@@ -1,7 +1,9 @@
-import type * as workflowexecutions from "@distilled.cloud/gcp/workflowexecutions_v1";
+import * as workflowexecutions from "@distilled.cloud/gcp/workflowexecutions_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as GCPBindings from "../GCPBindings.ts";
 import type { Workflow } from "./Workflow.ts";
 
 export interface CreateExecutionRequest extends Omit<
@@ -45,3 +47,34 @@ export interface CreateExecution extends Binding.Service<
 > {}
 
 export const CreateExecution = Binding.Service<CreateExecution>("GCP.Workflows.CreateExecution");
+
+/**
+ * HTTP implementation of {@link CreateExecution}.
+ *
+ * @layer
+ * @provides GCP.Workflows.CreateExecution
+ */
+export const CreateExecutionHttp = Layer.effect(
+  CreateExecution,
+  Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
+    const createExecution = yield* GCPBindings.withCredentials(
+      workflowexecutions.createProjectsLocationsWorkflowsExecutions,
+    );
+    return Effect.fn(function* (workflow: Workflow) {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        yield* bind`GCP.Workflows.CreateExecution(${workflow})`({
+          // Workflows has no resource-level IAM; invoker is granted on the project.
+          iam: [{ role: "roles/workflows.invoker" }],
+        });
+      }
+      const name = yield* workflow.name;
+      return Effect.fn(`GCP.Workflows.CreateExecution(${workflow.LogicalId})`)(function* (
+        request?: CreateExecutionRequest,
+      ) {
+        const parent = yield* name;
+        return yield* createExecution({ ...request, parent });
+      });
+    });
+  }),
+);

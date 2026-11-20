@@ -1,7 +1,9 @@
-import type * as tpu from "@distilled.cloud/gcp/tpu_v2";
+import * as tpu from "@distilled.cloud/gcp/tpu_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTpuNodeHttpBinding } from "./BindingHttp.ts";
 import type { Node } from "./Node.ts";
 
 export interface GetNodeRequest extends Omit<tpu.GetProjectsLocationsNodesRequest, "name"> {}
@@ -38,3 +40,18 @@ export interface GetNode extends Binding.Service<
 > {}
 
 export const GetNode = Binding.Service<GetNode>("GCP.TPU.GetNode");
+
+/**
+ * HTTP implementation of {@link GetNode}.
+ *
+ * @layer
+ * @provides GCP.TPU.GetNode
+ */
+export const GetNodeHttp = Layer.effect(
+  GetNode,
+  makeTpuNodeHttpBinding({
+    tag: "GCP.TPU.GetNode",
+    iam: { role: "roles/tpu.viewer" },
+    operation: tpu.getProjectsLocationsNodes,
+  }),
+);

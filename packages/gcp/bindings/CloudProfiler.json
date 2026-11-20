@@ -1,0 +1,9 @@
+{
+  "discovery": "cloudprofiler-v2",
+  "module": "cloudprofiler_v2",
+  "resources": {},
+  "probes": {
+    "resources": {},
+    "enable": ["cloudprofiler.googleapis.com"]
+  }
+}

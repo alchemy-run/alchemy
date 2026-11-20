@@ -1,0 +1,93 @@
+{
+  "discovery": "dialogflow-v3",
+  "module": "dialogflow_v3",
+  "resources": {
+    "Agent": {
+      "pattern": "projects/*/locations/*/agents/*"
+    },
+    "AgentsEntityType": {
+      "pattern": "projects/*/locations/*/agents/*/entityTypes/*"
+    },
+    "AgentsEnvironment": {
+      "pattern": "projects/*/locations/*/agents/*/environments/*"
+    },
+    "AgentsEnvironmentsExperiment": {
+      "pattern": "projects/*/locations/*/agents/*/environments/*/experiments/*"
+    },
+    "AgentsEnvironmentsSessionsEntityType": {
+      "pattern": "projects/*/locations/*/agents/*/environments/*/sessions/*/entityTypes/*"
+    },
+    "AgentsFlow": {
+      "pattern": "projects/*/locations/*/agents/*/flows/*"
+    },
+    "AgentsFlowsPage": {
+      "pattern": "projects/*/locations/*/agents/*/flows/*/pages/*"
+    },
+    "AgentsFlowsTransitionRouteGroup": {
+      "pattern": "projects/*/locations/*/agents/*/flows/*/transitionRouteGroups/*"
+    },
+    "AgentsFlowsVersion": {
+      "pattern": "projects/*/locations/*/agents/*/flows/*/versions/*"
+    },
+    "AgentsGenerator": {
+      "pattern": "projects/*/locations/*/agents/*/generators/*"
+    },
+    "AgentsIntent": {
+      "pattern": "projects/*/locations/*/agents/*/intents/*"
+    },
+    "AgentsPlaybook": {
+      "pattern": "projects/*/locations/*/agents/*/playbooks/*"
+    },
+    "AgentsPlaybooksExample": {
+      "pattern": "projects/*/locations/*/agents/*/playbooks/*/examples/*"
+    },
+    "AgentsPlaybooksVersion": {
+      "pattern": "projects/*/locations/*/agents/*/playbooks/*/versions/*"
+    },
+    "AgentsSessionsEntityType": {
+      "pattern": "projects/*/locations/*/agents/*/sessions/*/entityTypes/*"
+    },
+    "AgentsTool": {
+      "pattern": "projects/*/locations/*/agents/*/tools/*"
+    },
+    "AgentsToolsVersion": {
+      "pattern": "projects/*/locations/*/agents/*/tools/*/versions/*"
+    },
+    "AgentsTransitionRouteGroup": {
+      "pattern": "projects/*/locations/*/agents/*/transitionRouteGroups/*"
+    },
+    "AgentsWebhook": {
+      "pattern": "projects/*/locations/*/agents/*/webhooks/*"
+    },
+    "SecuritySetting": {
+      "pattern": "projects/*/locations/*/securitySettings/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "SecuritySetting": "ProbeSecuritySetting",
+      "Agent": "ProbeAgent",
+      "AgentsEntityType": "ProbeEntityType",
+      "AgentsFlow": "ProbeFlow",
+      "AgentsFlowsPage": "ProbePage",
+      "AgentsFlowsTransitionRouteGroup": "ProbeFlowRouteGroup",
+      "AgentsFlowsVersion": "ProbeFlowVersion",
+      "AgentsGenerator": "ProbeGenerator",
+      "AgentsIntent": "ProbeIntent",
+      "AgentsPlaybook": "ProbePlaybook",
+      "AgentsTool": "ProbeTool",
+      "AgentsTransitionRouteGroup": "ProbeRouteGroup",
+      "AgentsWebhook": "ProbeWebhook"
+    },
+    "untestable": {
+      "AgentsEnvironment": "its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+      "AgentsEnvironmentsExperiment": "its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+      "AgentsEnvironmentsSessionsEntityType": "its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+      "AgentsPlaybooksExample": "its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+      "AgentsPlaybooksVersion": "its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+      "AgentsSessionsEntityType": "its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+      "AgentsToolsVersion": "its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet"
+    },
+    "location": "global"
+  }
+}

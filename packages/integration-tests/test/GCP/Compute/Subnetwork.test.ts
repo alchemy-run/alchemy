@@ -110,3 +110,43 @@ test.provider(
     }).pipe(logLevel, withNetworkSlot),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 360_000 },
 );
+
+// Proxy-only subnets (internal Application Load Balancers) reject
+// `privateIpGoogleAccess`: create must leave it out, and a redeploy must
+// not try to set it.
+test.provider(
+  "create a proxy-only subnetwork and redeploy it unchanged",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const proxyOnly = Effect.gen(function* () {
+        const network = yield* GCP.Compute.Network("ProxyVpc", { autoCreateSubnetworks: false });
+        return yield* GCP.Compute.Subnetwork("ProxySubnet", {
+          network: network.networkName,
+          region: "us-central1",
+          ipCidrRange: "10.129.0.0/23",
+          purpose: "REGIONAL_MANAGED_PROXY",
+        });
+      });
+
+      const created = yield* stack.deploy(proxyOnly);
+      expect(created.purpose).toEqual("REGIONAL_MANAGED_PROXY");
+
+      const fetched = yield* compute.getSubnetworks({
+        project: created.project,
+        region: created.region,
+        subnetwork: created.subnetworkName,
+      });
+      expect(fetched.purpose).toEqual("REGIONAL_MANAGED_PROXY");
+
+      const plan = yield* stack.plan(proxyOnly);
+      expect(plan.resources.ProxySubnet?.action).toEqual("noop");
+      yield* stack.deploy(proxyOnly);
+
+      yield* stack.destroy();
+      const gone = yield* waitUntilGone(created.project, created.region, created.subnetworkName);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel, withNetworkSlot),
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 360_000 },
+);

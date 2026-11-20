@@ -1,0 +1,17 @@
+{
+  "discovery": "notebooks-v2",
+  "module": "notebooks_v2",
+  "resources": {
+    "Instance": {
+      "pattern": "projects/*/locations/*/instances/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Instance": "ProbeInstance"
+    },
+    "enable": ["notebooks.googleapis.com", "compute.googleapis.com"],
+    "location": "us-central1-a",
+    "deployMinutes": 30
+  }
+}

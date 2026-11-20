@@ -13,7 +13,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 // The Schema Registry API refuses every call until a Kafka cluster exists in
 // the region (`SchemaRegistryRequiresCluster`), so lifecycle tests deploy a
 // cluster first and make the registry depend on it. Clusters take ~30 minutes.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 

@@ -1,7 +1,9 @@
-import type * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
+import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeSubscriptionHttpBinding } from "./BindingHttp.ts";
 import type { Subscription } from "./Subscription.ts";
 
 export interface AcknowledgeRequest extends Omit<
@@ -40,3 +42,18 @@ export interface Acknowledge extends Binding.Service<
 > {}
 
 export const Acknowledge = Binding.Service<Acknowledge>("GCP.PubSub.Acknowledge");
+
+/**
+ * HTTP implementation of {@link Acknowledge}.
+ *
+ * @layer
+ * @provides GCP.PubSub.Acknowledge
+ */
+export const AcknowledgeHttp = Layer.effect(
+  Acknowledge,
+  makeSubscriptionHttpBinding({
+    tag: "GCP.PubSub.Acknowledge",
+    iam: { role: "roles/pubsub.subscriber", on: "pubsub.subscription" },
+    operation: pubsub.acknowledgeProjectsSubscriptions,
+  }),
+);

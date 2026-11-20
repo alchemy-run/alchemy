@@ -1,7 +1,9 @@
-import type * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
+import * as bigquery from "@distilled.cloud/gcp/bigquery_v2";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { makeTableHttpBinding } from "./BindingHttp.ts";
 import type { Table } from "./Table.ts";
 
 export interface InsertAllRequest extends Omit<
@@ -44,3 +46,19 @@ export interface InsertAll extends Binding.Service<
 > {}
 
 export const InsertAll = Binding.Service<InsertAll>("GCP.BigQuery.InsertAll");
+
+/**
+ * HTTP implementation of {@link InsertAll}.
+ *
+ * @layer
+ * @provides GCP.BigQuery.InsertAll
+ */
+export const InsertAllHttp = Layer.effect(
+  InsertAll,
+  makeTableHttpBinding({
+    tag: "GCP.BigQuery.InsertAll",
+    // bigquery.tables.updateData
+    iam: { role: "roles/bigquery.dataEditor", on: "bigquery.table" },
+    operation: bigquery.insertAllTabledata,
+  }),
+);

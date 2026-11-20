@@ -1,6 +1,9 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
+import { recordAuditLogs } from "../../auditLogs.ts";
 import { serveProbes } from "../../bindingHost.ts";
 
 /** Topic the `Publish` binding writes to; `PublishTap` observes it. */
@@ -47,6 +50,32 @@ export const EventSchema = GCP.PubSub.Schema("EventSchema", {
   }),
 });
 
+/** Topic, subscriptions, snapshot and schema the generated bindings bind. */
+export const GenTopic = GCP.PubSub.Topic("GenTopic", {});
+export const GenInbox = Effect.gen(function* () {
+  const topic = yield* GenTopic;
+  return yield* GCP.PubSub.Subscription("GenInbox", { topic: topic.name });
+});
+export const DetachInbox = Effect.gen(function* () {
+  const topic = yield* GenTopic;
+  return yield* GCP.PubSub.Subscription("DetachInbox", { topic: topic.name });
+});
+export const GenSnapshot = Effect.gen(function* () {
+  const inbox = yield* GenInbox;
+  return yield* GCP.PubSub.Snapshot("GenSnapshot", { subscription: inbox.name });
+});
+const ID_FIELD = { name: "id", type: "string" };
+export const GenSchema = GCP.PubSub.Schema("GenSchema", {
+  type: "AVRO",
+  definition: JSON.stringify({ type: "record", name: "Event", fields: [ID_FIELD] }),
+});
+/** The revision `CommitSchema` adds to {@link GenSchema}: a compatible optional field. */
+export const COMMITTED_DEFINITION = JSON.stringify({
+  type: "record",
+  name: "Event",
+  fields: [ID_FIELD, { name: "kind", type: ["null", "string"], default: null }],
+});
+
 export const PUBLISH_PAYLOAD = "publish-binding";
 export const WRITE_PAYLOAD = "write-topic-binding";
 export const WRITE_BATCH_TEXT = "batch-text";
@@ -59,6 +88,12 @@ const untilSome = <A>(page: ReadonlyArray<A> | undefined) => (page ?? []).length
  * Effect-native Cloud Run service exercising every Pub/Sub binding as its
  * own runtime service account. Deployed from {@link ../Bindings.test.ts}.
  */
+/** Bucket the audit-log consumers record entries in. */
+export const AuditMarkers = GCP.Storage.Bucket("AuditMarkers", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+
 export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>()(
   "PubSubBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
@@ -70,6 +105,43 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
     const readSubscription = yield* GCP.PubSub.ReadSubscription(ReadInbox);
     const getSchema = yield* GCP.PubSub.GetSchema(EventSchema);
     const validate = yield* GCP.PubSub.ValidateMessage(EventSchema);
+
+    const putMarker = yield* GCP.Storage.PutObject(AuditMarkers);
+    const audited = { methods: ["SetIamPolicy"] };
+    yield* GCP.PubSub.consumeTopicAuditLogs(GenTopic, audited, recordAuditLogs("topic", putMarker));
+    yield* GCP.PubSub.consumeSubscriptionAuditLogs(
+      GenInbox,
+      audited,
+      recordAuditLogs("subscription", putMarker),
+    );
+    yield* GCP.PubSub.consumeSchemaAuditLogs(
+      GenSchema,
+      audited,
+      recordAuditLogs("schema", putMarker),
+    );
+    yield* GCP.PubSub.consumeSnapshotAuditLogs(
+      GenSnapshot,
+      audited,
+      recordAuditLogs("snapshot", putMarker),
+    );
+    const getTopic = yield* GCP.PubSub.GetTopic(GenTopic);
+    const listTopicSubscriptions = yield* GCP.PubSub.ListTopicSubscriptions(GenTopic);
+    const listTopicSnapshots = yield* GCP.PubSub.ListTopicSnapshots(GenTopic);
+    const getSubscription = yield* GCP.PubSub.GetSubscription(GenInbox);
+    const seekSubscription = yield* GCP.PubSub.SeekSubscription(GenInbox);
+    const modifyPushConfig = yield* GCP.PubSub.ModifySubscriptionPushConfig(GenInbox);
+    const detachSubscription = yield* GCP.PubSub.DetachSubscription(DetachInbox);
+    const getSnapshot = yield* GCP.PubSub.GetSnapshot(GenSnapshot);
+    const commitSchema = yield* GCP.PubSub.CommitSchema(GenSchema);
+    const listSchemaRevisions = yield* GCP.PubSub.ListSchemaRevisions(GenSchema);
+    const rollbackSchema = yield* GCP.PubSub.RollbackSchema(GenSchema);
+    const deleteSchemaRevision = yield* GCP.PubSub.DeleteSchemaRevision(GenSchema);
+
+    const listTopics = yield* GCP.PubSub.ListTopics();
+    const listSubscriptions = yield* GCP.PubSub.ListSubscriptions();
+    const listSnapshots = yield* GCP.PubSub.ListSnapshots();
+    const listSchemas = yield* GCP.PubSub.ListSchemas();
+    const validateSchema = yield* GCP.PubSub.ValidateSchema();
 
     return {
       fetch: serveProbes({
@@ -135,6 +207,63 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
           encoding: "JSON",
           message: Buffer.from(JSON.stringify({ id: "abc" })).toString("base64"),
         }),
+        project: Effect.gen(function* () {
+          const topics = yield* listTopics({ pageSize: 1000 });
+          const subscriptions = yield* listSubscriptions({ pageSize: 1000 });
+          const snapshots = yield* listSnapshots({ pageSize: 1000 });
+          const schemas = yield* listSchemas({ pageSize: 1000 });
+          const validated = yield* validateSchema({
+            body: {
+              schema: {
+                type: "AVRO",
+                definition: JSON.stringify({ type: "record", name: "Event", fields: [ID_FIELD] }),
+              },
+            },
+          });
+          return {
+            topics: (topics.topics ?? []).map((topic) => topic.name),
+            subscriptions: (subscriptions.subscriptions ?? []).map((sub) => sub.name),
+            snapshots: (snapshots.snapshots ?? []).map((snapshot) => snapshot.name),
+            schemas: (schemas.schemas ?? []).map((schema) => schema.name),
+            validated,
+          };
+        }),
+        getTopic: getTopic(),
+        listTopicSubscriptions: listTopicSubscriptions(),
+        listTopicSnapshots: listTopicSnapshots(),
+        getSubscription: getSubscription(),
+        seekSubscription: seekSubscription({ body: { time: new Date().toISOString() } }),
+        modifySubscriptionPushConfig: modifyPushConfig({ body: { pushConfig: {} } }),
+        detachSubscription: detachSubscription(),
+        getSnapshot: getSnapshot(),
+        // One request per step, so a slow or failing step names itself.
+        schemaCommit: Effect.gen(function* () {
+          const before = yield* listSchemaRevisions();
+          const committed = yield* commitSchema({
+            body: {
+              schema: {
+                name: before.schemas?.[0]?.name ?? "",
+                type: "AVRO",
+                definition: COMMITTED_DEFINITION,
+              },
+            },
+          });
+          return {
+            original: before.schemas?.at(-1)?.revisionId,
+            committed: committed.revisionId,
+          };
+        }),
+        schemaRollback: Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          const revisionId = new URL(request.url, "http://host").searchParams.get("revision") ?? "";
+          return yield* rollbackSchema({ body: { revisionId } });
+        }),
+        schemaDeleteRevision: Effect.gen(function* () {
+          const request = yield* HttpServerRequest;
+          const revisionId = new URL(request.url, "http://host").searchParams.get("revision") ?? "";
+          return yield* deleteSchemaRevision({ revisionId });
+        }),
+        schemaListRevisions: listSchemaRevisions(),
         validateInvalid: validate({
           encoding: "JSON",
           message: Buffer.from(JSON.stringify({ wrong: 1 })).toString("base64"),
@@ -149,5 +278,28 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
     Effect.provide(GCP.PubSub.ReadSubscriptionHttp),
     Effect.provide(GCP.PubSub.GetSchemaHttp),
     Effect.provide(GCP.PubSub.ValidateMessageHttp),
+    Effect.provide(
+      Layer.mergeAll(
+        GCP.PubSub.GetTopicHttp,
+        GCP.PubSub.ListTopicSubscriptionsHttp,
+        GCP.PubSub.ListTopicSnapshotsHttp,
+        GCP.PubSub.GetSubscriptionHttp,
+        GCP.PubSub.SeekSubscriptionHttp,
+        GCP.PubSub.ModifySubscriptionPushConfigHttp,
+        GCP.PubSub.DetachSubscriptionHttp,
+        GCP.PubSub.GetSnapshotHttp,
+        GCP.PubSub.CommitSchemaHttp,
+        GCP.PubSub.ListSchemaRevisionsHttp,
+        GCP.PubSub.RollbackSchemaHttp,
+        GCP.PubSub.DeleteSchemaRevisionHttp,
+        GCP.PubSub.ListTopicsHttp,
+        GCP.PubSub.ListSubscriptionsHttp,
+        GCP.PubSub.ListSnapshotsHttp,
+        GCP.PubSub.ListSchemasHttp,
+        GCP.PubSub.ValidateSchemaHttp,
+        GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
+        GCP.Storage.PutObjectHttp,
+      ),
+    ),
   ),
 ) {}

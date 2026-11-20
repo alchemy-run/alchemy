@@ -2,7 +2,9 @@ import type * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import type { SecretBindingTarget } from "./BindingHttp.ts";
+import { makeSecretAccessBinding, readSecretGrants } from "./SecretHttp.ts";
 
 /** Read-only client for one Secret Manager secret. */
 export interface ReadSecretClient {
@@ -57,3 +59,19 @@ export interface ReadSecret extends Binding.Service<
 > {}
 
 export const ReadSecret = Binding.Service<ReadSecret>("GCP.SecretManager.ReadSecret");
+
+/**
+ * HTTP implementation of {@link ReadSecret} over the Secret Manager REST API.
+ *
+ * @layer
+ * @provides GCP.SecretManager.ReadSecret
+ * @category SecretManager
+ */
+export const ReadSecretHttp = Layer.effect(
+  ReadSecret,
+  makeSecretAccessBinding({
+    tag: "GCP.SecretManager.ReadSecret",
+    grants: readSecretGrants,
+    makeClient: (helpers, name) => helpers.makeRead(name),
+  }),
+);
