@@ -322,7 +322,8 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
    */
   handler?: string;
   /**
-   * Runtime environment for the container program.
+   * Runtime environment for the container program. When omitted, uses the
+   * provider's `ContainerRuntime` layer.
    *
    * @default "bun"
    */

@@ -1,4 +1,5 @@
 import * as BuildPlan from "@alchemy.run/docker/BuildPlan";
+import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import { DockerLive } from "@alchemy.run/docker/Docker";
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import * as DockerfileParser from "@alchemy.run/docker/DockerfileParser";
@@ -376,6 +377,24 @@ RUN apt-get update && apt-get install -y git`,
         );
         expect(BuildPlan.startCommand(plan)).toEqual(["bun", "/app/index.mjs"]);
         expect(BuildPlan.render(plan)).toContain(`COPY ${BuildPlan.BUNDLE_DIR}/ /app/`);
+      }),
+    { tags },
+  );
+
+  test.effect(
+    "the provided runtime supplies both the default base and the bundled command",
+    () =>
+      Effect.gen(function* () {
+        const { root, path } = yield* makeContext({
+          "package.json": '{"name":"runtime-test","type":"module"}',
+          "main.ts": "export default 'hello';\n",
+        });
+        const plan = yield* BuildPlan.plan(
+          { main: path.join(root, "main.ts") },
+          { capabilities: docker },
+        ).pipe(Effect.provide(ContainerRuntime.node));
+        expect(plan.base).toBe("node:26-slim");
+        expect(BuildPlan.startCommand(plan)).toEqual(["node", "/app/index.mjs"]);
       }),
     { tags },
   );

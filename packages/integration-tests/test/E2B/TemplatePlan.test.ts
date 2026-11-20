@@ -1,5 +1,7 @@
 import * as zlib from "node:zlib";
+import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
+import { programReadyCmd } from "@alchemy.run/e2b/internal/Program";
 import { tarGzip } from "@alchemy.run/e2b/internal/Tar";
 import { planTemplateBuild } from "@alchemy.run/e2b/internal/TemplateBuild";
 import { planSource } from "@alchemy.run/e2b/internal/TemplatePlan";
@@ -23,6 +25,23 @@ const makeContext = Effect.fn(function* (files: Record<string, string>) {
 });
 
 layer(BunServices.layer)("E2B template plan", (test) => {
+  test.effect(
+    "uses Node for the image, program and readiness probe when selected",
+    () =>
+      Effect.gen(function* () {
+        const runtime = yield* ContainerRuntime;
+        const path = yield* Path.Path;
+        const plan = yield* planSource(
+          { main: path.join(import.meta.dirname, "fixtures/async-program.mjs") },
+          { port: 8080, runtime },
+        );
+        expect(plan.fromImage).toBe("node:26-slim");
+        expect(plan.startCmd).toBe("node /app/index.mjs");
+        expect(programReadyCmd(8080, runtime.command)).toMatch(/^node -e /);
+      }).pipe(Effect.provide(ContainerRuntime.node)),
+    { tags },
+  );
+
   test.effect(
     "lowers a Dockerfile and its context to E2B steps",
     () =>

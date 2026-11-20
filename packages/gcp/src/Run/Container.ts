@@ -1,4 +1,5 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import type { PackageInstall } from "alchemy/Bundle/InstalledPackages";
@@ -11,11 +12,14 @@ import { type ServerHost } from "alchemy/Runtime/Process";
 import type { ExtraFile } from "alchemy/Util/extraFiles";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
+import {
+  destroyHostImageRepository,
+  makeCloudRunImageSource,
+} from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import type { GcpHostBinding, GcpIamGrant } from "../Host.ts";
 import { createGcpHostRuntimeContext, type GcpHostRuntimeContext } from "../HostContext.ts";
-import { alchemyRuntimeEnv, makeGcpBootstrap, mergeContainerEnv } from "../HostRuntime.ts";
+import { alchemyRuntimeEnv, mergeContainerEnv } from "../HostRuntime.ts";
 import type { Providers } from "../Providers.ts";
 import type { ContainerSpec, Probe } from "./Service.ts";
 
@@ -225,9 +229,6 @@ const sourceOf = (news: ContainerProps, main: string) => ({
   install: news.build?.install,
 });
 
-const bootstrapFor = (news: ContainerProps) =>
-  makeGcpBootstrap("CloudRun", news.handler ?? "default");
-
 const repositoryFor = Effect.fn(function* (id: string) {
   const name = yield* createPhysicalName({ id, maxLength: MAX_NAME_LENGTH, lowercase: true });
   return `${dnsLabel(name, "container")}-src`;
@@ -274,103 +275,107 @@ export const directContainerNames = (bindings: readonly ResourceBinding<GcpHostB
 ];
 
 export const ContainerProvider = () =>
-  Provider.succeed(Container, {
-    stables: ["name", "project", "location", "repository"],
-
-    diff: Effect.fn(function* ({ news, output }) {
-      if (!isResolved(news)) return undefined;
-      // A code-only change leaves the props untouched; hash the bundle.
-      if (output !== undefined && news.main !== undefined) {
-        const images = yield* makeImageSource;
-        const hash = yield* images.hash({
-          source: sourceOf(news, news.main),
-          port: news.port ?? DEFAULT_PORT,
-          isExternal: news.isExternal,
-          bootstrap: bootstrapFor(news),
-        });
-        if (hash !== undefined && hash !== output.codeHash) {
-          return { action: "update" as const };
-        }
-      }
-      return undefined;
-    }),
-
-    read: Effect.fn(function* ({ output }) {
-      return output;
-    }),
-
-    reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
-      const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location, env.region);
-      const name = output?.name ?? dnsLabel(news.name ?? id, "container");
-      const hostBindings = bindings as ResourceBinding<GcpHostBinding>[];
-      const port = news.port ?? (news.main !== undefined ? DEFAULT_PORT : undefined);
-
-      let image = news.image;
-      let codeHash: string | undefined;
-      let repository: string | undefined;
-      const runtimeEnv: Record<string, unknown> = {};
-      if (news.main !== undefined) {
-        repository = output?.repository ?? (yield* repositoryFor(id));
-        const images = yield* makeImageSource;
-        const resolved = yield* images.resolve({
-          id,
-          source: sourceOf(news, news.main),
-          repositoryName: repository,
-          location,
-          port: port ?? DEFAULT_PORT,
-          isExternal: news.isExternal,
-          bootstrap: bootstrapFor(news),
-          session,
-        });
-        image = resolved.imageUri;
-        codeHash = resolved.codeHash;
-        Object.assign(runtimeEnv, yield* alchemyRuntimeEnv, {
-          [CONTAINER_PORT_ENV]: String(port ?? DEFAULT_PORT),
-        });
-      }
-      if (image === undefined) {
-        return yield* new ContainerImageMissing({ id });
-      }
-
-      const bindingEnv = Object.assign(
-        {},
-        ...hostBindings.map((binding) => binding.data?.env ?? {}),
-      ) as Record<string, unknown>;
-      const dependsOn = [
-        ...new Set([...(news.dependsOn ?? []), ...directContainerNames(hostBindings)]),
-      ];
-      const spec: ContainerSpec = {
-        name,
-        command: news.command,
-        args: news.args,
-        workingDir: news.workingDir,
-        resources: news.resources,
-        volumeMounts: news.volumeMounts,
-        image,
-        env: mergeContainerEnv(undefined, bindingEnv, runtimeEnv, news.env),
-        startupProbe: withPort(news.startupProbe, port),
-        livenessProbe: withPort(news.livenessProbe, port),
-        dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
-      };
-
+  Provider.effect(
+    Container,
+    Effect.gen(function* () {
+      const runtime = yield* ContainerRuntime;
       return {
-        name,
-        image,
-        port,
-        spec,
-        iam: hostBindings.flatMap((binding) => (binding.data?.iam ?? []) as GcpIamGrant[]),
-        sidecars: boundContainersOf(hostBindings),
-        project: env.project,
-        location,
-        repository,
-        codeHash,
+        stables: ["name", "project", "location", "repository"],
+
+        diff: Effect.fn(function* ({ news, output }) {
+          if (!isResolved(news)) return undefined;
+          // A code-only change leaves the props untouched; hash the bundle.
+          if (output !== undefined && news.main !== undefined) {
+            const images = yield* makeCloudRunImageSource("server", runtime);
+            const hash = yield* images.hash({
+              source: sourceOf(news, news.main),
+              port: news.port ?? DEFAULT_PORT,
+              isExternal: news.isExternal,
+            });
+            if (hash !== undefined && hash !== output.codeHash) {
+              return { action: "update" as const };
+            }
+          }
+          return undefined;
+        }),
+
+        read: Effect.fn(function* ({ output }) {
+          return output;
+        }),
+
+        reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
+          const env = yield* GcpEnvironment.current;
+          const location = normalizeLocation(news.location ?? output?.location, env.region);
+          const name = output?.name ?? dnsLabel(news.name ?? id, "container");
+          const hostBindings = bindings as ResourceBinding<GcpHostBinding>[];
+          const port = news.port ?? (news.main !== undefined ? DEFAULT_PORT : undefined);
+
+          let image = news.image;
+          let codeHash: string | undefined;
+          let repository: string | undefined;
+          const runtimeEnv: Record<string, unknown> = {};
+          if (news.main !== undefined) {
+            repository = output?.repository ?? (yield* repositoryFor(id));
+            const images = yield* makeCloudRunImageSource("server", runtime);
+            const resolved = yield* images.resolve({
+              id,
+              source: sourceOf(news, news.main),
+              repositoryName: repository,
+              location,
+              port: port ?? DEFAULT_PORT,
+              isExternal: news.isExternal,
+              session,
+            });
+            image = resolved.imageUri;
+            codeHash = resolved.codeHash;
+            Object.assign(runtimeEnv, yield* alchemyRuntimeEnv, {
+              [CONTAINER_PORT_ENV]: String(port ?? DEFAULT_PORT),
+            });
+          }
+          if (image === undefined) {
+            return yield* new ContainerImageMissing({ id });
+          }
+
+          const bindingEnv = Object.assign(
+            {},
+            ...hostBindings.map((binding) => binding.data?.env ?? {}),
+          ) as Record<string, unknown>;
+          const dependsOn = [
+            ...new Set([...(news.dependsOn ?? []), ...directContainerNames(hostBindings)]),
+          ];
+          const spec: ContainerSpec = {
+            name,
+            command: news.command,
+            args: news.args,
+            workingDir: news.workingDir,
+            resources: news.resources,
+            volumeMounts: news.volumeMounts,
+            image,
+            env: mergeContainerEnv(undefined, bindingEnv, runtimeEnv, news.env),
+            startupProbe: withPort(news.startupProbe, port),
+            livenessProbe: withPort(news.livenessProbe, port),
+            dependsOn: dependsOn.length > 0 ? dependsOn : undefined,
+          };
+
+          return {
+            name,
+            image,
+            port,
+            spec,
+            iam: hostBindings.flatMap((binding) => (binding.data?.iam ?? []) as GcpIamGrant[]),
+            sidecars: boundContainersOf(hostBindings),
+            project: env.project,
+            location,
+            repository,
+            codeHash,
+          };
+        }),
+
+        delete: Effect.fn(function* ({ id, output }) {
+          if (output.repository !== undefined) {
+            yield* destroyHostImageRepository(id, output, output.repository);
+          }
+        }),
       };
     }),
-
-    delete: Effect.fn(function* ({ id, output }) {
-      if (output.repository !== undefined) {
-        yield* destroyHostImageRepository(id, output, output.repository);
-      }
-    }),
-  });
+  );

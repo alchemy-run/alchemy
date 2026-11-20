@@ -1,10 +1,11 @@
 import { AlchemyContext } from "alchemy/AlchemyContext";
-import * as Bundle from "alchemy/Bundle/Bundle";
-import { findCwdForBundle, getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
+import type * as Bundle from "alchemy/Bundle/Bundle";
+import { getStableContextDir, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
-import type * as rolldown from "rolldown";
+import { ContainerRuntime, makeContainerBootstrap } from "./ContainerRuntime.ts";
 import { Docker } from "./Docker.ts";
+import { bundleMainProgram, containerBundleLayout } from "./ImageSource.ts";
 
 /**
  * INTERNAL — image machinery for the effectful `Docker.Service` platform.
@@ -61,95 +62,26 @@ await bootstrap(entrypoint);
 /**
  * Init-time constructor for the service-image resolver. Resolves the services
  * that are only available at provider-layer construction (Docker, the
- * `.alchemy` directory, the rolldown virtual-entry plugin) and returns
+ * `.alchemy` directory, the optional container runtime) and returns
  * `resolve` (build the image if its content hash isn't present in the target
  * engine) and `hash` (content hash only, for `diff`).
  */
 export const makeServiceImage = Effect.gen(function* () {
   const docker = yield* Docker;
+  const runtime = yield* ContainerRuntime;
   const { dotAlchemy } = yield* AlchemyContext;
-  const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
-
-  /** Bundle the Effect program behind a `main` source. */
-  const bundleProgram = Effect.fn(function* (options: {
-    source: BundledServiceSource;
-    isExternal?: boolean;
-  }) {
-    const { source } = options;
-    const realMain = yield* resolveMainPath(source.main);
-    const cwd = yield* findCwdForBundle(realMain);
-    const bootstrap = makeServiceBunBootstrap(source.handler ?? "default");
-
-    const buildBundle = Effect.fn(function* (
-      entry: string,
-      plugins?: rolldown.RolldownPluginOption,
-    ) {
-      return yield* Bundle.build(
-        {
-          ...source.build?.input,
-          input: entry,
-          cwd,
-          platform: "node",
-          // The container runs on `bun`; keep `bun`/`bun:*` external (the
-          // runtime provides them) and resolve the `bun` export condition
-          // so `@effect/platform-bun` picks its Bun implementations.
-          external: [
-            "bun",
-            "bun:*",
-            ...((source.build?.input?.external as string[] | undefined) ?? []),
-          ],
-          resolve: {
-            conditionNames: [...Bundle.BUN_CONDITION_NAMES],
-            ...source.build?.input?.resolve,
-          },
-          plugins: [source.build?.input?.plugins, plugins],
-        },
-        {
-          ...source.build?.output,
-          format: "esm",
-          sourcemap: source.build?.output?.sourcemap ?? false,
-          minify: source.build?.output?.minify ?? false,
-          entryFileNames: "index.mjs",
-        },
-        source.build,
-      );
-    });
-
-    const bundleOutput = options.isExternal
-      ? yield* buildBundle(realMain)
-      : yield* buildBundle(realMain, virtualEntryPlugin(bootstrap));
-
-    // Return every emitted file (entry + shared chunks). Dynamic imports in
-    // the Bun HTTP server split into chunks; dropping any of them crashes the
-    // container with `Cannot find module './chunk-XXX.js'`.
-    const files = bundleOutput.files.map((file) => ({
-      path: file.path,
-      content:
-        typeof file.content === "string" ? new TextEncoder().encode(file.content) : file.content,
-    }));
-
-    return { files, hash: bundleOutput.hash };
-  });
-
   /**
    * Generated Dockerfile for a bundled `main` program. The environment
    * preamble is the `image` ref or the default bun base (`oven/bun` is
    * Docker-Hub only).
    */
   const generateDockerfile = (source: BundledServiceSource) => {
-    const lines = [
-      `FROM ${source.image ?? "oven/bun:1"}`,
-      `WORKDIR /app`,
-      `COPY index.mjs /app/index.mjs`,
-      // Copy any additional rolldown chunks (`chunk-XXX.js`, …). Non-trivial
-      // bundles always emit at least one; minimal bundles emit none and the
-      // COPY no-ops.
-      `COPY *.js /app/`,
-    ];
+    const layout = containerBundleLayout(runtime);
+    const lines = [`FROM ${source.image ?? runtime.baseImage}`, `WORKDIR /app`, ...layout.copy];
     if (source.port !== undefined) {
       lines.push(`ENV PORT=${String(source.port)}`, `EXPOSE ${String(source.port)}`);
     }
-    lines.push(`ENTRYPOINT ["bun", "/app/index.mjs"]`);
+    lines.push(layout.entrypoint);
     return `${lines.join("\n")}\n`;
   };
 
@@ -163,7 +95,17 @@ export const makeServiceImage = Effect.gen(function* () {
     source: BundledServiceSource;
     isExternal?: boolean;
   }) {
-    const bundled = yield* bundleProgram(options);
+    const handler = options.source.handler ?? "default";
+    const bootstrap =
+      runtime.preset === "bun"
+        ? makeServiceBunBootstrap(handler)
+        : makeContainerBootstrap(
+            runtime.platformModule,
+            "alchemy/Runtime/ContainerProcess",
+            handler,
+            "server",
+          );
+    const bundled = yield* bundleMainProgram({ ...options, bootstrap, runtime });
     const dockerfile = generateDockerfile(options.source);
     const codeHash = (yield* sha256Object({
       bundleHash: bundled.hash,
@@ -209,7 +151,11 @@ export const makeServiceImage = Effect.gen(function* () {
     }
 
     const realMain = yield* resolveMainPath(source.main);
-    const contextDir = yield* getStableContextDir(realMain, dotAlchemy, `${id}-image`);
+    const contextDir = yield* getStableContextDir(
+      realMain,
+      dotAlchemy,
+      runtime.preset === "bun" ? `${id}-image` : `${id}-image-${codeHash}`,
+    );
     yield* docker.materialize({
       context: contextDir,
       dockerfile,

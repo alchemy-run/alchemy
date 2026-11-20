@@ -1,4 +1,8 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import {
+  ContainerRuntime,
+  type ContainerRuntimeSettings,
+} from "@alchemy.run/docker/ContainerRuntime";
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -20,7 +24,10 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
-import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
+import {
+  destroyHostImageRepository,
+  makeCloudRunImageSource,
+} from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import {
   retryActAs,
@@ -31,7 +38,6 @@ import {
 import {
   alchemyRuntimeEnv,
   isManagedServiceAccount,
-  makeGcpBootstrap,
   mergeContainerEnv,
   releaseHostIdentity,
   resolveHostIdentity,
@@ -503,8 +509,6 @@ const toId = (id: string, jobId: string | undefined, existing?: string) =>
 
 const HOST_TYPE = "GCP.Run.Job";
 
-const bootstrapFor = (news: JobProps) => makeGcpBootstrap("CloudRunJob", news.handler ?? "default");
-
 const toAttrs = (
   job: cloudrun.GoogleCloudRunV2Job,
   project: string,
@@ -762,8 +766,8 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-export const JobProvider = () =>
-  Provider.succeed(Job, {
+const makeJobProvider = (runtime: ContainerRuntimeSettings) =>
+  Job.Provider.of({
     stables: ["name", "jobId", "project", "location", "uid", "createTime"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
@@ -783,11 +787,10 @@ export const JobProvider = () =>
       // A code-only change leaves the props untouched; hash the bundled
       // program (and bootstrap) so it still surfaces as an update.
       if (output !== undefined && news.main !== undefined) {
-        const images = yield* makeImageSource;
+        const images = yield* makeCloudRunImageSource("job", runtime);
         const hash = yield* images.hash({
           source: { main: news.main, handler: news.handler, build: news.build },
           isExternal: news.isExternal,
-          bootstrap: bootstrapFor(news),
         });
         if (hash !== undefined && hash !== output.codeHash) {
           return { action: "update" as const };
@@ -874,7 +877,7 @@ export const JobProvider = () =>
       let containers = news.containers;
       let codeHash: string | undefined;
       if (news.main !== undefined) {
-        const images = yield* makeImageSource;
+        const images = yield* makeCloudRunImageSource("job", runtime);
         const image = yield* images
           .resolve({
             id,
@@ -886,7 +889,6 @@ export const JobProvider = () =>
             repositoryName: rfc1035(`${jobId}-src`),
             location,
             isExternal: news.isExternal,
-            bootstrap: bootstrapFor(news),
             session,
           })
           .pipe(Effect.onError(() => identity.cleanup));
@@ -1058,3 +1060,6 @@ export const JobProvider = () =>
       yield* releaseHostIdentity(output);
     }),
   });
+
+export const JobProvider = () =>
+  Provider.effect(Job, Effect.map(ContainerRuntime, makeJobProvider));

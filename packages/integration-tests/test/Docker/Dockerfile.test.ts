@@ -1,9 +1,11 @@
 import { imageSourceKind, validateImageSource } from "@alchemy.run/aws/ECR/ImageSource";
 import {
   buildFinalDockerfile,
+  resolveContainerRuntime,
   containerEnvPreamble,
   validateContainerImageProps,
 } from "@alchemy.run/cloudflare/Containers/ContainerBundle";
+import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import { describe, expect, it, test } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
@@ -176,21 +178,41 @@ RUN apt-get install -y ffmpeg`,
       }),
     );
 
-    test("buildFinalDockerfile layers the bundle on top of the preamble", () => {
-      const dockerfile = buildFinalDockerfile(
-        "FROM oven/bun:1\nRUN apt-get install -y ffmpeg",
-        "bun",
-      );
-      const lines = dockerfile.split("\n");
-      expect(lines[0]).toBe("FROM oven/bun:1");
-      expect(lines[1]).toBe("RUN apt-get install -y ffmpeg");
-      expect(dockerfile).toContain('ENTRYPOINT ["bun", "/app/index.mjs"]');
-    });
+    it.effect("buildFinalDockerfile layers the bundle on top of the preamble", () =>
+      Effect.gen(function* () {
+        const runtime = yield* resolveContainerRuntime("bun");
+        const dockerfile = buildFinalDockerfile(
+          "FROM oven/bun:1\nRUN apt-get install -y ffmpeg",
+          runtime,
+        );
+        const lines = dockerfile.split("\n");
+        expect(lines[0]).toBe("FROM oven/bun:1");
+        expect(lines[1]).toBe("RUN apt-get install -y ffmpeg");
+        expect(dockerfile).toContain('ENTRYPOINT ["bun", "/app/index.mjs"]');
+      }),
+    );
 
-    test("buildFinalDockerfile falls back to the runtime default base", () => {
-      expect(buildFinalDockerfile(undefined, "bun").split("\n")[0]).toBe("FROM oven/bun:1");
-      expect(buildFinalDockerfile(undefined, "node").split("\n")[0]).toBe("FROM node:22-slim");
-    });
+    it.effect("buildFinalDockerfile falls back to the runtime default base", () =>
+      Effect.gen(function* () {
+        const bun = yield* resolveContainerRuntime("bun");
+        const node = yield* resolveContainerRuntime("node");
+        expect(buildFinalDockerfile(undefined, bun).split("\n")[0]).toBe("FROM oven/bun:1");
+        expect(buildFinalDockerfile(undefined, node).split("\n")[0]).toBe("FROM node:22-slim");
+      }),
+    );
+
+    it.effect("an explicit runtime overrides the provider runtime", () =>
+      Effect.gen(function* () {
+        const inherited = yield* resolveContainerRuntime();
+        const explicit = yield* resolveContainerRuntime("bun");
+        const node = buildFinalDockerfile(undefined, inherited, ["example"]);
+        const bun = buildFinalDockerfile(undefined, explicit, ["example"]);
+        expect(node).toContain("FROM node:26-slim");
+        expect(node).toContain("RUN npm install example");
+        expect(bun).toContain("FROM oven/bun:1");
+        expect(bun).toContain("RUN bun add example");
+      }).pipe(Effect.provide(ContainerRuntime.node)),
+    );
 
     it.effect("validateContainerImageProps enforces exclusivity", () =>
       Effect.gen(function* () {

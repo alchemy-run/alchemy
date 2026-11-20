@@ -1,3 +1,4 @@
+import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import { connectCluster, readObject } from "@alchemy.run/kubernetes/Client";
 import {
@@ -14,6 +15,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
@@ -24,7 +26,12 @@ import LocalEffectServer from "./fixtures/local-server.ts";
 import { TestLocalCluster } from "./fixtures/local.ts";
 import { expectFound } from "./lookup.ts";
 
-const testOptions = { providers: Kubernetes.providers() };
+const testOptions = {
+  providers:
+    process.env.ALCHEMY_TEST_NODE_RUNTIME === "1"
+      ? Kubernetes.providers().pipe(Layer.provide(ContainerRuntime.node))
+      : Kubernetes.providers(),
+};
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 
 const tags = ["provider:kubernetes", "provider:kubernetes:localcluster"];

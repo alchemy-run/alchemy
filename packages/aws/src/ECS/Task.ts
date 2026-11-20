@@ -34,7 +34,6 @@ import type { Credentials } from "../Credentials.ts";
 import {
   IMAGE_AGENT_DIR,
   imageAgentEntryPoint,
-  makeBunBootstrap,
   makeImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
@@ -682,8 +681,12 @@ export const taskImageInput = (
     platform: taskImagePlatform(props.runtimePlatform),
     port: props.port,
     isExternal: props.isExternal,
-    bootstrap: makeBunBootstrap(source.handler ?? "default"),
-    agent: isImageSandbox(props, bindings) ? { main: sandboxAgentMain } : undefined,
+    agent: isImageSandbox(props, bindings)
+      ? {
+          main: sandboxAgentMain,
+          platformBootstrap: "@alchemy.run/aws/Bootstrap/EcsSandboxProcess",
+        }
+      : undefined,
   };
 };
 
@@ -924,7 +927,7 @@ const withSandboxAgent = (
 ): ecs.ContainerDefinition[] => [
   {
     ...primary,
-    entryPoint: [...imageAgentEntryPoint],
+    entryPoint: [...(agent.agentEntryPoint ?? imageAgentEntryPoint)],
     command: [
       ...(primary.entryPoint ?? agent.entryPoint),
       // An entry point of the task's own drops the image's `CMD`, as Docker does.

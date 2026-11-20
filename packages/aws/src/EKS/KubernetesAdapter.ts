@@ -1,3 +1,4 @@
+import type { ContainerRuntimeSettings } from "@alchemy.run/docker/ContainerRuntime";
 import {
   ClusterAdapter,
   ClusterNotFoundError,
@@ -583,6 +584,7 @@ export const EksKubernetesAdapter = () =>
             port: options.port,
             isExternal: options.isExternal,
             bootstrap: options.bootstrap,
+            runtime: options.runtime,
             session: options.session,
           })
           .pipe(Effect.provideContext(context));
@@ -603,6 +605,7 @@ export const EksKubernetesAdapter = () =>
         port?: number | undefined;
         isExternal?: boolean | undefined;
         bootstrap: (importPath: string) => string;
+        runtime?: ContainerRuntimeSettings;
       }) {
         return yield* imageSource
           .hash({
@@ -611,6 +614,7 @@ export const EksKubernetesAdapter = () =>
             port: options.port,
             isExternal: options.isExternal,
             bootstrap: options.bootstrap,
+            runtime: options.runtime,
           })
           .pipe(Effect.provideContext(context));
       });
@@ -664,6 +668,7 @@ export const EksKubernetesAdapter = () =>
           hash: registryHash,
           delete: registryDelete,
         },
+        runtimeBootstrap: "@alchemy.run/aws/Bootstrap/Eks",
         bootstrap: {
           server: makeEksServerBootstrap,
           job: makeEksJobBootstrap,

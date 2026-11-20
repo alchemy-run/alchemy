@@ -1,5 +1,6 @@
 import { buildCacheRef, resolveBuildCache } from "@alchemy.run/docker/BuildCache";
 import { hashDockerBuildInputs } from "@alchemy.run/docker/BuildHash";
+import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { repositoryFromImageRef } from "@alchemy.run/docker/Registry";
@@ -33,12 +34,10 @@ import type {
   DurableObjectContainerProps,
 } from "./ContainerApplication.ts";
 import {
-  buildFinalDockerfile,
-  bundleContainerProgram,
-  containerEnvPreamble,
   createContainerApplicationName,
   makeContainerEnv,
   materializeInlineDockerfileContext,
+  planContainerProgram,
   validateContainerImageProps,
 } from "./ContainerBundle.ts";
 import {
@@ -85,6 +84,7 @@ export class ContainerProviderUnexpectedResponse extends Data.TaggedError(
 type ImageBuild =
   | {
       readonly kind: "effectful";
+      readonly dockerfile: string;
       readonly files: ReadonlyArray<{ path: string; content: Uint8Array }>;
     }
   | {
@@ -197,6 +197,7 @@ export const LiveContainerProvider = () =>
       const { dotAlchemy } = yield* AlchemyContext;
       const path = yield* Path.Path;
       const docker = yield* Docker;
+      const containerRuntime = yield* ContainerRuntime;
       const http = yield* HttpClient.HttpClient;
 
       const telemetry = yield* CloudflareLogs;
@@ -456,26 +457,14 @@ export const LiveContainerProvider = () =>
         // generated Dockerfile around it; the environment preamble comes
         // from `image` / inline `dockerfile` (default: the runtime base).
         if (props.main) {
-          const runtime = props.runtime ?? "bun";
-          const { files, hash: bundleHash } = yield* bundleContainerProgram({
+          const { files, bundleHash, dockerfile } = yield* planContainerProgram(
             id,
-            main: props.main,
-            runtime,
-            handler: props.handler,
-            isExternal: props.isExternal,
-            external: props.external,
-            build: props.build,
-          });
-          const finalDockerfile = buildFinalDockerfile(
-            yield* containerEnvPreamble(props),
-            runtime,
-            props.external,
-            props.autoInstallExternals,
-            props.imageInstall,
-          );
+            props.main,
+            props,
+          ).pipe(Effect.provideService(ContainerRuntime, containerRuntime));
           const imageHash = (yield* sha256Object({
             bundleHash,
-            dockerfile: finalDockerfile,
+            dockerfile,
             imageName: props.publish?.repository?.toLowerCase(),
           })).slice(0, 16);
           // The dev image is the deterministic build-context directory that
@@ -490,7 +479,7 @@ export const LiveContainerProvider = () =>
             `${id}-container`,
           );
           return {
-            build: { kind: "effectful" as const, files },
+            build: { kind: "effectful" as const, files, dockerfile },
             imageRef: makeRef(imageHash),
             imageHash,
             dev: {
@@ -736,22 +725,14 @@ export const LiveContainerProvider = () =>
           if (session) {
             yield* session.note(`Building container image ${imageRef}...`);
           }
-          const runtime = props.runtime ?? "bun";
           const contextDir = yield* getStableContextDir(
             process.cwd(),
             dotAlchemy,
             `${id}-container`,
           );
-          const finalDockerfile = buildFinalDockerfile(
-            yield* containerEnvPreamble(props),
-            runtime,
-            props.external,
-            props.autoInstallExternals,
-            props.imageInstall,
-          );
           yield* docker.materialize({
             context: contextDir,
-            dockerfile: finalDockerfile,
+            dockerfile: build.dockerfile,
             files: build.files.map((f, i) => ({
               path: i === 0 ? "index.mjs" : f.path,
               content: f.content,
