@@ -11,20 +11,17 @@ A name says nothing about how the tool works. Each harness ships its own `bash`,
 
 <Tree
   nodes={[
-    { id: "tools", label: "AI.CodingTools", type: "names", icon: "tag", areas: ["bash read edit"], phoneAreas: ["bash", "read", "edit"] },
-    { id: "bash", label: "AI.Bash", type: "name", parent: "tools", tone: "accent", icon: "square-terminal" },
-    { id: "read", label: "AI.Read", type: "name", parent: "tools", icon: "file-text" },
-    { id: "edit", label: "AI.Edit", type: "name", parent: "tools", icon: "pencil" },
+    { id: "bash", label: "AI.Bash", type: "a name, listed on a harness", tone: "accent", icon: "square-terminal" },
     { id: "pi", label: "Pi.Bash", type: "Layer", icon: "layers", specs: [["runs", "in the harness"], ["takes", "command, timeout"]] },
     { id: "oc", label: "OpenCode.Bash", type: "Layer", icon: "layers", specs: [["runs", "in the sandbox"], ["takes", "command, workdir"]] },
     { id: "own", label: "AuditedBash", type: "your Layer", icon: "layers", specs: [["runs", "your handler"], ["takes", "your schema"]] },
   ]}
-  areas={["tools tools tools", "pi oc own"]}
-  phoneAreas={["tools", "pi", "oc", "own"]}
+  areas={["bash bash bash", "pi oc own"]}
+  phoneAreas={["bash", "pi", "oc", "own"]}
   links={[
     { from: "pi", to: "bash", label: "provides" },
-    { from: "oc", to: "bash" },
-    { from: "own", to: "bash" },
+    { from: "oc", to: "bash", label: "provides" },
+    { from: "own", to: "bash", label: "provides" },
   ]}
   caption="AI.Bash is a name. Pi.Bash, OpenCode.Bash and a Layer of your own each provide it, with their own description, parameters and place to run. A harness uses whichever one it is given."
 />

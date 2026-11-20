@@ -14,29 +14,29 @@ Take one small app: a `Session` Durable Object for the user `sam`, with two conv
     { id: "api", label: "Api", type: "Worker", icon: "square-function" },
     {
       id: "object", label: "sam", type: "Session · Durable Object", icon: "box",
-      areas: ["harness storage"], phoneAreas: ["harness", "storage"], colGap: 4,
+      areas: ["storage", "harness"], phoneAreas: ["storage", "harness"],
     },
     {
       id: "harness", label: "harness", type: "Pi Durable", parent: "object", tone: "accent", icon: "refresh-cw",
-      specs: [["models", "Fast"], ["tools", "add · bash · read"]],
+      specs: [["models", "Fast"], ["tools", "add · bash"]],
     },
     {
       id: "storage", label: "SQLite", type: "storage", parent: "object", icon: "database",
-      areas: ["pr", "notes"], phoneAreas: ["pr", "notes"],
+      areas: ["pr notes"], phoneAreas: ["pr notes"],
     },
-    { id: "pr", label: "pr-142", type: "conversation · running", parent: "storage", icon: "messages-square" },
-    { id: "notes", label: "notes", type: "conversation · idle", parent: "storage", tone: "muted", icon: "messages-square" },
+    { id: "pr", label: "pr-142", type: "running", parent: "storage", icon: "messages-square" },
+    { id: "notes", label: "notes", type: "idle", parent: "storage", tone: "muted", icon: "messages-square" },
     { id: "sandbox", label: "pr-142", type: "sandbox · Boat", icon: "box", specs: [["files", "/home/user/repo"]] },
   ]}
-  areas={["api object", "sandbox object"]}
+  areas={["api object", "api sandbox"]}
   phoneAreas={["api", "object", "sandbox"]}
-  colGap={4.5}
+  colGap={5.5}
   links={[
     { from: "api", to: "object", label: "submits" },
     { from: "harness", to: "storage", label: "checkpoints" },
     { from: "harness", to: "sandbox", label: "runs tools in" },
   ]}
-  caption="The Session object for sam owns one harness and its SQLite, which holds both conversations. The harness writes each step there before acting on it. The coding tools of pr-142 run in that conversation's own sandbox on Boat."
+  caption="The Session object for sam owns one harness and its SQLite, which holds both conversations: pr-142 is running and notes is idle. The harness writes each step there before acting on it. The coding tools of pr-142 run in that conversation's own sandbox on Boat."
 />
 
 ## The harness

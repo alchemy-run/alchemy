@@ -18,7 +18,7 @@ OpenCode asks a model provider for every answer. Running it in a sandbox would n
     { from: "harness", to: "bridge", label: "exec: follow requests" },
     { from: "opencode", to: "bridge", label: "chat completion" },
     { from: "bridge", to: "harness", label: "the request", dashed: true },
-    { from: "harness", to: "model", label: "streamText" },
+    { from: "harness", to: "model", label: "asks the model" },
     { from: "model", to: "harness", label: "text and tool calls", dashed: true },
     { from: "harness", to: "bridge", label: "exec: the reply" },
     { from: "bridge", to: "opencode", label: "completion", dashed: true },

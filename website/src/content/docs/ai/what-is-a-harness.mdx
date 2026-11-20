@@ -14,18 +14,18 @@ Take one small app: a bot that fixes failing tests. A `Coder` Durable Object run
     {
       id: "coder", label: "Coder", type: "Durable Object", icon: "box",
       areas: ["harness smart", "harness deploy", "harness coding"],
-      phoneAreas: ["harness harness", "smart deploy", "coding coding"],
+      phoneAreas: ["smart smart", "harness harness", "coding deploy"],
       colGap: 4.5,
     },
     { id: "harness", label: "harness", type: "the loop", parent: "coder", tone: "accent", icon: "refresh-cw" },
     { id: "smart", label: "Smart", type: "model", parent: "coder", icon: "sparkles" },
     { id: "deploy", label: "deploy", type: "your tool", parent: "coder", icon: "wrench" },
     { id: "coding", label: "bash · edit", type: "coding tools", parent: "coder", icon: "square-terminal" },
-    { id: "sandbox", label: "pr-142", type: "sandbox", icon: "box", specs: [["files", "/home/user/repo"]] },
+    { id: "sandbox", label: "pr-142", type: "sandbox", icon: "box", specs: [["files", "~/repo"]] },
     { id: "bucket", label: "Releases", type: "R2 Bucket", icon: "hard-drive" },
   ]}
   areas={["coder bucket", "coder sandbox"]}
-  phoneAreas={["coder coder", "bucket sandbox"]}
+  phoneAreas={["coder coder", "sandbox bucket"]}
   colGap={4}
   links={[
     { from: "harness", to: "smart", label: "asks" },
