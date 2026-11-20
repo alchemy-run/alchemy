@@ -29,6 +29,7 @@ import {
   migrateStorage,
   runFiredAlarm,
   type ActorContextLike,
+  type ActorDatabase,
 } from "../DurableObjectState.ts";
 import type { WebSocket } from "../WebSocket.ts";
 import {
@@ -57,6 +58,8 @@ interface ActivationVars {
 
 type ActivationContext = ActorContextLike & {
   readonly vars: ActivationVars;
+  /** Aborted once the actor starts to stop: it's going to sleep, being destroyed, or its node is shutting down. */
+  readonly abortSignal: AbortSignal;
   /** The request a WebSocket was opened with. */
   readonly request?: Request | undefined;
 };
@@ -65,6 +68,39 @@ type ActivationContext = ActorContextLike & {
 const env = (name: string): string | undefined => process.env[name];
 
 const deadlock = (message: string) => new Response(message, { status: DEADLOCK_STATUS });
+
+/**
+ * A call whose storage RivetKit closed under it as the actor stopped. What
+ * it returned can't be trusted (a Domain object reports the failure as
+ * data), so answer it as a call that never arrived, which the caller sends
+ * again to the next activation.
+ */
+const stopped = () =>
+  new Response("This Durable Object stopped while it served the call.", { status: 503 });
+
+/**
+ * `c` whose storage marks `activation` once it fails after the actor began
+ * to stop, which is RivetKit closing it under the calls still running.
+ */
+const watchStorage = (c: ActivationContext, activation: Activation): ActivationContext => {
+  const watch = <T>(promise: Promise<T>) =>
+    promise.catch((error: unknown) => {
+      if (c.abortSignal.aborted) activation.storageClosed = true;
+      return Promise.reject(error);
+    });
+  const db: ActorDatabase = {
+    execute: (query, ...args) => watch(c.db.execute(query, ...args)),
+    transaction: (callback, options) => watch(c.db.transaction(callback, options)),
+  };
+  // RivetKit's context keeps private fields: its methods run bound to it.
+  return new Proxy(c, {
+    get: (target, key) => {
+      if (key === "db") return db;
+      const value = Reflect.get(target, key, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+};
 
 /** Serve one actor request through the instance's `fetch` (and fetch-RPC). */
 const handleRequest = (
@@ -112,13 +148,15 @@ const handleRequest = (
         return HttpServerResponse.toWeb(response, { context });
       }).pipe(Effect.provideService(Awaiting, awaiting)),
     async (exit) =>
-      Exit.isSuccess(exit)
-        ? (exit.value as Response)
-        : isDeadlock(exit.cause)
-          ? deadlock(
-              "A transaction on this Durable Object waits on this call, which needs its storage.",
-            )
-          : new Response("Internal Server Error", { status: 500 }),
+      activation.storageClosed
+        ? stopped()
+        : Exit.isSuccess(exit)
+          ? (exit.value as Response)
+          : isDeadlock(exit.cause)
+            ? deadlock(
+                "A transaction on this Durable Object waits on this call, which needs its storage.",
+              )
+            : new Response("Internal Server Error", { status: 500 }),
   );
 };
 
@@ -256,7 +294,7 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
             // instance from the bridge.
             services: Context.make(
               DurableObjectState,
-              makeDurableObjectState(c, activation, sockets),
+              makeDurableObjectState(watchStorage(c, activation), activation, sockets),
             ).pipe(
               // Construction runs under the activation's construction
               // section; each call replaces it with what it was sent.

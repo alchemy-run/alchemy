@@ -1,12 +1,14 @@
 /**
- * An instance whose alarm handler records the node running it and hangs
- * on its first run, so a test can kill that node, and finishes on every
- * run after. It runs on a pool of its own, so killing that pool's node
- * leaves every other fixture's calls alone.
+ * An instance on a pool of its own, so a test can kill or stop its node
+ * without touching any other fixture's calls. Its alarm handler records
+ * the node running it and hangs on its first run, and finishes on every
+ * run after; `writeUntilStopped` keeps writing until its storage fails.
  */
 import * as Rivet from "@alchemy.run/rivet";
+import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { Abandoned } from "./cluster.ts";
 
 export default class AbandonedAlarm extends Rivet.DurableObject<AbandonedAlarm>()(
@@ -19,7 +21,21 @@ export default class AbandonedAlarm extends Rivet.DurableObject<AbandonedAlarm>(
         Effect.map(state.storage.get<number>(key), (value) => value ?? 0);
       const bump = (key: string) =>
         Effect.flatMap(read(key), (value) => state.storage.put(key, value + 1));
+      // The container this runs on: Docker sets its hostname to its id.
+      const node = Config.String("HOSTNAME").pipe(Effect.orElseSucceed(() => "unknown"));
       return {
+        node: () => node,
+        // Writes every 100ms until storage fails, then reports the failure as
+        // data, as a Domain object reports a defect.
+        writeUntilStopped: () =>
+          Effect.gen(function* () {
+            for (let i = 0; i < 300; i++) {
+              const exit = yield* Effect.exit(state.storage.put("busy", i));
+              if (Exit.isFailure(exit)) return { failed: Cause.pretty(exit.cause) };
+              yield* Effect.sleep("100 millis");
+            }
+            return { failed: null };
+          }),
         arm: () =>
           Effect.gen(function* () {
             yield* state.storage.setAlarm((yield* Effect.sync(() => Date.now())) + 100);
@@ -36,11 +52,7 @@ export default class AbandonedAlarm extends Rivet.DurableObject<AbandonedAlarm>(
         alarm: () =>
           Effect.gen(function* () {
             yield* bump("runs");
-            // The container running the handler: Docker sets its hostname to its id.
-            const node = yield* Config.String("HOSTNAME").pipe(
-              Effect.orElseSucceed(() => "unknown"),
-            );
-            yield* state.storage.put("node", node);
+            yield* state.storage.put("node", yield* node);
             // The first run waits for its node to be killed.
             if ((yield* read("runs")) === 1) yield* Effect.sleep("10 minutes");
             yield* bump("done");
