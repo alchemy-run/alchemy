@@ -16,6 +16,16 @@ export interface ExecProps extends CommandRunProps {
    * @default true
    */
   memo?: MemoOptions | boolean;
+  /**
+   * Command to run when the resource is deleted, for a final backup or a
+   * deregistration call. Delete runs the `destroyCommand` saved by the last
+   * deploy, with that deploy's `cwd`, `env`, `shell` and `timeout`, before the
+   * resources this `Exec` references are destroyed. Editing it alone does not
+   * re-run `command`. A non-zero exit fails the delete: make the command
+   * succeed when its target is already gone, and deploy a fix before
+   * destroying again.
+   */
+  destroyCommand?: string;
 }
 
 export interface Exec extends Resource<
@@ -81,9 +91,47 @@ export interface Exec extends Resource<
  * });
  * ```
  *
+ * ### Running a Command on Destroy
+ * **Example:** Back Up Before Teardown
+ * ```typescript
+ * yield* Exec("migrate", {
+ *   command: "npm run db:migrate",
+ *   destroyCommand: "npm run db:backup",
+ *   // Referencing the database makes the backup run before it is deleted.
+ *   env: { DATABASE_URL: database.connectionUrl },
+ * });
+ * ```
+ *
  * @resource
  */
 export const Exec = Resource<Exec>("Command.Exec");
+
+const hashInputFiles = (props: ExecProps) =>
+  props.memo === false
+    ? Effect.succeed(undefined)
+    : hashDirectory({ cwd: props.cwd, memo: props.memo === true ? {} : props.memo });
+
+const inputHashMatches = (props: ExecProps, output: Exec["Attributes"]) =>
+  output.hash.input === undefined
+    ? Effect.succeed(false)
+    : Effect.map(hashInputFiles(props), (hash) => hash === output.hash.input);
+
+const withoutDestroyCommand = (props: ExecProps): ExecProps => ({
+  ...props,
+  destroyCommand: undefined,
+});
+
+// Only an update persists props, and `delete` reads `destroyCommand` from them.
+const onlyDestroyCommandChanged = (
+  olds: ExecProps | undefined,
+  news: ExecProps,
+  output: Exec["Attributes"],
+) =>
+  olds === undefined ||
+  olds.destroyCommand === news.destroyCommand ||
+  havePropsChanged(withoutDestroyCommand(olds), withoutDestroyCommand(news))
+    ? Effect.succeed(false)
+    : inputHashMatches(news, output);
 
 export const ExecProvider = () =>
   Provider.effect(
@@ -95,36 +143,21 @@ export const ExecProvider = () =>
         list: () => Effect.succeed([]),
         diff: Effect.fn(function* ({ olds, news, output }) {
           if (!output || !isResolved(news)) return undefined;
-
-          // Always update if memoization is disabled or input hash is not available.
-          if (news.memo === false || !output.hash.input) return { action: "update" };
-
-          // Optimization: short-circuit if props have changed to avoid unnecessary file system operations.
+          if (yield* onlyDestroyCommandChanged(olds, news, output)) {
+            return { action: "update", stables: ["hash"] };
+          }
           if (havePropsChanged(olds, news)) return { action: "update" };
-
-          const newHash = yield* hashDirectory({
-            cwd: news.cwd,
-            memo: news.memo === true ? {} : news.memo,
-          });
-          return {
-            action: newHash === output.hash.input ? "noop" : "update",
-          };
+          return { action: (yield* inputHashMatches(news, output)) ? "noop" : "update" };
         }),
-        reconcile: Effect.fn(function* ({ news, session }) {
+        reconcile: Effect.fn(function* ({ news, olds, output, session }) {
+          if (output && (yield* onlyDestroyCommandChanged(olds, news, output))) return output;
           yield* run(news, session);
-          return {
-            hash: {
-              input:
-                news.memo === false
-                  ? undefined
-                  : yield* hashDirectory({
-                      cwd: news.cwd,
-                      memo: news.memo === true ? {} : news.memo,
-                    }),
-            },
-          };
+          return { hash: { input: yield* hashInputFiles(news) } };
         }),
-        delete: () => Effect.void,
+        delete: Effect.fn(function* ({ olds, session }) {
+          if (olds.destroyCommand === undefined) return;
+          yield* run({ ...olds, command: olds.destroyCommand }, session);
+        }),
       };
     }),
   );
