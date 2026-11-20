@@ -5,6 +5,7 @@ import * as NodeChildProcess from "node:child_process";
  * the other runner (and the one Swarm starts again) makes of it.
  */
 import { expect } from "@alchemy.run/test";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
@@ -22,11 +23,24 @@ export interface CrashOptions {
   readonly stack: { readonly name: string; readonly stage: string };
 }
 
-const docker = (args: ReadonlyArray<string>) => {
-  const result = NodeChildProcess.spawnSync("docker", args, { encoding: "utf8" });
-  if (result.status !== 0) throw new Error(`docker ${args.join(" ")}: ${result.stderr.trim()}`);
-  return result.stdout.trim();
-};
+/** A `docker` command that exited with an error. */
+class DockerCommandFailed extends Data.TaggedError("DockerCommandFailed")<{
+  readonly args: ReadonlyArray<string>;
+  readonly stderr: string;
+}> {}
+
+/** The pool has no runner left to kill, or a route answered with an error. */
+class CrashCaseFailed extends Data.TaggedError("CrashCaseFailed")<{
+  readonly message: string;
+}> {}
+
+const docker = (args: ReadonlyArray<string>) =>
+  Effect.suspend(() => {
+    const result = NodeChildProcess.spawnSync("docker", args, { encoding: "utf8" });
+    return result.status === 0
+      ? Effect.succeed(result.stdout.trim())
+      : Effect.fail(new DockerCommandFailed({ args, stderr: result.stderr.trim() }));
+  });
 
 /** The pool's Swarm service. */
 const poolService = (stack: CrashOptions["stack"]) =>
@@ -44,9 +58,9 @@ const poolService = (stack: CrashOptions["stack"]) =>
   ]);
 
 /** The running containers of the pool: one per runner. */
-const runners = (stack: CrashOptions["stack"]) => {
-  const service = poolService(stack);
-  const ids = docker([
+const runners = Effect.fn(function* (stack: CrashOptions["stack"]) {
+  const service = yield* poolService(stack);
+  const ids = yield* docker([
     "ps",
     "--filter",
     `label=com.docker.swarm.service.name=${service}`,
@@ -54,20 +68,21 @@ const runners = (stack: CrashOptions["stack"]) => {
     "{{.ID}}",
   ]);
   return ids === "" ? [] : ids.split("\n");
-};
+});
 
 /** SIGKILL one runner: no shutdown, no shard handoff. Swarm starts a new task in its place. */
-const killOne = (stack: CrashOptions["stack"]) =>
-  Effect.sync(() => {
-    const [victim] = runners(stack);
-    if (victim === undefined) throw new Error("the pool has no running runner");
-    docker(["kill", "--signal", "KILL", victim]);
-    return victim;
-  });
+const killOne = Effect.fn(function* (stack: CrashOptions["stack"]) {
+  const [victim] = yield* runners(stack);
+  if (victim === undefined) {
+    return yield* new CrashCaseFailed({ message: "the pool has no running runner" });
+  }
+  yield* docker(["kill", "--signal", "KILL", victim]);
+  return victim;
+});
 
 /** Wait until the pool runs two runners again, neither of them `killed`. */
 const bothRunning = (stack: CrashOptions["stack"], killed: string) =>
-  Effect.sync(() => runners(stack)).pipe(
+  runners(stack).pipe(
     Effect.filterOrFail(
       (running) => running.length === 2 && !running.includes(killed),
       () => "not yet" as const,
@@ -75,6 +90,7 @@ const bothRunning = (stack: CrashOptions["stack"], killed: string) =>
     Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 90 }),
   );
 
+/** An id no earlier run used: these cases' counters and holds are never reset. */
 const fresh = (name: string) => `${name}-${crypto.randomUUID().slice(0, 8)}`;
 
 const get = <T>(base: string, path: string) =>
@@ -82,9 +98,9 @@ const get = <T>(base: string, path: string) =>
     const client = yield* HttpClient.HttpClient;
     const response = yield* client.get(`${base}${path}`);
     if (response.status !== 200) {
-      return yield* Effect.fail(
-        new Error(`${path} answered ${response.status}: ${yield* response.text}`),
-      );
+      return yield* new CrashCaseFailed({
+        message: `${path} answered ${response.status}: ${yield* response.text}`,
+      });
     }
     return (yield* response.json) as T;
   }).pipe(Effect.timeout("30 seconds"));
