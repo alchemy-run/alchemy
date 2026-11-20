@@ -61,7 +61,7 @@ describe("RivetGCP.CloudRunPool worker pool", { tags: ["unit"] }, () => {
 });
 
 describe("Rivet node RivetKit release", { tags: ["unit"] }, () => {
-  test("nodes install RivetKit 3.0.0 unless the pool names another release", () => {
+  test("nodes install RivetKit 3.1.1 unless the pool names another release", () => {
     expect(nodeDockerfile("3.0.0")).toBe(
       "FROM oven/bun:1\nWORKDIR /app\nRUN bun add rivetkit@3.0.0\n",
     );
@@ -74,7 +74,7 @@ describe("Rivet node RivetKit release", { tags: ["unit"] }, () => {
         rolloutTimeout: 600,
         rivetkitVersion,
       });
-    expect(script()).toContain("npm install --no-save --no-fund --no-audit rivetkit@3.0.0 ");
+    expect(script()).toContain("npm install --no-save --no-fund --no-audit rivetkit@3.1.1 ");
     expect(script("3.0.7")).toContain("npm install --no-save --no-fund --no-audit rivetkit@3.0.7 ");
   });
 });
