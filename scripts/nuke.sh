@@ -45,6 +45,10 @@ fi
 # EmailAddress test retains and re-adopts it instead of create/destroy churn.
 # Daytona API keys "alchemy": the team's own key, not a
 # test leak. Keys carry no ownership marker, so it is spared by name.
+# AWS.KMS.Key "Alchemy state store key": the state stores' own keys. They
+# encrypt the alchemy-state table and buckets, and every secret in the
+# account's state is sealed under one; scheduling one for deletion makes the
+# state table INACCESSIBLE and its secrets unreadable.
 pnpm -C ./stacks alchemy unsafe nuke --config ./src/nuke.ts  \
   --exclude 'AWS.BackupSearch.SearchJob' \
   --exclude 'Cloudflare.Zone*' \
@@ -82,5 +86,6 @@ pnpm -C ./stacks alchemy unsafe nuke --config ./src/nuke.ts  \
   --filter 'String(resource.logGroupName).startsWith("/aws/vendedlogs/b2bi/")' \
   --filter 'resource.Type === "AWS.Logs.LogGroup" && String(resource.logGroupName).startsWith("/aws-glue/")' \
   --filter 'resource.Type === "GCP.Storage.Bucket" && String(resource.bucketName).startsWith("alchemy-state-")' \
+  --filter 'resource.Type === "AWS.KMS.Key" && String(resource.description).startsWith("Alchemy state store key")' \
   --filter 'resource.Type === "Daytona.ApiKey" && ["alchemy"].includes(resource.name)' \
   "$@"

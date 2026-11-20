@@ -11,6 +11,7 @@ import { defineMessageUnion, type MessageUnion } from "foldkit/message";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Api from "./Api.ts";
 import type * as DomainCommand from "./Command.ts";
+import { sendPayload } from "./internal.ts";
 import * as Key from "./Key.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Query from "./Query.ts";
@@ -84,7 +85,10 @@ type Cases<A extends Api.Any> = QueryCases<A> & {
   readonly [C in Api.CommandsOf<A> as `Succeeded${C["tag"]}`]: {
     commandId: typeof Schema.String;
     reply: Schema.Schema<Reply<C>>;
-    receipt: Schema.Struct<{ stream: typeof Schema.String; version: typeof Schema.Number }>;
+    /** The first stream it committed to: what a read takes as `atLeast`. */
+    receipt: typeof Receipt;
+    /** Every stream it committed to: more than one for a command a decision implements. */
+    commits: Schema.$Array<typeof Receipt>;
   };
 } & {
   readonly [C in Api.CommandsOf<A> as `Failed${C["tag"]}`]: {
@@ -94,7 +98,6 @@ type Cases<A extends Api.Any> = QueryCases<A> & {
 };
 
 type Args<C extends DomainCommand.Any> = {
-  target: Schema.toType<C["target"]>;
   input: Schema.Schema<Input<C>>;
   commandId: typeof Schema.String;
 };
@@ -154,6 +157,7 @@ function commandDefinitions(api: Api.Any): unknown {
       commandId: Schema.String,
       reply: command.reply ?? Schema.Void,
       receipt: Receipt,
+      commits: Schema.Array(Receipt),
     };
     cases[`Failed${command.tag}`] = {
       commandId: Schema.String,
@@ -194,35 +198,30 @@ function commandDefinitions(api: Api.Any): unknown {
     const { payloadSchema } = command.rpc as Rpc.AnyWithProps;
     definitions[command.tag] = Command.define(command.tag, {
       args: {
-        target: Schema.toType(command.target),
         input: Schema.toType((payloadSchema as Schema.Struct<{ input: Schema.Top }>).fields.input),
         commandId: Schema.String,
       },
       messages: [Message],
       execute: Effect.fn(
-        function* ({ target, input, commandId }) {
-          const client = (yield* Effect.service(api.Client)) as Record<
-            string,
-            (
-              target: string,
-              input: unknown,
-              options: Api.CommandOptions,
-            ) => Effect.Effect<{ reply: unknown; stream: string; version: number }, unknown>
-          >;
+        function* (args: { readonly input: unknown; readonly commandId: string }) {
+          const { input, commandId } = args;
+          const client = (yield* Effect.service(api.Client)) as Record<string, unknown>;
           const headersService = yield* Effect.serviceOption(CommandHeaders);
           const headers =
             headersService._tag === "Some"
               ? yield* headersService.value.get(command.tag)
               : undefined;
-          const { reply, stream, version } = yield* client[command.tag](target, input, {
-            commandId,
-            headers,
-          });
+          const { reply, ...receipt } = (yield* sendPayload(
+            client[command.tag],
+            { ...args, input, commandId },
+            { headers },
+          )) as { reply: unknown; stream?: string; version?: number; commits?: unknown };
           return {
             _tag: `Succeeded${command.tag}`,
             commandId,
             reply,
-            receipt: { stream, version },
+            receipt: { stream: receipt.stream, version: receipt.version },
+            commits: receipt.commits,
           };
         },
         (effect, { commandId }) =>

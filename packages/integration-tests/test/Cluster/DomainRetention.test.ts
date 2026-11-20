@@ -1,12 +1,10 @@
 /**
- * Retention of the Domain host on Effect Cluster, against a real Postgres.
- * Runs only when its database URL is set:
- *
- *   DOMAIN_TEST_POSTGRES_URL=postgres://postgres@localhost:5432/domain_test
- *
- * It drops and makes again `alchemy_domain_objects` and the `cluster_*`
- * tables of that database.
+ * Retention of the Domain host on Effect Cluster, against a real Postgres in
+ * Docker that the suite deploys. Each case drops and makes again
+ * `alchemy_domain_objects` and the `cluster_*` tables, so the cases run one
+ * at a time.
  */
+import * as Docker from "@alchemy.run/docker";
 import {
   CLUSTER_TABLE_PREFIX,
   objectStorage,
@@ -14,7 +12,9 @@ import {
   sweep,
   TABLE,
 } from "@alchemy.run/domain/EffectCluster/internal";
-import { describe, expect, it } from "@alchemy.run/test";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import { PgClient } from "@effect/sql-pg";
 import { makeInputGate } from "alchemy/Workers/InputGate";
 import * as Clock from "effect/Clock";
@@ -27,9 +27,16 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { SqlClient } from "effect/sql/SqlClient";
 
-const URL = process.env.DOMAIN_TEST_POSTGRES_URL;
+const testOptions = { providers: Docker.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const stack = Core.scratchStack(testOptions, "ClusterDomainRetention", import.meta.url);
+
+// Distinct from the other Cluster fixtures' host ports (18610, 18620, 18630).
+const PORT = 18640;
+const URL = `postgres://postgres:retention@127.0.0.1:${PORT}/postgres`;
 
 const DAY = 24 * 60 * 60 * 1000;
 /** Times are set from here: Effect Cluster's snowflakes start in 2025. */
@@ -57,7 +64,7 @@ const Database = SqlMessageStorage.layerMigrations({ prefix: CLUSTER_TABLE_PREFI
       ),
     ),
   ),
-  Layer.provideMerge(PgClient.layer({ url: Redacted.make(URL ?? ""), maxConnections: 2 })),
+  Layer.provideMerge(PgClient.layer({ url: Redacted.make(URL), maxConnections: 2 })),
 );
 
 /**
@@ -129,216 +136,243 @@ const messagesLeft = Effect.gen(function* () {
   return { messages: messages.map((row) => row.id), replies: replies.map((row) => row.request) };
 });
 
-describe.skipIf(URL === undefined)(
+describe(
   "Domain on Effect Cluster: retention",
-  { tags: ["local"] },
+  { tags: ["provider:cluster", "provider:cluster:domain", "provider:docker", "local"] },
   () => {
-    it.live(
+    beforeAll(
+      Effect.gen(function* () {
+        if (!process.env.NO_DESTROY) yield* stack.destroy();
+        yield* stack.deploy(
+          Effect.gen(function* () {
+            const image = yield* Docker.RemoteImage("RetentionPostgresImage", {
+              name: "postgres",
+              tag: "17-alpine",
+              alwaysPull: false,
+            });
+            yield* Docker.Container("RetentionPostgres", {
+              image: image.imageRef,
+              environment: { POSTGRES_PASSWORD: "retention" },
+              ports: [{ external: PORT, internal: 5432 }],
+              start: true,
+            });
+          }),
+        );
+        // Postgres takes a few seconds to accept connections after the container starts.
+        yield* Effect.gen(function* () {
+          const sql = yield* SqlClient;
+          yield* sql`SELECT 1`;
+        }).pipe(
+          Effect.provide(PgClient.layer({ url: Redacted.make(URL), maxConnections: 1 })),
+          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 30 }),
+        );
+      }),
+      { timeout: 180_000 },
+    );
+
+    afterAll.skipIf(!!process.env.NO_DESTROY)(stack.destroy(), { timeout: 120_000 });
+
+    test(
       "each kind of dedupe row is deleted once it is older than its window",
-      () =>
-        Effect.gen(function* () {
-          yield* setTime(T0);
-          const sql = yield* SqlClient;
-          const counter = yield* storageOf("Bank/Bank.CounterAggregate/a");
-          yield* counter.put({
-            "event:000000000001": { n: 1 },
-            meta: { version: 1 },
-            "receipt:c-1": { _tag: "Accepted" },
-            "scheduled:pending": "token-1",
-            "scheduled:dropped": "cancelled",
-          });
-          const policy = yield* storageOf("Bank/Bank.WelcomePolicy/a");
-          yield* policy.put("seen:Counter/a:1", true);
-          // Another model's entity on the same database keeps its rows.
-          const other = yield* storageOf("Other/Other.CounterAggregate/a");
-          yield* other.put({ "receipt:c-1": { _tag: "Accepted" }, "seen:x:1": true });
-          const old = yield* message("Bank", T0, 1);
-          const waiting = yield* message("Bank", T0, 2, false);
-          const saga = yield* message("Workflow/Transfer", T0, 3);
-          const others = yield* message("Other", T0, 4);
+      Effect.gen(function* () {
+        yield* setTime(T0);
+        const sql = yield* SqlClient;
+        const counter = yield* storageOf("Bank/Bank.CounterAggregate/a");
+        yield* counter.put({
+          "event:000000000001": { n: 1 },
+          meta: { version: 1 },
+          "receipt:c-1": { _tag: "Accepted" },
+          "decided:d-1": { stream: "Bank.Counter/a", version: 1 },
+          "scheduled:pending": "token-1",
+          "scheduled:dropped": "cancelled",
+        });
+        const policy = yield* storageOf("Bank/Bank.WelcomePolicy/a");
+        yield* policy.put("seen:Counter/a:1", true);
+        // Another model's entity on the same database keeps its rows.
+        const other = yield* storageOf("Other/Other.CounterAggregate/a");
+        yield* other.put({ "receipt:c-1": { _tag: "Accepted" }, "seen:x:1": true });
+        const old = yield* message("Bank", T0, 1);
+        const waiting = yield* message("Bank", T0, 2, false);
+        const saga = yield* message("Workflow/Transfer", T0, 3);
+        const others = yield* message("Other", T0, 4);
 
-          // Nothing has outlived its window yet.
-          yield* setTime(T0 + 7 * DAY);
-          yield* sweep(sql, "Bank");
-          expect(yield* keysOf("Bank/Bank.WelcomePolicy/a")).toEqual(["seen:Counter/a:1"]);
-          expect((yield* messagesLeft).messages).toContain(old);
+        // Nothing has outlived its window yet.
+        yield* setTime(T0 + 7 * DAY);
+        yield* sweep(sql, "Bank");
+        expect(yield* keysOf("Bank/Bank.WelcomePolicy/a")).toEqual(["seen:Counter/a:1"]);
+        expect((yield* messagesLeft).messages).toContain(old);
 
-          // A week on: the delivery marks, the cancelled command and the processed message go.
-          yield* setTime(T0 + 7 * DAY + 1);
-          const fresh = yield* message("Bank", T0 + 7 * DAY, 5);
-          yield* sweep(sql, "Bank");
-          expect(yield* keysOf("Bank/Bank.WelcomePolicy/a")).toEqual([]);
-          expect(yield* keysOf("Bank/Bank.CounterAggregate/a")).toEqual([
-            "event:000000000001",
-            "meta",
-            "receipt:c-1",
-            "scheduled:pending",
-          ]);
-          expect(yield* messagesLeft).toEqual({
-            messages: [waiting, saga, others, fresh].sort(),
-            replies: [saga, others, fresh].sort(),
-          });
-          expect(yield* keysOf("Other/Other.CounterAggregate/a")).toEqual([
-            "receipt:c-1",
-            "seen:x:1",
-          ]);
+        // A week on: the delivery marks, the cancelled command and the processed message go.
+        yield* setTime(T0 + 7 * DAY + 1);
+        const fresh = yield* message("Bank", T0 + 7 * DAY, 5);
+        yield* sweep(sql, "Bank");
+        expect(yield* keysOf("Bank/Bank.WelcomePolicy/a")).toEqual([]);
+        expect(yield* keysOf("Bank/Bank.CounterAggregate/a")).toEqual([
+          "decided:d-1",
+          "event:000000000001",
+          "meta",
+          "receipt:c-1",
+          "scheduled:pending",
+        ]);
+        expect(yield* messagesLeft).toEqual({
+          messages: [waiting, saga, others, fresh].sort(),
+          replies: [saga, others, fresh].sort(),
+        });
+        expect(yield* keysOf("Other/Other.CounterAggregate/a")).toEqual([
+          "receipt:c-1",
+          "seen:x:1",
+        ]);
 
-          // Thirty days on: the receipt goes too; events and state stay.
-          yield* setTime(T0 + 30 * DAY + 1);
-          yield* sweep(sql, "Bank");
-          expect(yield* keysOf("Bank/Bank.CounterAggregate/a")).toEqual([
-            "event:000000000001",
-            "meta",
-            "scheduled:pending",
-          ]);
-        }).pipe(onDatabase),
+        // Thirty days on: the receipts go too; events and state stay.
+        yield* setTime(T0 + 30 * DAY + 1);
+        yield* sweep(sql, "Bank");
+        expect(yield* keysOf("Bank/Bank.CounterAggregate/a")).toEqual([
+          "event:000000000001",
+          "meta",
+          "scheduled:pending",
+        ]);
+      }).pipe(onDatabase),
       { timeout: 60_000 },
     );
 
-    it.live(
+    test(
       "a row written again starts its window again",
-      () =>
-        Effect.gen(function* () {
-          yield* setTime(T0);
-          const sql = yield* SqlClient;
-          const timer = yield* storageOf("Bank/Bank.HoldAggregate/h");
-          yield* timer.put("scheduled:expire", "token-1");
-          // Cancelled six days later: its week starts then.
-          yield* setTime(T0 + 6 * DAY);
-          yield* timer.put("scheduled:expire", "cancelled");
-          yield* setTime(T0 + 8 * DAY);
-          yield* sweep(sql, "Bank");
-          expect(yield* keysOf("Bank/Bank.HoldAggregate/h")).toEqual(["scheduled:expire"]);
-          yield* setTime(T0 + 13 * DAY + 1);
-          yield* sweep(sql, "Bank");
-          expect(yield* keysOf("Bank/Bank.HoldAggregate/h")).toEqual([]);
-        }).pipe(onDatabase),
+      Effect.gen(function* () {
+        yield* setTime(T0);
+        const sql = yield* SqlClient;
+        const timer = yield* storageOf("Bank/Bank.HoldAggregate/h");
+        yield* timer.put("scheduled:expire", "token-1");
+        // Cancelled six days later: its week starts then.
+        yield* setTime(T0 + 6 * DAY);
+        yield* timer.put("scheduled:expire", "cancelled");
+        yield* setTime(T0 + 8 * DAY);
+        yield* sweep(sql, "Bank");
+        expect(yield* keysOf("Bank/Bank.HoldAggregate/h")).toEqual(["scheduled:expire"]);
+        yield* setTime(T0 + 13 * DAY + 1);
+        yield* sweep(sql, "Bank");
+        expect(yield* keysOf("Bank/Bank.HoldAggregate/h")).toEqual([]);
+      }).pipe(onDatabase),
       { timeout: 60_000 },
     );
 
-    it.live(
+    test(
       "a cancelled command armed again while the sweep runs keeps its token",
-      () =>
-        Effect.gen(function* () {
-          yield* setTime(T0);
-          const sql = yield* SqlClient;
-          const timer = yield* storageOf("Bank/Bank.HoldAggregate/h");
-          yield* timer.put("scheduled:expire", "cancelled");
-          yield* setTime(T0 + 8 * DAY);
-          // `schedule` arms the name again: its row is locked until the commit.
-          const armed = yield* Deferred.make<void>();
-          const arming = yield* timer
-            .transaction(
-              Effect.gen(function* () {
-                yield* timer.put("scheduled:expire", "token-2");
-                yield* Deferred.succeed(armed, undefined);
-                yield* Effect.sleep("500 millis");
-              }),
-            )
-            .pipe(Effect.forkDetach);
-          yield* Deferred.await(armed);
-          // The sweep reads the row as cancelled and a week old, then waits for it.
-          yield* sweep(sql, "Bank");
-          yield* Fiber.join(arming);
-          expect(yield* timer.get("scheduled:expire")).toBe("token-2");
-        }).pipe(onDatabase),
+      Effect.gen(function* () {
+        yield* setTime(T0);
+        const sql = yield* SqlClient;
+        const timer = yield* storageOf("Bank/Bank.HoldAggregate/h");
+        yield* timer.put("scheduled:expire", "cancelled");
+        yield* setTime(T0 + 8 * DAY);
+        // `schedule` arms the name again: its row is locked until the commit.
+        const armed = yield* Deferred.make<void>();
+        const arming = yield* timer
+          .transaction(
+            Effect.gen(function* () {
+              yield* timer.put("scheduled:expire", "token-2");
+              yield* Deferred.succeed(armed, undefined);
+              yield* Effect.sleep("500 millis");
+            }),
+          )
+          .pipe(Effect.forkDetach);
+        yield* Deferred.await(armed);
+        // The sweep reads the row as cancelled and a week old, then waits for it.
+        yield* sweep(sql, "Bank");
+        yield* Fiber.join(arming);
+        expect(yield* timer.get("scheduled:expire")).toBe("token-2");
+      }).pipe(onDatabase),
       { timeout: 60_000 },
     );
 
-    it.live(
+    test(
       "a runner that starts on a migrated table does not lock it",
-      () =>
-        Effect.gen(function* () {
-          const sql = yield* SqlClient;
-          // A read in an open transaction: `ALTER TABLE` would wait for it.
-          const reading = yield* Deferred.make<void>();
-          const reader = yield* sql
-            .withTransaction(
-              Effect.gen(function* () {
-                yield* sql`SELECT count(*) FROM ${sql(TABLE)}`;
-                yield* Deferred.succeed(reading, undefined);
-                yield* Effect.sleep("2 seconds");
-              }),
-            )
-            .pipe(Effect.forkDetach);
-          yield* Deferred.await(reading);
-          const migrated = yield* migrate(sql).pipe(Effect.timeoutOption("1 second"));
-          expect(Option.isSome(migrated)).toBe(true);
-          yield* Fiber.join(reader);
-        }).pipe(onDatabase),
+      Effect.gen(function* () {
+        const sql = yield* SqlClient;
+        // A read in an open transaction: `ALTER TABLE` would wait for it.
+        const reading = yield* Deferred.make<void>();
+        const reader = yield* sql
+          .withTransaction(
+            Effect.gen(function* () {
+              yield* sql`SELECT count(*) FROM ${sql(TABLE)}`;
+              yield* Deferred.succeed(reading, undefined);
+              yield* Effect.sleep("2 seconds");
+            }),
+          )
+          .pipe(Effect.forkDetach);
+        yield* Deferred.await(reading);
+        const migrated = yield* migrate(sql).pipe(Effect.timeoutOption("1 second"));
+        expect(Option.isSome(migrated)).toBe(true);
+        yield* Fiber.join(reader);
+      }).pipe(onDatabase),
       { timeout: 60_000 },
     );
 
-    it.live(
+    test(
       "rows from before the host kept times age from the first sweep",
-      () =>
-        Effect.gen(function* () {
-          yield* setTime(T0);
-          const sql = yield* SqlClient;
-          // The table as an earlier host made it, with no times.
-          yield* sql`DROP TABLE ${sql(TABLE)}`;
-          yield* sql`CREATE TABLE ${sql(TABLE)} (
+      Effect.gen(function* () {
+        yield* setTime(T0);
+        const sql = yield* SqlClient;
+        // The table as an earlier host made it, with no times.
+        yield* sql`DROP TABLE ${sql(TABLE)}`;
+        yield* sql`CREATE TABLE ${sql(TABLE)} (
             object TEXT COLLATE "C" NOT NULL,
             key TEXT COLLATE "C" NOT NULL,
             value TEXT NOT NULL,
             PRIMARY KEY (object, key)
           )`;
-          yield* sql`INSERT INTO ${sql(TABLE)} (object, key, value) VALUES ('Bank/Bank.WelcomePolicy/a', 'seen:Counter/a:1', 'true')`;
-          // A newer runner starts on it, twice at once.
-          yield* Effect.all([migrate(sql), migrate(sql)], { concurrency: 2 });
-          yield* setTime(T0 + 100 * DAY);
-          yield* sweep(sql, "Bank");
-          expect(yield* keysOf("Bank/Bank.WelcomePolicy/a")).toEqual(["seen:Counter/a:1"]);
-          yield* setTime(T0 + 107 * DAY + 1);
-          yield* sweep(sql, "Bank");
-          expect(yield* keysOf("Bank/Bank.WelcomePolicy/a")).toEqual([]);
-        }).pipe(onDatabase),
+        yield* sql`INSERT INTO ${sql(TABLE)} (object, key, value) VALUES ('Bank/Bank.WelcomePolicy/a', 'seen:Counter/a:1', 'true')`;
+        // A newer runner starts on it, twice at once.
+        yield* Effect.all([migrate(sql), migrate(sql)], { concurrency: 2 });
+        yield* setTime(T0 + 100 * DAY);
+        yield* sweep(sql, "Bank");
+        expect(yield* keysOf("Bank/Bank.WelcomePolicy/a")).toEqual(["seen:Counter/a:1"]);
+        yield* setTime(T0 + 107 * DAY + 1);
+        yield* sweep(sql, "Bank");
+        expect(yield* keysOf("Bank/Bank.WelcomePolicy/a")).toEqual([]);
+      }).pipe(onDatabase),
       { timeout: 60_000 },
     );
 
-    it.live(
+    test(
       "a window of forever keeps that kind of row",
-      () =>
-        Effect.gen(function* () {
-          yield* setTime(T0);
-          const sql = yield* SqlClient;
-          const counter = yield* storageOf("Bank/Bank.CounterAggregate/a");
-          yield* counter.put({
-            "receipt:c-1": { _tag: "Accepted" },
-            "scheduled:dropped": "cancelled",
-          });
-          const old = yield* message("Bank", T0, 1);
-          yield* setTime(T0 + 365 * DAY);
-          yield* sweep(sql, "Bank", {
-            receipts: "forever",
-            cancelled: "forever",
-            messages: "forever",
-          });
-          expect(yield* keysOf("Bank/Bank.CounterAggregate/a")).toEqual([
-            "receipt:c-1",
-            "scheduled:dropped",
-          ]);
-          expect((yield* messagesLeft).messages).toEqual([old]);
-        }).pipe(onDatabase),
+      Effect.gen(function* () {
+        yield* setTime(T0);
+        const sql = yield* SqlClient;
+        const counter = yield* storageOf("Bank/Bank.CounterAggregate/a");
+        yield* counter.put({
+          "receipt:c-1": { _tag: "Accepted" },
+          "scheduled:dropped": "cancelled",
+        });
+        const old = yield* message("Bank", T0, 1);
+        yield* setTime(T0 + 365 * DAY);
+        yield* sweep(sql, "Bank", {
+          receipts: "forever",
+          cancelled: "forever",
+          messages: "forever",
+        });
+        expect(yield* keysOf("Bank/Bank.CounterAggregate/a")).toEqual([
+          "receipt:c-1",
+          "scheduled:dropped",
+        ]);
+        expect((yield* messagesLeft).messages).toEqual([old]);
+      }).pipe(onDatabase),
       { timeout: 60_000 },
     );
 
-    it.live(
+    test(
       "many expired rows go in several batches",
-      () =>
-        Effect.gen(function* () {
-          yield* setTime(T0);
-          const sql = yield* SqlClient;
-          const policy = yield* storageOf("Bank/Bank.WelcomePolicy/a");
-          const marks: Record<string, boolean> = {};
-          for (let i = 0; i < 2_500; i++) marks[`seen:Counter/a:${i}`] = true;
-          yield* policy.put(marks);
-          for (let i = 0; i < 1_200; i++) yield* message("Bank", T0, i);
-          yield* setTime(T0 + 8 * DAY);
-          yield* sweep(sql, "Bank");
-          expect(yield* keysOf("Bank/Bank.WelcomePolicy/a")).toEqual([]);
-          expect(yield* messagesLeft).toEqual({ messages: [], replies: [] });
-        }).pipe(onDatabase),
+      Effect.gen(function* () {
+        yield* setTime(T0);
+        const sql = yield* SqlClient;
+        const policy = yield* storageOf("Bank/Bank.WelcomePolicy/a");
+        const marks: Record<string, boolean> = {};
+        for (let i = 0; i < 2_500; i++) marks[`seen:Counter/a:${i}`] = true;
+        yield* policy.put(marks);
+        for (let i = 0; i < 1_200; i++) yield* message("Bank", T0, i);
+        yield* setTime(T0 + 8 * DAY);
+        yield* sweep(sql, "Bank");
+        expect(yield* keysOf("Bank/Bank.WelcomePolicy/a")).toEqual([]);
+        expect(yield* messagesLeft).toEqual({ messages: [], replies: [] });
+      }).pipe(onDatabase),
       { timeout: 120_000 },
     );
   },

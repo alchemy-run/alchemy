@@ -71,7 +71,7 @@ export const objectStorage = (
         typeof keyOrKeys === "string" ? Effect.map(deleted, (n) => n > 0) : deleted,
       );
     }) as ObjectStorage["delete"],
-    list: <T>({ prefix, start, startAfter, end, limit }: ListOptions = {}) =>
+    list: <T>({ prefix, start, startAfter, end, limit, reverse }: ListOptions = {}) =>
       run(
         sql<{ key: string; value: string }>`SELECT key, value FROM ${sql(TABLE)}
           WHERE object = ${object}
@@ -79,7 +79,7 @@ export const objectStorage = (
           ${start !== undefined ? sql`AND key >= ${start}` : sql``}
           ${startAfter !== undefined ? sql`AND key > ${startAfter}` : sql``}
           ${end !== undefined ? sql`AND key < ${end}` : sql``}
-          ORDER BY key
+          ${reverse ? sql`ORDER BY key DESC` : sql`ORDER BY key`}
           ${limit !== undefined ? sql`LIMIT ${Math.max(0, limit | 0)}` : sql``}`.pipe(
           Effect.map((rows) => new Map(rows.map((row) => [row.key, decode<T>(row.value)]))),
         ),
@@ -134,8 +134,8 @@ const migrateLocked = (sql: SqlClient) =>
  */
 export interface Retention {
   /**
-   * Receipts of accepted commands. A command sent again after this time is
-   * decided again.
+   * Receipts of accepted commands and committed decisions. A command or
+   * decision sent again after this time is decided again.
    * @default "30 days"
    */
   readonly receipts?: Duration.Input | "forever";
@@ -197,6 +197,8 @@ export const sweep = (sql: SqlClient, entity: string, retention: Retention = {})
     const table = sql(TABLE);
     const kinds = [
       { prefix: "receipt:", window: window.receipts, only: sql`` },
+      // A decision's receipt, on the instance that was its primary.
+      { prefix: "decided:", window: window.receipts, only: sql`` },
       { prefix: "seen:", window: window.deliveries, only: sql`` },
       { prefix: "scheduled:", window: window.cancelled, only: sql`AND value = ${CANCELLED}` },
     ];

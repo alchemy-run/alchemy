@@ -131,6 +131,9 @@ const historyNow = (url: string) =>
     }),
   );
 
+/** How many new accounts open just before the deploy that adds the view. */
+const OPENED = 120;
+
 // Locally a redeploy restarts every object at once; live, an object keeps its old
 // code until it has been idle, and the catch-up must wait it out.
 for (const dev of [true, false]) {
@@ -233,6 +236,66 @@ for (const dev of [true, false]) {
               "a-2:6",
               "a-4:4",
             ]);
+
+            yield* stack.destroy();
+          }),
+        { timeout: 600_000 },
+      );
+
+      test.provider(
+        `${dev ? "local" : "live"}: accounts opened just before and during the deploy that adds a view all reach it`,
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+
+            const { worker: v1 } = yield* stack.deploy(
+              Effect.gen(function* () {
+                return { worker: yield* WorkerV1 };
+              }),
+            );
+            const url = v1.url!.replace(/\/+$/, "");
+            yield* serving(url, "v1");
+
+            // A new account's first commit answers before the account is listed in the
+            // directory: a stored job lists it afterwards. Open many at once, so their
+            // listings queue up on the new directory nodes and are still running when
+            // the redeploy restarts the objects (locally every object restarts at once).
+            const before = Array.from({ length: OPENED }, (_, i) => `o-${i}`);
+            yield* Effect.forEach(before, (account, i) => deposit(url, account, i + 1), {
+              concurrency: 32,
+              discard: true,
+            });
+            // More open while the deploy's backfill runs: committed after its run may have
+            // read the directory, and listed later still.
+            const during = Array.from({ length: OPENED / 4 }, (_, i) => `d-${i}`);
+            const writes = yield* Effect.forkChild(
+              Effect.gen(function* () {
+                yield* serving(url, "v2");
+                yield* Effect.forEach(during, (account, i) => deposit(url, account, i + 1), {
+                  concurrency: 8,
+                  discard: true,
+                });
+              }),
+            );
+            yield* stack.deploy(
+              Effect.gen(function* () {
+                return { worker: yield* WorkerV2 };
+              }),
+            );
+            yield* Fiber.join(writes);
+            yield* serving(url, "v2");
+
+            // Every account reached the view, with no further command to any of them.
+            expect(yield* historyComplete(url)).toBe(true);
+            yield* Effect.forEach(
+              [...before, ...during],
+              (account) =>
+                Effect.gen(function* () {
+                  const amount = Number(account.slice(2)) + 1;
+                  expect(yield* deposits(url, account, [amount])).toEqual([amount]);
+                }),
+              { concurrency: 16, discard: true },
+            );
 
             yield* stack.destroy();
           }),

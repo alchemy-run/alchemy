@@ -13,9 +13,8 @@ import * as Tracer from "effect/Tracer";
 import {
   CallbackError,
   type Callback,
-  type CallbackOptions,
   type CallbackScheduleOptions,
-  type CallbackFactory,
+  type CallbackStatus,
 } from "../../Callback.ts";
 import { RuntimeContext } from "../../RuntimeContext.ts";
 import { ensureAlarmTables, reconcileDurableObjectAlarm } from "./DurableObjectAlarmStorage.ts";
@@ -36,11 +35,48 @@ interface RetryPolicy {
   readonly maxAttempts: number;
   readonly parkedDelay: number;
 }
+/**
+ * How a job whose handler dies is redelivered: a recovery wake persisted
+ * before each attempt survives crashes, from 2 seconds doubling (like
+ * workerd's own alarm retries), and every hour once the doubling reaches one.
+ * A job is never dropped.
+ */
 const defaultRetryPolicy: RetryPolicy = {
-  delay: 30_000,
-  maxAttempts: 8,
+  delay: 2_000,
+  maxAttempts: 12,
   parkedDelay: 3_600_000,
 };
+
+/**
+ * @internal Override the redelivery policy, for tests of the scheduler
+ * itself. Not part of `Alchemy.makeCallback`.
+ */
+export interface AlarmRetryPolicy {
+  readonly delay?: Duration.Input;
+  readonly maxAttempts?: number;
+  readonly parkedDelay?: Duration.Input;
+}
+
+/** @internal A job's status, with the scheduler's redelivery state. */
+export interface AlarmCallbackStatus extends CallbackStatus {
+  readonly retryAt: number | undefined;
+  readonly attempts: number;
+  readonly parked: boolean;
+}
+
+/** @internal An alarm callback, with the scheduler's redelivery state. */
+export interface AlarmCallback<Payload> extends Callback<Payload> {
+  readonly getStatus: (
+    id: string,
+  ) => Effect.Effect<AlarmCallbackStatus | undefined, CallbackError, RuntimeContext>;
+}
+
+/** @internal Register an alarm callback, optionally with its own redelivery policy. */
+export type AlarmCallbackFactory = <Payload, E, R>(
+  name: string,
+  handler: (payload: Payload) => Effect.Effect<unknown, E, R>,
+  retry?: AlarmRetryPolicy,
+) => Effect.Effect<AlarmCallback<Payload>, never, Exclude<R, Scope.Scope>>;
 
 const recoveryDelay = (policy: RetryPolicy, attempts: number, parked: boolean) =>
   parked ? policy.parkedDelay : Math.min(policy.parkedDelay, policy.delay * 2 ** (attempts - 1));
@@ -149,12 +185,11 @@ export const makeDurableObjectCallbackFactory = (
   raw: cf.DurableObjectState,
   stateTag: Context.Key<any, any>,
   random: SecureRandom.SecureRandom["Service"],
-): CallbackFactory => {
+): AlarmCallbackFactory => {
   // `unknown` skips comparing the native state's two declarations, which
   // hangs (see `NativeDurableObjectState`).
   const state = fromDurableObjectState(raw as unknown as NativeDurableObjectState);
-  return (name, handler, options) =>
-    makeAlarmCallback(state, stateTag, random, name, handler, options);
+  return (name, handler, retry) => makeAlarmCallback(state, stateTag, random, name, handler, retry);
 };
 
 const makeAlarmCallback = <Payload, E, R>(
@@ -163,8 +198,8 @@ const makeAlarmCallback = <Payload, E, R>(
   random: SecureRandom.SecureRandom["Service"],
   name: string,
   handler: (payload: Payload) => Effect.Effect<unknown, E, R>,
-  options?: CallbackOptions,
-): Effect.Effect<Callback<Payload>, never, RuntimeContext | Exclude<R, Scope.Scope>> =>
+  options?: AlarmRetryPolicy,
+): Effect.Effect<AlarmCallback<Payload>, never, Exclude<R, Scope.Scope>> =>
   Effect.gen(function* () {
     const context = (yield* Effect.context<Exclude<R, Scope.Scope>>()).pipe(
       Context.omit(
@@ -191,13 +226,11 @@ const makeAlarmCallback = <Payload, E, R>(
     }
     const retry = yield* Effect.try({
       try: () => {
-        const delay = Math.ceil(
-          Duration.toMillis(options?.retry?.delay ?? defaultRetryPolicy.delay),
-        );
-        const maxAttempts = options?.retry?.maxAttempts ?? defaultRetryPolicy.maxAttempts;
+        const delay = Math.ceil(Duration.toMillis(options?.delay ?? defaultRetryPolicy.delay));
+        const maxAttempts = options?.maxAttempts ?? defaultRetryPolicy.maxAttempts;
         const parkedDelay = Math.ceil(
           Duration.toMillis(
-            options?.retry?.parkedDelay ?? Math.max(defaultRetryPolicy.parkedDelay, delay),
+            options?.parkedDelay ?? Math.max(defaultRetryPolicy.parkedDelay, delay),
           ),
         );
         if (

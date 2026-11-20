@@ -47,6 +47,7 @@ const V1_PREFIXES = ["/docs/", "/guides/", "/providers/", "/concepts/"];
  * dropped.
  */
 const REDIRECTS: Record<string, string> = {
+  "/docker/build-and-push": "/docker/build-images",
   "/modal/concepts": "/modal/workspaces-and-tokens",
   "/modal/security/network-and-secrets": "/modal/networking/network",
   "/tutorial/part-1": "/cloudflare/tutorial/part-1",

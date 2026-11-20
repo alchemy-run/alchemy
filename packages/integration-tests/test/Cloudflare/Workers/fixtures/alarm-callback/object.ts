@@ -1,14 +1,19 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import { makeDurableObjectCallbackFactory } from "@alchemy.run/cloudflare/Workers/AlarmCallback";
+import type * as cf from "@cloudflare/workers-types";
 import * as Alchemy from "alchemy";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import type { AlarmCallback, AlarmCallbackStatus } from "alchemy/Workers/Workerd/AlarmCallback";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Scheduler from "effect/Scheduler";
@@ -51,7 +56,7 @@ export interface Snapshot {
 }
 
 export interface BoundedSnapshot {
-  status: Alchemy.CallbackStatus | null;
+  status: AlarmCallbackStatus | null;
   snapshot: Snapshot;
 }
 
@@ -126,6 +131,15 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
     const storage = state.storage;
 
     return Effect.gen(function* () {
+      // The scheduler's own factory: these callbacks override its redelivery
+      // policy and read its retry state, which Alchemy.makeCallback hides.
+      const random = yield* Effect.serviceOption(SecureRandom.SecureRandom).pipe(
+        Effect.map(Option.getOrThrow),
+      );
+      const register = makeDurableObjectCallbackFactory(
+        state.raw as unknown as cf.DurableObjectState,
+        random,
+      );
       const boots = ((yield* storage.get<number>("boots")) ?? 0) + 1;
       yield* storage.put("boots", boots);
       yield* storage.sql.exec(
@@ -161,12 +175,10 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
         yield* record("archive", payload.value);
       });
 
-      const onArchive = yield* Alchemy.makeCallback("archive", archive, {
-        retry: { delay: "1 second" },
-      });
+      const onArchive = yield* register("archive", archive, { delay: "1 second" });
       const onTransactionalRegistration = yield* storage
         .transaction(
-          Alchemy.makeCallback(
+          register(
             "transactional-init",
             Effect.fn(function* (payload: { value: string }) {
               yield* storage.put("application", payload.value);
@@ -175,13 +187,13 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
           ),
         )
         .pipe(Effect.orDie);
-      const onSecondary = yield* Alchemy.makeCallback(
+      const onSecondary = yield* register(
         "secondary",
         Effect.fn(function* (payload: { value: string }) {
           yield* record("secondary", payload.value);
         }),
       );
-      const onRetry = yield* Alchemy.makeCallback(
+      const onRetry = yield* register(
         "retry",
         Effect.fn(function* (payload: { value: string }) {
           const attempts = (yield* storage.get<Attempt[]>("attempts")) ?? [];
@@ -198,23 +210,21 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
           }
           yield* record("retry", payload.value);
         }),
-        { retry: { delay: "1 second" } },
+        { delay: "1 second" },
       );
-      const boundedRetry = {
-        retry: { delay: "1 second", maxAttempts: 2 },
-      } as const;
-      const onBoundedFailure = yield* Alchemy.makeCallback(
+      const boundedRetry = { delay: "1 second", maxAttempts: 2 } as const;
+      const onBoundedFailure = yield* register(
         "bounded-failure",
         (_payload: null) => Effect.fail(new RetryArchive()),
         boundedRetry,
       );
-      const onBoundedLoop: Alchemy.Callback<null> = yield* Alchemy.makeCallback(
+      const onBoundedLoop: AlarmCallback<null> = yield* register(
         "bounded-loop",
         (_payload: null): Effect.Effect<void, Alchemy.CallbackError, RuntimeContext> =>
           onBoundedLoop.schedule("bounded", { after: 0, payload: null }),
         boundedRetry,
       );
-      const onCrash = yield* Alchemy.makeCallback(
+      const onCrash = yield* register(
         "crash",
         Effect.fn(function* (payload: { value: string; retryAlarm?: boolean }) {
           const attempts = (yield* storage.get<Attempt[]>("attempts")) ?? [];
@@ -235,17 +245,17 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
           }
           yield* record("crash", payload.value);
         }),
-        { retry: { delay: "1 second" } },
+        { delay: "1 second" },
       );
       const onOptional =
         (yield* storage.get<boolean>("optionalEnabled")) === false
           ? undefined
-          : yield* Alchemy.makeCallback(
+          : yield* register(
               "optional",
               Effect.fn(function* (payload: { value: string }) {
                 yield* record("optional", payload.value);
               }),
-              { retry: { delay: "1 second" } },
+              { delay: "1 second" },
             );
 
       const snapshot = Effect.fn(function* () {
@@ -468,7 +478,10 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
         }),
         registerLate: Effect.fn(function* () {
           const exit = yield* Effect.exit(
-            Alchemy.makeCallback("late", (_payload: { value: string }) => Effect.void),
+            Alchemy.makeCallback("late", (_payload: { value: string }) => Effect.void).pipe(
+              Effect.provide(Cloudflare.DurableObjectCallbacks),
+              Effect.provideService(Cloudflare.DurableObjectState, state),
+            ),
           );
           const defect = Exit.isFailure(exit)
             ? Result.getOrUndefined(Cause.findDefect(exit.cause))
@@ -897,6 +910,6 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
           });
         }),
       };
-    });
+    }).pipe(Effect.provide(Cloudflare.DurableObjectCallbacks));
   }),
 ) {}

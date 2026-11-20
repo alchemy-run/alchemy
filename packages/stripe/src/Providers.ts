@@ -1,5 +1,7 @@
+import { Retry as StripeRetry } from "@distilled.cloud/stripe/Retry";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as Provider from "alchemy/Provider";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -13,6 +15,7 @@ import { Alert, AlertProvider } from "./Alert.ts";
 import { ApplePayDomain, ApplePayDomainProvider } from "./ApplePayDomain.ts";
 import { AppsSecret, AppsSecretProvider } from "./AppsSecret.ts";
 import { StripeAuth } from "./AuthProvider.ts";
+import { BalanceSettings, BalanceSettingsProvider } from "./BalanceSettings.ts";
 import { BillingMeter, BillingMeterProvider } from "./BillingMeter.ts";
 import {
   BillingPortalConfiguration,
@@ -33,6 +36,7 @@ import { CreditGrant, CreditGrantProvider } from "./CreditGrant.ts";
 import { Customer, CustomerProvider } from "./Customer.ts";
 import { CustomerTaxId, CustomerTaxIdProvider } from "./CustomerTaxId.ts";
 import { EntitlementsFeature, EntitlementsFeatureProvider } from "./EntitlementsFeature.ts";
+import { EventDestination, EventDestinationProvider } from "./EventDestination.ts";
 import { FileLink, FileLinkProvider } from "./FileLink.ts";
 import { IssuingCard, IssuingCardProvider } from "./IssuingCard.ts";
 import { IssuingCardholder, IssuingCardholderProvider } from "./IssuingCardholder.ts";
@@ -90,12 +94,14 @@ import { RetrieveTerminalLocationHttp } from "./RetrieveTerminalLocationHttp.ts"
 import { RetrieveTerminalReaderHttp } from "./RetrieveTerminalReaderHttp.ts";
 import { RetrieveWebhookEndpointHttp } from "./RetrieveWebhookEndpointHttp.ts";
 import { ShippingRate, ShippingRateProvider } from "./ShippingRate.ts";
+import { TaxId, TaxIdProvider } from "./TaxId.ts";
 import { TaxRate, TaxRateProvider } from "./TaxRate.ts";
 import { TaxRegistration, TaxRegistrationProvider } from "./TaxRegistration.ts";
 import { TaxSettings, TaxSettingsProvider } from "./TaxSettings.ts";
 import { TerminalConfiguration, TerminalConfigurationProvider } from "./TerminalConfiguration.ts";
 import { TerminalLocation, TerminalLocationProvider } from "./TerminalLocation.ts";
 import { TerminalReader, TerminalReaderProvider } from "./TerminalReader.ts";
+import { TrialOffer, TrialOfferProvider } from "./TrialOffer.ts";
 import { UpdateAccountHttp } from "./UpdateAccountHttp.ts";
 import { UpdateCreditGrantHttp } from "./UpdateCreditGrantHttp.ts";
 import { UpdateCustomerHttp } from "./UpdateCustomerHttp.ts";
@@ -146,6 +152,7 @@ export const providers = () =>
       Alert,
       ApplePayDomain,
       AppsSecret,
+      BalanceSettings,
       BillingMeter,
       BillingPortalConfiguration,
       Coupon,
@@ -153,6 +160,7 @@ export const providers = () =>
       Customer,
       CustomerTaxId,
       EntitlementsFeature,
+      EventDestination,
       FileLink,
       IssuingCard,
       IssuingCardholder,
@@ -169,12 +177,14 @@ export const providers = () =>
       RadarValueListItem,
       RestrictedApiKey,
       ShippingRate,
+      TaxId,
       TaxRate,
       TaxRegistration,
       TaxSettings,
       TerminalConfiguration,
       TerminalLocation,
       TerminalReader,
+      TrialOffer,
       WebhookEndpoint,
     ]),
   ).pipe(
@@ -186,6 +196,7 @@ export const providers = () =>
         AlertProvider(),
         ApplePayDomainProvider(),
         AppsSecretProvider(),
+        BalanceSettingsProvider(),
         BillingMeterProvider(),
         BillingPortalConfigurationProvider(),
         CouponProvider(),
@@ -193,6 +204,7 @@ export const providers = () =>
         CustomerProvider(),
         CustomerTaxIdProvider(),
         EntitlementsFeatureProvider(),
+        EventDestinationProvider(),
         FileLinkProvider(),
         IssuingCardProvider(),
         IssuingCardholderProvider(),
@@ -209,12 +221,14 @@ export const providers = () =>
         RadarValueListItemProvider(),
         RestrictedApiKeyProvider(),
         ShippingRateProvider(),
+        TaxIdProvider(),
         TaxRateProvider(),
         TaxRegistrationProvider(),
         TaxSettingsProvider(),
         TerminalConfigurationProvider(),
         TerminalLocationProvider(),
         TerminalReaderProvider(),
+        TrialOfferProvider(),
         WebhookEndpointProvider(),
       ),
     ),
@@ -274,6 +288,7 @@ export const providers = () =>
         UpdateTerminalReaderHttp,
       ),
     ),
+    Layer.provideMerge(Layer.succeed(StripeRetry, DeployRetry.policy)),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(StripeAuth),
     Layer.provideMerge(ProfileStoreLive),

@@ -2,6 +2,7 @@ import type { BundleConfig } from "alchemy/Bundle/Bundle";
 import type { Input } from "alchemy/Input";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import type { LookupMethod, Resource } from "alchemy/Resource";
+import { yieldDeclared } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import type { BranchScope } from "./BranchScope.ts";
@@ -203,13 +204,10 @@ export const Function: NeonFunctionResource = Platform<Function>("Neon.Function"
   transformProps: (_id, props) =>
     Effect.gen(function* () {
       if (globalThis.__ALCHEMY_RUNTIME__) return props;
-      const yieldRef = (value: unknown) =>
-        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- props refs are declaration Effects resolved by the engine
-        Effect.isEffect(value) ? (value as Effect.Effect<unknown>) : Effect.succeed(value);
       return {
         ...props,
-        ...(props.branch !== undefined ? { branch: yield* yieldRef(props.branch) } : {}),
-        ...(props.project !== undefined ? { project: yield* yieldRef(props.project) } : {}),
+        ...(props.branch !== undefined ? { branch: yield* yieldDeclared(props.branch) } : {}),
+        ...(props.project !== undefined ? { project: yield* yieldDeclared(props.project) } : {}),
       };
     }),
 });

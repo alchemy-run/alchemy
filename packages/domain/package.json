@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/domain",
-  "version": "2.0.0-beta.85",
+  "version": "2.0.0-beta.87",
   "description": "Domain-driven backends for Alchemy: aggregates, commands, events, projections, sagas and stories over Effect.",
   "keywords": [
     "alchemy",
@@ -56,6 +56,8 @@
         "bun": "./src/Rivet/index.ts",
         "default": "./lib/Rivet/index.js"
       },
+      "./Explore/internal/*": null,
+      "./Prove/internal/*": null,
       "./internal": null,
       "./*/internal": null,
       "./*": {
@@ -70,6 +72,10 @@
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
     "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "oxc-parser": "catalog:",
+    "z3-solver": "catalog:"
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "workspace:*",

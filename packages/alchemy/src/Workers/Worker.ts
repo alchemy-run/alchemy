@@ -26,7 +26,7 @@ import {
   type RpcErrorEnvelope,
   type RpcStreamEnvelope,
 } from "../Rpc.ts";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "../Runtime.ts";
+import { makeEntrypointLayer, runtimeConfigProvider } from "../Runtime.ts";
 import type { BaseRuntimeContext } from "../RuntimeContext.ts";
 import { Self } from "../Self.ts";
 import { StackContext } from "../StackContext.ts";
@@ -142,13 +142,8 @@ export const getSharedBuild = (
           Layer.provideMerge(
             Layer.succeed(
               ConfigProvider.ConfigProvider,
-              ConfigProvider.orElse(
-                ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-                // Auto-bound `Config` values arrive in `env` as
-                // `{"_tag":"Redacted","value":...}` markers; reify them so a
-                // `Config` re-read inside a request handler decodes the raw
-                // source value instead of the marker JSON.
-                reifyBoundConfigProvider(ConfigProvider.fromUnknown(env), env),
+              runtimeConfigProvider(
+                ConfigProvider.fromUnknown(env, { preserveEmptyStrings: true }),
               ),
             ),
           ),
@@ -214,7 +209,8 @@ export const getWorkerExport = <Export = any, Runtime = WorkerRuntimeContextLike
     Effect.flatMap((context) => context.exports),
     Effect.flatMap((exports) =>
       Effect.isEffect(exports[exportName])
-        ? exports[exportName]
+        ? // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- a user module export, typed as `Export` below
+          exports[exportName]
         : Effect.succeed(exports[exportName]),
     ),
   ) as Effect.Effect<Export>;
@@ -270,6 +266,7 @@ export const handleRpcExit = async (
         lifetime.extend(new Promise<void>((resolve) => (done = resolve)));
         stream = stream.pipe(Stream.onExit(() => Effect.sync(done)));
       }
+      // oxlint-disable-next-line effecttsgo/any-unknown-in-error-context -- a user handler's returned Stream, encoded for the RPC transport
       return await Effect.runPromise(toRpcStream(stream) as Effect.Effect<RpcStreamEnvelope>);
     }
     return exit.value;

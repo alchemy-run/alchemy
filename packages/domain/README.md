@@ -21,8 +21,7 @@ export class MoneyDeposited extends Domain.Event("MoneyDeposited", {
 export class TooLarge extends Domain.Rejection("TooLarge", { max: Schema.Int }) {}
 
 export class DepositMoney extends Domain.Command("DepositMoney", {
-  target: Schema.String,
-  input: { amount: Schema.Int },
+  input: { id: Schema.String, amount: Schema.Int },
   events: [MoneyDeposited],
   rejects: [TooLarge],
   reply: { balance: Schema.Int },
@@ -33,6 +32,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Int }),
   initial: { balance: 0 },
   commands: [DepositMoney],
+  keyOf: (cmd) => cmd.accountId,
   decide: {
     DepositMoney: (s, cmd) =>
       cmd.amount > 10_000
@@ -64,7 +64,7 @@ const account = Account.ref("a-1");
 it.effect("deposits and replies with the balance", () =>
   story(
     Story.given(account, new MoneyDeposited({ amount: 50, balanceAfter: 50 })),
-    Story.when(account, new DepositMoney({ amount: 100 })),
+    Story.when(new DepositMoney({ accountId: account.id, amount: 100 })),
     Story.then(account, new MoneyDeposited({ amount: 100, balanceAfter: 150 })),
     Story.replied({ balance: 150 }),
   ),
@@ -72,7 +72,7 @@ it.effect("deposits and replies with the balance", () =>
 
 it.effect("rejects large deposits", () =>
   story(
-    Story.when(account, new DepositMoney({ amount: 20_000 })),
+    Story.when(new DepositMoney({ accountId: account.id, amount: 20_000 })),
     Story.rejected(new TooLarge({ max: 10_000 })),
   ),
 );

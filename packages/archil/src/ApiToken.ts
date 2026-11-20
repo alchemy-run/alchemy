@@ -51,8 +51,8 @@ export type ApiToken = Resource<
  * in state as a `Redacted` value. Changing a prop creates a new key, and
  * destroying it revokes the key.
  *
- * Archil only creates API keys from a console session: deploying with an
- * API key fails with `ApiTokenCreationForbidden`.
+ * Archil refuses API keys on its API key operations: deploying with one
+ * fails with `Unauthorized`, the same error a bad key gets.
  * @see https://docs.archil.com/api-reference
  *
  * ### Creating a Key

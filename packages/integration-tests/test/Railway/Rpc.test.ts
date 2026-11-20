@@ -12,8 +12,9 @@ import { Api, ApiLive } from "./fixtures/rpc-api.ts";
 import Caller from "./fixtures/rpc-caller.ts";
 import Greeter from "./fixtures/rpc-greeter.ts";
 import Query from "./fixtures/rpc-query.ts";
+import { railwayApi } from "./limit.ts";
 
-const { test } = Test.make({ providers: Railway.providers() });
+const { test } = Test.make({ limit: railwayApi, providers: Railway.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 

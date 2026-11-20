@@ -30,6 +30,12 @@ export const Policy = Schema.Struct({
    * content again refreshes the clock.
    */
   ttl: Schema.DurationFromMillis,
+  /**
+   * Branches whose latest push publication never expires, such as
+   * `["main"]`. A newer push from the branch hands the previous publication
+   * back to the TTL, counted from that newer push.
+   */
+  keepLatest: Schema.String.pipe(Schema.Array, Schema.optionalKey),
   /** Upper bound on a single tarball. Absent means unlimited. */
   maxPackageSize: Schema.optionalKey(Schema.ByteSizeFromNumber),
 });
