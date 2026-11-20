@@ -173,6 +173,22 @@ export default AthenaTestFunction.make(
           });
         }
 
+        // A result longer than one `GetQueryResults` page (1,000 rows): 2,500 data rows,
+        // with NULL on every even row of `y`, read across all three pages.
+        if (request.method === "GET" && pathname === "/many") {
+          const result = yield* runQuery({
+            QueryString:
+              "SELECT x, IF(x % 2 = 0, NULL, x) AS y FROM UNNEST(sequence(1, 2500)) AS t(x) ORDER BY x",
+          });
+          return yield* HttpServerResponse.json({
+            state: result.state,
+            columns: result.columns,
+            types: result.types,
+            rows: result.rows.length,
+            values: result.values,
+          });
+        }
+
         // Run a trivial query to completion and hand back its execution id
         // for the granular query-execution bindings below.
         if (request.method === "GET" && pathname === "/exec/run") {
