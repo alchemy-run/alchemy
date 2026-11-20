@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import * as Docker from "@alchemy.run/docker";
 import * as Rivet from "@alchemy.run/rivet";
@@ -26,9 +25,6 @@ const EffectPool = RivetDocker.SwarmPool("EffectPool").pipe(Layer.provide(Cluste
 const RustPool = RivetDocker.SwarmPool("RustPool").pipe(Layer.provide(Cluster));
 const ImagePool = RivetDocker.SwarmPool("ImagePool").pipe(Layer.provide(Cluster));
 
-/** The prebuilt image the image Durable Object runs, built before the deploy. */
-const IMAGE = "rivet-external-image:test";
-
 const fixture = (file: string) =>
   fileURLToPath(new URL(`./fixtures/external/${file}`, import.meta.url));
 
@@ -41,6 +37,45 @@ const call = <A>(f: () => Promise<A>) =>
     Effect.timeout("20 seconds"),
     Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 30 }),
   );
+
+/**
+ * Every external Durable Object, on a pool of its own. `step` is baked into
+ * the prebuilt image as `STEP`: its counter adds `x * STEP`.
+ */
+const program = (step: string) =>
+  Effect.gen(function* () {
+    const asyncActors = yield* Rivet.DurableObject("AsyncActors", {
+      main: fixture("async-actors.ts"),
+    }).pipe(Effect.provide(AsyncPool));
+    const effectActors = yield* Rivet.DurableObject("EffectActors", {
+      main: fixture("effect/main.ts"),
+    }).pipe(Effect.provide(EffectPool));
+    // A member of a Cargo workspace, built with a feature.
+    const rustActors = yield* Rivet.DurableObject("RustActors", {
+      crate: fixture("rust/counter"),
+      build: { features: ["double"] },
+    }).pipe(Effect.provide(RustPool));
+    // An image the app builds itself, with its own runtime and RivetKit,
+    // run as it is.
+    const appImage = yield* Docker.Image("AppImage", {
+      build: {
+        context: fixture("."),
+        dockerfile: fixture("image.Dockerfile"),
+        args: { STEP: step },
+      },
+    });
+    const imageActors = yield* Rivet.DurableObject("ImageActors", {
+      image: appImage.imageRef,
+    }).pipe(Effect.provide(ImagePool));
+    return {
+      token: asyncActors.token,
+      namespace: asyncActors.namespace,
+      asyncPool: asyncActors.pool,
+      effectPool: effectActors.pool,
+      rustPool: rustActors.pool,
+      imagePool: imageActors.pool,
+    };
+  });
 
 let deployed: {
   token: Redacted.Redacted<string>;
@@ -64,46 +99,12 @@ const clientFor = (poolName: string) =>
 // the Rust crate into its node image, and runs each on a pool.
 describe.skipIf(!!process.env.FAST)(
   "Rivet external Durable Objects",
-  { tags: ["provider:rivet", "provider:docker", "live"] },
+  { tags: ["provider:rivet", "provider:docker", "live"], sequential: true },
   () => {
     beforeAll(
       Effect.gen(function* () {
         if (!process.env.NO_DESTROY) yield* sharedStack.destroy();
-        yield* Effect.sync(() =>
-          execFileSync(
-            "docker",
-            ["build", "-t", IMAGE, "-f", fixture("image.Dockerfile"), fixture(".")],
-            { stdio: "inherit" },
-          ),
-        );
-        const out = yield* sharedStack.deploy(
-          Effect.gen(function* () {
-            const asyncActors = yield* Rivet.DurableObject("AsyncActors", {
-              main: fixture("async-actors.ts"),
-            }).pipe(Effect.provide(AsyncPool));
-            const effectActors = yield* Rivet.DurableObject("EffectActors", {
-              main: fixture("effect/main.ts"),
-            }).pipe(Effect.provide(EffectPool));
-            // A member of a Cargo workspace, built with a feature.
-            const rustActors = yield* Rivet.DurableObject("RustActors", {
-              crate: fixture("rust/counter"),
-              build: { features: ["double"] },
-            }).pipe(Effect.provide(RustPool));
-            // A prebuilt image, run as it is.
-            const imageActors = yield* Rivet.DurableObject("ImageActors", {
-              image: IMAGE,
-            }).pipe(Effect.provide(ImagePool));
-            return {
-              token: asyncActors.token,
-              namespace: asyncActors.namespace,
-              asyncPool: asyncActors.pool,
-              effectPool: effectActors.pool,
-              rustPool: rustActors.pool,
-              imagePool: imageActors.pool,
-            };
-          }),
-        );
-        deployed = out as typeof deployed;
+        deployed = (yield* sharedStack.deploy(program("1"))) as typeof deployed;
       }),
       { timeout: 900_000 },
     );
@@ -161,6 +162,29 @@ describe.skipIf(!!process.env.FAST)(
         expect(second - first).toBe(4);
       }),
       { timeout: 300_000 },
+    );
+
+    // Runs last: it redeploys the shared stack.
+    test(
+      "a new image rolls the pool's nodes onto it",
+      Effect.gen(function* () {
+        deployed = (yield* sharedStack.deploy(program("2"))) as typeof deployed;
+        const counter = clientFor(deployed.imagePool).counter.getOrCreate(["external-image-2"]);
+        // The old nodes may still answer while the new ones start.
+        const doubled = yield* call(() =>
+          counter
+            .increment(4)
+            .then((before) => counter.increment(4).then((after) => after - before)),
+        ).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("3 seconds"),
+            until: (delta) => delta === 8,
+            times: 30,
+          }),
+        );
+        expect(doubled).toBe(8);
+      }),
+      { timeout: 600_000 },
     );
   },
 );

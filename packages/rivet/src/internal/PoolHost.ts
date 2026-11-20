@@ -125,8 +125,8 @@ export interface BundleProgram {
  * in it, whose `CMD` runs the node (a Rust crate's binary).
  */
 export interface ImageProgram {
-  readonly context: string;
-  readonly dockerfile: string;
+  readonly context: Input<string>;
+  readonly dockerfile: Input<string>;
 }
 
 export type NodeProgram = BundleProgram | ImageProgram;
@@ -307,9 +307,10 @@ const makeHost = <Network, Req>(options: {
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
         Effect.gen(function* () {
           // The prebuilt image is the node, staged as a build every host runs.
-          const program = yield* stageImageProgram(yield* stackDnsLabel(id), image);
+          const label = yield* stackDnsLabel(id);
+          const program = yield* stageImageProgram(label, image);
           yield* deploy(
-            { name: id, module: image, handler: "", external: true },
+            { name: id, module: `image:${label}`, handler: "", external: true },
             {},
             resource.bind`Pool`(caller),
             () => program,
@@ -323,15 +324,28 @@ const makeHost = <Network, Req>(options: {
  * `label`, whose Dockerfile is the image and nothing else. Every host
  * already builds an {@link ImageProgram} for its platform, so the image
  * reaches each one the way a Rust crate's does, and runs unchanged.
+ *
+ * The Dockerfile is written once `image` resolves, so an image built in
+ * the same stack is built before the pool builds from it.
  */
-const stageImageProgram = Effect.fn(function* (label: string, image: string) {
+const stageImageProgram = Effect.fn(function* (label: string, image: Input<string>) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const dir = path.resolve(yield* dotAlchemyDirectory, "rivet", "image", label);
-  yield* fs.makeDirectory(dir, { recursive: true });
   const dockerfile = path.join(dir, "Dockerfile");
-  yield* fs.writeFileString(dockerfile, `FROM ${image}\n`);
-  return { context: dir, dockerfile } satisfies ImageProgram;
+  const staged = output(image).pipe(
+    Output.mapEffect((ref: string) =>
+      Effect.gen(function* () {
+        yield* fs.makeDirectory(dir, { recursive: true });
+        yield* fs.writeFileString(dockerfile, `FROM ${ref}\n`);
+        return dir;
+      }).pipe(Effect.orDie),
+    ),
+  );
+  return {
+    context: staged,
+    dockerfile: staged.pipe(Output.map(() => dockerfile)),
+  } satisfies ImageProgram;
 });
 
 /** A cluster value as an Output, whether it is one already or a plain value. */

@@ -1,6 +1,6 @@
 import * as nodePath from "node:path";
 import type { HttpEffect } from "alchemy/Http";
-import type { InputProps } from "alchemy/Input";
+import type { Input, InputProps } from "alchemy/Input";
 import type { Named } from "alchemy/Named";
 import * as Output from "alchemy/Output";
 import {
@@ -179,13 +179,20 @@ export interface RustDurableObjectProps {
 /** Props of an image Durable Object: Actors in a prebuilt image, run as it is. */
 export interface ImageDurableObjectProps {
   /**
-   * The image every node runs, as a reference the deploy's Docker can pull,
-   * such as `us-docker.pkg.dev/acme/app/actors@sha256:…`. Its `CMD` starts a
-   * RivetKit registry with `RIVET_ENDPOINT`, `RIVET_TOKEN`,
-   * `RIVET_NAMESPACE` and `RIVET_POOL` set. The image brings its own
-   * runtime and RivetKit, so a node installs nothing when it starts.
+   * The image every node runs, such as
+   * `us-docker.pkg.dev/acme/app/actors@sha256:…`, or the `imageRef` of a
+   * `Docker.Image` in the same stack. Its `CMD` starts a RivetKit registry
+   * with `RIVET_ENDPOINT`, `RIVET_TOKEN`, `RIVET_NAMESPACE` and
+   * `RIVET_POOL` set. The image brings its own runtime and RivetKit, so a
+   * node installs nothing when it starts.
+   *
+   * The pool builds its node image `FROM` this one, wherever it builds
+   * images: the deploy's Docker for a Docker, Compute Engine, EC2 or
+   * Hetzner pool, the platform's builder on Fly, Railway or Rivet Cloud.
+   * That builder must be able to pull it. Pin a digest: a pool only
+   * rebuilds when the reference or the image it names changes.
    */
-  image: string;
+  image: Input<string>;
   main?: never;
   crate?: never;
 }
@@ -519,7 +526,7 @@ const rust = (id: string, props: RustDurableObjectProps) =>
  */
 const image = (id: string, props: ImageDurableObjectProps) =>
   Effect.gen(function* () {
-    const resource: DurableObject = yield* (platform as any)(id, { main: props.image });
+    const resource: DurableObject = yield* (platform as any)(id, { main: id });
     if (globalThis.__ALCHEMY_RUNTIME__) return resource;
     const host = yield* PoolHost;
     yield* host.deployImage({ id, image: props.image, resource });

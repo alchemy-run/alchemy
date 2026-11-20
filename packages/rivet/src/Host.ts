@@ -4,6 +4,7 @@
  *
  * @module
  */
+import type { Input } from "alchemy/Input";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type { DurableObject, HostedDurableObject } from "./DurableObject.ts";
@@ -31,7 +32,7 @@ export class PoolHost extends Context.Service<
     }) => Effect.Effect<void>;
     readonly deployImage: (object: {
       readonly id: string;
-      readonly image: string;
+      readonly image: Input<string>;
       readonly resource: DurableObject;
     }) => Effect.Effect<void>;
   }
