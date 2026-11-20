@@ -21,18 +21,18 @@ export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const list = yield* Convex.Query(Backend);
+    const list = yield* Convex.RunQuery(Backend);
 
     return {
       fetch: Effect.gen(function* () {
         return yield* HttpServerResponse.json(yield* list("messages:list"));
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(Convex.QueryHttp)),
+  }).pipe(Effect.provide(Convex.RunQueryHttp)),
 ) {}
 ```
 
-`Convex.Query` grants nothing: the Worker gets the deployment's URL, and public functions need no credentials.
+`Convex.RunQuery` grants nothing: the Worker gets the deployment's URL, and public functions need no credentials.
 
 ## Bind a mutation
 
@@ -42,8 +42,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
 +import * as Layer from "effect/Layer";
 
   Effect.gen(function* () {
-    const list = yield* Convex.Query(Backend);
-+    const add = yield* Convex.Mutation(Backend);
+    const list = yield* Convex.RunQuery(Backend);
++    const add = yield* Convex.RunMutation(Backend);
 
     return {
       fetch: Effect.gen(function* () {
@@ -54,8 +54,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return yield* HttpServerResponse.json(yield* list("messages:list"));
       }).pipe(Effect.orDie),
     };
--  }).pipe(Effect.provide(Convex.QueryHttp)),
-+  }).pipe(Effect.provide(Layer.mergeAll(Convex.QueryHttp, Convex.MutationHttp))),
+-  }).pipe(Effect.provide(Convex.RunQueryHttp)),
++  }).pipe(Effect.provide(Layer.mergeAll(Convex.RunQueryHttp, Convex.RunMutationHttp))),
 ```
 
 `POST` adds a message, and every request lists them.

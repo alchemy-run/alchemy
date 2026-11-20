@@ -31,10 +31,10 @@ Run `alchemy deploy`. Each stage gets its own preview deployment, and `url` is t
 
 ## Call a function from a Worker
 
-`Convex.Query` runs a public query. It needs no credentials:
+`Convex.RunQuery` runs a public query. It needs no credentials:
 
 ```typescript
-const list = yield* Convex.Query(Backend);
+const list = yield* Convex.RunQuery(Backend);
 const messages = yield* list("messages:list");
 ```
 

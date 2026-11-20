@@ -9,13 +9,13 @@ These bindings call Convex from any host. Each one takes the deployment, and ret
 
 ```typescript
 Effect.gen(function* () {
-  const list = yield* Convex.Query(Backend);
+  const list = yield* Convex.RunQuery(Backend);
   return {
     fetch: Effect.gen(function* () {
       return yield* HttpServerResponse.json(yield* list("messages:list"));
     }),
   };
-}).pipe(Effect.provide(Convex.QueryHttp));
+}).pipe(Effect.provide(Convex.RunQueryHttp));
 ```
 
 `Query`, `Mutation`, `Action` and `QueryBatch` grant nothing: public functions need no credentials.
@@ -23,21 +23,21 @@ Effect.gen(function* () {
 ## Run a mutation
 
 ```typescript
-const add = yield* Convex.Mutation(Backend);
+const add = yield* Convex.RunMutation(Backend);
 yield* add("messages:add", { body: "hello" });
 ```
 
 ## Run an action
 
 ```typescript
-const ping = yield* Convex.Action(Backend);
+const ping = yield* Convex.RunAction(Backend);
 const reply = yield* ping("messages:ping", { n: 41 });
 ```
 
 ## Run several queries together
 
 ```typescript
-const batch = yield* Convex.QueryBatch(Backend);
+const batch = yield* Convex.RunQueryBatch(Backend);
 const [messages, user] = yield* batch([{ path: "messages:list" }, { path: "users:me" }]);
 ```
 

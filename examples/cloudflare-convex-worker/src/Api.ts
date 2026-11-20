@@ -11,8 +11,8 @@ export default class Api extends Cloudflare.Worker<Api>()(
   "Api",
   { main: import.meta.url },
   Effect.gen(function* () {
-    const list = yield* Convex.Query(Backend);
-    const add = yield* Convex.Mutation(Backend);
+    const list = yield* Convex.RunQuery(Backend);
+    const add = yield* Convex.RunMutation(Backend);
 
     return {
       fetch: Effect.gen(function* () {
@@ -23,5 +23,5 @@ export default class Api extends Cloudflare.Worker<Api>()(
         return yield* HttpServerResponse.json(yield* list("messages:list"));
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Convex.QueryHttp, Convex.MutationHttp))),
+  }).pipe(Effect.provide(Layer.mergeAll(Convex.RunQueryHttp, Convex.RunMutationHttp))),
 ) {}

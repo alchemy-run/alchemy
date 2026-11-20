@@ -3,14 +3,23 @@ import { fromDeployment } from "@distilled.cloud/convex/Credentials";
 import * as functions from "@distilled.cloud/convex/functions";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { convexToJson, jsonToConvex, type Value } from "convex/values";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import type * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import { DeployKey } from "./DeployKey.ts";
 import type { Deployment } from "./Deployment.ts";
+import {
+  type Args,
+  type Failure,
+  type FunctionDeclaration,
+  type Success,
+  encodeArgs,
+} from "./Function.ts";
 
 /** A Convex function threw, or doesn't exist. Convex reports both as a 200. */
 export class ConvexFunctionError extends Data.TaggedError("ConvexFunctionError")<{
@@ -70,3 +79,47 @@ export const hostKey = Effect.fn(function* (
   });
   return yield* key.value;
 });
+
+/** A public function another host may call, typed by its declaration. */
+export type Callable<Kind extends FunctionDeclaration["kind"]> = FunctionDeclaration<
+  Kind,
+  string,
+  any,
+  any,
+  any,
+  false
+>;
+
+/**
+ * Call a declared function over the HTTP API: encode its arguments, send
+ * them in Convex's JSON format, and decode the result or typed failure. A
+ * failure the declaration doesn't describe stays a `ConvexFunctionError`.
+ */
+export const callDeclared = <F extends FunctionDeclaration, E, R>(
+  fn: F,
+  args: Args<F>,
+  send: (args: Record<string, unknown>) => Effect.Effect<functions.UdfResponse, E, R>,
+): Effect.Effect<Success<F>, Failure<F> | E | ConvexFunctionError | Schema.SchemaError, R> =>
+  Effect.gen(function* () {
+    const encoded = yield* encodeArgs(fn, args);
+    const response = yield* send(convexToJson(encoded) as Record<string, unknown>);
+    if (response.status === "success") {
+      if (fn.returns === undefined) return undefined as Success<F>;
+      return (yield* Schema.decodeUnknownEffect(fn.returns)(
+        jsonToConvex(response.value as never),
+      )) as Success<F>;
+    }
+    const data =
+      response.errorData === undefined || response.errorData === null
+        ? undefined
+        : jsonToConvex(response.errorData as never);
+    if (fn.error !== undefined && data !== undefined) {
+      const failure = yield* Schema.decodeUnknownEffect(fn.error)(data).pipe(Effect.option);
+      if (failure._tag === "Some") return yield* Effect.fail(failure.value as Failure<F>);
+    }
+    return yield* new ConvexFunctionError({
+      path: fn.path,
+      message: response.errorMessage,
+      data: data as Value | undefined,
+    });
+  });

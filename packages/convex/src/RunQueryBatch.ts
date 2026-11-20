@@ -6,7 +6,7 @@ import * as Layer from "effect/Layer";
 import { type ConvexFunctionError, onHost, unwrap } from "./BindingHttp.ts";
 import type { Deployment } from "./Deployment.ts";
 
-export type QueryBatchError = ConvexFunctionError | functions.QueryBatchError;
+export type RunQueryBatchError = ConvexFunctionError | functions.QueryBatchError;
 
 /** One query in a batch. */
 export interface QueryBatchItem {
@@ -17,9 +17,9 @@ export interface QueryBatchItem {
 }
 
 /** Run several queries at one point in time. Results are in the order given. */
-export type QueryBatchClient = <A extends unknown[] = unknown[]>(
+export type RunQueryBatchClient = <A extends unknown[] = unknown[]>(
   queries: ReadonlyArray<QueryBatchItem>,
-) => Effect.Effect<A, QueryBatchError, RuntimeContext>;
+) => Effect.Effect<A, RunQueryBatchError, RuntimeContext>;
 
 /**
  * Run several public Convex queries in one request, from a Worker, Lambda or
@@ -32,34 +32,34 @@ export type QueryBatchClient = <A extends unknown[] = unknown[]>(
  * **Example:** Read two queries together
  * ```typescript
  * Effect.gen(function* () {
- *   const batch = yield* Convex.QueryBatch(Backend);
+ *   const batch = yield* Convex.RunQueryBatch(Backend);
  *   return {
  *     fetch: Effect.gen(function* () {
  *       const results = yield* batch([{ path: "messages:list" }, { path: "users:me" }]);
  *       return yield* HttpServerResponse.json(results);
  *     }),
  *   };
- * }).pipe(Effect.provide(Convex.QueryBatchHttp));
+ * }).pipe(Effect.provide(Convex.RunQueryBatchHttp));
  * ```
  *
  * @binding
  * @product Functions
  */
-export interface QueryBatch extends Binding.Service<
-  QueryBatch,
-  "Convex.QueryBatch",
-  (deployment: Deployment) => Effect.Effect<QueryBatchClient>
+export interface RunQueryBatch extends Binding.Service<
+  RunQueryBatch,
+  "Convex.RunQueryBatch",
+  (deployment: Deployment) => Effect.Effect<RunQueryBatchClient>
 > {}
 
-export const QueryBatch = Binding.Service<QueryBatch>("Convex.QueryBatch");
+export const RunQueryBatch = Binding.Service<RunQueryBatch>("Convex.RunQueryBatch");
 
 /** Implementation over Convex's public HTTP API, usable from any host. */
-export const QueryBatchHttp = Layer.effect(
-  QueryBatch,
+export const RunQueryBatchHttp = Layer.effect(
+  RunQueryBatch,
   Effect.succeed(
     Effect.fn(function* (deployment: Deployment) {
       const on = onHost(yield* deployment.url);
-      const client: QueryBatchClient = <A extends unknown[] = unknown[]>(
+      const client: RunQueryBatchClient = <A extends unknown[] = unknown[]>(
         queries: ReadonlyArray<QueryBatchItem>,
       ) =>
         functions
