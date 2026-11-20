@@ -1,8 +1,10 @@
 import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -11,8 +13,10 @@ import {
   type CredentialDemand,
   type CredentialsRequired,
   demandCredentials,
+  failCredentialsRequired,
 } from "@/Auth/Demand.ts";
 import { ProfileStore, ProfileStoreLive } from "@/Auth/Profile.ts";
+import { CredentialsUnavailable } from "@/Auth/Resolve.ts";
 
 const PROBE = "DemandProbe";
 
@@ -122,6 +126,61 @@ const demand: CredentialDemand = {
   provider: PROBE,
   resources: [{ fqn: "Website", reason: "remote" }],
 };
+
+it.live(
+  "maps unavailable credentials in composite causes without dropping other reasons",
+  () =>
+    Effect.sync(() => {
+      const otherFailure = new Error("provider operation failed");
+      const otherDefect = new Error("unexpected provider defect");
+      const unavailable = new CredentialsUnavailable({
+        provider: PROBE,
+        message: "Configure credentials.",
+      });
+      const cause = Cause.combine(
+        Cause.combine(Cause.fail(otherFailure), Cause.fail(unavailable)),
+        Cause.die(otherDefect),
+      );
+      const exit = Effect.runSyncExit(failCredentialsRequired("Website")(Effect.failCause(cause)));
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const reasons = exit.cause.reasons;
+        expect(reasons).toHaveLength(3);
+        expect(Cause.isFailReason(reasons[0]) && reasons[0].error).toBe(otherFailure);
+        expect(Cause.isFailReason(reasons[1]) && reasons[1].error).toMatchObject({
+          _tag: "CredentialsRequired",
+          provider: PROBE,
+          resources: ["Website"],
+        });
+        expect(Cause.isDieReason(reasons[2]) && reasons[2].defect).toBe(otherDefect);
+      }
+    }),
+  { tags: ["unit", "local"] },
+);
+
+it.live(
+  "maps unavailable credential defects to CredentialsRequired",
+  () =>
+    Effect.sync(() => {
+      const unavailable = new CredentialsUnavailable({
+        provider: PROBE,
+        message: "Configure credentials.",
+      });
+      const exit = Effect.runSyncExit(failCredentialsRequired("Website")(Effect.die(unavailable)));
+
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const reason = exit.cause.reasons[0];
+        expect(Cause.isFailReason(reason) && reason.error).toMatchObject({
+          _tag: "CredentialsRequired",
+          provider: PROBE,
+          resources: ["Website"],
+        });
+      }
+    }),
+  { tags: ["unit", "local"] },
+);
 
 it.live(
   "zero demand touches no credentials at all",
