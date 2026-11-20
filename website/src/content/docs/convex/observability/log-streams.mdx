@@ -1,0 +1,40 @@
+---
+title: Log streams
+description: Send a Convex deployment's logs to a webhook or another service.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+A **log stream** sends a deployment's logs to somewhere you choose as they happen: a webhook, or a service such as Datadog or Axiom. Each request to a webhook is signed, so the receiver can check it came from Convex.
+
+<Tree
+  nodes={[
+    { id: "prod", label: "prod", type: "deployment", icon: "brand:convex", specs: [["logs", "function calls, console"]] },
+    { id: "hook", label: "example.com/logs", type: "webhook · checks hmacSecret", icon: "webhook" },
+  ]}
+  areas={["prod hook"]}
+  colGap={5}
+  links={[{ from: "prod", to: "hook", label: "delivers", dashed: true }]}
+  caption="Convex delivers each batch of logs to the webhook, signed with the stream's hmacSecret."
+/>
+
+Log streams need the Convex Professional plan. Below it, a deploy fails with `LogStreamingNotEnabled`.
+
+## Send logs to a webhook
+
+```typescript
+const stream = yield* Convex.LogStream("Logs", {
+  deployment,
+  config: {
+    logStreamType: "webhook",
+    url: "https://example.com/logs",
+    format: "json",
+  },
+});
+```
+
+`stream.hmacSecret` signs each request. Alchemy reads it from the deployment, so a stream you adopt has its secret too.
+
+## Change where logs go
+
+Update `config` and deploy. Changing `logStreamType` replaces the stream. A deployment has one stream of each type.

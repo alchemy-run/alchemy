@@ -286,8 +286,31 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
               return fn(shape);
             }, onExit)
             .finally(constructed);
-        return { instance: { ...instance, execute }, activation, sockets: c.vars.sockets! };
+        // `onSleep` and `onDestroy` are RivetKit's hooks, not methods a
+        // caller can run over fetch-RPC.
+        const fetch: DurableObjectInstance["fetch"] = (shape, request) => {
+          const { onSleep: _onSleep, onDestroy: _onDestroy, ...methods } = shape;
+          return instance.fetch(methods, request);
+        };
+        return { instance: { ...instance, execute, fetch }, activation, sockets: c.vars.sockets! };
       };
+
+      // A hook runs on the instance this activation built; an activation that
+      // took no call has nothing to wind down.
+      const runLifecycle = (c: ActivationContext, hook: "onSleep" | "onDestroy") =>
+        c.vars.instance === undefined
+          ? Promise.resolve()
+          : instanceOf(c).instance.execute((shape) => {
+              const handler = shape[hook];
+              return (
+                typeof handler === "function" ? Effect.suspend(() => handler()) : Effect.void
+              ).pipe(
+                Effect.provideService(Awaiting, receive(undefined)),
+                Effect.catchCause((cause) =>
+                  Effect.logError(`Durable Object ${hook} could not run`, cause),
+                ),
+              );
+            });
 
       use[name] = actor({
         db: db({ onMigrate: (database) => migrateStorage(database) }),
@@ -296,6 +319,8 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
           activation: undefined,
           sockets: undefined,
         }),
+        onSleep: (c: ActivationContext) => runLifecycle(c, "onSleep"),
+        onDestroy: (c: ActivationContext) => runLifecycle(c, "onDestroy"),
         onRequest: (c: ActivationContext, request: Request) => {
           const { instance, activation } = instanceOf(c);
           return handleRequest(instance, activation, request);
@@ -311,10 +336,12 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
           // wait out a transaction before its handler runs as long as it
           // takes: the action only starts it, kept awake until it's done.
           [ALARM_ACTION]: (c: ActivationContext, token: unknown) => {
+            const { instance, activation } = instanceOf(c);
             void c.keepAwake(
-              instanceOf(c).instance.execute((shape) =>
+              instance.execute((shape) =>
                 runFiredAlarm(
                   c,
+                  activation,
                   token,
                   typeof shape.alarm === "function"
                     ? Effect.suspend(() => (shape.alarm as () => Effect.Effect<void>)())
@@ -337,7 +364,7 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
       endpoint: env("RIVET_ENDPOINT"),
       token: env("RIVET_TOKEN"),
       namespace: env("RIVET_NAMESPACE"),
-      envoy: { poolName: env("RIVET_POOL") },
+      node: { poolName: env("RIVET_POOL") },
       noWelcome: true,
     } as never) as { startAndWait(): Promise<void>; shutdown(): Promise<void> };
 

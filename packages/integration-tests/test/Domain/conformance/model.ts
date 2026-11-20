@@ -8,6 +8,7 @@
  * engine and its durable timers, and commits atomically across instances.
  */
 import * as Domain from "@alchemy.run/domain";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -114,6 +115,20 @@ export class CounterTotal extends Domain.View("CounterTotal", {
   },
 }) {}
 
+/** When a counter's first and latest events were committed, in epoch milliseconds. */
+export class CounterTimes extends Domain.View("CounterTimes", {
+  from: [Counter],
+  key: Counter,
+  state: Schema.Struct({ first: Schema.Number, last: Schema.Number }),
+  initial: { first: 0, last: 0 },
+  evolve: {
+    Incremented: (view, _, { at }) => ({
+      first: view.first === 0 ? DateTime.toEpochMillis(at) : view.first,
+      last: DateTime.toEpochMillis(at),
+    }),
+  },
+}) {}
+
 export class Hidden extends Domain.Rejection("Hidden") {}
 
 /** A counter's total no caller may read: `validate` refuses everyone. */
@@ -167,11 +182,18 @@ const TotalWriterLive = TotalWriter.toLayer(
   }),
 );
 
-/** Mirrors a counter's first increment onto its Echo; one run per counter. */
+/**
+ * Mirrors a counter's first increment onto its Echo; one run per counter.
+ * Its step fails its first attempt after it sends, so the step runs again:
+ * the second attempt sends the same command, which must commit once.
+ */
 export class MirrorFirst extends Domain.Saga("MirrorFirst", {
   key: Schema.String,
   input: { by: Schema.Int },
 }) {}
+
+/** The first attempt of {@link MirrorFirst}'s step fails after its send. */
+export class MirrorFlaky extends Schema.TaggedError<MirrorFlaky>()("MirrorFlaky", {}) {}
 
 const MirrorFirstLive = MirrorFirst.toLayer(
   Effect.gen(function* () {
@@ -179,8 +201,12 @@ const MirrorFirstLive = MirrorFirst.toLayer(
     return Effect.fn(function* ({ key, by }) {
       yield* Activity.make({
         name: "mirror",
-        execute: echoes.send(new Mirror({ id: key, by })).pipe(Effect.orDie),
-      });
+        error: MirrorFlaky,
+        execute: Effect.gen(function* () {
+          yield* echoes.send(new Mirror({ id: key, by })).pipe(Effect.orDie);
+          if ((yield* Activity.CurrentAttempt) === 1) return yield* new MirrorFlaky();
+        }),
+      }).pipe(Activity.retry({ times: 2 }), Effect.orDie);
     });
   }),
 );
@@ -271,7 +297,7 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
 export class Conformance extends Domain.Model("Conformance", {
   aggregates: [Counter, Echo, Hold, ...latencyAggregates],
   decisions: [Giving],
-  views: [CounterTotal, HiddenTotal, ...latencyViews],
+  views: [CounterTotal, CounterTimes, HiddenTotal, ...latencyViews],
   projections: [TotalWriter],
   streams: [Recorded],
   policies: [StartMirror, HoldDeadline],

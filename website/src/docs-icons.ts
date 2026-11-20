@@ -53,6 +53,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   PlanetScale: b("planetscale"),
   Neon: b("neon"),
   Turso: b("turso"),
+  Convex: b("convex"),
   E2B: b("e2b"),
   Daytona: b("daytona"),
   Modal: b("modal"),
@@ -87,6 +88,8 @@ export const TAB_ICONS: Record<string, string | undefined> = {
 /** Sidebar group-heading icons, keyed by (normalized) group label. */
 const GROUP_ICONS: Record<string, string | undefined> = {
   Tutorial: l("graduation-cap"),
+  Deployments: l("server"),
+  Functions: l("square-function"),
   Deploy: l("rocket"),
   Develop: l("refresh-cw"),
   Auth: l("key-round"),
@@ -127,6 +130,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Workflows: l("workflow"),
   Containers: l("container"),
   Observability: l("activity"),
+  "Self-hosted": l("server-cog"),
   Networking: l("globe"),
   Guides: l("map"),
   Resources: l("boxes"),
@@ -161,6 +165,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   GitHub: b("github"),
   Neon: b("neon"),
   Turso: b("turso"),
+  Convex: b("convex"),
   E2B: b("e2b"),
   Daytona: b("daytona"),
   Modal: b("modal"),

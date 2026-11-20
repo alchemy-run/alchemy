@@ -4,6 +4,8 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Predicate from "effect/Predicate";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import type { Plan } from "./Backfill.ts";
@@ -17,10 +19,12 @@ import {
   DuplicateEventTag,
   DuplicateName,
   ImplementedTwice,
+  InitialNotJson,
   InvalidInitial,
   MissingInitial,
   MissingKeyOf,
   NoEmitter,
+  NoJsonForm,
   PagedWithoutSuccess,
   type Reason,
   TwoWriters,
@@ -39,7 +43,7 @@ import {
   WriterKeyMismatch,
 } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
-import { judge, rejectionTag, settle } from "./internal.ts";
+import { judge, pathsWithoutJson, rejectionTag, settle } from "./internal.ts";
 import * as Key from "./Key.ts";
 import type {
   Accepted,
@@ -280,7 +284,8 @@ export interface Kernel {
 
 /**
  * Build the kernel for a set of definitions. Validates tags and routing, and
- * dies with a {@link DefinitionError} for the first problem.
+ * dies with a {@link DefinitionError} for every problem, in definition order:
+ * each one is a defect of the Cause.
  */
 export const make = (
   definitions: Definitions,
@@ -288,15 +293,33 @@ export const make = (
 ): Effect.Effect<Kernel> =>
   Effect.suspend(() => {
     const { kernel, problems } = collect(definitions, telemetry);
-    return problems.length > 0 ? Effect.die(problems[0]) : Effect.succeed(kernel);
+    return problems.length > 0
+      ? Effect.failCause(Cause.fromReasons(problems.map(Cause.makeDieReason)))
+      : Effect.succeed(kernel);
   });
 
 /**
- * Every problem {@link make} would die with, without building anything.
- * Empty when the definitions are valid.
+ * Why an `initial` state does not come back the same from JSON text, if it
+ * does not. A schema like `Schema.Any` lets a value through that JSON drops
+ * or refuses, such as a function or a `bigint`.
  */
-export const verify = (definitions: Definitions): ReadonlyArray<DefinitionError> =>
-  collect(definitions, Telemetry.resolve(undefined)).problems;
+const jsonRoundTrip = (
+  codec: Schema.Codec<unknown, unknown>,
+  encoded: unknown,
+): string | undefined => {
+  const text = Result.try(() => JSON.stringify(encoded));
+  if (Result.isFailure(text)) return describe(text.failure);
+  if (text.success === undefined) return "it encodes to nothing";
+  const back = Schema.decodeUnknownExit(codec)(JSON.parse(text.success));
+  if (Exit.isFailure(back)) return back.cause.pipe(Cause.squash, describe);
+  const again = Schema.encodeUnknownExit(codec)(back.value);
+  if (Exit.isFailure(again)) return again.cause.pipe(Cause.squash, describe);
+  return JSON.stringify(again.value) === text.success
+    ? undefined
+    : `${text.success} comes back different`;
+};
+const describe = (cause: unknown) =>
+  Predicate.hasProperty(cause, "message") ? String(cause.message) : String(cause);
 
 /** Build the kernel and collect every definition problem, each once, in order. */
 const collect = (definitions: Definitions, telemetry: Telemetry.Resolved) => {
@@ -312,7 +335,7 @@ const collect = (definitions: Definitions, telemetry: Telemetry.Resolved) => {
 
 /**
  * Build the kernel. Each definition problem goes to `report`, and the build
- * goes on past it, so {@link verify} sees every problem.
+ * goes on past it, so {@link make} reports every problem.
  */
 const build = (
   definitions: Definitions,
@@ -320,6 +343,29 @@ const build = (
   report: (problem: DefinitionError) => void,
 ): Kernel => {
   const problem = (reason: Reason) => report(new DefinitionError({ reason }));
+  /** A host stores and sends every value as JSON: each schema must have a JSON form. */
+  const requireJson = (schema: Schema.Top, path: string) => {
+    for (const at of pathsWithoutJson(schema.ast, path)) problem(new NoJsonForm({ path: at }));
+  };
+  const requireCommandJson = (command: Command.Any) => {
+    requireJson(command, `Command ${command.tag}`);
+    if (command.reply) requireJson(command.reply, `Command ${command.tag}.reply`);
+    for (const rejection of command.rejects) {
+      requireJson(rejection, `Rejection ${rejectionTag(rejection)}`);
+    }
+  };
+  /** The JSON an `initial` state is stored as, once it is known to survive JSON. */
+  const encodeInitial = (owner: string, schema: Schema.Top, initial: unknown): Json => {
+    const codec: Schema.Codec<unknown, unknown> = Schema.toCodecJson(schema as any) as any;
+    const encoded = Schema.encodeUnknownExit(codec)(initial);
+    if (Exit.isFailure(encoded)) {
+      problem(new InvalidInitial({ owner, cause: Cause.squash(encoded.cause) }));
+      return null;
+    }
+    const detail = jsonRoundTrip(codec, encoded.value);
+    if (detail !== undefined) problem(new InitialNotJson({ owner, detail }));
+    return encoded.value;
+  };
   // ---------------------------------------------------------------- events
   const eventCodecs = new Map<string, { readonly cls: Event.Any; readonly codec: JsonCodec }>();
   const registerEvent = (cls: Event.Any) => {
@@ -327,7 +373,10 @@ const build = (
     if (existing && existing.cls !== cls) {
       return problem(new DuplicateEventTag({ tag: cls.tag }));
     }
-    if (!existing) eventCodecs.set(cls.tag, { cls, codec: jsonCodec(cls) });
+    if (!existing) {
+      requireJson(cls, `Event ${cls.tag}`);
+      eventCodecs.set(cls.tag, { cls, codec: jsonCodec(cls) });
+    }
   };
   for (const aggregate of definitions.aggregates) {
     for (const event of aggregate.definition.events) registerEvent(event);
@@ -364,9 +413,11 @@ const build = (
     aggregateByName.set(aggregate.aggregateName, aggregate);
     const def = aggregate.definition;
     const state = jsonCodec(def.state);
+    requireJson(def.state, `${aggregate.aggregateName}.state`);
     const commands = new Map<string, { cls: Command.Any; codec: JsonCodec; reply?: JsonCodec }>();
     const rejections = new Map<string, JsonCodec>();
     for (const command of def.commands) {
+      requireCommandJson(command);
       commands.set(command.tag, {
         cls: command,
         codec: jsonCodec(command),
@@ -377,18 +428,7 @@ const build = (
         if (!rejections.has(tag)) rejections.set(tag, jsonCodec(rejection));
       }
     }
-    const encodedInitial = Schema.encodeUnknownExit(Schema.toCodecJson(def.state as any) as any)(
-      def.initial,
-    );
-    const initial: Json = Exit.isSuccess(encodedInitial) ? encodedInitial.value : null;
-    if (Exit.isFailure(encodedInitial)) {
-      problem(
-        new InvalidInitial({
-          owner: aggregate.aggregateName,
-          cause: Cause.squash(encodedInitial.cause),
-        }),
-      );
-    }
+    const initial = encodeInitial(aggregate.aggregateName, def.state, def.initial);
     aggregateCodecs.set(aggregate.aggregateName, {
       state,
       initial,
@@ -431,6 +471,7 @@ const build = (
       continue;
     }
     implement(command.tag, `the decision ${decision.decisionName}`);
+    requireCommandJson(command);
     for (const aggregate of new Set(Object.values(decision.reads))) {
       if (aggregateByName.get(aggregate.aggregateName) !== aggregate) {
         problem(
@@ -625,6 +666,10 @@ const build = (
     const def = view.definition;
     if (def.state !== undefined && def.initial === undefined) {
       problem(new MissingInitial({ view: view.viewName }));
+    }
+    if (def.state !== undefined) {
+      requireJson(def.state, `${view.viewName}.state`);
+      if (def.initial !== undefined) encodeInitial(view.viewName, def.state, def.initial);
     }
     // Route-keyed handlers need the same routes in keyOf.
     for (const field of ["evolve", "emit"] as const) {
@@ -1038,6 +1083,7 @@ const build = (
       history: boolean,
       correlationId: string = commandId,
       trace?: Telemetry.TraceJson,
+      at?: ReadonlyArray<number | null>,
     ) {
       const stream = `${aggregate.aggregateName}/${id}`;
       const events: Array<StoredEvent> = [];
@@ -1059,7 +1105,7 @@ const build = (
           id,
           stream,
           seq: version + index + 1,
-          at: now,
+          at: typeof at?.[index] === "number" ? DateTime.makeUnsafe(at[index]) : now,
           commandId,
           correlationId,
         };
@@ -1180,6 +1226,9 @@ const build = (
           DateTime.makeUnsafe(input.now),
           input.commandId,
           true,
+          undefined,
+          undefined,
+          input.at,
         );
         return {
           state: codecs.state.encode(result.next),

@@ -18,6 +18,7 @@ import {
  */
 import type { HttpEffect } from "alchemy/Http";
 import { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -52,7 +53,10 @@ import {
   emptyStreamMeta,
   type HostedModel,
   hostedModels,
+  type ImportMeta,
+  type ImportResult,
   inRange,
+  outOfOrder,
   type Json,
   type ListRange,
   type ModelHost,
@@ -210,6 +214,14 @@ export interface Host<R = never> {
 
 const pad = (n: number) => n.toString().padStart(12, "0");
 
+/** Put rows in batches: Cloudflare's storage takes at most 128 keys a put. */
+const putRows = <T>(storage: ObjectStorage, rows: ReadonlyArray<readonly [string, T]>) =>
+  Effect.forEach(
+    Arr.chunksOf(rows, 128),
+    (batch) => storage.put(Object.fromEntries(batch) as Record<string, T>),
+    { discard: true },
+  );
+
 /** The storage list that reads exactly the `entry:` rows in `range`. */
 const entryRange = (range: ListRange | undefined): ListOptions => {
   const limit = range?.limit === undefined ? {} : { limit: Math.max(0, range.limit) };
@@ -334,6 +346,21 @@ interface Armed {
 const LEASE_MS = 60_000;
 
 /**
+ * Take a drain's lease: `undefined` once taken, or when the lease another
+ * drain holds ends. That drain may have died with an earlier instance and
+ * left work behind, so a drain that can't take the lease looks again then.
+ * Run it exclusively.
+ */
+const acquireLease = (state: ObjectStateShape, lease: string) =>
+  Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const held = yield* state.storage.get<number>(lease);
+    if (held !== undefined && held > now) return held;
+    yield* state.storage.put(lease, now + LEASE_MS);
+    return undefined;
+  });
+
+/**
  * A durable, ordered work queue in the instance's storage. Rows are written
  * in the same transaction as the state change that produced them, processed
  * right after the commit (`kick`), and again by a durable callback if the
@@ -345,17 +372,17 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
     const state = yield* ObjectState;
     const prefix = `${name}:`;
     const lease = `${name}-lease`;
-    const acquire = exclusively(
-      Effect.gen(function* () {
-        const held = yield* state.storage.get<number>(lease);
-        if (held !== undefined && held > (yield* Clock.currentTimeMillis)) return false;
-        yield* state.storage.put(lease, (yield* Clock.currentTimeMillis) + LEASE_MS);
-        return true;
-      }),
-    );
+    const acquire = exclusively(acquireLease(state, lease));
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
     const drain: Effect.Effect<void> = Effect.gen(function* () {
-      if (!(yield* acquire)) return;
+      const held = yield* acquire;
+      if (held !== undefined) {
+        // Another drain holds the lease, or held it when its instance died
+        // (its rows are still here). Look again once the lease expires:
+        // nothing else may, if no more rows are staged.
+        yield* callback.schedule("drain", { at: held, payload: {} }).pipe(Effect.orDie);
+        return;
+      }
       yield* Effect.gen(function* () {
         const rows = yield* state.storage.list<Row>({ prefix });
         for (const [key, row] of rows) {
@@ -374,11 +401,10 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
         Effect.gen(function* () {
           if (rows.length === 0) return;
           const last = ((yield* state.storage.get<number>(`${name}-seq`)) ?? 0) + rows.length;
-          const entries: Record<string, Row> = {};
-          rows.forEach((row, index) => {
-            entries[`${prefix}${pad(last - rows.length + index + 1)}`] = row;
-          });
-          yield* state.storage.put(entries);
+          yield* putRows(
+            state.storage,
+            rows.map((row, index) => [`${prefix}${pad(last - rows.length + index + 1)}`, row]),
+          );
           yield* state.storage.put(`${name}-seq`, last);
           // The backstop: delivered even if this instance dies before `kick` runs.
           // Its rows are progress, so a callback staging them doesn't hand it
@@ -961,6 +987,55 @@ const aggregateObject = (
         );
         return { sent, kick };
       });
+    // Callers run it through `whenFree`: an import never lands under a decision's intent.
+    const importEvents = (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
+      Effect.gen(function* () {
+        const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
+        if (duplicate?._tag === "Accepted") {
+          const imported: ImportResult = { _tag: "Imported", receipt: duplicate.receipt };
+          return { imported, kick: false };
+        }
+        const current = yield* storedMeta;
+        if (current.held) return yield* new InstanceHeld();
+        if (current.version !== meta.expectedVersion) {
+          const imported: ImportResult = { _tag: "UnexpectedVersion", version: current.version };
+          return { imported, kick: false };
+        }
+        const now = yield* Clock.currentTimeMillis;
+        const latest =
+          current.version === 0
+            ? 0
+            : ((yield* state.storage.get<StoredEvent>(`event:${pad(current.version)}`))?.envelope
+                .at ?? 0);
+        const refused = outOfOrder(meta.at, events.length, latest, now);
+        if (refused) return { imported: refused as ImportResult, kick: false };
+        const result = yield* kit.seed({
+          id,
+          state: current.state,
+          version: current.version,
+          events,
+          commandId: meta.commandId,
+          now,
+          ...(meta.at === undefined ? {} : { at: meta.at }),
+        });
+        const receipt = {
+          stream: `${kit.name}/${id}`,
+          version: result.version,
+          events: result.events.map((e) => e.event),
+          reply: null,
+        };
+        const kick = yield* state.storage.transaction(
+          Effect.gen(function* () {
+            yield* state.storage.put<SendResult>(`receipt:${meta.commandId}`, {
+              _tag: "Accepted",
+              receipt,
+            });
+            return yield* persist(id, current.version, result);
+          }),
+        );
+        const imported: ImportResult = { _tag: "Imported", receipt };
+        return { imported, kick };
+      });
     /**
      * Store decided events, the state after them and their deliveries. Call
      * inside the storage transaction that commits them; `true` when there are
@@ -968,9 +1043,10 @@ const aggregateObject = (
      */
     const persist = (id: string, from: number, result: SeedResult) =>
       Effect.gen(function* () {
-        const events: Record<string, StoredEvent> = {};
-        for (const event of result.events) events[`event:${pad(event.envelope.seq)}`] = event;
-        yield* state.storage.put(events);
+        yield* putRows(
+          state.storage,
+          result.events.map((event) => [`event:${pad(event.envelope.seq)}`, event]),
+        );
         yield* state.storage.put("meta", { state: result.state, version: result.version });
         // Listed in the directory after the call returns, not before it commits.
         yield* listAfterCommit(runtime.jobs, id);
@@ -1324,6 +1400,12 @@ const aggregateObject = (
           yield* timers.cancel(name);
           return "Cancelled" as const;
         }).pipe(exclusively, reportDefects),
+      importEvents: (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
+        Effect.gen(function* () {
+          const { imported, kick } = yield* whenFree(id, importEvents(id, events, meta));
+          if (kick) yield* outbox.kick;
+          return imported;
+        }).pipe(reportDefects),
       state: () => reportDefects(currentMeta),
       after: (after: number) => reportDefects(eventsAfter(after)),
       // A decision, with this instance as its primary: see `TwoPhase.decide`.
@@ -1741,14 +1823,7 @@ const projectionObject = (
     const size = kit.options.batch?.size ?? 1;
     const waitMillis = kit.options.batch?.waitMillis ?? 0;
     const lease = "drain-lease";
-    const acquire = exclusively(
-      Effect.gen(function* () {
-        const held = yield* state.storage.get<number>(lease);
-        if (held !== undefined && held > (yield* Clock.currentTimeMillis)) return false;
-        yield* state.storage.put(lease, (yield* Clock.currentTimeMillis) + LEASE_MS);
-        return true;
-      }),
-    );
+    const acquire = exclusively(acquireLease(state, lease));
     // Re-run the drain later: when a short batch has waited long enough, or after a failure.
     let wake: (at: number) => Effect.Effect<void> = () => Effect.void;
     // Each input's backstop advances this cursor: once an input arrives, a
@@ -1761,7 +1836,9 @@ const projectionObject = (
     });
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
     const drain: Effect.Effect<void> = Effect.gen(function* () {
-      if (!(yield* acquire)) return;
+      const held = yield* acquire;
+      // Held by another drain, or by one whose instance died: look again once it expires.
+      if (held !== undefined) return yield* wake(held);
       const exit = yield* Effect.exit(
         Effect.gen(function* () {
           while (true) {
@@ -2342,6 +2419,14 @@ export const makePlatform = <R>(
                               return Effect.fail(new NotScheduled(fields));
                             return Effect.void;
                           },
+                        ),
+                      ),
+                    import: (id, events, meta) =>
+                      announce.pipe(
+                        Effect.andThen(
+                          unwrapDefects<ImportResult>(
+                            namespace.getByName(id).importEvents(id, events, meta),
+                          ),
                         ),
                       ),
                     state: (id) =>

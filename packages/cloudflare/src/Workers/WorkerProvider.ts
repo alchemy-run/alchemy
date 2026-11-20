@@ -1681,11 +1681,13 @@ export const LiveWorkerProvider = () =>
         matches: (existing: PhaseRule, rule: Rule) => boolean;
       }) {
         const { zoneId, phase } = params;
-        const entrypoint = yield* rulesets
-          .getPhasForZone({ zoneId, rulesetPhase: phase })
-          // Only a missing entrypoint means no rules yet. Any other failure
-          // stops here rather than treating the phase as empty.
-          .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
+        const entrypoint = yield* (
+          rulesets
+            .getPhasForZone({ zoneId, rulesetPhase: phase })
+            // Only a missing entrypoint means no rules yet. Any other failure
+            // stops here rather than treating the phase as empty.
+            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined))
+        );
         if (entrypoint === undefined) {
           if (params.desired.length === 0) return;
           yield* rulesets.putPhasForZone({

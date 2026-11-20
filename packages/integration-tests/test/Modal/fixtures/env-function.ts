@@ -18,10 +18,12 @@ export default class EnvFunction extends AWS.Lambda.Function<EnvFunction>()(
         const agent = yield* agents.create({ timeout: "5 minutes" });
         const body = yield* Effect.gen(function* () {
           const port = yield* agent.getTcpPort();
-          const response = yield* port
-            .fetch(HttpClientRequest.get("/"))
-            // The program needs a few seconds to start listening after boot.
-            .pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 20 }));
+          const response = yield* (
+            port
+              .fetch(HttpClientRequest.get("/"))
+              // The program needs a few seconds to start listening after boot.
+              .pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 20 }))
+          );
           return yield* response.json;
         }).pipe(Effect.ensuring(Effect.ignore(agent.terminate())));
         return yield* HttpServerResponse.json(body);
