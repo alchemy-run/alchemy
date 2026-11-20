@@ -71,20 +71,10 @@ export class TimePriorityQueue {
    */
   async add(entry: WakerPriorityEntry) {
     await this.#ctx.storage.transaction(async () => {
-      // TODO: Handle this
-      // const waker = this.#env.WAKERS.idFromName(
-      // 	this.#instanceMetadata.instance.id
-      // );
-      // const wakerStub = this.#env.WAKERS.get(waker);
-      // We can optimise this by only calling it if time is sooner than any other
-      // await wakerStub.wake(
-      // 	new Date(entry.targetTimestamp),
-      // 	this.#instanceMetadata
-      // );
-
       this.#heap.add(entry);
       this.addEntryDB(entry);
     });
+    await this.handleNextAlarm();
   }
 
   /**
@@ -133,20 +123,16 @@ export class TimePriorityQueue {
   }
 
   // Idempotent, perhaps name should suggest so
-  async handleNextAlarm() {
+  async handleNextAlarm(deferPastByMs = 0) {
     const nextWakeCall = this.#heap.peek();
     if (nextWakeCall === undefined) {
       return;
     }
-    // TODO: Handle this
-    // const waker = this.#env.WAKERS.idFromName(
-    // 	this.#instanceMetadata.instance.id
-    // );
-    // const wakerStub = this.#env.WAKERS.get(waker);
-    // await wakerStub.wake(
-    // 	new Date(nextWakeCall.targetTimestamp),
-    // 	this.#instanceMetadata
-    // );
+    const alarmTime =
+      deferPastByMs > 0 && nextWakeCall.targetTimestamp <= Date.now()
+        ? Date.now() + deferPastByMs
+        : nextWakeCall.targetTimestamp;
+    await this.#ctx.storage.setAlarm(alarmTime);
   }
 
   getFirst(callbackFn: (a: WakerPriorityEntry) => boolean): WakerPriorityEntry | undefined {
