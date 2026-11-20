@@ -313,3 +313,109 @@ export const callTool = (
     }),
   );
 };
+
+const ToolTagTypeId = "~alchemy/AI/ToolTag" as const;
+
+/**
+ * What a Layer for a tool tag provides: a whole tool, or a reference to
+ * the tool a coding agent ships under that name.
+ */
+export type ToolTagService =
+  | {
+      readonly kind: "tool";
+      readonly spec: ToolSpec;
+      readonly handler: ToolHandler<ToolSpec>;
+    }
+  | {
+      readonly kind: "native";
+      /** The coding agent whose tool this is (`pi`, `opencode`). */
+      readonly engine: string;
+      /** How that agent's harness finds the tool. */
+      readonly tool: unknown;
+    };
+
+/**
+ * A tool known only by name (`AI.Bash`, `AI.Read`). Its description, its
+ * schema and its implementation come from the Layer provided for it, so
+ * the same name can be a coding agent's own tool on one harness and yours
+ * on another.
+ */
+export interface ToolTagClass<Self, Name extends string> extends Context.ServiceClass<
+  Self,
+  `AI.Tool/${Name}`,
+  ToolTagService
+> {
+  readonly [ToolTagTypeId]: true;
+  readonly toolName: Name;
+  /**
+   * Implement the tool yourself. The Effect runs where the harness is
+   * yielded and returns the per-call handler; a handler that uses
+   * `AI.Sandbox` makes the Layer require `AI.Sandboxes`.
+   */
+  make<const Spec extends ToolSpec, R>(
+    spec: Spec,
+    impl: Effect.Effect<PlainToolHandler<Spec>, never, R>,
+  ): Layer.Layer<Self, never, Exclude<R, Scope.Scope>>;
+  make<const Spec extends ToolSpec, R>(
+    spec: Spec,
+    impl: Effect.Effect<ToolHandler<Spec>, never, R>,
+  ): Layer.Layer<Self, never, Exclude<R, Scope.Scope> | Sandboxes>;
+  /**
+   * Use a coding agent's own tool of this name. A harness package builds
+   * its Layers with it (`OpenCode.BashLive`, `Pi.BashLive`).
+   */
+  native(engine: string, tool: unknown): Layer.Layer<Self>;
+}
+
+/** Any tool tag, structurally: what a harness reads off it. */
+export interface AnyToolTag {
+  readonly [ToolTagTypeId]: true;
+  readonly key: string;
+  readonly toolName: string;
+}
+
+export const isToolTag = (u: unknown): u is AnyToolTag =>
+  (typeof u === "object" || typeof u === "function") && u !== null && ToolTagTypeId in u;
+
+/**
+ * Declare a tool by name only.
+ *
+ * **Example:** A name every harness can implement
+ * ```typescript
+ * export class Bash extends AI.ToolTag<Bash>()("bash") {}
+ * ```
+ */
+export const ToolTag =
+  <Self>() =>
+  <const Name extends string>(name: Name): ToolTagClass<Self, Name> => {
+    const Tag = Context.Service<unknown, ToolTagService>()(`AI.Tool/${name}`);
+    return class extends Tag {
+      static readonly [ToolTagTypeId] = true;
+      static readonly toolName = name;
+      static make(spec: ToolSpec, impl: Effect.Effect<ToolHandler<ToolSpec>, never, unknown>) {
+        return Layer.effect(
+          this as never,
+          Effect.map(impl, (handler): ToolTagService => ({ kind: "tool", spec, handler })),
+        );
+      }
+      static native(engine: string, tool: unknown) {
+        return Layer.succeed(this as never, { kind: "native", engine, tool } as never);
+      }
+    } as unknown as ToolTagClass<Self, Name>;
+  };
+
+const ToolGroupTypeId = "~alchemy/AI/ToolGroup" as const;
+
+/** Several tools listed as one. */
+export interface ToolGroup<Tools extends ReadonlyArray<unknown> = ReadonlyArray<unknown>> {
+  readonly [ToolGroupTypeId]: true;
+  readonly tools: Tools;
+}
+
+export const isToolGroup = (u: unknown): u is ToolGroup =>
+  typeof u === "object" && u !== null && ToolGroupTypeId in u;
+
+/** Group tools so one name lists them all. */
+export const ToolGroup = <const Tools extends ReadonlyArray<unknown>>(
+  ...tools: Tools
+): ToolGroup<Tools> => ({ [ToolGroupTypeId]: true, tools });

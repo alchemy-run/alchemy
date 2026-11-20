@@ -101,12 +101,13 @@ const HarnessLive = Layer.mergeAll(
   ModelsLive,
   AddLive,
   SandboxLive,
+  OpenCode.CodingToolsLive,
   OpenCodeCloudflare.DurableObjectInstance,
 ).pipe(
   Layer.provideMerge(Layer.mergeAll(Cloudflare.AI.QueryGatewayBinding, Boat.CreateSandboxHttp)),
 );
 
-const toolsByName = { add: Add, count_bytes: CountBytes, bash: OpenCode.Bash, read: OpenCode.Read };
+const toolsByName = { add: Add, count_bytes: CountBytes, bash: AI.Bash, read: AI.Read };
 
 export default class OpenCodeSession extends Cloudflare.DurableObject<OpenCodeSession>()(
   "OpenCodeSession",
@@ -114,7 +115,7 @@ export default class OpenCodeSession extends Cloudflare.DurableObject<OpenCodeSe
     const sandboxes = yield* Sandboxes;
     const harness = yield* OpenCode.Harness({
       models: [Fast],
-      tools: [OpenCode.CodingTools, Add, CountBytes],
+      tools: [AI.CodingTools, Add, CountBytes],
     });
 
     return Effect.gen(function* () {

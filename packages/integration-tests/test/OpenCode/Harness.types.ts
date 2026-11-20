@@ -1,6 +1,7 @@
 import * as AI from "@alchemy.run/ai";
 import * as OpenCode from "@alchemy.run/opencode";
 import * as Effect from "effect/Effect";
+import type * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 type Assert<T extends true> = T;
@@ -27,14 +28,43 @@ type _AlwaysNeedsSandboxes = Assert<
   Equals<Effect.Services<typeof bare>, OpenCode.Instance | AI.Sandboxes | Fast>
 >;
 
-// OpenCode's own tools add nothing; a tool and an MCP server require their Layers.
+// A tool, a tool tag and an MCP server require their Layers; a tool only OpenCode has adds nothing.
 const full = OpenCode.Harness({
   models: [Fast],
-  tools: [OpenCode.CodingTools, OpenCode.WebFetch, Add, Docs],
+  tools: [AI.Bash, AI.Read, OpenCode.WebFetch, Add, Docs],
   skills: [Releasing],
 });
 type _ListedToolsNeedTheirLayers = Assert<
-  Equals<Effect.Services<typeof full>, OpenCode.Instance | AI.Sandboxes | Fast | Add | Docs>
+  Equals<
+    Effect.Services<typeof full>,
+    OpenCode.Instance | AI.Sandboxes | Fast | Add | Docs | AI.Bash | AI.Read
+  >
+>;
+
+// The coding tools as a group require each tool's Layer, which OpenCode's own satisfy.
+const coding = OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
+type _CodingToolsNeedTheirLayers = Assert<
+  Equals<
+    Effect.Services<typeof coding>,
+    | OpenCode.Instance
+    | AI.Sandboxes
+    | Fast
+    | AI.Bash
+    | AI.Read
+    | AI.Edit
+    | AI.Write
+    | AI.Grep
+    | AI.Glob
+  >
+>;
+type _OpenCodeProvidesThem = Assert<
+  Equals<
+    Layer.Success<typeof OpenCode.CodingToolsLive>,
+    AI.Bash | AI.Read | AI.Edit | AI.Write | AI.Grep | AI.Glob
+  >
+>;
+type _OpenCodeToolsNeedNothing = Assert<
+  Equals<Layer.Services<typeof OpenCode.CodingToolsLive>, never>
 >;
 
 // An inline tool closes over what is in scope and requires nothing more.
@@ -54,4 +84,5 @@ type _InlineToolNeedsNothing = Assert<
   Equals<Effect.Services<typeof inline>, OpenCode.Instance | AI.Sandboxes | Fast>
 >;
 
+export type { _CodingToolsNeedTheirLayers, _OpenCodeProvidesThem, _OpenCodeToolsNeedNothing };
 export type { _AlwaysNeedsSandboxes, _InlineToolNeedsNothing, _ListedToolsNeedTheirLayers };

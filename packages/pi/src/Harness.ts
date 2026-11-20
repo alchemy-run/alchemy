@@ -7,6 +7,7 @@ import {
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
 import { Sandboxes } from "@alchemy.run/ai/Sandbox";
 import type { AnySkill } from "@alchemy.run/ai/Skill";
+import type { ToolTagService } from "@alchemy.run/ai/Tool";
 import type { ModelThinkingLevel } from "@earendil-works/pi-ai";
 import { createModels } from "@earendil-works/pi-ai/models";
 import {
@@ -62,10 +63,12 @@ import { makeEnvFor, sandboxKey } from "./Sandbox.ts";
 import { isSkill, toExtension, type SkillExtension } from "./Skill.ts";
 import { Storage } from "./Storage.ts";
 import {
+  ENGINE,
   flattenTools,
   kindOf,
   toRegistration,
   type AnyTool,
+  type NativeTool,
   type RunTool,
   type ToolRef,
   type ToolRequirements,
@@ -351,7 +354,7 @@ const ALARM_SLICE = "10 minutes";
  * export default class Session extends Cloudflare.DurableObject<Session>()(
  *   "Session",
  *   Effect.gen(function* () {
- *     const harness = yield* Pi.Harness({ models: [Smart], tools: [Pi.CodingTools, RunTests] });
+ *     const harness = yield* Pi.Harness({ models: [Smart], tools: [AI.CodingTools, RunTests] });
  *     return Effect.gen(function* () {
  *       return {
  *         prompt: Effect.fn(function* (name: string, text: string) {
@@ -382,10 +385,10 @@ export const Harness = <
   Effect.gen(function* () {
     const prefix = `${options.name ?? "pi"}_`;
     const storage = yield* (yield* Storage).instance;
-    // Where tools find files and a shell. A harness without one runs only
-    // tools that need neither; the coding tools require it in their type.
-    const sandbox = Option.getOrUndefined(yield* Effect.serviceOption(Sandboxes));
-    const envFor = sandbox === undefined ? undefined : makeEnvFor(sandbox);
+    // Where tools find files and a shell: the harness's own `AI.Sandboxes`,
+    // or the one a coding tool's Layer was given. A harness without either
+    // runs only tools that need neither.
+    let sandbox = Option.getOrUndefined(yield* Effect.serviceOption(Sandboxes));
 
     // Resolve every model and tool implementation here, where their Layers
     // (and the bindings those declare) are provided.
@@ -398,8 +401,34 @@ export const Harness = <
     const resolveTools = (list: ReadonlyArray<AnyTool>) =>
       Effect.forEach(flattenTools(list), (tool) => {
         switch (kindOf(tool)) {
-          case "builtin":
-            return Effect.succeed({ tool, handler: undefined as any });
+          case "tag":
+            return Effect.flatMap(
+              Effect.service(tool as unknown as Context.Key<unknown, ToolTagService>),
+              (impl) => {
+                if (impl.kind === "tool") {
+                  return Effect.succeed({
+                    tool: { toolName: tool.toolName, spec: impl.spec } as unknown as ToolRef,
+                    handler: impl.handler as any,
+                  });
+                }
+                if (impl.engine !== ENGINE) {
+                  return Effect.die(
+                    new PiError({
+                      message: `AI.Tool/${tool.toolName} was given ${impl.engine}'s tool, which only runs on that harness. Provide a Pi Layer for it (Pi.CodingToolsLive) or your own.`,
+                    }),
+                  );
+                }
+                const own = impl.tool as NativeTool;
+                sandbox ??= own.sandboxes;
+                return Effect.succeed({
+                  tool: {
+                    toolName: tool.toolName,
+                    registration: own.registration,
+                  } as unknown as ToolRef,
+                  handler: undefined as any,
+                });
+              },
+            );
           case "inline":
             return Effect.succeed({ tool, handler: (tool as { handler: any }).handler });
           default: {
@@ -451,6 +480,8 @@ export const Harness = <
         isSkill(extension) ? [[extension.skillName, extension] as const] : [],
       ),
     );
+    const sandboxes = sandbox;
+    const envFor = sandboxes === undefined ? undefined : makeEnvFor(sandboxes);
     const captured = yield* Effect.context<never>();
 
     let opened: Promise<PiHarness> | undefined;
@@ -534,7 +565,7 @@ export const Harness = <
         }).pipe(Effect.provideContext(base));
         const compile = ({ tool, handler }: { tool: ToolRef; handler: any }): ToolRegistration =>
           handler === undefined
-            ? (tool as { registration: ToolRegistration }).registration
+            ? (tool as unknown as { registration: ToolRegistration }).registration
             : toRegistration(tool.toolName, (tool as { spec: any }).spec, handler, runTool);
         const runHook = <A>(effect: Effect.Effect<A, never, any>) =>
           Effect.runPromiseWith(base as Context.Context<any>)(effect);
@@ -872,9 +903,9 @@ export const Harness = <
           key: string,
         ) => Effect.Effect<unknown, unknown, RuntimeContext>,
       ): Effect.Effect<void, PiError, RuntimeContext> =>
-        sandbox === undefined
+        sandboxes === undefined
           ? Effect.void
-          : Effect.suspend(() => call(sandbox, sandboxKey(storage.id, id))).pipe(
+          : Effect.suspend(() => call(sandboxes, sandboxKey(storage.id, id))).pipe(
               Effect.asVoid,
               Effect.mapError(
                 (cause) => new PiError({ message: `Sandbox: ${messageOf(cause)}`, cause }),

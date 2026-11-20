@@ -19,15 +19,45 @@ class Add extends AI.Tool<Add>()("add", {
 const plain = Pi.Harness({ models: [Fast], tools: [Add] });
 type _PlainNeedsNoSandbox = Assert<Equals<Effect.Services<typeof plain>, Pi.Storage | Fast | Add>>;
 
-// The coding tools, as a group or one at a time, require a sandbox.
-const coding = Pi.Harness({ models: [Fast], tools: [Pi.CodingTools, Add] });
-type _CodingToolsNeedSandbox = Assert<
-  Equals<Effect.Services<typeof coding>, Pi.Storage | Fast | Add | AI.Sandboxes>
+// The coding tools, as a group or one at a time, require a Layer each.
+const coding = Pi.Harness({ models: [Fast], tools: [AI.CodingTools, Add] });
+type _CodingToolsNeedTheirLayers = Assert<
+  Equals<
+    Effect.Services<typeof coding>,
+    Pi.Storage | Fast | Add | AI.Bash | AI.Read | AI.Edit | AI.Write | AI.Grep | AI.Glob
+  >
 >;
-const bash = Pi.Harness({ models: [Fast], tools: [Pi.Bash] });
-type _OneCodingToolNeedsSandbox = Assert<
-  Equals<Effect.Services<typeof bash>, Pi.Storage | Fast | AI.Sandboxes>
+const bash = Pi.Harness({ models: [Fast], tools: [AI.Bash] });
+type _OneCodingToolNeedsItsLayer = Assert<
+  Equals<Effect.Services<typeof bash>, Pi.Storage | Fast | AI.Bash>
 >;
+// Pi's Layers for them work in a sandbox, so they require `AI.Sandboxes`.
+type _PiProvidesThem = Assert<
+  Equals<
+    Layer.Success<typeof Pi.CodingToolsLive>,
+    AI.Bash | AI.Read | AI.Edit | AI.Write | AI.Grep | AI.Glob
+  >
+>;
+type _PiToolsNeedSandboxes = Assert<
+  Equals<Layer.Services<typeof Pi.CodingToolsLive>, AI.Sandboxes>
+>;
+// A tool tag implemented by hand takes its schema from the Layer.
+const OwnBash = AI.Bash.make(
+  {
+    description: "Run a command.",
+    parameters: Schema.Struct({ command: Schema.String }),
+    success: Schema.Number,
+  },
+  Effect.succeed(
+    Effect.fn(function* ({ command }) {
+      type _ParametersAreTyped = Assert<Equals<typeof command, string>>;
+      const sandbox = yield* AI.Sandbox;
+      return (yield* sandbox.exec(command).pipe(Effect.orDie)).exitCode;
+    }),
+  ),
+);
+type _OwnToolLayer = Assert<Equals<Layer.Success<typeof OwnBash>, AI.Bash>>;
+type _OwnSandboxToolNeedsSandboxes = Assert<Equals<Layer.Services<typeof OwnBash>, AI.Sandboxes>>;
 
 // An MCP server listed as a tool requires its client Layer.
 class Docs extends AI.McpServer<Docs>()("docs") {}

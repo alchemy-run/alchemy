@@ -1,13 +1,18 @@
-import { Sandbox } from "@alchemy.run/ai/Sandbox";
+import { Sandbox, type Sandboxes } from "@alchemy.run/ai/Sandbox";
 import {
   callTool,
+  isToolGroup,
+  isToolTag,
   parametersJsonSchema,
   ToolCall,
   toolKind,
   type AnyTool as AiTool_,
+  type AnyToolTag,
   type InlineTool,
   type SandboxesFor,
   type ToolClass,
+  type ToolGroup,
+  type ToolTagClass,
   type ToolHandler,
   type ToolSpec,
 } from "@alchemy.run/ai/Tool";
@@ -30,33 +35,16 @@ import { messageOf } from "./internal/promise.ts";
 /** The services every tool handler on a Pi harness may use. */
 export type ToolServices = Sandbox | ToolCall | RuntimeContext;
 
-const PiToolTypeId = "~alchemy/Pi/Tool" as const;
-
-/** One of Pi's own tools (`read`, `bash`, …), used as is. */
-export interface BuiltinTool<Name extends string = string, Requires = never> {
-  readonly [PiToolTypeId]: "builtin";
-  readonly toolName: Name;
-  readonly registration: ToolRegistration;
-  /** Phantom: what yielding the harness that lists this tool requires. */
-  readonly "~requires"?: Requires;
-}
-
-/** Several tools listed as one. */
-export interface ToolGroup<Tools extends ReadonlyArray<AnyTool> = ReadonlyArray<AnyTool>> {
-  readonly [PiToolTypeId]: "group";
-  readonly tools: Tools;
-}
-
-/** Anything a Pi harness lists as a tool: an `AI.Tool`, one of Pi's own, or a group. */
-export type AnyTool = AiTool_ | BuiltinTool<string, any> | ToolGroup;
+/** Anything a Pi harness lists as a tool: an `AI.Tool`, a tool tag (`AI.Bash`), or a group. */
+export type AnyTool = ToolRef | ToolGroup<ReadonlyArray<ToolRef>>;
 
 type OwnRequirements<T> =
-  T extends ToolClass<any, any, any, infer Requires>
-    ? Requires
-    : T extends InlineTool<any, any, infer Uses>
-      ? SandboxesFor<Uses>
-      : T extends BuiltinTool<any, infer Requires>
-        ? Requires
+  T extends ToolTagClass<infer Self, any>
+    ? Self
+    : T extends ToolClass<any, any, any, infer Requires>
+      ? Requires
+      : T extends InlineTool<any, any, infer Uses>
+        ? SandboxesFor<Uses>
         : never;
 
 /** What listing `T` on a harness requires to be provided. */
@@ -64,34 +52,25 @@ export type ToolRequirements<T> =
   T extends ToolGroup<infer Tools> ? OwnRequirements<Tools[number]> : OwnRequirements<T>;
 
 /** A tool that can be enabled on a conversation, by reference. */
-export type ToolRef = AiTool_ | BuiltinTool<string, any>;
+export type ToolRef = AiTool_ | AnyToolTag;
 
 /** How a listed tool was declared. */
-export const kindOf = (tool: AnyTool): "class" | "inline" | "builtin" | "group" =>
-  PiToolTypeId in tool ? tool[PiToolTypeId] : toolKind(tool);
+export const kindOf = (tool: AnyTool): "class" | "inline" | "tag" | "group" =>
+  isToolGroup(tool) ? "group" : isToolTag(tool) ? "tag" : toolKind(tool);
 
 /** Every tool a list names, groups flattened. */
 export const flattenTools = (tools: ReadonlyArray<AnyTool>): ReadonlyArray<ToolRef> =>
-  tools.flatMap((tool) =>
-    kindOf(tool) === "group" ? flattenTools((tool as ToolGroup).tools) : [tool as ToolRef],
-  );
+  tools.flatMap((tool) => (isToolGroup(tool) ? flattenTools(tool.tools as never) : [tool]));
 
-/** Group tools so one name lists them all. */
-export const group = <const Tools extends ReadonlyArray<AnyTool>>(
-  ...tools: Tools
-): ToolGroup<Tools> => ({
-  [PiToolTypeId]: "group",
-  tools,
-});
+/** The engine name Pi's own tools are provided under (`AI.Bash.native`). */
+export const ENGINE = "pi";
 
-/** Wrap one of Pi's own tool registrations. */
-export const builtin = <Name extends string, Requires = never>(
-  registration: ToolRegistration & { name: Name },
-): BuiltinTool<Name, Requires> => ({
-  [PiToolTypeId]: "builtin",
-  toolName: registration.name,
-  registration,
-});
+/** What a Layer for one of Pi's own tools provides. */
+export interface NativeTool {
+  readonly registration: ToolRegistration;
+  /** Where the tool finds files and a shell. */
+  readonly sandboxes: Sandboxes["Service"];
+}
 
 const jsonSchemaOf = (schema: Schema.Top): object =>
   AiTool.getJsonSchemaFromSchema(schema) as object;

@@ -80,7 +80,11 @@ class CountBytes extends AI.Tool<CountBytes>()(
   }),
 ) {}
 
-const HarnessLive = Layer.mergeAll(ModelsLive, PiCloudflare.DurableObjectStorage, SandboxLive).pipe(
+const HarnessLive = Layer.mergeAll(
+  ModelsLive,
+  PiCloudflare.DurableObjectStorage,
+  Pi.CodingToolsLive.pipe(Layer.provideMerge(SandboxLive)),
+).pipe(
   Layer.provideMerge(Layer.mergeAll(Cloudflare.AI.QueryGatewayBinding, Boat.CreateSandboxHttp)),
 );
 
@@ -88,7 +92,7 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
   "PiSandboxSession",
   Effect.gen(function* () {
     const sandboxes = yield* Sandboxes;
-    const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools, CountBytes] });
+    const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools, CountBytes] });
 
     return Effect.gen(function* () {
       /** The conversation's sandbox as Boat lists it, if it has one. */
@@ -102,7 +106,7 @@ export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandbox
         create: Effect.fn(function* (name: string) {
           const conversation = yield* harness.createConversation({
             name,
-            tools: [Pi.Read, Pi.Write, Pi.Bash, CountBytes],
+            tools: [AI.Read, AI.Write, AI.Bash, CountBytes],
             instructions: "You work in a Linux sandbox. Use your tools to do what the user asks.",
           });
           return conversation.id;

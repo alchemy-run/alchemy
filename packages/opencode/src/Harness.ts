@@ -5,10 +5,12 @@ import type { AnySkill } from "@alchemy.run/ai/Skill";
 import {
   callTool,
   parametersJsonSchema,
+  isToolTag,
   ToolCall,
   type AnyTool as AiTool,
   type ToolHandler,
   type ToolSpec,
+  type ToolTagService,
 } from "@alchemy.run/ai/Tool";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { LanguageModel, McpClient } from "effect/ai";
@@ -25,6 +27,7 @@ import { Instance } from "./Instance.ts";
 import { complete, type ChatRequest } from "./internal/chat.ts";
 import { BRIDGE, CALL, CLIENT, INSTALL, LAUNCH, OPENCODE, PORTS } from "./internal/scripts.ts";
 import {
+  ENGINE,
   flattenTools,
   isBuiltin,
   type AnyTool,
@@ -47,8 +50,9 @@ export interface HarnessOptions<
   /** Every model a session may run on. The first is the default. */
   readonly models: Models;
   /**
-   * Every tool a session may be given: your own (`AI.Tool`), OpenCode's
-   * (`OpenCode.Bash`, `OpenCode.CodingTools`), and MCP servers. OpenCode
+   * Every tool a session may be given: your own (`AI.Tool`), tool tags
+   * (`AI.Bash`, `AI.CodingTools`), the tools only OpenCode has
+   * (`OpenCode.WebFetch`), and MCP servers. OpenCode
    * names a tool it did not ship after its server: yours are
    * `<name>_<tool>`, an MCP server's are `<server>_<tool>`.
    */
@@ -236,7 +240,7 @@ interface Built {
 
 /** A tool of ours, with the handler its Layer or declaration gave. */
 interface Resolved {
-  readonly tool: AiTool;
+  readonly tool: { readonly toolName: string; readonly spec: ToolSpec };
   readonly handler: ToolHandler<ToolSpec>;
 }
 
@@ -278,7 +282,7 @@ interface Connection {
  *   Effect.gen(function* () {
  *     const harness = yield* OpenCode.Harness({
  *       models: [Smart],
- *       tools: [OpenCode.CodingTools, Deploy],
+ *       tools: [AI.CodingTools, Deploy],
  *     });
  *     return Effect.gen(function* () {
  *       return {
@@ -318,9 +322,32 @@ export const Harness = <
     );
     const listed: ReadonlyArray<AnyTool | AnyMcpServer> = options.tools ?? [];
     const refs = flattenTools(listed.filter((tool): tool is AnyTool => !isMcpServer(tool)));
-    const builtins = refs.filter(isBuiltin).map((tool) => tool.toolName);
-    const tools: ReadonlyArray<Resolved> = yield* Effect.forEach(
-      refs.filter((tool): tool is AiTool => !isBuiltin(tool)),
+    // A tool tag is whatever its Layer provided: OpenCode's own tool of
+    // that name, or a tool of yours that the bridge serves.
+    const tags = yield* Effect.forEach(refs.filter(isToolTag), (tool) =>
+      Effect.flatMap(
+        Effect.service(tool as unknown as Context.Key<unknown, ToolTagService>),
+        (impl): Effect.Effect<{ key: string; native?: string; own?: Resolved }> => {
+          if (impl.kind === "tool") {
+            return Effect.succeed({
+              key: tool.key,
+              own: { tool: { toolName: tool.toolName, spec: impl.spec }, handler: impl.handler },
+            });
+          }
+          return impl.engine === ENGINE
+            ? Effect.succeed({ key: tool.key, native: impl.tool as string })
+            : Effect.die(
+                new OpenCodeError({
+                  message: `AI.Tool/${tool.toolName} was given ${impl.engine}'s tool, which only runs on that harness. Provide an OpenCode Layer for it (OpenCode.CodingToolsLive) or your own.`,
+                }),
+              );
+        },
+      ),
+    );
+    const nativeOf = new Map(tags.flatMap((tag) => (tag.native ? [[tag.key, tag.native]] : [])));
+    const builtins = [...refs.filter(isBuiltin).map((tool) => tool.toolName), ...nativeOf.values()];
+    const declared: ReadonlyArray<Resolved> = yield* Effect.forEach(
+      refs.filter((tool): tool is AiTool => !isBuiltin(tool) && !isToolTag(tool)),
       (tool): Effect.Effect<Resolved> => {
         if ("handler" in tool) return Effect.succeed({ tool, handler: tool.handler });
         const cls = tool as unknown as {
@@ -330,9 +357,10 @@ export const Harness = <
         return Effect.map(cls.impl ?? Effect.service(cls), (handler) => ({
           tool,
           handler,
-        })) as Effect.Effect<Resolved>;
+        })) as unknown as Effect.Effect<Resolved>;
       },
     );
+    const tools = [...declared, ...tags.flatMap((tag) => (tag.own ? [tag.own] : []))];
     const servers = yield* Effect.forEach(
       listed.filter((tool): tool is AnyMcpServer => isMcpServer(tool)),
       (server) =>
@@ -818,6 +846,8 @@ export const Harness = <
             for (const entry of ours) if (entry.server === tool.serverName) on.add(entry.name);
           } else if (isBuiltin(tool)) {
             on.add(tool.toolName);
+          } else if (isToolTag(tool) && nativeOf.has(tool.key)) {
+            on.add(nativeOf.get(tool.key)!);
           } else {
             if (!ours.some((entry) => entry.server === name && entry.tool === tool.toolName)) {
               return yield* new NotOnHarness({ kind: "tool", missing: tool.toolName });

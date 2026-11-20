@@ -12,7 +12,7 @@ import { E2BSandbox } from "./sandboxes/E2B.ts";
 import { ModalSandbox } from "./sandboxes/Modal.ts";
 
 /**
- * A coding agent: Pi's own `read`, `write`, `edit` and `bash` tools, run in
+ * A coding agent: the coding tools (`AI.CodingTools`) as Pi implements them, run in
  * a sandbox because a Durable Object has no file system or processes.
  *
  * Which platform the sandbox is on is the one Layer passed in. Nothing else
@@ -20,14 +20,14 @@ import { ModalSandbox } from "./sandboxes/Modal.ts";
  */
 const workspace = <E, R>(sandbox: Layer.Layer<AI.Sandboxes, E, R>) =>
   Effect.gen(function* () {
-    const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools] });
+    const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools] });
 
     return Effect.gen(function* () {
       return {
         create: Effect.fn(function* (name: string) {
           const conversation = yield* harness.createConversation({
             name,
-            tools: [Pi.Read, Pi.Write, Pi.Bash],
+            tools: [AI.Read, AI.Write, AI.Bash],
             instructions: "You work in a Linux sandbox. Use your tools to do what the user asks.",
           });
           return conversation.id;
@@ -64,7 +64,15 @@ const workspace = <E, R>(sandbox: Layer.Layer<AI.Sandboxes, E, R>) =>
         remove: (name: string) => harness.removeSandbox(name),
       };
     });
-  }).pipe(Effect.provide(Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage, sandbox)));
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        FastLive,
+        PiCloudflare.DurableObjectStorage,
+        Pi.CodingToolsLive.pipe(Layer.provideMerge(sandbox)),
+      ),
+    ),
+  );
 
 export class E2BWorkspace extends Cloudflare.DurableObject<E2BWorkspace>()(
   "E2BWorkspace",

@@ -10,17 +10,12 @@ export {
 } from "./Harness.ts";
 export { Instance, NamedInstance } from "./Instance.ts";
 export {
-  Bash,
-  CodingTools,
-  Edit,
-  Glob,
-  Grep,
-  Read,
-  Task,
-  TodoWrite,
-  WebFetch,
-  Write,
-  type AnyTool,
-  type BuiltinTool,
-  type ToolRef,
-} from "./Tool.ts";
+  BashLive,
+  CodingToolsLive,
+  EditLive,
+  GlobLive,
+  GrepLive,
+  ReadLive,
+  WriteLive,
+} from "./CodingTools.ts";
+export { Task, TodoWrite, WebFetch, type AnyTool, type BuiltinTool, type ToolRef } from "./Tool.ts";

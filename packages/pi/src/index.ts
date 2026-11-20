@@ -6,7 +6,15 @@ export {
   EvalQuickJS,
   type CodeModeExtension,
 } from "./CodeMode.ts";
-export { CodingTools, Bash, Edit, Read, Write } from "./CodingTools.ts";
+export {
+  BashLive,
+  CodingToolsLive,
+  EditLive,
+  GlobLive,
+  GrepLive,
+  ReadLive,
+  WriteLive,
+} from "./CodingTools.ts";
 export { ConversationNotFound, NotOnHarness, PiError } from "./Errors.ts";
 export {
   Harness,

@@ -15,11 +15,18 @@ export {
   type McpServerClass,
   type McpServerService,
 } from "./McpServer.ts";
+export { Bash, CodingTools, Edit, Glob, Grep, Read, Write } from "./CodingTools.ts";
 export {
   isTool,
+  isToolTag,
   Tool,
   ToolCall,
+  ToolGroup,
+  ToolTag,
   type AnyTool,
+  type AnyToolTag,
+  type ToolTagClass,
+  type ToolTagService,
   type InlineTool,
   type ToolClass,
   type ToolHandler,

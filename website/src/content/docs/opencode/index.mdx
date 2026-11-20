@@ -69,6 +69,7 @@ export const BoatSandbox = Layer.effect(
 Yield the harness in the Durable Object's outer Effect, where its Layers are provided, and prompt a session by name:
 
 ```typescript title="src/Coder.ts"
+import * as AI from "@alchemy.run/ai";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as OpenCode from "@alchemy.run/opencode";
 import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
@@ -87,13 +88,14 @@ const ModelsLive = Layer.unwrap(
 const HarnessLive = Layer.mergeAll(
   ModelsLive,
   BoatSandbox,
+  OpenCode.CodingToolsLive,
   OpenCodeCloudflare.DurableObjectInstance,
 ).pipe(Layer.provideMerge(Cloudflare.AI.QueryGatewayBinding));
 
 export default class Coder extends Cloudflare.DurableObject<Coder>()(
   "Coder",
   Effect.gen(function* () {
-    const harness = yield* OpenCode.Harness({ models: [Fast], tools: [OpenCode.CodingTools] });
+    const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
 
     return Effect.gen(function* () {
       return {
@@ -106,6 +108,8 @@ export default class Coder extends Cloudflare.DurableObject<Coder>()(
   }).pipe(Effect.provide(HarnessLive)),
 ) {}
 ```
+
+`AI.CodingTools` names `bash`, `read`, `edit`, `write`, `grep` and `glob`. A name says nothing about how the tool works: `OpenCode.CodingToolsLive` provides OpenCode's own tool for each, with OpenCode's description and schema. The same list runs on another harness with that harness's Layer.
 
 `harness.session(name)` does nothing until it is used. Its first call opens the session's sandbox, installs OpenCode there and starts it; later calls find it running. `requestId` makes a prompt exactly-once while its sandbox runs: a retried call waits for the original answer.
 
@@ -144,7 +148,7 @@ export const RunTestsLive = RunTests.make(
 ```typescript
 const harness = yield* OpenCode.Harness({
   models: [Fast],
-  tools: [OpenCode.CodingTools, RunTests],
+  tools: [AI.CodingTools, RunTests],
 });
 ```
 
@@ -157,7 +161,7 @@ A prompt uses the harness's first model and every listed tool unless it says oth
 ```typescript
 const reply = yield* harness.session("pr-142").prompt("Run the tests and fix what fails.", {
   model: Smart,
-  tools: [OpenCode.Bash, OpenCode.Read, OpenCode.Edit, RunTests],
+  tools: [AI.Bash, AI.Read, AI.Edit, RunTests],
   instructions: "Use pnpm, never npm.",
 });
 ```
@@ -165,8 +169,34 @@ const reply = yield* harness.session("pr-142").prompt("Run the tests and fix wha
 `tools` is exact: the model gets these and nothing else, including any tools the sandbox image configured for OpenCode. Defaults for every prompt of a session go on the session:
 
 ```typescript
-const session = harness.session("pr-142", { tools: [OpenCode.CodingTools, RunTests] });
+const session = harness.session("pr-142", { tools: [AI.CodingTools, RunTests] });
 ```
+
+A coding tool can also be yours. `AI.Bash.make` takes the description, the schema and the handler, and the harness then serves it instead of OpenCode's `bash`:
+
+```typescript title="src/AuditedBash.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+export const AuditedBashLive = AI.Bash.make(
+  {
+    description: "Run a shell command in the workspace. Every command is logged.",
+    parameters: Schema.Struct({ command: Schema.String }),
+    success: Schema.Struct({ exitCode: Schema.Number, output: Schema.String }),
+  },
+  Effect.succeed(
+    Effect.fn(function* ({ command }) {
+      const sandbox = yield* AI.Sandbox;
+      yield* Effect.log(command);
+      const result = yield* sandbox.exec(["sh", "-c", command]).pipe(Effect.orDie);
+      return { exitCode: result.exitCode, output: result.stdout };
+    }),
+  ),
+);
+```
+
+The tools only OpenCode has stay its own: `OpenCode.WebFetch`, `OpenCode.TodoWrite` and `OpenCode.Task` are listed as they are and need no Layer.
 
 ## Skills
 

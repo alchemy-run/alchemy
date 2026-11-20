@@ -93,7 +93,7 @@ export default class Session extends Cloudflare.DurableObject<Session>()(
 A conversation stores what it runs with. Change it by name from any call; the next model request uses it:
 
 ```typescript
-yield* harness.configure("pr-142", { tools: { remove: [Pi.Bash] } });
+yield* harness.configure("pr-142", { tools: { remove: [AI.Bash] } });
 yield* harness.configure("pr-142", { model: Fast, instructions: "Review only. Never edit files." });
 yield* harness.configure("pr-142", { extensions: { add: [Releasing] } });
 ```
@@ -177,17 +177,25 @@ The harness chooses the `key`: one for each conversation. The Layer only maps a 
 
 All three operations are safe to repeat. `open` returns the sandbox running, whatever state it was in. `suspend` stops paying for compute and keeps the files where the platform can. `remove` deletes the sandbox.
 
-`Pi.CodingTools` require `AI.Sandboxes`, so a harness that lists them compiles only once the Layer is provided:
+`AI.CodingTools` names `bash`, `read`, `edit`, `write`, `grep` and `glob`. A name says nothing about how the tool works, so a harness that lists them compiles only once a Layer is provided for each:
 
 ```typescript
-const harness = yield* Pi.Harness({ models: [Fast], tools: [Pi.CodingTools] });
+const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools] });
 ```
+
+`Pi.CodingToolsLive` provides them all, and requires `AI.Sandboxes`:
 
 ```typescript
-const HarnessLive = Layer.mergeAll(FastLive, PiCloudflare.DurableObjectStorage, E2BSandbox);
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  PiCloudflare.DurableObjectStorage,
+  Pi.CodingToolsLive.pipe(Layer.provideMerge(E2BSandbox)),
+);
 ```
 
-Pi's own `pi-env` daemon runs in the sandbox, so `read`, `write`, `edit` and `bash` behave exactly as they do locally.
+`bash`, `read`, `edit` and `write` are Pi's own tools, with Pi's descriptions and schemas. Pi's `pi-env` daemon runs in the sandbox, so they behave exactly as they do locally. Pi has no `grep` or `glob`, so those two run a command in the sandbox.
+
+Each tool has a Layer of its own (`Pi.BashLive`, `Pi.ReadLive`), and any of them can be yours instead: `AI.Bash.make` takes the description, the schema and the handler.
 
 A tool of your own runs in the harness. To reach the conversation's files and shell it uses `AI.Sandbox`, which the harness has already scoped to the call's conversation. Its Layer then requires `AI.Sandboxes`, as the coding tools do:
 
