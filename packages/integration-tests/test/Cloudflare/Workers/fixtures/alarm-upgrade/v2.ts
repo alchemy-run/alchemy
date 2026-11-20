@@ -209,7 +209,7 @@ export class UpgradeObject extends Cloudflare.DurableObject<UpgradeObject>()(
           Effect.provideService(Cloudflare.DurableObjectState, state),
         ),
       };
-    });
+    }).pipe(Effect.provide(Cloudflare.DurableObjectCallbacks));
   }),
 ) {}
 

@@ -59,6 +59,8 @@ const price = yield* Stripe.Price("ProMonthly", {
 
 Declared like this, your catalog is reviewed in pull requests and is the same in every stage.
 
+A price can also be tiered per seat, sold in packs, chosen by the customer, or carry an amount in several currencies. See [Price your product](/stripe/guides/pricing).
+
 ## Customers
 
 A **customer** is someone who pays you, with their email, payment methods and history. Create one when a user first buys, and keep its id next to your own user.
@@ -74,6 +76,8 @@ A **subscription** charges a customer on a schedule until it's cancelled. Stripe
 ## Webhooks
 
 Stripe tells your app what happened by sending **events** to a **webhook endpoint**: a subscription created, an invoice paid, a payment failed. Each request is signed, so your app can tell it came from Stripe. Treat events as the source of truth for what a customer has paid for.
+
+An **event destination** is the newer kind of endpoint. It can deliver to a URL, or straight to Amazon EventBridge or Azure Event Grid, and it's the only way to receive **thin events**: small notifications that carry an event's id, which your app fetches in full.
 
 In Alchemy, one call creates the endpoint and hands your handler each event, typed:
 
@@ -99,6 +103,6 @@ See [Onboard merchants with Connect](/stripe/guides/connect).
 
 Each of these concepts is something your Stack or your Worker declares.
 
-Your profile's key picks the account and mode, and `Stripe.providers()` deploys into it. Products, prices, coupons, webhook endpoints and the Billing Portal's configuration are resources, created and updated on deploy, and archived where Stripe won't delete them. Each call your Worker makes, like `Stripe.CreateCheckoutSession()`, is a binding: it adds exactly that permission to a restricted key the Worker holds, so the Worker never sees your secret key.
+Your profile's key picks the account and mode, and `Stripe.providers()` deploys into it. Products, prices, coupons, webhook endpoints and the Billing Portal's configuration are resources, created and updated on deploy, and archived where Stripe won't delete them. Account settings like tax and the payout schedule are resources too: destroy puts back what they were before. Each call your Worker makes, like `Stripe.CreateCheckoutSession()`, is a binding: it adds exactly that permission to a restricted key the Worker holds, so the Worker never sees your secret key.
 
 Next, build one: [Sell a subscription](/stripe/guides/subscriptions) walks through a complete app.

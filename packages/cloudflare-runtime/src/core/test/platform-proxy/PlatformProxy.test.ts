@@ -25,6 +25,14 @@ export class Counter extends DurableObject {
     await this.ctx.storage.put("count", count);
     return count;
   }
+
+  fail(name) {
+    const error = new Error("Repository not found: " + name + ".");
+    error.name = "BindingError";
+    error.code = "NOT_FOUND";
+    Object.defineProperty(error, "numericCode", { value: 10200 });
+    throw error;
+  }
 }
 `;
 
@@ -136,6 +144,31 @@ layer(localRuntimeLayer, { excludeTestServices: true })("PlatformProxy", (it) =>
         yield* Effect.promise(async () => {
           const kv = (proxy.env as Record<string, any>).KV;
           await expect(kv.get("")).rejects.toThrow();
+        });
+      }),
+    { timeout: 30_000 },
+  );
+
+  it.effect(
+    "preserves error codes and names thrown by RPC bindings",
+    () =>
+      Effect.gen(function* () {
+        const proxy = yield* openTestProxy;
+        yield* Effect.promise(async () => {
+          const DO = (proxy.env as Record<string, any>).DO;
+          const error = await DO.get(DO.idFromName("errors"))
+            .fail("missing")
+            .then(
+              () => undefined,
+              (caught: unknown) => caught,
+            );
+          expect(error).toBeInstanceOf(Error);
+          expect(error).toMatchObject({
+            name: "BindingError",
+            message: "Repository not found: missing.",
+            code: "NOT_FOUND",
+            numericCode: 10200,
+          });
         });
       }),
     { timeout: 30_000 },
