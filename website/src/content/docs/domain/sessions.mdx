@@ -308,17 +308,12 @@ export const SessionLive = Layer.effect(
   Session,
   Effect.gen(function* () {
     const key = yield* SessionKey;
-    return (effect, { headers }) =>
-      sessionOf(headers).pipe(
-        Effect.provideService(SessionKey, key),
-        Effect.flatMap(
-          Option.match({
-            onNone: () => Effect.fail(new Unauthorized()),
-            onSome: ({ actor, expires }) =>
-              effect.pipe(Effect.provideService(CurrentActor, actor), Domain.validUntil(expires)),
-          }),
-        ),
-      );
+    return Effect.fn(function* (effect, { headers }) {
+      const session = yield* sessionOf(headers).pipe(Effect.provideService(SessionKey, key));
+      if (Option.isNone(session)) return yield* new Unauthorized();
+      yield* Domain.setExpiry(session.value.expires);
+      return yield* Effect.provideService(effect, CurrentActor, session.value.actor);
+    });
   }),
 );
 
@@ -371,14 +366,13 @@ A browser can't set headers on a WebSocket, and a URL ends up in logs. A live re
 
 ## End live reads when the session does
 
-A live read's middleware runs when its WebSocket connects, and the socket can stay open for hours. `SessionLive` says how long its verdict holds with `Domain.validUntil`:
+A live read's middleware runs when its WebSocket connects, and the socket can stay open for hours. `SessionLive` says when its verdict expires with `Domain.setExpiry`:
 
 ```typescript
-onSome: ({ actor, expires }) =>
-  effect.pipe(Effect.provideService(CurrentActor, actor), Domain.validUntil(expires)),
+yield* Domain.setExpiry(session.value.expires);
 ```
 
-When the session expires, the object that holds the read closes its socket, even if the account has no new commits. The client reconnects at once from its cursor, so the middleware runs again on the new upgrade. A browser whose cookie was renewed carries on with nothing missed or repeated. A caller whose session is gone gets `Unauthorized`, and the read ends with it. Commands and queries are judged on every call, so `validUntil` changes nothing for them.
+When the session expires, the object that holds the read closes its socket, even if the account has no new commits. The client reconnects at once from its cursor, so the middleware runs again on the new upgrade. A browser whose cookie was renewed carries on with nothing missed or repeated. A caller whose session is gone gets `Unauthorized`, and the read ends with it. Commands and queries are judged on every call, so `setExpiry` changes nothing for them.
 
 ## Ask for a second factor
 

@@ -318,8 +318,8 @@ export { DefinitionError } from "./Kernel.ts";
 /** A service middleware provides to a request, carried into the domain. See {@link RequestContextModule.make}. */
 export const RequestContext = RequestContextModule.make;
 
-/** How long a middleware's verdict holds; a live read is judged again after it. See {@link RequestContextModule.validUntil}. */
-export const validUntil = RequestContextModule.validUntil;
+/** When a middleware's verdict expires; a live read is judged again then. See {@link RequestContextModule.setExpiry}. */
+export const setExpiry = RequestContextModule.setExpiry;
 
 export type { Filter, OrderBy } from "./Filter.ts";
 export { InMemory } from "./InMemory.ts";

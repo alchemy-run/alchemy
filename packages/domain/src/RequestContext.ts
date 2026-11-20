@@ -116,25 +116,35 @@ export const restore = Effect.fn(function* (json: Json) {
 });
 
 /**
- * Until when the middleware a request ran through vouched for its caller, in
- * epoch milliseconds: the earliest any of them set with {@link validUntil}.
+ * Where a live read's middleware records when its verdict expires (see
+ * {@link setExpiry}): the earliest time any of them set.
  *
  * @internal
  */
-export const ValidUntil = EffectContext.Reference<number | undefined>(
-  "alchemy/Domain/RequestContext/ValidUntil",
+export interface Expiry {
+  at: number | undefined;
+}
+
+/**
+ * The {@link Expiry} of the request being judged. Only a live read has one;
+ * a command or query has none, and {@link setExpiry} does nothing there.
+ *
+ * @internal
+ */
+export const CurrentExpiry = EffectContext.Reference<Expiry | undefined>(
+  "alchemy/Domain/RequestContext/CurrentExpiry",
   { defaultValue: () => undefined },
 );
 
 /**
- * Say how long a middleware's verdict holds, such as until the session token
- * it checked expires. A call is judged once and finishes, so this changes
- * nothing for commands and queries. A live read (`watch`, `events`) pushed
- * over a WebSocket is closed when the time passes, even if its key has no
- * new commits; the client reconnects at once from its cursor, which runs the
- * middleware again. A caller still allowed misses nothing, and one it now
- * refuses gets its typed error. Several middleware may set it: the earliest
- * time wins.
+ * Say when a middleware's verdict expires, such as when the session token it
+ * checked does. A live read (`watch`, `events`) pushed over a WebSocket is
+ * closed then, even if its key has no new commits; the client reconnects at
+ * once from its cursor, which runs the middleware again. A caller still
+ * allowed misses nothing, and one it now refuses gets its typed error. When
+ * several middleware set an expiry, the earliest wins: one middleware never
+ * extends another's verdict. Commands and queries are judged on every call,
+ * so it changes nothing for them.
  *
  * ### Ending a live read when its session expires
  * **Example:** A session middleware whose token carries its expiry
@@ -144,26 +154,20 @@ export const ValidUntil = EffectContext.Reference<number | undefined>(
  * import * as Layer from "effect/Layer";
  * import * as Option from "effect/Option";
  *
- * export const SessionLive = Layer.succeed(Session, (effect, { headers }) =>
- *   Effect.flatMap(
- *     verifySession(headers),
- *     Option.match({
- *       onNone: () => Effect.fail(new Unauthorized()),
- *       onSome: ({ actor, expires }) =>
- *         effect.pipe(
- *           Effect.provideService(CurrentActor, actor),
- *           Domain.validUntil(expires),
- *         ),
- *     }),
- *   ),
+ * export const SessionLive = Layer.succeed(
+ *   Session,
+ *   Effect.fn(function* (effect, { headers }) {
+ *     const session = yield* verifySession(headers);
+ *     if (Option.isNone(session)) return yield* new Unauthorized();
+ *     yield* Domain.setExpiry(session.value.expires);
+ *     return yield* Effect.provideService(effect, CurrentActor, session.value.actor);
+ *   }),
  * );
  * ```
  */
-export const validUntil =
-  (at: Date | number) =>
-  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
-    const millis = typeof at === "number" ? at : at.getTime();
-    return Effect.updateService(self, ValidUntil, (current) =>
-      current === undefined ? millis : Math.min(current, millis),
-    );
-  };
+export const setExpiry = Effect.fn(function* (at: Date | number) {
+  const expiry = yield* CurrentExpiry;
+  if (expiry === undefined) return;
+  const millis = typeof at === "number" ? at : at.getTime();
+  expiry.at = expiry.at === undefined ? millis : Math.min(expiry.at, millis);
+});

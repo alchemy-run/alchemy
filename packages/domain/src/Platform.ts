@@ -119,7 +119,7 @@ export const Subscription = Schema.Struct({
   caughtUpSent: Schema.optionalKey(Schema.Boolean),
   /**
    * Epoch milliseconds until which the read's middleware vouched for the
-   * caller (see `Domain.validUntil`). Once it passes, the platform closes the
+   * caller (see `Domain.setExpiry`). Once it passes, the platform closes the
    * connection with {@link REAUTHORIZE_CLOSE_CODE} instead of sending more.
    */
   validUntil: Schema.optionalKey(Schema.Number),

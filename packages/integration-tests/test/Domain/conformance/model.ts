@@ -151,13 +151,15 @@ export class Ticket extends RpcMiddleware.Service<Ticket>()("Conformance/Ticket"
   error: Expired,
 }) {}
 
-export const TicketLive = Layer.succeed(Ticket, (effect, { headers }) =>
-  Effect.gen(function* () {
+export const TicketLive = Layer.succeed(
+  Ticket,
+  Effect.fn(function* (effect, { headers }) {
     const now = yield* Clock.currentTimeMillis;
     const [kind, value] = (headers["x-ticket"] ?? "").split(":");
     const until = kind === "until" ? Number(value) : kind === "for" ? now + Number(value) : NaN;
     if (!(until > now)) return yield* new Expired();
-    return yield* effect.pipe(Domain.validUntil(until));
+    // After the read is judged, as `Effect.tap`: the expiry counts wherever it is set.
+    return yield* effect.pipe(Effect.tap(Domain.setExpiry(until)));
   }),
 );
 

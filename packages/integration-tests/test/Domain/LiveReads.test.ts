@@ -308,10 +308,12 @@ let revoked = false;
 class Revoked extends Domain.Rejection("Revoked") {}
 class Gate extends RpcMiddleware.Service<Gate>()("Test/Gate", { error: Revoked }) {}
 /** Each verdict holds for a second, as a session middleware's would until its token expires. */
-const GateLive = Layer.succeed(Gate, (effect) =>
-  Effect.gen(function* () {
+const GateLive = Layer.succeed(
+  Gate,
+  Effect.fn(function* (effect) {
     if (revoked) return yield* new Revoked();
-    return yield* effect.pipe(Domain.validUntil((yield* Clock.currentTimeMillis) + 1_000));
+    yield* Domain.setExpiry((yield* Clock.currentTimeMillis) + 1_000);
+    return yield* effect;
   }),
 );
 

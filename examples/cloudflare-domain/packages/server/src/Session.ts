@@ -124,17 +124,12 @@ export const SessionLive = Layer.effect(
   Session,
   Effect.gen(function* () {
     const key = yield* SessionKey;
-    return (effect, { headers }) =>
-      sessionOf(headers).pipe(
-        Effect.provideService(SessionKey, key),
-        Effect.flatMap(
-          Option.match({
-            onNone: () => Effect.fail(new Unauthorized()),
-            onSome: ({ actor, expires }) =>
-              effect.pipe(Effect.provideService(CurrentActor, actor), Domain.validUntil(expires)),
-          }),
-        ),
-      );
+    return Effect.fn(function* (effect, { headers }) {
+      const session = yield* sessionOf(headers).pipe(Effect.provideService(SessionKey, key));
+      if (Option.isNone(session)) return yield* new Unauthorized();
+      yield* Domain.setExpiry(session.value.expires);
+      return yield* Effect.provideService(effect, CurrentActor, session.value.actor);
+    });
   }),
 );
 

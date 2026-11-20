@@ -975,7 +975,7 @@ const liveRequestOf = (request: { readonly url: string }): LiveRequest | undefin
   return raw === null ? undefined : Option.getOrUndefined(decodeLiveRequest(raw));
 };
 
-/** The shortest a live read stays open on one verdict (see `Domain.validUntil`). */
+/** The shortest a live read stays open on one verdict (see `Domain.setExpiry`). */
 const MIN_VERDICT_MILLIS = 1_000;
 
 /**
@@ -985,7 +985,7 @@ const MIN_VERDICT_MILLIS = 1_000;
  * the subscription to the object that owns the key, which pushes to the
  * socket on every commit. A refused read still connects, to deliver its
  * typed rejection. When the middleware says how long its verdict holds
- * (`Domain.validUntil`), the subscription carries it, and the platform closes
+ * (`Domain.setExpiry`), the subscription carries it, and the platform closes
  * the read then so the client reconnects through the middleware again.
  */
 const liveReads = (
@@ -1027,17 +1027,12 @@ const liveReads = (
     const { key, where, after } = payload.value as ReadPayload;
     yield* Effect.annotateCurrentSpan({ "domain.read": live.tag, "domain.key": String(key) });
     // Run the read's middleware, as the RPC server would, around capturing what it provides.
-    type Verdict = { readonly context: RequestContext.Json; readonly validUntil?: number };
-    let authorized: Effect.Effect<Verdict, unknown> = Effect.gen(function* () {
-      const context = yield* RequestContext.capture;
-      const validUntil = yield* RequestContext.ValidUntil;
-      return validUntil === undefined ? { context } : { context, validUntil };
-    });
+    let authorized: Effect.Effect<RequestContext.Json, unknown> = RequestContext.capture;
     for (const service of read.rpc.middlewares) {
       const run = Context.getUnsafe(middleware, service) as unknown as (
-        effect: Effect.Effect<Verdict, unknown>,
+        effect: Effect.Effect<RequestContext.Json, unknown>,
         options: unknown,
-      ) => Effect.Effect<Verdict, unknown>;
+      ) => Effect.Effect<RequestContext.Json, unknown>;
       authorized = run(authorized, {
         rpc: read.rpc,
         client: new Rpc.ServerClient(0),
@@ -1054,14 +1049,17 @@ const liveReads = (
       context: {},
       cursor: live.cursor ?? (read.mode === "watch" ? -1 : (after ?? 0)),
     };
+    // Where the middleware set its verdict's expiry (`Domain.setExpiry`), read once they all ran.
+    const expiry: RequestContext.Expiry = { at: undefined };
     const judged = yield* authorized.pipe(
-      Effect.map((verdict): Subscription => ({
+      Effect.provideService(RequestContext.CurrentExpiry, expiry),
+      Effect.map((context): Subscription => ({
         ...subscription,
-        context: verdict.context,
+        context,
         // At least a second: a verdict already out can't make a client reconnect in a loop.
-        ...(verdict.validUntil === undefined
+        ...(expiry.at === undefined
           ? {}
-          : { validUntil: Math.max(verdict.validUntil, connectedAt + MIN_VERDICT_MILLIS) }),
+          : { validUntil: Math.max(expiry.at, connectedAt + MIN_VERDICT_MILLIS) }),
       })),
       // A refusal, or a defect (already logged and redacted by the middleware), ends the read.
       Effect.catchCause((cause) =>
