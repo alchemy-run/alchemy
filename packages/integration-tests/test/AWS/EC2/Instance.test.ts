@@ -81,6 +81,58 @@ describe.sequential("Instance", { tags: ["provider:aws", "provider:aws:ec2", "li
     { timeout: 240_000 },
   );
 
+  // `rootVolumeSize` sizes the AMI's root device at launch, and raising it
+  // grows the same volume in place rather than replacing the instance.
+  test.provider(
+    "rootVolumeSize sizes the root volume at launch and grows it in place",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const imageId = amazonLinux2023();
+        const deploy = (rootVolumeSize: number) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              const vpc = yield* Vpc("RootVolumeVpc", { cidrBlock: "10.0.0.0/16" });
+              const subnet = yield* Subnet("RootVolumeSubnet", {
+                vpcId: vpc.vpcId,
+                cidrBlock: "10.0.1.0/24",
+              });
+              const instance = yield* Instance("RootVolumeInstance", {
+                imageId,
+                instanceType: "t3.micro",
+                subnetId: subnet.subnetId,
+                rootVolumeSize,
+              });
+              return { vpc, instance };
+            }),
+          );
+        const rootVolumeSize = (instanceId: string) =>
+          Effect.gen(function* () {
+            const { Reservations } = yield* ec2.describeInstances({ InstanceIds: [instanceId] });
+            const instance = Reservations?.[0]?.Instances?.[0];
+            const rootDevice = instance?.RootDeviceName;
+            const volumeId = instance?.BlockDeviceMappings?.find((m) => m.DeviceName === rootDevice)
+              ?.Ebs?.VolumeId;
+            expect(volumeId).toBeDefined();
+            const { Volumes } = yield* ec2.describeVolumes({ VolumeIds: [volumeId!] });
+            return Volumes?.[0]?.Size;
+          });
+
+        const first = yield* deploy(10);
+        expect(yield* rootVolumeSize(first.instance.instanceId)).toBe(10);
+
+        const second = yield* deploy(12);
+        expect(second.instance.instanceId).toBe(first.instance.instanceId);
+        expect(yield* rootVolumeSize(second.instance.instanceId)).toBe(12);
+
+        yield* stack.destroy();
+        yield* assertInstanceTerminated(first.instance.instanceId);
+        yield* assertVpcGone(first.vpc.vpcId);
+      }).pipe(logLevel),
+    { timeout: 300_000 },
+  );
+
   // Metadata options are applied by RunInstances at launch and updated in
   // place via ModifyInstanceMetadataOptions — the instance id must not change.
   test.provider(
