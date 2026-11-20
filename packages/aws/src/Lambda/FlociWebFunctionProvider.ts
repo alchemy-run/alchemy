@@ -48,7 +48,7 @@ import {
   WebFunctionNotReady,
 } from "./WebFunctionEndpointSync.ts";
 
-// This provider runs in the RPC sidecar; register its typed failures so
+// This provider runs in the RPC sidecar. Register its typed failures so
 // callers receive instances of the real classes.
 registerRpcErrorClasses(
   WebFunctionFailed,
