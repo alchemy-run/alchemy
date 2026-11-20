@@ -1,22 +1,22 @@
-import { ToolGroup, ToolTag } from "./Tool.ts";
+import { Tool, ToolGroup } from "./Tool.ts";
 
 /**
  * Run a shell command in the conversation's sandbox.
  *
  * The tag is only the name. Provide a coding agent's own tool
- * (`OpenCode.BashLive`, `Pi.BashLive`) or one of yours (`AI.Bash.make`).
+ * (`OpenCode.Bash`, `Pi.Bash`) or one of yours (`AI.Bash.make`).
  */
-export class Bash extends ToolTag<Bash>()("bash") {}
+export class Bash extends Tool<Bash>()("bash") {}
 /** Read a file. */
-export class Read extends ToolTag<Read>()("read") {}
+export class Read extends Tool<Read>()("read") {}
 /** Replace text in a file. */
-export class Edit extends ToolTag<Edit>()("edit") {}
+export class Edit extends Tool<Edit>()("edit") {}
 /** Write a whole file. */
-export class Write extends ToolTag<Write>()("write") {}
+export class Write extends Tool<Write>()("write") {}
 /** Search file contents. */
-export class Grep extends ToolTag<Grep>()("grep") {}
+export class Grep extends Tool<Grep>()("grep") {}
 /** Find files by pattern. */
-export class Glob extends ToolTag<Glob>()("glob") {}
+export class Glob extends Tool<Glob>()("glob") {}
 
 /**
  * The tools for working in a codebase: `bash`, `read`, `edit`, `write`,
@@ -25,7 +25,7 @@ export class Glob extends ToolTag<Glob>()("glob") {}
  * **Example:** OpenCode's own coding tools
  * ```typescript
  * const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
- * // provided with OpenCode.CodingToolsLive
+ * // provided with OpenCode.CodingTools
  * ```
  */
 export const CodingTools = ToolGroup(Bash, Read, Edit, Write, Grep, Glob);

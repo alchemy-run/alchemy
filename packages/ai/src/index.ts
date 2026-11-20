@@ -22,7 +22,6 @@ export {
   Tool,
   ToolCall,
   ToolGroup,
-  ToolTag,
   type AnyTool,
   type AnyToolTag,
   type ToolTagClass,

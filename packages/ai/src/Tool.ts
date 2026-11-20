@@ -162,6 +162,8 @@ export const toolKind = (tool: AnyTool): "class" | "inline" => tool[ToolTypeId];
 /** The declaration forms of a tool. */
 export interface ToolConstructor {
   <Self>(): {
+    /** A tool known only by name: its Layer brings the description, the schema and the implementation. */
+    <const Name extends string>(name: Name): ToolTagClass<Self, Name>;
     <const Name extends string, const Spec extends ToolSpec>(
       name: Name,
       spec: Spec,
@@ -243,6 +245,26 @@ export interface ToolConstructor {
  * );
  * ```
  *
+ * **Example:** A name only, implemented differently on each harness
+ * ```typescript
+ * export class Bash extends AI.Tool<Bash>()("bash") {}
+ *
+ * // A coding agent's own tool, or yours with its own schema:
+ * const OnOpenCode = OpenCode.Bash;
+ * const Mine = Bash.make(
+ *   {
+ *     description: "Run a shell command.",
+ *     parameters: Schema.Struct({ command: Schema.String }),
+ *     success: Schema.Struct({ exitCode: Schema.Number }),
+ *   },
+ *   Effect.fn(function* ({ command }) {
+ *     const sandbox = yield* AI.Sandbox;
+ *     const result = yield* sandbox.exec(["sh", "-c", command]).pipe(Effect.orDie);
+ *     return { exitCode: result.exitCode };
+ *   }),
+ * );
+ * ```
+ *
  * **Example:** Inline, closing over the Durable Object's bindings
  * ```typescript
  * const notes = yield* Cloudflare.KV.ReadWriteNamespace(Notes);
@@ -285,9 +307,10 @@ export const Tool = ((...args: ReadonlyArray<unknown>): unknown => {
   }
   return (
     name: string,
-    spec: ToolSpec,
+    spec?: ToolSpec,
     impl?: Effect.Effect<ToolHandler<ToolSpec>, never, unknown>,
   ) => {
+    if (spec === undefined) return toolTag(name);
     const Tag = Context.Service<unknown, ToolHandler<ToolSpec>>()(`AI.Tool/${name}`);
     return class extends Tag {
       static readonly [ToolTypeId] = "class";
@@ -430,32 +453,23 @@ export interface AnyToolTag {
 export const isToolTag = (u: unknown): u is AnyToolTag =>
   (typeof u === "object" || typeof u === "function") && u !== null && ToolTagTypeId in u;
 
-/**
- * Declare a tool by name only.
- *
- * **Example:** A name every harness can implement
- * ```typescript
- * export class Bash extends AI.ToolTag<Bash>()("bash") {}
- * ```
- */
-export const ToolTag =
-  <Self>() =>
-  <const Name extends string>(name: Name): ToolTagClass<Self, Name> => {
-    const Tag = Context.Service<unknown, ToolTagService>()(`AI.Tool/${name}`);
-    return class extends Tag {
-      static readonly [ToolTagTypeId] = true;
-      static readonly toolName = name;
-      static make(spec: ToolSpec, impl: Effect.Effect<AnyHandler, never, unknown> | AnyHandler) {
-        return Layer.effect(
-          this as never,
-          Effect.map(implOf(impl), (handler): ToolTagService => ({ kind: "tool", spec, handler })),
-        );
-      }
-      static native(engine: string, tool: unknown) {
-        return Layer.succeed(this as never, { kind: "native", engine, tool } as never);
-      }
-    } as unknown as ToolTagClass<Self, Name>;
+/** A tool declared by name only (`AI.Tool<Self>()(name)`). */
+const toolTag = (name: string) => {
+  const Tag = Context.Service<unknown, ToolTagService>()(`AI.Tool/${name}`);
+  return class extends Tag {
+    static readonly [ToolTagTypeId] = true;
+    static readonly toolName = name;
+    static make(spec: ToolSpec, impl: Effect.Effect<AnyHandler, never, unknown> | AnyHandler) {
+      return Layer.effect(
+        this as never,
+        Effect.map(implOf(impl), (handler): ToolTagService => ({ kind: "tool", spec, handler })),
+      );
+    }
+    static native(engine: string, tool: unknown) {
+      return Layer.succeed(this as never, { kind: "native", engine, tool } as never);
+    }
   };
+};
 
 const ToolGroupTypeId = "~alchemy/AI/ToolGroup" as const;
 
