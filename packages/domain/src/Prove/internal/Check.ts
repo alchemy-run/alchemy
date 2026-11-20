@@ -1,7 +1,8 @@
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import type * as DateTime from "effect/DateTime";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "../../Aggregate.ts";
 import type * as Decision from "../../Decision.ts";
@@ -9,7 +10,7 @@ import * as Decide from "./Decide.ts";
 import type { DecisionStep, Inputs } from "./Paths.ts";
 import * as Smt from "./Smt.ts";
 import * as Symbolic from "./Symbolic.ts";
-import type { Run } from "./Value.ts";
+import type { Run, V } from "./Value.ts";
 
 /** Inputs that break an invariant, and what the real code does with them. */
 export interface Counterexample {
@@ -39,7 +40,9 @@ export type Verdict =
   /** No list of up to a few items breaks it: longer lists were not looked at. */
   | { readonly _tag: "Bounded"; readonly reason: string }
   /** The solver gave up. */
-  | { readonly _tag: "Unknown"; readonly reason: string };
+  | { readonly _tag: "Unknown"; readonly reason: string }
+  /** The prover read the code as doing one thing, and the real code does another on the same inputs. */
+  | { readonly _tag: "Misread"; readonly reason: string };
 
 export type Model = ReadonlyMap<string, number | bigint | string | boolean>;
 
@@ -57,8 +60,15 @@ const functionOf = (application: { readonly term: string; readonly argument: str
  * the prover knows only by its implementation starts free; each answer that
  * disagrees with the real function is ruled out, and the question is asked again.
  */
-export const solve = Effect.fn(function* (solver: Smt.Solver, run: Run, condition: string) {
+export const solve = Effect.fn(function* (
+  solver: Smt.Solver,
+  run: Run,
+  condition: string,
+  /** Terms to read back with the inputs: the model then has each by its text. */
+  reads: ReadonlyArray<Smt.Term> = [],
+) {
   const applications = [...run.applications.values()];
+  const named = reads.map((term, index) => ({ term, name: Smt.symbol(`$out.${index}`) }));
   const declarations = [...run.declarations.values()];
   const base = [
     ...run.conditions,
@@ -68,18 +78,26 @@ export const solve = Effect.fn(function* (solver: Smt.Solver, run: Run, conditio
       const match = /^\(declare-const (.+) Int\)$/.exec(declaration);
       return match && !run.bigs.has(match[1]!) ? [`(<= (- ${SAFE}) ${match[1]} ${SAFE})`] : [];
     }),
+    ...named.map((read) => `(= ${read.name} ${read.term.text})`),
   ];
   // Equal results of a function that never repeats one mean equal arguments.
   for (const [index, a] of applications.entries())
     for (const b of applications.slice(index + 1))
       if (a.injective && b.injective && functionOf(a) === functionOf(b))
         base.push(`(=> (= ${a.term} ${b.term}) (= ${a.argument} ${b.argument}))`);
-  const values = [...run.constants, ...applications.flatMap((a) => [a.term, a.argument])];
+  const values = [
+    ...run.constants,
+    ...applications.flatMap((a) => [a.term, a.argument]),
+    ...named.map((read) => read.name),
+  ];
   const facts: Array<string> = [];
 
   const ask = Effect.fn(function* (extra: ReadonlyArray<string>) {
     const answer = yield* solver.check({
-      declarations,
+      declarations: [
+        ...declarations,
+        ...named.map((read) => `(declare-const ${read.name} ${read.term.sort})`),
+      ],
       assertions: [...base, ...facts, ...extra],
       values,
     });
@@ -89,6 +107,11 @@ export const solve = Effect.fn(function* (solver: Smt.Solver, run: Run, conditio
       const value = answer.values[index];
       if (value !== undefined) model.set(text, value);
     });
+    // A term read back is known by its own text, as an input is.
+    for (const read of named) {
+      const value = model.get(read.name);
+      if (value !== undefined) model.set(read.term.text, value);
+    }
     return { _tag: "Sat", model } as const;
   });
 
@@ -306,6 +329,168 @@ const replay = Effect.fn(function* (
     },
   };
   return verdict;
+});
+
+/** A value as text two values share only when they are the same data. */
+const canon = (value: unknown): string => {
+  if (typeof value === "bigint") return `${value}n`;
+  if (typeof value === "string") return JSON.stringify(value);
+  if (value === null || typeof value !== "object") return String(value);
+  if (DateTime.isDateTime(value)) return `@${DateTime.toEpochMillis(value)}`;
+  if (Option.isOption(value)) return Option.isSome(value) ? `some(${canon(value.value)})` : "none";
+  if (Array.isArray(value)) return `[${value.map(canon).join(",")}]`;
+  return `{${Object.entries(value)
+    .filter(([, field]) => field !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([key, field]) => `${key}:${canon(field)}`)
+    .join(",")}}`;
+};
+
+/** Whether a real event or rejection has every field the prover read, with the same value. */
+const carries = (real: unknown, read: unknown): boolean =>
+  typeof real === "object" &&
+  real !== null &&
+  typeof read === "object" &&
+  read !== null &&
+  Object.entries(read).every(
+    ([key, field]) =>
+      field === undefined || canon((real as Record<string, unknown>)[key]) === canon(field),
+  );
+
+/** Every term a value is made of that is not an input: what the solver has to work out. */
+const computed = (value: V, into: Map<string, Smt.Term>): void => {
+  switch (value._tag) {
+    case "Term":
+      into.set(value.term.text, value.term);
+      return;
+    case "Time":
+      into.set(value.millis.text, value.millis);
+      return;
+    case "Obj":
+      for (const field of Object.values(value.fields)) computed(field, into);
+      return;
+    case "Arr":
+      for (const item of value.items) computed(item, into);
+      return;
+    default:
+      return;
+  }
+};
+
+/** What comparing a path with the real code gave. */
+export type Agreement =
+  | { readonly _tag: "Agreed" }
+  /**
+   * Nothing was compared. No inputs take the path, or with `taken`, the ones
+   * the solver found cannot be built as real values or run.
+   */
+  | { readonly _tag: "Skipped"; readonly taken: boolean }
+  | { readonly _tag: "Differs"; readonly reason: string };
+
+/** What the prover read a command to do on one path. */
+export type Read =
+  | { readonly _tag: "Rejected"; readonly rejection: V }
+  | { readonly _tag: "Unchanged" }
+  | { readonly _tag: "Changed"; readonly events: ReadonlyArray<V>; readonly after: V };
+
+/**
+ * Pick inputs that take one path, run the real `decide` and `evolve` on them,
+ * and say whether they do what the prover read: the same rejection, or the
+ * same events and the same state. A proof is about what the prover read, so
+ * it stands only where the two agree.
+ */
+export const agree = Effect.fn(function* (
+  solver: Smt.Solver,
+  aggregate: Aggregate.Any,
+  run: Run,
+  inputs: Inputs,
+  read: Read,
+) {
+  const skipped: Agreement = { _tag: "Skipped", taken: true };
+  const outputs = new Map<string, Smt.Term>();
+  if (read._tag === "Rejected") computed(read.rejection, outputs);
+  if (read._tag === "Changed") {
+    computed(read.after, outputs);
+    for (const event of read.events) computed(event, outputs);
+  }
+  const answer = yield* solve(
+    solver,
+    run,
+    "false",
+    [...outputs.values()].filter((term) => !run.declarations.has(term.text)),
+  );
+  if (answer._tag !== "Sat") return { _tag: "Skipped", taken: false } as const;
+  const model = answer.model;
+  const build = (value: V) => {
+    const built = Symbolic.concretize(value, model, run.lists);
+    return "value" in built ? Effect.succeed(built.value) : Effect.fail(skipped);
+  };
+  const tried = Effect.gen(function* () {
+    const definition = aggregate.definition;
+    const state = yield* build(inputs.state);
+    if (!Schema.is(definition.state)(state)) return skipped;
+    const invariants = (definition.invariants ?? {}) as unknown as Record<
+      string,
+      (state: unknown) => boolean
+    >;
+    // A state an invariant the prover could not read refuses is not one a proof starts from.
+    for (const holds of Object.values(invariants))
+      if (!(yield* Effect.try(() => holds(state)).pipe(Effect.orElseSucceed(() => false))))
+        return skipped;
+    const { _tag: tag, ...fields } = (yield* build(inputs.command)) as { readonly _tag: string };
+    const cls = definition.commands.find((c) => c.tag === tag) as unknown as new (
+      fields: object,
+    ) => { readonly _tag: string };
+    const command = yield* Effect.try(() => new cls(fields)).pipe(Effect.mapError(() => skipped));
+    let context = Context.empty() as Context.Context<unknown>;
+    for (const entry of run.contexts.values())
+      context = Context.add(
+        context,
+        entry.tag as Context.Key<unknown, unknown>,
+        yield* build(entry.value),
+      );
+    const prediction = Aggregate.predict(aggregate, state, command, {
+      now: (yield* build(inputs.now)) as DateTime.Utc,
+      version: (yield* build(inputs.version)) as number,
+      commandId: (yield* build(inputs.commandId)) as string,
+      context: context as Context.Context<never>,
+    });
+    // A command that fails is one whose fields a schema the prover does not read refuses.
+    if (prediction._tag === "Unpredictable") return skipped;
+    const on = `${Symbolic.show(command)} on ${Symbolic.show(state)}`;
+    const did =
+      prediction._tag === "Rejected"
+        ? `rejects it with ${Symbolic.show(prediction.rejection)}`
+        : prediction.events.length === 0
+          ? "records nothing"
+          : `records ${prediction.events.map(Symbolic.show).join(", ")} and leaves ${Symbolic.show(prediction.state)}`;
+    const differs = (what: string): Agreement => ({
+      _tag: "Differs",
+      reason: `the prover read ${on} as ${what}, and the real code ${did}`,
+    });
+    if (read._tag === "Rejected") {
+      const rejection = yield* build(read.rejection);
+      return prediction._tag === "Rejected" && carries(prediction.rejection, rejection)
+        ? ({ _tag: "Agreed" } as const)
+        : differs(`rejected with ${Symbolic.show(rejection)}`);
+    }
+    if (read._tag === "Unchanged")
+      return prediction._tag === "Accepted" && prediction.events.length === 0
+        ? ({ _tag: "Agreed" } as const)
+        : differs("recording nothing");
+    const events: Array<unknown> = [];
+    for (const event of read.events) events.push(yield* build(event));
+    const after = yield* build(read.after);
+    return prediction._tag === "Accepted" &&
+      prediction.events.length === events.length &&
+      prediction.events.every((event, index) => carries(event, events[index])) &&
+      canon(prediction.state) === canon(after)
+      ? ({ _tag: "Agreed" } as const)
+      : differs(
+          `recording ${events.map(Symbolic.show).join(", ")} and leaving ${Symbolic.show(after)}`,
+        );
+  });
+  return yield* tried.pipe(Effect.catch((agreement) => Effect.succeed(agreement)));
 });
 
 /**

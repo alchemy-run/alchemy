@@ -167,6 +167,15 @@ export interface Members<
   readonly eventually?: {
     readonly [name: string]: (model: Instances<A> & Keys<V> & Fed<J>) => boolean;
   };
+  /**
+   * What must be able to happen. Every other rule says what the model never
+   * does, and a model that refuses every command keeps them all. Each of
+   * these is named and given what an invariant is, and `Verify.model` looks
+   * for a sequence of commands that makes it true: it fails when none does.
+   */
+  readonly sometimes?: {
+    readonly [name: string]: (model: Instances<A> & Keys<V> & Fed<J>) => boolean;
+  };
 }
 
 /**
@@ -234,6 +243,8 @@ export interface ModelClass<
   readonly invariants: { readonly [name: string]: (model: never) => boolean };
   /** What holds once everything has run its course, by name. */
   readonly eventually: { readonly [name: string]: (model: never) => boolean };
+  /** What must be able to happen, by name. */
+  readonly sometimes: { readonly [name: string]: (model: never) => boolean };
   /** The model's relations, by name. */
   readonly relations: { readonly [name: string]: Relation.Any };
   readonly definitions: Kernel.Definitions;
@@ -510,6 +521,9 @@ export const make = <
       readonly [name: string]: (model: never) => boolean;
     };
     static readonly eventually = (members.eventually ?? {}) as {
+      readonly [name: string]: (model: never) => boolean;
+    };
+    static readonly sometimes = (members.sometimes ?? {}) as {
       readonly [name: string]: (model: never) => boolean;
     };
     static readonly relations = members.relations ?? {};

@@ -171,7 +171,7 @@ More: [Testing models: Check every outcome](https://alchemy.run/domain/testing-m
 
 A story checks one example. A rule says what is always true, and `Verify` looks for any state, input or sequence of commands that breaks it. Write a rule for each thing the business says can never happen.
 
-Rules go on the declaration. An aggregate has `invariants` (what no state may be) and `transitions` (what no command may do); a model has `invariants` (true whenever nothing is left to react) and `eventually` (true once every reaction and scheduled command has run). A model's rule is given every instance by aggregate name (`bank.Account`), every view key by view name (`bank.DailyOutflow`), and what each projection was given by projection name (`bank.Ledger`).
+Rules go on the declaration. An aggregate has `invariants` (what no state may be) and `transitions` (what no command may do); a model has `invariants` (true whenever nothing is left to react), `eventually` (true once every reaction and scheduled command has run) and `sometimes` (what some sequence of commands must reach, so a model that refuses everything fails). A model's rule is given every instance by aggregate name (`bank.Account`), every view key by view name (`bank.DailyOutflow`), and what each projection was given by projection name (`bank.Ledger`).
 
 ```ts
 export class Account extends Domain.Aggregate("Account", {
@@ -228,6 +228,8 @@ Rules of thumb:
 - A model's `relations` relate a few instances, each made with `Domain.Relation({ over: { customer: Customer, claim: UsernameClaim }, holds: ({ customer, claim }) => ... })`. `holds` is given `{ id, state }` for each name and starts with which instances it is about (`claim.state.customerId !== customer.id || ...`). `Verify.model` proves one where every command and decision that records on its aggregates keeps it, so a decision that writes both sides is what makes it provable. When a proof fails on states nothing reaches, add the relation that rules them out: relations are proved together.
 - `decide`, `evolve` and rules are plain functions of their inputs: loops, `+=`, rest patterns, `Option`, `effect/Array`, `effect/Record`, `effect/Struct` and `effect/Match` helpers are read. Code outside what the prover reads is reported with its file and line and fails the check: the full list is in [What the prover reads](https://alchemy.run/domain/verifiable-code). A loop over a list from the state or a command is tried up to 2 items past what its schema asks for, so its rule is `Checked`, not `Proved`.
 - Pin the rules that must stay proved with `require: { proved: ["Account.NeverOverdrawn"] }`: one that slips to `Checked` then fails the test.
+- Keep rules from being weakened with `lock: "./Bank.lock.json"`: the first run writes the file, commit it. A rule removed, or changed to allow more, then fails. Never set `UPDATE_VERIFY_LOCK=1` or edit the file to make a test pass: relocking a rule that says less is the user's call.
+- Where a proof fails from a state no sequence reaches, the report may print the invariant to add (`Add it to the invariants:`). Add it as written.
 - Never widen `allow` to get a pass. It names what the check may skip, and each entry is something no longer verified.
 - A rule that is true but not proved needs a second invariant that rules out the state the prover started from.
 - An external call listed under "called again" must be safe to repeat: give the vendor an idempotency key made from the event.

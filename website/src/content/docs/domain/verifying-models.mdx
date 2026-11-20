@@ -199,6 +199,27 @@ export class Bank extends Domain.Model("Bank", {
 
 It's checked once a sequence has run its course: nothing is left to react, and every scheduled command has come due and run.
 
+## Say what must be able to happen
+
+Every rule so far says what the model never does. A model that refuses every command keeps them all. `sometimes` says what it has to be able to do.
+
+```diff lang="typescript" title="packages/domain/src/Bank.model.ts"
+export class Bank extends Domain.Model("Bank", {
+  eventually: {
+    EveryTransferEnds: (bank) =>
+      bank.Transfer.every(
+        (transfer) => transfer.state._tag === "Completed" || transfer.state._tag === "Failed",
+      ),
+  },
++  sometimes: {
++    /** The bank can be used: a customer can end up with money in an account. */
++    AnAccountHoldsMoney: (bank) =>
++      bank.Account.some((account) => account.state._tag === "Open" && account.state.balance > 0),
++  },
+```
+
+One sequence of commands that gets there is enough, and the report shows the shortest one found. If none does, the test fails.
+
 ## Verify the model
 
 One test verifies all of it. Pass the model and the Apis callers reach it through. Their commands are what a sequence is made of.
@@ -257,8 +278,16 @@ Checked: in every sequence of up to 2 commands through CustomerApi, SupportApi, 
   ✓ Bank.LedgerIsGivenEveryDeposit
   ✓ Bank.EveryTransferEnds  holds at the end of the 6,158 sequences that ran their course
 
+Reached: a sequence of commands gets there
+  ✓ Bank.AnAccountHoldsMoney
+      1. RegisterCustomer { customerId: "A", name: "B", username: "C" } as { _tag: "Customer", customerId: "A" }  → CustomerRegistered, UsernameClaimed
+         ↳ MainAccountProvisioning: Account "A-main" OpenAccount { accountId: "A-main", customerId: "A", owner: "B" }  → AccountOpened
+      2. Account "A-main" DepositMoney { accountId: "A-main", amount: 1 } as { _tag: "Customer", customerId: "A" }  → MoneyDeposited
+
 Sampled: 200 longer sequences, of up to 12 commands picked at random (seed 1)
   ✓ none breaks a rule
+
+Agreed with the real code: inputs picked for each of 141 paths through the commands did what the prover read
 
 Left out, and no rule depends on it
   - view AccountSummary: no rule reads it and no policy reacts to it
@@ -279,7 +308,11 @@ Assumed
 
 **Checked** means no sequence that was run breaks the rule. A model's invariants are about many instances at once, which a solver can't decide in general, so they are searched: every sequence of a few commands, with everything that follows from each.
 
+**Reached** is the answer to a `sometimes` rule: the sequence that gets there, run on the real code.
+
 **Sampled** reaches past that. A rule that takes five commands to break is out of reach of every sequence of two, so longer ones are run too: 200 walks of up to 12 commands, each command picked at random. The seed makes them the same on every run, so a failure repeats.
+
+**Agreed** is what the proofs rest on. A proof is about the code as the prover reads it, so for each path through a command it picks inputs that take that path and runs the real `decide` and `evolve` on them. If the real code rejects where the prover read an event, or leaves another state, the rule isn't proved and the test fails with both.
 
 **Left out** names every part of the model the sequences ran without. No rule reads one and no policy reacts to one, so leaving it out changes no result. A view a rule does read is followed, and a policy the search can't follow fails the test.
 
@@ -303,6 +336,47 @@ Verify.model(Bank, {
 Not done
   ✗ Account.NeverOverdrawn is required to be proved, and is only checked
 ```
+
+## Keep a rule from saying less
+
+A test that fails can be made to pass by weakening the rule it checks, or deleting it. `lock` names a file that keeps each rule as it's written.
+
+```typescript title="packages/domain/test/Bank.verify.test.ts"
+Verify.model(Bank, {
+  apis: [CustomerApi, SupportApi],
+  story,
+  lock: "./Bank.lock.json",
+});
+```
+
+The first run writes the file, next to the test. Commit it. From then on a rule that is in the file and gone from the code fails the test, and so does one that changed to allow more. Here the locked `NeverOverdrawn` kept ten in every account, and the code now keeps none:
+
+```text
+Not done
+  ✗ Account.NeverOverdrawn says less than the rule locked in Bank.lock.json: { _tag: "Open", customerId: "", owner: "", balance: 0, frozen: "", today: { day: "", withdrawn: 0 } } passes it now, and the locked rule refuses it
+  ✗ Account.NeverFrozenForLong is locked in Bank.lock.json, and is no longer a rule of Bank
+  ✗ to change a rule on purpose, run the test once with UPDATE_VERIFY_LOCK=1: it locks each rule as it is written, and says which
+```
+
+A new rule is added to the file. An invariant of an aggregate that changed is compared with the one kept: the solver looks for a state the rules allow now that the old rule refused. If there is none, the new rule says at least as much, and it replaces the old one in the file. Every other kind of rule is compared as text.
+
+## Change a locked rule on purpose
+
+Sometimes the rule was wrong, and saying less is the fix. Run the test once with `UPDATE_VERIFY_LOCK=1`, the way a snapshot is rewritten.
+
+```sh
+UPDATE_VERIFY_LOCK=1 bun vitest run test/Bank.verify.test.ts
+```
+
+Every rule is locked as it's written now. The run logs a warning for each rule it let go, and the report lists them:
+
+```text
+Relocked with UPDATE_VERIFY_LOCK=1
+  ! Account.NeverOverdrawn says less than the rule locked in Bank.lock.json: { _tag: "Open", customerId: "", owner: "", balance: 0, frozen: "", today: { day: "", withdrawn: 0 } } passes it now, and the locked rule refuses it
+  ! Account.NeverFrozenForLong is locked in Bank.lock.json, and is no longer a rule of Bank
+```
+
+Commit the file. The change is then in the diff of a file a reviewer can read. Under `CI` the variable does nothing and the file is never written, so a rule the lock doesn't have fails there.
 
 ## Fix what breaks
 
@@ -637,17 +711,21 @@ An invariant can be true of every state the aggregate reaches and still not be p
 Checked: in every sequence of up to 3 commands on a new instance
   ✓ NeverOverdrawn
       not proved: Capture { id: "" } breaks it from { balance: 0, reserved: 1 }, a state the rules allow
-      No sequence that was run reaches that state. If none can, say so in an invariant, and this one is proved.
+      No sequence that was run reaches that state, and none can.
+      Every command keeps this, and with it the rule is proved. Add it to the invariants:
+        ReservedWithinBalance: (hold) => hold.reserved <= hold.balance,
 ```
 
-Nothing says the reserved amount is covered, so the proof starts from a state where it isn't. Write that rule down, and both are proved:
+Nothing says the reserved amount is covered, so the proof starts from a state where it isn't. The report found the rule that says so: it holds of a new escrow, every command keeps it, and with it `NeverOverdrawn` is proved. Write it down, and both are:
 
 ```typescript title="packages/domain/src/Escrow.aggregate.ts"
 invariants: {
-  NeverOverdrawn: (escrow) => escrow.balance >= 0,
-  ReservedIsCovered: (escrow) => escrow.reserved >= 0 && escrow.reserved <= escrow.balance,
+  NeverOverdrawn: (hold) => hold.balance >= 0,
+  ReservedWithinBalance: (hold) => hold.reserved <= hold.balance,
 },
 ```
+
+The rules it tries are simple ones about whole numbers: that one isn't below zero, and that one isn't above another. Where none of those does it, the report says only where the proof fails, and the rule is yours to find.
 
 A relation meets the same thing more often, because it starts from any two states at once. This club seats members, and says a seated member's seat is taken:
 
