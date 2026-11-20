@@ -742,6 +742,7 @@ import {
   OrganizationSecurityPolicyProvider,
 } from "./Compute/OrganizationSecurityPolicy.ts";
 import { PacketMirroring, PacketMirroringProvider } from "./Compute/PacketMirroring.ts";
+import { ProjectMetadataItem, ProjectMetadataItemProvider } from "./Compute/ProjectMetadataItem.ts";
 import {
   PublicAdvertisedPrefix,
   PublicAdvertisedPrefixProvider,
@@ -1523,9 +1524,11 @@ import {
   DatasetsHl7V2StoresMessage,
   DatasetsHl7V2StoresMessageProvider,
 } from "./Healthcare/DatasetsHl7V2StoresMessage.ts";
+import { Binding as IamBinding, BindingProvider as IamBindingProvider } from "./IAM/Binding.ts";
 import { HostServiceAccount, HostServiceAccountProvider } from "./IAM/HostServiceAccount.ts";
 import { Member as IamMember, MemberProvider as IamMemberProvider } from "./IAM/Member.ts";
 import { Policy as IamPolicy, PolicyProvider as IamPolicyProvider } from "./IAM/Policy.ts";
+import { Role as IamRole, RoleProvider as IamRoleProvider } from "./IAM/Role.ts";
 import {
   ServiceAccount as IamServiceAccount,
   ServiceAccountProvider as IamServiceAccountProvider,
@@ -2275,6 +2278,7 @@ import { AccessSecretVersionHttp } from "./SecretManager/AccessSecretVersionHttp
 import { AddSecretVersionHttp } from "./SecretManager/AddSecretVersionHttp.ts";
 import { LocationsSecret, LocationsSecretProvider } from "./SecretManager/LocationsSecret.ts";
 import { Secret, SecretProvider } from "./SecretManager/Secret.ts";
+import { SecretVersion, SecretVersionProvider } from "./SecretManager/SecretVersion.ts";
 import {
   RepositoriesBranchRule,
   RepositoriesBranchRuleProvider,
@@ -3612,6 +3616,10 @@ const makeProviders = () =>
           WorkloadIdentityPool,
           WorkloadIdentityProvider,
           ProjectService,
+          IamBinding,
+          ProjectMetadataItem,
+          SecretVersion,
+          IamRole,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
       return {
@@ -4740,6 +4748,10 @@ const makeProviders = () =>
                 ProjectServiceProvider(),
                 SasportalSignedCustomersDeploymentsDeviceProvider(),
                 SasportalSignedNodesDeploymentsDeviceProvider(),
+                IamBindingProvider(),
+                ProjectMetadataItemProvider(),
+                SecretVersionProvider(),
+                IamRoleProvider(),
               ),
             ),
           ),

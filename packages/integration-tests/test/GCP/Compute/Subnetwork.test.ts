@@ -110,3 +110,58 @@ test.provider(
     }).pipe(logLevel, withNetworkSlot),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 360_000 },
 );
+
+test.provider(
+  "create active and backup proxy-only subnetworks",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          const network = yield* GCP.Compute.Network("ProxyVpc", {
+            autoCreateSubnetworks: false,
+          });
+          const active = yield* GCP.Compute.Subnetwork("ProxyActive", {
+            network: network.networkName,
+            region: "us-central1",
+            ipCidrRange: "10.30.0.0/23",
+            purpose: "REGIONAL_MANAGED_PROXY",
+            role: "ACTIVE",
+          });
+          const backup = yield* GCP.Compute.Subnetwork("ProxyBackup", {
+            network: network.networkName,
+            region: "us-central1",
+            ipCidrRange: "10.30.2.0/23",
+            purpose: "REGIONAL_MANAGED_PROXY",
+            role: "BACKUP",
+          });
+          return { active, backup };
+        }),
+      );
+
+      expect(created.active.purpose).toEqual("REGIONAL_MANAGED_PROXY");
+      expect(created.active.role).toEqual("ACTIVE");
+      expect(created.backup.role).toEqual("BACKUP");
+
+      const fetched = yield* compute.getSubnetworks({
+        project: created.backup.project,
+        region: created.backup.region,
+        subnetwork: created.backup.subnetworkName,
+      });
+      expect(fetched.purpose).toEqual("REGIONAL_MANAGED_PROXY");
+      expect(fetched.role).toEqual("BACKUP");
+
+      yield* stack.destroy();
+
+      for (const subnetwork of [created.active, created.backup]) {
+        const gone = yield* waitUntilGone(
+          subnetwork.project,
+          subnetwork.region,
+          subnetwork.subnetworkName,
+        );
+        expect(gone).toEqual("gone");
+      }
+    }).pipe(logLevel, withNetworkSlot),
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 360_000 },
+);

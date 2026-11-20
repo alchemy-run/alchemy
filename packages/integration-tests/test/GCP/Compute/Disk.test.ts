@@ -91,3 +91,56 @@ test.provider(
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 90_000 },
 );
+
+test.provider(
+  "attach and detach a snapshot schedule on a disk",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (attached: boolean) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const schedule = yield* GCP.Compute.ResourcePolicy("Nightly", {
+              region: "us-central1",
+              snapshotSchedulePolicy: {
+                schedule: { dailySchedule: { daysInCycle: 1, startTime: "04:00" } },
+                retentionPolicy: { maxRetentionDays: 1 },
+              },
+            });
+            const disk = yield* GCP.Compute.Disk("Scheduled", {
+              zone: "us-central1-a",
+              resourcePolicies: attached ? [schedule.resourcePolicyName] : [],
+            });
+            return { schedule, disk };
+          }),
+        );
+
+      const created = yield* deploy(true);
+      expect(created.disk.resourcePolicies).toHaveLength(1);
+      expect(created.disk.resourcePolicies[0]).toContain(
+        `/regions/us-central1/resourcePolicies/${created.schedule.resourcePolicyName}`,
+      );
+
+      const fetched = yield* compute.getDisks({
+        project: created.disk.project,
+        zone: created.disk.zone,
+        disk: created.disk.diskName,
+      });
+      expect(fetched.resourcePolicies ?? []).toHaveLength(1);
+
+      const detached = yield* deploy(false);
+      expect(detached.disk.diskName).toEqual(created.disk.diskName);
+      expect(detached.disk.resourcePolicies).toEqual([]);
+
+      yield* stack.destroy();
+
+      const gone = yield* waitUntilGone(
+        created.disk.project,
+        created.disk.zone,
+        created.disk.diskName,
+      );
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  { tags: ["provider:gcp", "provider:gcp:compute", "live"], timeout: 180_000 },
+);

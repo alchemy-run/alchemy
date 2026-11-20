@@ -195,6 +195,13 @@ export type InstanceProps = {
    */
   deletionProtectionEnabled?: boolean;
   /**
+   * Require every connection to go through a Cloud SQL connector (the
+   * Auth Proxy or a language connector). `REQUIRED` rejects direct
+   * connections to the instance IP; `NOT_REQUIRED` allows both.
+   * @default unset — Cloud SQL's default (`NOT_REQUIRED`) on create; the observed setting is left alone
+   */
+  connectorEnforcement?: sqladmin.SettingsConnectorEnforcementEnum | (string & {});
+  /**
    * Database flags passed at instance startup.
    */
   databaseFlags?: DatabaseFlag[];
@@ -248,6 +255,8 @@ export type Instance = Resource<
     sslMode: string | undefined;
     /** Whether deletion protection is enabled. */
     deletionProtectionEnabled: boolean;
+    /** Connector enforcement (`REQUIRED`, `NOT_REQUIRED`). */
+    connectorEnforcement: string | undefined;
     /** Activation policy (`ALWAYS`, `NEVER`, …). */
     activationPolicy: string | undefined;
     /** Availability type (`ZONAL`, `REGIONAL`). */
@@ -264,6 +273,12 @@ export type Instance = Resource<
     storageAutoResize: boolean;
     /** Service account email used by the instance. */
     serviceAccountEmailAddress: string | undefined;
+    /**
+     * PEM of the instance's current server CA certificate, for clients
+     * that verify the server (`sslmode=verify-ca`). `undefined` when
+     * Cloud SQL does not report one.
+     */
+    serverCaCert: string | undefined;
     /** SQL Admin self-link. */
     selfLink: string | undefined;
     /** RFC3339 creation timestamp. */
@@ -356,6 +371,23 @@ export interface InstanceLookup {
  *   },
  * });
  * // db.privateIpAddress is reachable from inside the VPC
+ * ```
+ *
+ * **Example:** Verify the server certificate from a client
+ * ```typescript
+ * const db = yield* GCP.SQL.Instance("Control", {
+ *   databaseVersion: "POSTGRES_17",
+ *   ipConfiguration: { sslMode: "ENCRYPTED_ONLY" },
+ * });
+ * // db.serverCaCert is the PEM to trust with sslmode=verify-ca
+ * ```
+ *
+ * **Example:** Only accept connections through the Cloud SQL connectors
+ * ```typescript
+ * const db = yield* GCP.SQL.Instance("Control", {
+ *   databaseVersion: "POSTGRES_17",
+ *   connectorEnforcement: "REQUIRED",
+ * });
  * ```
  *
  * ### Backups and Storage
@@ -533,6 +565,7 @@ const toAttrs = (instance: sqladmin.DatabaseInstance, project: string, defaultRe
     privateNetwork: settings?.ipConfiguration?.privateNetwork,
     sslMode: settings?.ipConfiguration?.sslMode,
     deletionProtectionEnabled: settings?.deletionProtectionEnabled === true,
+    connectorEnforcement: settings?.connectorEnforcement,
     activationPolicy: settings?.activationPolicy,
     availabilityType: settings?.availabilityType,
     dataDiskSizeGb: diskSizeOf(settings?.dataDiskSizeGb),
@@ -541,6 +574,7 @@ const toAttrs = (instance: sqladmin.DatabaseInstance, project: string, defaultRe
     transactionLogRetentionDays: settings?.backupConfiguration?.transactionLogRetentionDays,
     storageAutoResize: settings?.storageAutoResize === true,
     serviceAccountEmailAddress: instance.serviceAccountEmailAddress,
+    serverCaCert: instance.serverCaCert?.cert,
     selfLink: instance.selfLink,
     createTime: instance.createTime,
   };
@@ -672,6 +706,7 @@ const insertBody = (
       dataDiskSizeGb: String(news.dataDiskSizeGb ?? DEFAULT_DISK_SIZE_GB),
       dataDiskType: normalizeDiskType(news.dataDiskType),
       deletionProtectionEnabled: news.deletionProtectionEnabled === true,
+      connectorEnforcement: news.connectorEnforcement,
       userLabels: desiredLabels,
       storageAutoResize: news.storageAutoResize === true,
       ipConfiguration: ipConfigurationOf(news.ipConfiguration, privateNetwork, version),
@@ -879,6 +914,11 @@ export const InstanceProvider = () =>
       const protectionChanged =
         (settings?.deletionProtectionEnabled === true) !== desiredProtection;
 
+      const desiredConnector = news.connectorEnforcement?.toUpperCase();
+      const connectorChanged =
+        desiredConnector !== undefined &&
+        (settings?.connectorEnforcement ?? "NOT_REQUIRED") !== desiredConnector;
+
       const ip = news.ipConfiguration;
       const observedIp = settings?.ipConfiguration;
       const desiredSslMode = ip?.sslMode?.toUpperCase();
@@ -944,6 +984,7 @@ export const InstanceProvider = () =>
         activationChanged ||
         availabilityChanged ||
         protectionChanged ||
+        connectorChanged ||
         ipChanged ||
         backupChanged ||
         autoResizeChanged ||
@@ -967,6 +1008,7 @@ export const InstanceProvider = () =>
             activationPolicy: news.activationPolicy !== undefined ? desiredActivation : undefined,
             availabilityType: news.availabilityType !== undefined ? desiredAvailability : undefined,
             deletionProtectionEnabled: desiredProtection,
+            connectorEnforcement: connectorChanged ? desiredConnector : undefined,
             dataDiskSizeGb: diskChanged ? String(desiredDisk) : undefined,
             ipConfiguration: ipChanged ? ipConfiguration : undefined,
             backupConfiguration: backupChanged

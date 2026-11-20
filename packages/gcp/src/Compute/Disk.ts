@@ -92,6 +92,15 @@ export type DiskProps = {
    * replaces the disk.
    */
   enableConfidentialCompute?: boolean;
+  /**
+   * Resource policies (for example a snapshot schedule from
+   * `GCP.Compute.ResourcePolicy`) attached to the disk, by name in the
+   * disk's region or by full path. Attached on create and kept in sync
+   * through `addResourcePolicies` / `removeResourcePolicies`; `[]`
+   * detaches every policy.
+   * @default unset — observed attachments are left alone
+   */
+  resourcePolicies?: ReadonlyArray<string>;
 };
 
 export type Disk = Resource<
@@ -128,6 +137,8 @@ export type Disk = Resource<
     sourceDisk: string | undefined;
     /** Attached instance URLs. */
     users: ReadonlyArray<string>;
+    /** Attached resource policy URLs. */
+    resourcePolicies: ReadonlyArray<string>;
   },
   never,
   Providers,
@@ -185,6 +196,22 @@ export interface DiskLookup {
  * const disk = yield* GCP.Compute.Disk("data", {
  *   diskName: "app-data",
  *   sizeGb: 50,
+ * });
+ * ```
+ *
+ * ### Snapshot schedules
+ * **Example:** Attach a daily snapshot schedule
+ * ```typescript
+ * const schedule = yield* GCP.Compute.ResourcePolicy("daily", {
+ *   region: "us-central1",
+ *   snapshotSchedulePolicy: {
+ *     schedule: { dailySchedule: { daysInCycle: 1, startTime: "04:00" } },
+ *     retentionPolicy: { maxRetentionDays: 7 },
+ *   },
+ * });
+ * const disk = yield* GCP.Compute.Disk("data", {
+ *   zone: "us-central1-a",
+ *   resourcePolicies: [schedule.resourcePolicyName],
  * });
  * ```
  *
@@ -271,6 +298,7 @@ const toAttrs = (disk: compute.Disk, project: string) => ({
   sourceSnapshot: disk.sourceSnapshot,
   sourceDisk: disk.sourceDisk,
   users: disk.users ?? [],
+  resourcePolicies: disk.resourcePolicies ?? [],
 });
 
 const getByName = (project: string, zone: string, disk: string) =>
@@ -321,6 +349,11 @@ const waitDiskGone = (project: string, zone: string, diskName: string) =>
 
 const diskTypeUrl = (project: string, zone: string, type: string) =>
   `projects/${project}/zones/${zone}/diskTypes/${type}`;
+
+const resourcePolicyUrl = (project: string, zone: string, policy: string) =>
+  policy.includes("/")
+    ? policy
+    : `projects/${project}/regions/${zone.slice(0, zone.lastIndexOf("-"))}/resourcePolicies/${policy}`;
 
 export const DiskProvider = () =>
   Provider.succeed(Disk, {
@@ -421,6 +454,9 @@ export const DiskProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
+      const desiredPolicies = news.resourcePolicies?.map((policy) =>
+        resourcePolicyUrl(env.project, zone, policy),
+      );
 
       let current = yield* getByName(env.project, zone, diskName);
       if (current?.status === "DELETING") {
@@ -454,6 +490,7 @@ export const DiskProvider = () =>
                   ? String(news.provisionedThroughput)
                   : undefined,
               enableConfidentialCompute: news.enableConfidentialCompute,
+              resourcePolicies: desiredPolicies?.length ? [...desiredPolicies] : undefined,
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
@@ -537,6 +574,39 @@ export const DiskProvider = () =>
         });
         yield* waitZoneOperation(env.project, zone, updated);
         current = yield* getByName(env.project, zone, diskName);
+      }
+
+      if (current === undefined) {
+        return yield* new DiskNotResolved({ diskName, zone });
+      }
+
+      if (desiredPolicies !== undefined) {
+        const desiredNames = new Set(desiredPolicies.map(lastSegment));
+        const observed = current.resourcePolicies ?? [];
+        const observedNames = new Set(observed.map(lastSegment));
+        const detach = observed.filter((policy) => !desiredNames.has(lastSegment(policy)));
+        const attach = desiredPolicies.filter((policy) => !observedNames.has(lastSegment(policy)));
+        if (detach.length > 0) {
+          const removed = yield* compute.removeResourcePoliciesDisks({
+            project: env.project,
+            zone,
+            disk: diskName,
+            body: { resourcePolicies: detach },
+          });
+          yield* waitZoneOperation(env.project, zone, removed);
+        }
+        for (const policy of attach) {
+          const added = yield* compute.addResourcePoliciesDisks({
+            project: env.project,
+            zone,
+            disk: diskName,
+            body: { resourcePolicies: [policy] },
+          });
+          yield* waitZoneOperation(env.project, zone, added);
+        }
+        if (detach.length > 0 || attach.length > 0) {
+          current = yield* getByName(env.project, zone, diskName);
+        }
       }
 
       if (current === undefined) {
