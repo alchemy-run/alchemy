@@ -75,6 +75,28 @@ export type PlainToolHandler<Spec extends ToolSpec> = (
 ) => Effect.Effect<SuccessOf<Spec>, FailureOf<Spec>, ToolCall | RuntimeContext>;
 
 /**
+ * What `make` takes: the handler, or an Effect that builds it. A handler
+ * returns an Effect or, when it needs none, the result itself. `Uses` is
+ * what the handler's Effect requires, `R` what building it does.
+ */
+export type ToolImpl<Spec extends ToolSpec, Uses extends ToolServices, R> =
+  | ((
+      parameters: Spec["parameters"]["Type"],
+    ) => SuccessOf<Spec> | Effect.Effect<SuccessOf<Spec>, FailureOf<Spec>, Uses>)
+  | Effect.Effect<
+      (
+        parameters: Spec["parameters"]["Type"],
+      ) => SuccessOf<Spec> | Effect.Effect<SuccessOf<Spec>, FailureOf<Spec>, Uses>,
+      never,
+      R
+    >;
+
+/** What an implementation's Layer requires: what building it needs, and sandboxes when its handler uses one. */
+export type ImplRequirements<Uses, R> =
+  | Exclude<R, Scope.Scope>
+  | SandboxesFor<Extract<Uses, Sandbox>>;
+
+/**
  * A tool declared as a class. Its implementation is either provided as a
  * Layer (`MyTool.make(...)`) or given inline as the class's third argument.
  */
@@ -96,13 +118,13 @@ export interface ToolClass<
    * is yielded (a Durable Object's outer Effect), so bindings it declares
    * are known at plan time; it returns the per-call handler. A handler that
    * uses `AI.Sandbox` makes the Layer require `AI.Sandboxes`.
+   *
+   * A tool with nothing to build first passes the handler alone: an
+   * `Effect.fn`, or a function that returns the result.
    */
-  make<R>(
-    impl: Effect.Effect<PlainToolHandler<Spec>, never, R>,
-  ): Layer.Layer<Self, never, Exclude<R, Scope.Scope>>;
-  make<R>(
-    impl: Effect.Effect<ToolHandler<Spec>, never, R>,
-  ): Layer.Layer<Self, never, Exclude<R, Scope.Scope> | Sandboxes>;
+  make<Uses extends ToolServices = never, R = never>(
+    impl: ToolImpl<Spec, Uses, R>,
+  ): Layer.Layer<Self, never, ImplRequirements<Uses, R>>;
 }
 
 /** A tool declared inline, closing over whatever is in scope. */
@@ -189,6 +211,18 @@ export interface ToolConstructor {
  * );
  * ```
  *
+ * **Example:** The handler alone
+ * ```typescript
+ * export const AddLive = Add.make(({ a, b }) => ({ sum: a + b }));
+ *
+ * export const FetchLive = Fetch.make(
+ *   Effect.fn(function* ({ url }) {
+ *     const sandbox = yield* AI.Sandbox;
+ *     return yield* sandbox.exec(["curl", "-s", url]).pipe(Effect.orDie);
+ *   }),
+ * );
+ * ```
+ *
  * **Example:** A tool that works in the conversation's sandbox
  * ```typescript
  * export class RunTests extends AI.Tool<RunTests>()("run_tests", {
@@ -225,10 +259,29 @@ export interface ToolConstructor {
  * );
  * ```
  */
+type AnyHandler = (parameters: unknown) => unknown;
+
+/** A handler that may return its result directly, as one that always returns an Effect. */
+const lift =
+  (handler: AnyHandler): ToolHandler<ToolSpec> =>
+  (parameters) =>
+    Effect.suspend(() => {
+      const result = handler(parameters);
+      return Effect.isEffect(result)
+        ? (result as ReturnType<ToolHandler<ToolSpec>>)
+        : Effect.succeed(result);
+    });
+
+/** What `make` was given, as the Effect that builds the handler. */
+const implOf = (
+  impl: Effect.Effect<AnyHandler, never, unknown> | AnyHandler,
+): Effect.Effect<ToolHandler<ToolSpec>, never, unknown> =>
+  Effect.isEffect(impl) ? Effect.map(impl, lift) : Effect.succeed(lift(impl));
+
 export const Tool = ((...args: ReadonlyArray<unknown>): unknown => {
   if (args.length === 3 && typeof args[0] === "string" && typeof args[2] === "function") {
-    const [name, spec, handler] = args as [string, ToolSpec, ToolHandler<ToolSpec>];
-    return { [ToolTypeId]: "inline", toolName: name, spec, handler };
+    const [name, spec, handler] = args as [string, ToolSpec, AnyHandler];
+    return { [ToolTypeId]: "inline", toolName: name, spec, handler: lift(handler) };
   }
   return (
     name: string,
@@ -241,8 +294,8 @@ export const Tool = ((...args: ReadonlyArray<unknown>): unknown => {
       static readonly toolName = name;
       static readonly spec = spec;
       static readonly impl = impl;
-      static make(implementation: Effect.Effect<ToolHandler<ToolSpec>, never, unknown>) {
-        return Layer.effect(this as never, implementation);
+      static make(implementation: Effect.Effect<AnyHandler, never, unknown> | AnyHandler) {
+        return Layer.effect(this as never, implOf(implementation));
       }
     };
   };
@@ -352,13 +405,13 @@ export interface ToolTagClass<Self, Name extends string> extends Context.Service
    * yielded and returns the per-call handler; a handler that uses
    * `AI.Sandbox` makes the Layer require `AI.Sandboxes`.
    */
-  make<const Spec extends ToolSpec, R>(
+  make<const Spec extends ToolSpec, R = never>(
     spec: Spec,
-    impl: Effect.Effect<PlainToolHandler<Spec>, never, R>,
+    impl: ToolImpl<Spec, ToolCall | RuntimeContext, R>,
   ): Layer.Layer<Self, never, Exclude<R, Scope.Scope>>;
-  make<const Spec extends ToolSpec, R>(
+  make<const Spec extends ToolSpec, R = never>(
     spec: Spec,
-    impl: Effect.Effect<ToolHandler<Spec>, never, R>,
+    impl: ToolImpl<Spec, ToolServices, R>,
   ): Layer.Layer<Self, never, Exclude<R, Scope.Scope> | Sandboxes>;
   /**
    * Use a coding agent's own tool of this name. A harness package builds
@@ -392,10 +445,10 @@ export const ToolTag =
     return class extends Tag {
       static readonly [ToolTagTypeId] = true;
       static readonly toolName = name;
-      static make(spec: ToolSpec, impl: Effect.Effect<ToolHandler<ToolSpec>, never, unknown>) {
+      static make(spec: ToolSpec, impl: Effect.Effect<AnyHandler, never, unknown> | AnyHandler) {
         return Layer.effect(
           this as never,
-          Effect.map(impl, (handler): ToolTagService => ({ kind: "tool", spec, handler })),
+          Effect.map(implOf(impl), (handler): ToolTagService => ({ kind: "tool", spec, handler })),
         );
       }
       static native(engine: string, tool: unknown) {

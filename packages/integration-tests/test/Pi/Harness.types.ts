@@ -46,13 +46,11 @@ const OwnBash = AI.Bash.make(
     parameters: Schema.Struct({ command: Schema.String }),
     success: Schema.Number,
   },
-  Effect.succeed(
-    Effect.fn(function* ({ command }) {
-      type _ParametersAreTyped = Assert<Equals<typeof command, string>>;
-      const sandbox = yield* AI.Sandbox;
-      return (yield* sandbox.exec(command).pipe(Effect.orDie)).exitCode;
-    }),
-  ),
+  Effect.fn(function* ({ command }) {
+    type _ParametersAreTyped = Assert<Equals<typeof command, string>>;
+    const sandbox = yield* AI.Sandbox;
+    return (yield* sandbox.exec(command).pipe(Effect.orDie)).exitCode;
+  }),
 );
 type _OwnToolLayer = Assert<Equals<Layer.Success<typeof OwnBash>, AI.Bash>>;
 type _OwnSandboxToolNeedsSandboxes = Assert<Equals<Layer.Services<typeof OwnBash>, AI.Sandboxes>>;
@@ -83,12 +81,45 @@ const CountLive = Count.make(
 type _SandboxToolLayerNeedsSandboxes = Assert<
   Equals<Layer.Services<typeof CountLive>, AI.Sandboxes>
 >;
+// `make` also takes the handler alone: an Effect.fn, or a function that returns the result.
+const CountShort = Count.make(
+  Effect.fn(function* ({ path }) {
+    type _ParametersAreTyped = Assert<Equals<typeof path, string>>;
+    const sandbox = yield* AI.Sandbox;
+    return (yield* sandbox.readFile(path).pipe(Effect.orDie)).length;
+  }),
+);
+type _ShortSandboxHandlerNeedsSandboxes = Assert<
+  Equals<Layer.Services<typeof CountShort>, AI.Sandboxes>
+>;
+const AddFn = Add.make(
+  Effect.fn(function* ({ a, b }) {
+    return a + b;
+  }),
+);
+const AddValue = Add.make(({ a, b }) => a + b);
+type _ShortHandlersNeedNothing = Assert<
+  Equals<Layer.Services<typeof AddFn> | Layer.Services<typeof AddValue>, never>
+>;
+class Touch extends AI.Tool<Touch>()("touch", {
+  description: "Create an empty file.",
+  parameters: Schema.Struct({ path: Schema.String }),
+  success: Schema.Void,
+}) {}
+// A handler that returns nothing still requires the sandbox it uses.
+const TouchLive = Touch.make(
+  Effect.fn(function* ({ path }) {
+    const sandbox = yield* AI.Sandbox;
+    yield* sandbox.writeFile(path, "").pipe(Effect.orDie);
+  }),
+);
+type _VoidSandboxHandlerNeedsSandboxes = Assert<
+  Equals<Layer.Services<typeof TouchLive>, AI.Sandboxes>
+>;
 const AddLive = Add.make(
-  Effect.succeed(
-    Effect.fn(function* ({ a, b }) {
-      return a + b;
-    }),
-  ),
+  Effect.fn(function* ({ a, b }) {
+    return a + b;
+  }),
 );
 type _PlainToolLayerNeedsNothing = Assert<Equals<Layer.Services<typeof AddLive>, never>>;
 

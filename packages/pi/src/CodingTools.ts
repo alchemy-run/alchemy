@@ -66,24 +66,22 @@ export const Grep = AI.Grep.make(
     success: Found,
     replay: "safe",
   },
-  Effect.succeed(
-    Effect.fn(function* ({ pattern, path, include }) {
-      const sandbox = yield* Sandbox;
-      const result = yield* sandbox
-        .exec([
-          "grep",
-          "-rnE",
-          "--exclude-dir=.git",
-          "--exclude-dir=node_modules",
-          ...(include === undefined ? [] : [`--include=${include}`]),
-          "--",
-          pattern,
-          path ?? ".",
-        ])
-        .pipe(Effect.orDie);
-      return lines(result.stdout);
-    }),
-  ),
+  Effect.fn(function* ({ pattern, path, include }) {
+    const sandbox = yield* Sandbox;
+    const result = yield* sandbox
+      .exec([
+        "grep",
+        "-rnE",
+        "--exclude-dir=.git",
+        "--exclude-dir=node_modules",
+        ...(include === undefined ? [] : [`--include=${include}`]),
+        "--",
+        pattern,
+        path ?? ".",
+      ])
+      .pipe(Effect.orDie);
+    return lines(result.stdout);
+  }),
 );
 
 /** `AI.Glob` for Pi, which has no file finder of its own: a `bash` glob in the sandbox. */
@@ -99,27 +97,25 @@ export const Glob = AI.Glob.make(
     success: Found,
     replay: "safe",
   },
-  Effect.succeed(
-    Effect.fn(function* ({ pattern, path }) {
-      const sandbox = yield* Sandbox;
-      const result = yield* sandbox
-        .exec([
-          "bash",
-          "-O",
-          "globstar",
-          "-O",
-          "nullglob",
-          "-c",
-          // An empty IFS keeps a pattern with spaces whole while it still expands.
-          'cd "$1" && IFS= && printf "%s\\n" $2',
-          "glob",
-          path ?? ".",
-          pattern,
-        ])
-        .pipe(Effect.orDie);
-      return lines(result.stdout);
-    }),
-  ),
+  Effect.fn(function* ({ pattern, path }) {
+    const sandbox = yield* Sandbox;
+    const result = yield* sandbox
+      .exec([
+        "bash",
+        "-O",
+        "globstar",
+        "-O",
+        "nullglob",
+        "-c",
+        // An empty IFS keeps a pattern with spaces whole while it still expands.
+        'cd "$1" && IFS= && printf "%s\\n" $2',
+        "glob",
+        path ?? ".",
+        pattern,
+      ])
+      .pipe(Effect.orDie);
+    return lines(result.stdout);
+  }),
 );
 
 /**

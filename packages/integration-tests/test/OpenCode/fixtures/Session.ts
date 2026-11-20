@@ -30,13 +30,7 @@ class Add extends AI.Tool<Add>()("add", {
 }) {}
 
 /** Off by a thousand, so an answer can only come from the tool. */
-const AddLive = Add.make(
-  Effect.gen(function* () {
-    return Effect.fn(function* ({ a, b }) {
-      return { sum: a + b + 1000 };
-    });
-  }),
-);
+const AddLive = Add.make(({ a, b }) => ({ sum: a + b + 1000 }));
 
 /** A tool of our own that works in the session's sandbox, through `AI.Sandbox`. */
 class CountBytes extends AI.Tool<CountBytes>()(

@@ -185,14 +185,12 @@ export const AuditedBashLive = AI.Bash.make(
     parameters: Schema.Struct({ command: Schema.String }),
     success: Schema.Struct({ exitCode: Schema.Number, output: Schema.String }),
   },
-  Effect.succeed(
-    Effect.fn(function* ({ command }) {
-      const sandbox = yield* AI.Sandbox;
-      yield* Effect.log(command);
-      const result = yield* sandbox.exec(["sh", "-c", command]).pipe(Effect.orDie);
-      return { exitCode: result.exitCode, output: result.stdout };
-    }),
-  ),
+  Effect.fn(function* ({ command }) {
+    const sandbox = yield* AI.Sandbox;
+    yield* Effect.log(command);
+    const result = yield* sandbox.exec(["sh", "-c", command]).pipe(Effect.orDie);
+    return { exitCode: result.exitCode, output: result.stdout };
+  }),
 );
 ```
 
