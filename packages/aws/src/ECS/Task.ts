@@ -21,6 +21,7 @@ import {
   type ServerHost,
 } from "alchemy/Runtime/Process";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
 import { moduleExtension } from "alchemy/Util/Node";
@@ -37,8 +38,8 @@ import {
   makeImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
+  type EcrRegistryImageSource,
   type ImageSourceLike,
-  type RegistryImageSource,
   type ResolvedImageAgent,
 } from "../ECR/ImageSource.ts";
 import { AWSEnvironment } from "../Environment.ts";
@@ -271,9 +272,10 @@ export interface BundledTaskProps extends TaskPropsBase, BundledImageSource {}
  */
 export interface DockerfileTaskProps extends TaskPropsBase, DockerfileImageSource {}
 /**
- * Run a pre-built registry image (`image`), mirrored into ECR.
+ * Run a pre-built registry image (`image`), mirrored into ECR unless
+ * `mirror: false`.
  */
-export interface ImageTaskProps extends TaskPropsBase, RegistryImageSource {}
+export interface ImageTaskProps extends TaskPropsBase, EcrRegistryImageSource {}
 
 /**
  * Task props — the image comes from exactly one of three sources, flat on
@@ -1002,10 +1004,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
             },
           ]
         : undefined,
-    environment: Object.entries(props.env ?? {}).map(([name, value]) => ({
-      name,
-      value: typeof value === "string" ? value : JSON.stringify(value),
-    })),
+    environment: Object.entries(envStrings(props.env)).map(([name, value]) => ({ name, value })),
     environmentFiles: props.environmentFiles,
     logConfiguration: {
       logDriver: "awslogs",

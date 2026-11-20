@@ -1,9 +1,3 @@
-/**
- * Bundling and deploying the program of an `Archil.Sandbox` with `main`: a
- * Node process run as an Archil sandbox service (`archil-sandbox services
- * create`), which restarts when it crashes and starts whenever the sandbox
- * boots.
- */
 import * as archil from "@distilled.cloud/archil";
 import * as Process from "@distilled.cloud/archil/Process";
 import * as Bundle from "alchemy/Bundle/Bundle";
@@ -13,6 +7,13 @@ import {
   type PackageInstall,
 } from "alchemy/Bundle/InstalledPackages";
 import { findCwdForBundle, resolveMainPath } from "alchemy/Bundle/TempRoot";
+/**
+ * Bundling and deploying the program of an `Archil.Sandbox` with `main`: a
+ * Node process run as an Archil sandbox service (`archil-sandbox services
+ * create`), which restarts when it crashes and starts whenever the sandbox
+ * boots.
+ */
+import { envString } from "alchemy/RuntimeContext";
 import {
   contextRootOf,
   extraFileDestination,
@@ -27,7 +28,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import { waitForSandbox } from "./archil.ts";
@@ -268,12 +268,7 @@ export const bundleProgram = Effect.fn(function* (
 /** Single-quote a value for `sh`. */
 const shellQuote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
 
-const envValue = (value: unknown): string =>
-  Redacted.isRedacted(value)
-    ? String(Redacted.value(value))
-    : typeof value === "string"
-      ? value
-      : JSON.stringify(value ?? null);
+const envValue = (value: unknown): string => envString(value) ?? "";
 
 /** Boot a sandbox that is paused or stopped, and wait until it runs. */
 export const ensureRunning = Effect.fn(function* (sid: string) {
