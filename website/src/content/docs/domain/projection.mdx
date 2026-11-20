@@ -225,7 +225,7 @@ Your store is eventually consistent with the model. A caller who has just sent a
 ```typescript title="packages/domain/test/ledgerAfterWithdrawal.ts"
 export const ledgerAfterWithdrawal = Effect.fn(function* (accountId: AccountId) {
   const accounts = yield* Account;
-  const receipt = yield* accounts.send(accountId, new WithdrawMoney({ amount: 2_000 }));
+  const receipt = yield* accounts.send(new WithdrawMoney({ accountId, amount: 2_000 }));
   yield* Ledger.caughtUp(receipt);
   return yield* (yield* LedgerStore).forAccount(accountId, { after: undefined, take: 50 });
 });
@@ -257,7 +257,7 @@ Projections run for real in a [story](/domain/story). Read back what one wrote t
 ```typescript title="packages/domain/test/Bank.story.test.ts"
 given(a1, opened(), new MoneyDeposited({ amount: 10_000, balanceAfter: 10_000 })),
 as(sam),
-when(a1, new WithdrawMoney({ amount: 2_500 })),
+when(new WithdrawMoney({ accountId: a1.id, amount: 2_500 })),
 then(a1, new MoneyWithdrawn({ amount: 2_500, balanceAfter: 7_500 })),
 query(AccountLedger, { account: a1.id }, [
   { kind: "MoneyDeposited", amount: 10_000, balanceAfter: 10_000 },

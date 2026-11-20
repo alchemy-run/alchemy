@@ -6,6 +6,7 @@ import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../../expectDeleteRefused.ts";
 import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -115,6 +116,35 @@ test.provider.skipIf(!!process.env.FAST)(
         name: created.name,
       });
       expect(refetched.concurrencyMode).toEqual("OPTIMISTIC");
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.Firestore.Database("App", {
+            databaseId: created.databaseId,
+            location: "us-central1",
+            type: "FIRESTORE_NATIVE",
+            concurrencyMode: "OPTIMISTIC",
+            deleteProtectionState: "DELETE_PROTECTION_ENABLED",
+          });
+        }),
+      );
+      // Delete protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "App",
+        tag: "GCP.Firestore.DatabaseDeletionProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* GCP.Firestore.Database("App", {
+            databaseId: created.databaseId,
+            location: "us-central1",
+            type: "FIRESTORE_NATIVE",
+            concurrencyMode: "OPTIMISTIC",
+            deleteProtectionState: "DELETE_PROTECTION_DISABLED",
+          });
+        }),
+      );
 
       yield* stack.destroy();
 

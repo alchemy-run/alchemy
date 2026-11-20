@@ -957,7 +957,14 @@ export const FunctionProvider = () =>
         serviceAccountEmail: serviceAccount,
         environmentVariables: {
           ...Object.fromEntries(
-            Object.entries(runtimeEnv).map(([key, value]) => [key, packEnvValue(value)]),
+            // A string is already an env value: the user's own (deployed
+            // verbatim, like every other host) or one the runtime context
+            // packed when it was bound. Packing it again would quote
+            // `"false"` and double-wrap bound secrets.
+            Object.entries(runtimeEnv).map(([key, value]) => [
+              key,
+              typeof value === "string" ? value : packEnvValue(value),
+            ]),
           ),
           ...news.serviceConfig?.environmentVariables,
         },
