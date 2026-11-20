@@ -92,8 +92,16 @@ export type DurableObjectStub<Shape> = Shape & {
 export interface DurableObjectNamespace<Shape> {
   /** The actor name: the class's logical id. */
   readonly name: string;
-  /** The instance called `name`, created on first use. */
+  /** The instance called `name`, created on first use: its key is the one part `name`. */
   getByName(name: string): DurableObjectStub<Shape>;
+  /**
+   * The instance whose key is `key`, created on first use. Each element is
+   * one part of the key RivetKit's `getOrCreate` takes, so an actor a
+   * RivetKit program created under `["a", "b"]` is reached with
+   * `getByKey(["a", "b"])`, and the instance reads the same parts from
+   * `DurableObjectState.key`.
+   */
+  getByKey(key: ReadonlyArray<string>): DurableObjectStub<Shape>;
 }
 
 export interface DurableObject extends Resource<
@@ -108,6 +116,19 @@ export interface DurableObject extends Resource<
 export interface DurableObjectShape {
   fetch?: HttpEffect<DurableObjectState | RuntimeContext>;
   alarm?: () => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /**
+   * Runs when the instance is about to sleep, within RivetKit's sleep grace
+   * period: finish or hand off work in flight. It does not run for an
+   * instance that took no call since it woke.
+   */
+  onSleep?: () => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /**
+   * Runs when the instance is destroyed, after `DurableObjectState.destroy`
+   * or a delete from the control plane, so it can release what it owns
+   * outside its storage. It does not run for an instance that took no call
+   * since it woke.
+   */
+  onDestroy?: () => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
   /** A message on a WebSocket this instance accepted with `Rivet.upgrade()`. */
   webSocketMessage?: (
     socket: WebSocket,
@@ -635,9 +656,8 @@ const namespaceOf = (name: string, declaration: Effect.Effect<DurableObject, nev
 export const makeNamespace = (
   name: string,
   target: Omit<GatewayTarget, "name" | "key"> | undefined,
-): DurableObjectNamespace<any> => ({
-  name,
-  getByName: (key: string) => {
+): DurableObjectNamespace<any> => {
+  const getByKey = (key: ReadonlyArray<string>) => {
     if (target === undefined) {
       const outside = Effect.die(
         new DurableObjectCalledOutsideRuntime({
@@ -658,8 +678,9 @@ export const makeNamespace = (
         fetch: (request: HttpServerRequest.HttpServerRequest) => fetcher.fetch(request),
       },
     }) as DurableObjectStub<any>;
-  },
-});
+  };
+  return { name, getByName: (instance: string) => getByKey([instance]), getByKey };
+};
 
 /** A namespace yielded outside any runtime was called. */
 export class DurableObjectCalledOutsideRuntime extends Data.TaggedError(
