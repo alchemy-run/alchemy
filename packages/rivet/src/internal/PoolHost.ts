@@ -118,6 +118,13 @@ export interface PoolSettings extends Pick<
    * @default "3.0.0"
    */
   rivetkitVersion?: string;
+  /**
+   * Version the nodes report to the control plane (`RIVET_NODE_VERSION`).
+   * Raise it on a deploy that changes the nodes: with `drainOnVersionUpgrade`
+   * the control plane moves actors off older nodes once a newer one connects.
+   * @default the RivetKit default (1)
+   */
+  version?: number;
 }
 
 /** A JavaScript node program: its entry and bundler settings, run with RivetKit beside it. */
@@ -158,6 +165,7 @@ export interface PoolNodes<Network> {
     readonly RIVET_TOKEN: ClusterShape["token"];
     readonly RIVET_NAMESPACE: ClusterShape["namespace"];
     readonly RIVET_POOL: Pool["name"];
+    readonly RIVET_NODE_VERSION?: string;
   };
 }
 
@@ -245,6 +253,9 @@ const makeHost = <Network, Req>(options: {
           RIVET_TOKEN: cluster.token,
           RIVET_NAMESPACE: cluster.namespace,
           RIVET_POOL: pool.name,
+          ...(options.settings.version === undefined
+            ? {}
+            : { RIVET_NODE_VERSION: String(options.settings.version) }),
         },
       });
     });
@@ -342,6 +353,9 @@ const nodeValues = (
       RIVET_TOKEN: token,
       RIVET_NAMESPACE: namespace,
       RIVET_POOL: poolName,
+      ...(environment.RIVET_NODE_VERSION === undefined
+        ? {}
+        : { RIVET_NODE_VERSION: environment.RIVET_NODE_VERSION }),
     })),
   );
 
