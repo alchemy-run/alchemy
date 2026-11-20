@@ -48,10 +48,11 @@ export interface WaitOptions {
    */
   readonly margin: "always" | "if-unseen";
   readonly nameservers: NameserverSearch;
+  /** `once` checks without waiting for the records to appear. */
+  readonly attempts?: "until-seen" | "once";
 }
 
 export interface SwitchboardWaitOptions extends WaitOptions {
-  /** `once` checks without waiting for the records to appear. */
   readonly attempts: "until-seen" | "once";
 }
 
@@ -264,7 +265,12 @@ export const waitForAuthoritativeRecord = (
     const check = Effect.forEach(servers, answerOf, { concurrency: "unbounded" }).pipe(
       Effect.map(combine),
     );
-    return yield* waitUntilVisible(check, (visibility) => visibility, options.margin);
+    return yield* waitUntilVisible(
+      check,
+      (visibility) => visibility,
+      options.margin,
+      options.attempts,
+    );
   });
 
 /**

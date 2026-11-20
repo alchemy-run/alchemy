@@ -136,9 +136,15 @@ export interface RoutingUrlProps {
   dns?: DNS.DnsConfig;
 }
 
+/** Props the `Prisma.RoutingUrl` resource receives from {@link RoutingUrl}. */
+export interface RoutingUrlRowProps extends Omit<RoutingUrlProps, "dns"> {
+  /** This deploy publishes the hostname's records, so the hostname-change check waits for them. */
+  recordsPublished?: boolean;
+}
+
 export interface RoutingUrl extends Resource<
   "Prisma.RoutingUrl",
-  Omit<RoutingUrlProps, "dns">,
+  RoutingUrlRowProps,
   {
     /** Prisma RoutingUrl ID. */
     routingUrlId: string;
@@ -262,6 +268,7 @@ export const RoutingUrl = (id: string, props: RoutingUrlInput) =>
     return yield* RoutingUrlRow(id, {
       ...rowProps,
       hostname: Output.map(Output.of(published as ResourceLike), () => props.hostname),
+      recordsPublished: true,
     });
   });
 
@@ -422,7 +429,12 @@ const ProviderLive = () =>
       const checkRecord = yield* AuthoritativeRecordCheck;
 
       /** Refuse a hostname change the new hostname cannot serve yet. */
-      const ensureCanServe = (service: Service, from: string, to: string) =>
+      const ensureCanServe = (
+        service: Service,
+        from: string,
+        to: string,
+        recordsPublished: boolean,
+      ) =>
         Effect.gen(function* () {
           const workspaceId = (yield* getProject({ id: service.projectId })).data.workspace.id;
           const covering = [to, wildcardOf(to)].filter((domain) => domain !== undefined);
@@ -439,7 +451,11 @@ const ProviderLive = () =>
               ? ("verified" as const)
               : yield* checkRecord(
                   { type: "TXT", name: verification.name, value: verification.value },
-                  { margin: "if-unseen", nameservers: "parent" },
+                  {
+                    margin: "if-unseen",
+                    nameservers: "parent",
+                    attempts: recordsPublished ? "until-seen" : "once",
+                  },
                 );
           const owned = ownershipDns === "verified" || ownershipDns === "seen";
           const target = switchboardTarget(service.appEndpointDomain);
@@ -531,7 +547,12 @@ const ProviderLive = () =>
           };
           if (Object.keys(change).length === 0) return attrsFrom(observed);
           if (change.hostname !== undefined && observed.status === "active") {
-            yield* ensureCanServe(service, observed.hostname, hostname);
+            yield* ensureCanServe(
+              service,
+              observed.hostname,
+              hostname,
+              news.recordsPublished === true,
+            );
           }
           const updated = yield* updateUrl({ id: observed.id, ...change }).pipe(
             Effect.catchTags(refusals(hostname, logicalId, serviceId)),

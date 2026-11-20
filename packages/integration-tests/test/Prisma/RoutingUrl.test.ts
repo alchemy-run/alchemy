@@ -31,6 +31,7 @@ import {
   SwitchboardDnsCheck,
   type SwitchboardDnsVisibility,
   type SwitchboardWaitOptions,
+  type WaitOptions,
 } from "../../../prisma/src/internal/AuthoritativeDns.ts";
 import { switchboardTarget } from "../../../prisma/src/internal/Switchboard.ts";
 import { cloneFixture } from "../Cloudflare/Utils/Fixture.ts";
@@ -144,6 +145,8 @@ interface CloudState {
   txt: RecordVisibility | undefined;
   /** The TXT records the ownership check was asked about. */
   txtChecked: ExpectedRecord[];
+  /** Whether each TXT check waited for the record. */
+  txtAttempts: Array<WaitOptions["attempts"]>;
   /** The DNS host's records when Prisma received a PATCH. */
   zoneAtPatch: DNS.DnsRecord[] | undefined;
 }
@@ -172,6 +175,7 @@ const makeUrlCloud = () => {
     fromZone: false,
     txt: undefined,
     txtChecked: [],
+    txtAttempts: [],
     zoneAtPatch: undefined,
   };
   let next = 0;
@@ -271,6 +275,7 @@ const makeUrlCloud = () => {
         fromZone: false,
         txt: undefined,
         txtChecked: [],
+        txtAttempts: [],
         zoneAtPatch: undefined,
       },
       options,
@@ -353,9 +358,10 @@ const testFor = (cloud: UrlCloud, options: { dev?: boolean } = {}) =>
     ).pipe(
       Layer.provideMerge(RoutingUrlProvider()),
       Layer.provide(
-        Layer.succeed(AuthoritativeRecordCheck, (expected) =>
+        Layer.succeed(AuthoritativeRecordCheck, (expected, options) =>
           Effect.sync(() => {
             cloud.state.txtChecked.push(expected);
+            cloud.state.txtAttempts.push(options.attempts);
             return cloud.txtSeen(expected);
           }),
         ),
@@ -506,6 +512,7 @@ testFor(dnsChange).test.provider(
       expect(dnsChange.state.txtChecked).toEqual([
         { type: "TXT", name: "_prisma-verification.new.example.com", value: TXT.value },
       ]);
+      expect(dnsChange.state.txtAttempts).toEqual(["until-seen"]);
       expect(dnsChange.state.checked.map(([expected]) => expected.name)).toEqual([
         "new.example.com",
       ]);
@@ -758,6 +765,7 @@ testFor(txtProof).test.provider(
       expect(txtProof.state.txtChecked.map((record) => record.name)).toEqual([
         "_prisma-verification.new.example.com",
       ]);
+      expect(txtProof.state.txtAttempts).toEqual(["once"]);
       expect(txtProof.state.checked.map(([, options]) => options.attempts)).toEqual(["until-seen"]);
 
       yield* stack.destroy();
@@ -793,6 +801,11 @@ testFor(txtMissing).test.provider(
       const unknown = yield* refusalOf(stack.deploy(urlStack("new.example.com")));
 
       expect(unknown?.ownershipDns).toBe("unknown");
+      expect(txtMissing.state.txtAttempts).toEqual(["once", "once"]);
+      expect(txtMissing.state.checked.map(([, options]) => options.attempts)).toEqual([
+        "once",
+        "once",
+      ]);
       expect(unknown?.message).toContain("could not be checked from this machine");
       expect(PATCHES(txtMissing)).toEqual([]);
       expect(txtMissing.rows.get("url-1")?.hostname).toBe(HOSTNAME);
