@@ -68,6 +68,25 @@ export const deployMissing = <A, E, R>(
     return yield* deploy;
   });
 
+/**
+ * Bring an existing store's settings up to date, e.g. its encryption: done
+ * outside CI and, in CI, with `--yes`. Otherwise CI logs a warning and goes
+ * on, since the store still works without the change.
+ */
+export const convergeSettings = <A, E, R>(
+  store: StoreRef & { readonly problem: string },
+  converge: Effect.Effect<A, E, R>,
+) =>
+  Effect.gen(function* () {
+    const context = yield* Effect.serviceOption(AlchemyContext);
+    const yes = Option.isSome(context) && context.value.updateStateStore;
+    if (!yes && (yield* CI)) {
+      yield* Effect.logWarning(required(store, "upgrade", store.problem).message);
+      return;
+    }
+    yield* converge;
+  });
+
 /** Upgrade an outdated store with `--yes` or on confirmation; in CI, only with `--yes`. */
 export const upgradeOutdated = <A, E, R>(
   store: StoreRef & { readonly observed: number | undefined; readonly expected: number },

@@ -17,6 +17,24 @@ export const isActionState = (s: PersistedState | undefined): s is ActionState =
 export const isResourceState = (s: PersistedState | undefined): s is ResourceState =>
   !!s && (s as any).kind !== "task";
 
+const storedInOldForm = new WeakSet<object>();
+
+/**
+ * Marks a row a store read in a form it no longer writes: a secret in
+ * plaintext while encrypting, or sealed while turning encryption off. A store
+ * that holds no stage lock can't safely write it back from a read, since
+ * other stacks and plans read it too; the stage's own deploy commits it
+ * again even when nothing else about it changed.
+ */
+export const markStoredInOldForm = <T>(row: T): T => {
+  if (typeof row === "object" && row !== null) storedInOldForm.add(row);
+  return row;
+};
+
+/** Whether a store marked `row` with {@link markStoredInOldForm}. */
+export const isStoredInOldForm = (row: unknown): boolean =>
+  typeof row === "object" && row !== null && storedInOldForm.has(row);
+
 export class StateStoreError extends Data.TaggedError("StateStoreError")<{
   message: string;
   cause?: Error;

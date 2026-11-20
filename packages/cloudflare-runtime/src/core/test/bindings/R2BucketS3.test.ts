@@ -4,6 +4,8 @@
  * with `aws4fetch` (header auth and presigned query auth); the worker's own
  * binding verifies that S3 writes land in the same bucket.
  */
+import http from "node:http";
+import { text as readText } from "node:stream/consumers";
 import { expect, layer } from "@effect/vitest";
 import { AwsClient } from "aws4fetch";
 import * as Effect from "effect/Effect";
@@ -111,6 +113,38 @@ const presign = (
   });
 
 const text = (response: Response) => Effect.promise(() => response.text());
+
+/**
+ * Header-authenticated GET over `node:http`, which (unlike `fetch`) sends
+ * exactly the headers given, without adding its own `Accept-Encoding`.
+ */
+const s3HttpGet = (
+  baseUrl: URL,
+  path: string,
+  signedHeaders: Record<string, string>,
+  sentHeaders: Record<string, string | Array<string>> = signedHeaders,
+) =>
+  Effect.promise(async () => {
+    const url = s3Url(baseUrl, path);
+    const signed = await client.sign(url, { method: "GET", headers: signedHeaders });
+    const authorization = signed.headers.get("authorization")!;
+    const headers = {
+      ...Object.fromEntries(signed.headers),
+      ...sentHeaders,
+      authorization,
+    };
+    const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
+      http.get(url, { headers }, resolve).on("error", reject);
+    });
+    return { status: response.statusCode, body: await readText(response), authorization };
+  });
+
+/** Asserts an R2-style S3 XML error response. */
+const expectS3Error = (response: Response, status: number, code: string) =>
+  Effect.gen(function* () {
+    expect(response.status).toBe(status);
+    expect(yield* text(response)).toContain(`<Code>${code}</Code>`);
+  });
 
 layer(localRuntimeLayer)("R2 local S3 endpoint", (it) => {
   it.effect("passes non-S3 requests through to the user worker", () =>
@@ -331,6 +365,144 @@ layer(localRuntimeLayer)("R2 local S3 endpoint", (it) => {
       expect(read.endsWith("tail")).toBe(true);
     }),
   );
+
+  for (const acceptEncoding of [undefined, "", "identity", "gzip"]) {
+    it.effect(`verifies signatures against the original Accept-Encoding: ${acceptEncoding}`, () =>
+      Effect.gen(function* () {
+        const { baseUrl, fetchText } = yield* startS3Worker;
+        expect(
+          yield* fetchText("/write?key=signed-encoding.txt", {
+            method: "PUT",
+            body: "signed encoding",
+          }),
+        ).toBe("ok");
+        const { status, body, authorization } = yield* s3HttpGet(
+          baseUrl,
+          "/bucket/signed-encoding.txt",
+          acceptEncoding === undefined ? {} : { "accept-encoding": acceptEncoding },
+        );
+        if (acceptEncoding === undefined) {
+          expect(authorization).not.toContain("accept-encoding");
+        } else {
+          expect(authorization).toContain("SignedHeaders=accept-encoding;");
+        }
+        expect(status).toBe(200);
+        expect(body).toBe("signed encoding");
+      }),
+    );
+  }
+
+  for (const { name, header, signedValue } of [
+    {
+      name: "repeated lines signed with comma-space",
+      header: ["one", "two"],
+      signedValue: "one, two",
+    },
+    { name: "single line containing a bare comma", header: "one,two", signedValue: "one,two" },
+    { name: "single line containing comma-space", header: "one, two", signedValue: "one, two" },
+  ]) {
+    it.effect(`verifies signatures for comma-separated header values: ${name}`, () =>
+      Effect.gen(function* () {
+        const { baseUrl, fetchText } = yield* startS3Worker;
+        expect(
+          yield* fetchText("/write?key=repeated-headers.txt", {
+            method: "PUT",
+            body: "repeated headers",
+          }),
+        ).toBe("ok");
+        const { status, body, authorization } = yield* s3HttpGet(
+          baseUrl,
+          "/bucket/repeated-headers.txt",
+          { "x-test-header": signedValue },
+          { "x-test-header": header },
+        );
+        expect(authorization).toContain(";x-test-header,");
+        expect(status).toBe(200);
+        expect(body).toBe("repeated headers");
+      }),
+    );
+  }
+
+  for (const { operation, path, body } of [
+    { operation: "DeleteObjects", path: "/bucket?delete", body: "<Delete><Object></Delete>" },
+    {
+      operation: "CompleteMultipartUpload",
+      path: "/bucket/key?uploadId=unused",
+      body: "<CompleteMultipartUpload><Part></CompleteMultipartUpload>",
+    },
+  ]) {
+    it.effect(`${operation} rejects invalid XML syntax`, () =>
+      Effect.gen(function* () {
+        const { baseUrl } = yield* startS3Worker;
+        const res = yield* s3(baseUrl, path, { method: "POST", body });
+        yield* expectS3Error(res, 400, "MalformedXML");
+      }),
+    );
+  }
+
+  it.effect("DeleteObjects accepts a processing instruction before the root", () =>
+    Effect.gen(function* () {
+      const { baseUrl, fetchText } = yield* startS3Worker;
+      const key = "batch/processing-instruction.txt";
+      yield* fetchText(`/write?key=${key}`, { method: "PUT", body: "original" });
+
+      const res = yield* s3(baseUrl, "/bucket?delete", {
+        method: "POST",
+        body: `<?xml version="1.0"?><?trace id="123"?><Delete><Object><Key>${key}</Key></Object></Delete>`,
+      });
+      expect(res.status).toBe(200);
+      expect(yield* fetchText(`/read?key=${key}`)).toBe("missing");
+    }),
+  );
+
+  for (const extraRoot of ["<Extra></Extra>", "<Extra/>"]) {
+    it.effect(`DeleteObjects rejects an additional XML root: ${extraRoot}`, () =>
+      Effect.gen(function* () {
+        const { baseUrl, fetchText } = yield* startS3Worker;
+        const key = "batch/extra-root.txt";
+        yield* fetchText(`/write?key=${key}`, { method: "PUT", body: "original" });
+
+        const res = yield* s3(baseUrl, "/bucket?delete", {
+          method: "POST",
+          body: `<Delete><Object><Key>${key}</Key></Object></Delete>${extraRoot}`,
+        });
+        yield* expectS3Error(res, 400, "MalformedXML");
+        expect(yield* fetchText(`/read?key=${key}`)).toBe("original");
+      }),
+    );
+
+    it.effect(`CompleteMultipartUpload rejects an additional XML root: ${extraRoot}`, () =>
+      Effect.gen(function* () {
+        const { baseUrl, fetchText } = yield* startS3Worker;
+        const key = "mp/extra-root.bin";
+        yield* fetchText(`/write?key=${key}`, { method: "PUT", body: "original" });
+        const create = yield* s3(baseUrl, `/bucket/${key}?uploads`, { method: "POST" });
+        const uploadId = /<UploadId>(.+)<\/UploadId>/.exec(yield* text(create))![1]!;
+        const part = yield* s3(
+          baseUrl,
+          `/bucket/${key}?partNumber=1&uploadId=${encodeURIComponent(uploadId)}`,
+          { method: "PUT", body: "replacement" },
+        );
+        expect(part.status).toBe(200);
+
+        const res = yield* s3(baseUrl, `/bucket/${key}?uploadId=${encodeURIComponent(uploadId)}`, {
+          method: "POST",
+          body: `<CompleteMultipartUpload><Part><PartNumber>1</PartNumber><ETag>${part.headers.get("etag")}</ETag></Part></CompleteMultipartUpload>${extraRoot}`,
+        });
+        yield* expectS3Error(res, 400, "MalformedXML");
+        expect(yield* fetchText(`/read?key=${key}`)).toBe("original");
+
+        const abort = yield* s3(
+          baseUrl,
+          `/bucket/${key}?uploadId=${encodeURIComponent(uploadId)}`,
+          {
+            method: "DELETE",
+          },
+        );
+        expect(abort.status).toBe(204);
+      }),
+    );
+  }
 
   it.effect("answers CORS preflights for browser uploads", () =>
     Effect.gen(function* () {

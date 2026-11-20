@@ -122,8 +122,8 @@ const deliver = (accountId: AccountId, intent: Intent) => {
   const { commandId, amount } = intent;
   const send: Command.Command<typeof BankClient.Message.Type, never, Bank> =
     intent.kind === "deposit"
-      ? BankClient.DepositMoney({ target: accountId, input: { amount }, commandId })
-      : BankClient.WithdrawMoney({ target: accountId, input: { amount }, commandId });
+      ? BankClient.DepositMoney({ input: { accountId, amount }, commandId })
+      : BankClient.WithdrawMoney({ input: { accountId, amount }, commandId });
   return send.effect.pipe(
     Effect.flatMap((result) =>
       Match.value(result).pipe(
@@ -325,8 +325,11 @@ export const update = (model: Model, message: Message) =>
         commands: [
           Command.mapMessage(
             BankClient.RegisterCustomer({
-              target: model.customerId,
-              input: { name: model.customerId, username: Username.make(model.customerId) },
+              input: {
+                customerId: model.customerId,
+                name: model.customerId,
+                username: Username.make(model.customerId),
+              },
               commandId: allocation.commandId,
             }),
             (result) => Message.ReceivedBankResult({ result }),

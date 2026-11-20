@@ -109,9 +109,13 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    */
   className?: string;
   /**
-   * Initial number of instances to maintain. Matches wrangler, which forces
-   * this to 0 whenever {@link maxInstances} is set (pure scale-from-zero).
-   * @default 0
+   * Number of instances to keep running.
+   *
+   * Set it to own the count: every deploy restores it if it drifted, without
+   * rolling out an unchanged configuration. Omit it to leave capacity to
+   * Cloudflare: a new application starts at 0 (pure scale-from-zero, like
+   * wrangler) and later deploys never reset the live count.
+   * @default 0 when the application is created; the live count afterwards
    */
   instances?: number;
   /**
@@ -374,8 +378,9 @@ export interface ExternalContainerProps
    */
   context?: string;
   /**
-   * The Dockerfile to build. A string is a **path** resolved relative to
-   * {@link context} (default `<context>/Dockerfile`); an
+   * The Dockerfile to build. A string is a **path** (default
+   * `<context>/Dockerfile`). A relative path is resolved against
+   * {@link context}. An
    * {@link InlineDockerfile} (typically `Dockerfile.inline`) is the whole
    * Dockerfile's content, built in an empty generated context (exclusive
    * with {@link context}).
@@ -588,13 +593,13 @@ export type ContainerShape = Main<ContainerServices>;
  * ```typescript
  * export class Web extends Cloudflare.Container<Web>()("Web", {
  *   context: `${import.meta.dirname}/context`,
- *   dockerfile: "Dockerfile",
+ *   dockerfile: "Dockerfile.web",
  * }) {}
  * ```
  *
  * Alchemy builds `dockerfile` against the `context` directory with no `main`
- * bundling. `dockerfile` is resolved relative to `context` and defaults to
- * `<context>/Dockerfile`.
+ * bundling. `dockerfile` defaults to `<context>/Dockerfile`; a relative
+ * path is resolved against `context`.
  *
  * **Example:** Remote image (`image`)
  * ```typescript
@@ -941,6 +946,11 @@ export interface ContainerApplication<Shape = unknown> extends Resource<
       image: string;
       digest?: string;
       configuration?: string;
+      /**
+       * Hash of the container configuration alone. Only a change to it
+       * creates a rollout; scaling and placement changes apply in place.
+       */
+      rollout?: string;
     };
     dev: DevContainerImage | undefined;
   },
