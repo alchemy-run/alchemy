@@ -28,17 +28,17 @@ import {
   type DurableObjectRuntimeContext,
 } from "../DurableObject.ts";
 import { PoolHost } from "../Host.ts";
-import { Pool, type PoolDurableObject } from "../Pool.ts";
+import { Pool, type PoolDurableObject, type PoolProps } from "../Pool.ts";
 import type { Providers } from "../Providers.ts";
 import { stageRustProgram } from "./RustProgram.ts";
 
 /** The RivetKit release node images install. */
 export const RIVETKIT_VERSION = "3.1.1";
 
-/** A node image environment: bun with RivetKit installed. */
-export const NODE_DOCKERFILE = `FROM oven/bun:1
+/** A node image environment: bun with RivetKit `version` installed. */
+export const nodeDockerfile = (version: string) => `FROM oven/bun:1
 WORKDIR /app
-RUN bun add rivetkit@${RIVETKIT_VERSION}
+RUN bun add rivetkit@${version}
 `;
 
 /** Packages the node image provides, kept out of the node bundle. */
@@ -101,12 +101,23 @@ export class ClusterNetworkMismatch extends Data.TaggedError("Rivet.ClusterNetwo
   readonly message: string;
 }> {}
 
-export interface PoolSettings {
+export interface PoolSettings extends Pick<
+  PoolProps,
+  "drainOnVersionUpgrade" | "actorEvictionDelay" | "actorEvictionPeriod" | "actorEvictionRate"
+> {
   /**
    * Pool name on the control plane.
    * @default ${stack}-${stage}-${id}
    */
   name?: string;
+  /**
+   * RivetKit release the nodes run a JavaScript program with. Nodes speak
+   * the control plane protocol of their release: a 3.0 node works with a
+   * 3.0 or 3.1 control plane, a 3.1 node needs a 3.1 one. A Rust program
+   * brings its own.
+   * @default "3.1.1"
+   */
+  rivetkitVersion?: string;
 }
 
 /** A JavaScript node program: its entry and bundler settings, run with RivetKit beside it. */
@@ -217,6 +228,10 @@ const makeHost = <Network, Req>(options: {
         token: cluster.token,
         namespace: cluster.namespace,
         name,
+        drainOnVersionUpgrade: options.settings.drainOnVersionUpgrade,
+        actorEvictionDelay: options.settings.actorEvictionDelay,
+        actorEvictionPeriod: options.settings.actorEvictionPeriod,
+        actorEvictionRate: options.settings.actorEvictionRate,
       });
       yield* pool.bind`${object.name}`({ durableObjects: [object], env });
       yield* bindCaller;

@@ -40,6 +40,22 @@ export const Default = RivetGCP.CloudRunPool("Default", {
 }).pipe(Layer.provide(Cluster));
 ```
 
+Nodes can read their secrets from Secret Manager, run as a service account of your own, and reach a control plane at a private address through a VPC network. To move actors off old nodes on a deploy, give each deploy a higher `RIVET_NODE_VERSION` and set `drainOnVersionUpgrade`:
+
+```typescript title="src/cluster.ts"
+export const Default = RivetGCP.CloudRunPool("Default", {
+  replicas: 2,
+  network: "private",
+  subnetwork: "private-us-central1",
+  env: { RIVET_ENDPOINT: "http://10.0.0.2:6420", RIVET_NODE_VERSION: "42" },
+  secrets: { RIVET_TOKEN: "projects/acme/secrets/rivet-token/versions/1" },
+  drainOnVersionUpgrade: true,
+  actorEvictionPeriod: 60,
+}).pipe(Layer.provide(Cluster));
+```
+
+The nodes run as the worker pool's own service account unless you name one, and that account is granted each secret before a revision reads it. The control plane's token reaches the nodes the same way, from a secret the pool keeps, so it never appears in the worker pool's configuration. Cloud Run holds a private network's addresses for up to a few hours after the pool is deleted, so a destroy in that window fails on the subnetwork, keeps it in state, and succeeds when run again later.
+
 ## On Compute Engine
 
 `ComputeEnginePool` runs one Compute Engine instance per node:
@@ -51,7 +67,7 @@ export const Default = RivetGCP.ComputeEnginePool("Default", {
 }).pipe(Layer.provide(Cluster));
 ```
 
-Each deploy updates running nodes in place.
+Each deploy updates running nodes in place, one at a time. A node restarts only once the node before it runs the new program and the control plane lists every node connected again, and it gets `stopTimeout` seconds (default 30) to drain before it is killed. A node still waiting after `rolloutTimeout` seconds (default 600) keeps its current program, so a program that never connects stops the rollout at its first node. The control plane's token reaches the nodes from Secret Manager, never instance metadata.
 
 ## Rivet Services
 

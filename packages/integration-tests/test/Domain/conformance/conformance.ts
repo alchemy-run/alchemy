@@ -5,10 +5,12 @@
  */
 import { expect } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
@@ -184,6 +186,55 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
         expect(withHistory).toEqual(withNone);
       }
     }),
+    options,
+  );
+
+  test(
+    "a live read is judged again when its middleware's verdict runs out, with no commit",
+    Effect.gen(function* () {
+      const id = fresh("ticket");
+      yield* call(`/increment/${id}?by=1`);
+      const base = yield* url;
+      /** A client whose live reads send `ticket` (see `Ticket`): Bun's WebSocket takes headers. */
+      const clientWith = (ticket: string) =>
+        ConformanceApi.clientWebSocket(`${base}/api`).pipe(
+          Effect.provideService(Socket.WebSocketConstructor, (socketUrl, protocols) => {
+            const init = { protocols, headers: { "x-ticket": ticket } };
+            return new WebSocket(socketUrl, init as unknown as string[]);
+          }),
+        );
+      const watch = (api: Effect.Success<ReturnType<typeof clientWith>>, first: number) =>
+        Effect.gen(function* () {
+          const seen = yield* Queue.unbounded<number | undefined>();
+          const read = yield* api.TicketedTotal.watch(id).pipe(
+            Stream.runForEach((frame) => Queue.offer(seen, frame.state?.total)),
+            Effect.flip,
+            Effect.forkScoped,
+          );
+          // The view folds the increment eventually: frames before it carry less.
+          const next = Queue.take(seen).pipe(Effect.timeout(within));
+          let total = yield* next;
+          while (total !== first) total = yield* next;
+          return { seen, read };
+        });
+
+      // Still signed in: each verdict holds 2 seconds, and the read rides over every close.
+      const signedIn = yield* watch(yield* clientWith("for:2000"), 1);
+      yield* Effect.sleep("6 seconds");
+      expect(yield* Queue.size(signedIn.seen)).toBe(0);
+      yield* call(`/increment/${id}?by=2`);
+      expect(yield* Queue.take(signedIn.seen).pipe(Effect.timeout(within))).toBe(3);
+
+      // A ticket that expires: once it has, the read ends with the middleware's rejection.
+      const expiring = yield* watch(
+        yield* clientWith(`until:${(yield* Clock.currentTimeMillis) + 5_000}`),
+        3,
+      );
+      const ended = yield* Fiber.join(expiring.read).pipe(Effect.timeout(within));
+      expect(ended._tag).toBe("Expired");
+      expect(yield* Queue.size(expiring.seen)).toBe(0);
+      expect(yield* Queue.size(signedIn.seen)).toBe(0);
+    }).pipe(Effect.scoped),
     options,
   );
 
@@ -400,6 +451,58 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       // The step's second attempt sent the same command: it never commits again.
       yield* Effect.sleep("3 seconds");
       expect(yield* call(`/echo/${id}`)).toEqual({ total: 7 });
+    }),
+    options,
+  );
+
+  test(
+    "an import appends history once, which views and projections apply and policies ignore",
+    Effect.gen(function* () {
+      const id = fresh("import");
+      // History from another system, committed at its own times.
+      const at = Date.parse("2020-01-01T00:00:00Z");
+      type Imported = { version: number; rejected?: string; index?: number };
+      expect(yield* call<Imported>(`/import/${id}?n=3&id=a&at=${at}`)).toEqual({ version: 3 });
+      // A retried import commits nothing and answers its first receipt.
+      expect(yield* call<Imported>(`/import/${id}?n=3&id=a&at=${at}`)).toEqual({ version: 3 });
+      // Another import into an instance with events is refused.
+      expect(yield* call<Imported>(`/import/${id}?n=3&id=b`)).toEqual({
+        rejected: "UnexpectedVersion",
+        version: 3,
+      });
+      // The next batch continues from the last.
+      expect(yield* call<Imported>(`/import/${id}?n=2&id=c&expected=3&at=${at + 3}`)).toEqual({
+        version: 5,
+      });
+      // Times only go forward: from the instance's latest event, within a batch, up to now.
+      const refused = (index: number) => ({ rejected: "ImportOutOfOrder", index });
+      expect(yield* call(`/import/${id}?n=2&id=d&expected=5&at=${at}`)).toEqual(refused(0));
+      expect(yield* call(`/import/${id}?n=2&id=e&expected=5&at=${at + 9}&step=-1`)).toEqual(
+        refused(1),
+      );
+      const future = Date.parse("2100-01-01T00:00:00Z");
+      expect(yield* call(`/import/${id}?n=1&id=f&expected=5&at=${future}`)).toEqual(refused(0));
+      expect(yield* call(`/counter/${id}`)).toEqual({ total: 5 });
+      const times = yield* eventually<{ first: number; last: number }>(
+        `/times/${id}`,
+        (view) => view.last === at + 4,
+      );
+      expect(times).toEqual({ first: at, last: at + 4 });
+      // A live command after it: the projection has every imported total, then the new one.
+      expect(yield* call(`/record/${id}?by=7`)).toEqual([1, 2, 3, 4, 5, 12]);
+      // The policy reacts to the live command alone: the saga mirrors 7, not an imported 1.
+      const echo = yield* eventually<{ total: number }>(`/echo/${id}`, (e) => e.total > 0);
+      expect(echo).toEqual({ total: 7 });
+    }),
+    options,
+  );
+
+  test(
+    "an import of 200 events commits them at once",
+    Effect.gen(function* () {
+      const id = fresh("bulk");
+      expect(yield* call(`/import/${id}?on=echo&n=200`)).toEqual({ version: 200 });
+      expect(yield* call(`/echo/${id}`)).toEqual({ total: 200 });
     }),
     options,
   );

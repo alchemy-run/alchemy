@@ -96,7 +96,7 @@ export const Pool = (id: string, options: PoolOptions = {}) =>
           ? { context: nodes.program.context }
           : {
               main: (yield* bundleNodes("rivet-cloud", id, nodes.program)) as unknown as string,
-              rivetkitVersion: RIVETKIT_VERSION,
+              rivetkitVersion: options.rivetkitVersion ?? RIVETKIT_VERSION,
             }),
         env: env as unknown as Record<string, string>,
         machineType: options.machineType,
