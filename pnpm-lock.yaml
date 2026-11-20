@@ -9156,6 +9156,21 @@ importers:
 
   packages/ai:
     devDependencies:
+      '@alchemy.run/archil':
+        specifier: workspace:*
+        version: link:../archil
+      '@alchemy.run/boat':
+        specifier: workspace:*
+        version: link:../boat
+      '@alchemy.run/daytona':
+        specifier: workspace:*
+        version: link:../daytona
+      '@alchemy.run/e2b':
+        specifier: workspace:*
+        version: link:../e2b
+      '@alchemy.run/modal':
+        specifier: workspace:*
+        version: link:../modal
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3

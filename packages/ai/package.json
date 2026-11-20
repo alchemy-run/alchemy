@@ -28,6 +28,11 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./Archil": "./src/Archil/index.ts",
+    "./Boat": "./src/Boat/index.ts",
+    "./Daytona": "./src/Daytona/index.ts",
+    "./E2B": "./src/E2B/index.ts",
+    "./Modal": "./src/Modal/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -38,6 +43,36 @@
         "bun": "./src/index.ts",
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
+      },
+      "./Archil": {
+        "types": "./lib/Archil/index.d.ts",
+        "bun": "./src/Archil/index.ts",
+        "worker": "./src/Archil/index.ts",
+        "default": "./lib/Archil/index.js"
+      },
+      "./Boat": {
+        "types": "./lib/Boat/index.d.ts",
+        "bun": "./src/Boat/index.ts",
+        "worker": "./src/Boat/index.ts",
+        "default": "./lib/Boat/index.js"
+      },
+      "./Daytona": {
+        "types": "./lib/Daytona/index.d.ts",
+        "bun": "./src/Daytona/index.ts",
+        "worker": "./src/Daytona/index.ts",
+        "default": "./lib/Daytona/index.js"
+      },
+      "./E2B": {
+        "types": "./lib/E2B/index.d.ts",
+        "bun": "./src/E2B/index.ts",
+        "worker": "./src/E2B/index.ts",
+        "default": "./lib/E2B/index.js"
+      },
+      "./Modal": {
+        "types": "./lib/Modal/index.d.ts",
+        "bun": "./src/Modal/index.ts",
+        "worker": "./src/Modal/index.ts",
+        "default": "./lib/Modal/index.js"
       },
       "./*": {
         "types": "./lib/*.d.ts",
@@ -54,13 +89,40 @@
     "build:package": "node scripts/build.ts"
   },
   "devDependencies": {
+    "@alchemy.run/archil": "workspace:*",
+    "@alchemy.run/boat": "workspace:*",
+    "@alchemy.run/daytona": "workspace:*",
+    "@alchemy.run/e2b": "workspace:*",
+    "@alchemy.run/modal": "workspace:*",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/archil": "workspace:*",
+    "@alchemy.run/boat": "workspace:*",
+    "@alchemy.run/daytona": "workspace:*",
+    "@alchemy.run/e2b": "workspace:*",
+    "@alchemy.run/modal": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@alchemy.run/archil": {
+      "optional": true
+    },
+    "@alchemy.run/boat": {
+      "optional": true
+    },
+    "@alchemy.run/daytona": {
+      "optional": true
+    },
+    "@alchemy.run/e2b": {
+      "optional": true
+    },
+    "@alchemy.run/modal": {
+      "optional": true
+    }
   }
 }

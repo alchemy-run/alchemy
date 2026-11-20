@@ -1,4 +1,5 @@
 import * as AI from "@alchemy.run/ai";
+import * as AIBoat from "@alchemy.run/ai/Boat";
 import * as Boat from "@alchemy.run/boat";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as OpenCode from "@alchemy.run/opencode";
@@ -73,46 +74,11 @@ class CountBytes extends AI.Tool<CountBytes>()(
   }),
 ) {}
 
-/** The sandbox client, bound to the snapshot every session's sandbox boots from. */
-const Sandboxes = Effect.gen(function* () {
-  const base = yield* Boat.Snapshot("OpenCodeBase", { run: ["node --version"] });
-  return yield* Boat.CreateSandbox(base);
-});
+/** The snapshot every sandbox boots from. */
+const Base = Boat.Snapshot("OpenCodeBase", { run: ["node --version"] });
 
 /** Boat finds a sandbox by a label and stops it on `suspend`, keeping its disk. */
-const SandboxLive = Layer.effect(
-  AI.Sandboxes,
-  Effect.gen(function* () {
-    const sandboxes = yield* Sandboxes;
-    const find = (key: string) => sandboxes.list({ labels: { key } });
-    return {
-      open: Effect.fn(function* (key) {
-        const [existing] = yield* find(key);
-        if (existing === undefined) {
-          return yield* sandboxes.create({
-            type: "small",
-            noEnv: true,
-            autoStop: "10 minutes",
-            labels: { key },
-          });
-        }
-        const sandbox = yield* sandboxes.connect(existing.id);
-        yield* sandbox.resume({ autoStop: "10 minutes" });
-        return sandbox;
-      }),
-      suspend: Effect.fn(function* (key) {
-        const [existing] = yield* find(key);
-        if (existing === undefined) return;
-        const sandbox = yield* sandboxes.connect(existing.id);
-        yield* sandbox.stop();
-      }),
-      remove: Effect.fn(function* (key) {
-        const found = yield* find(key);
-        yield* Effect.forEach(found, (sandbox) => sandboxes.delete(sandbox.id));
-      }),
-    };
-  }),
-);
+const SandboxLive = AIBoat.Sandboxes(Base);
 
 const HarnessLive = Layer.mergeAll(
   ModelsLive,
@@ -136,7 +102,7 @@ const toolsByName = {
 export default class OpenCodeSession extends Cloudflare.DurableObject<OpenCodeSession>()(
   "OpenCodeSession",
   Effect.gen(function* () {
-    const sandboxes = yield* Sandboxes;
+    const sandboxes = yield* Boat.CreateSandbox(yield* Base);
     const harness = yield* OpenCode.Harness({
       models: [Fast],
       tools: [AI.CodingTools, Add, Withdraw, CountBytes],
