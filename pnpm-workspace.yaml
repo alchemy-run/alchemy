@@ -49,6 +49,7 @@ packages:
   - packages/frontend-frameworks/src/nextjs/wrangler-stub
 
 catalog:
+  "@1password/sdk": "0.5.0"
   "@alchemy.run/sigil": "0.1.0-alpha.4"
   "@astrojs/check": "0.9.10"
   "@astrojs/internal-helpers": "0.13.0"
@@ -64,7 +65,7 @@ catalog:
   "@cloudflare/puppeteer": "^1.4.0"
   "@cloudflare/unenv-preset": "^2.16.2"
   "@cloudflare/vitest-plugin": "^1.4.0"
-  "@cloudflare/workers-types": "5.20261026.1"
+  "@cloudflare/workers-types": "5.20261117.1"
   "@effect/atom-react": "^4.1.4"
   "@effect/platform-bun": "^4.1.4"
   "@effect/platform-node": "^4.1.4"
@@ -100,7 +101,9 @@ catalog:
   partyserver: "^0.5.10"
   cross-fetch: "^4.0.0"
   # Kept in the C3 React Router template's Vite config, which alchemy neutralizes.
-  "@cloudflare/vite-plugin": "^1.65.0"
+  # npm `latest` (v1): what create-cloudflare templates and framework docs
+  # install. The examples and Website fixtures use it as their users do.
+  "@cloudflare/vite-plugin": "^1.70.0"
   "@flue/runtime": "^2.3.0"
   "@flue/sdk": "^2.3.0"
   "@flue/vite": "^2.3.0"
@@ -168,7 +171,7 @@ catalog:
   astro: "7.4.2"
   aws4fetch: "^1.0.20"
   better-auth: "^1.7.5"
-  capnp-es: "^0.0.16"
+  capnp-es: "^0.0.17"
   capnweb: "^0.12.0"
   changelogen: "^0.6.2"
   chokidar: "^5.0.0"
@@ -205,6 +208,7 @@ catalog:
   nuxt: "4.6.2"
   oauth2-mock-server: "9.1.0"
   octane: "0.16.0"
+  oxc-parser: "0.141.0"
   oxfmt: "^0.74.0"
   oxlint: "^1.89.0"
   pathe: "^2.0.3"
@@ -248,14 +252,19 @@ catalog:
   vue-router: "^5.4.0"
   vue-tsc: "^3.3.13"
   waku: "1.0.0-rc.4"
-  workerd: "1.20261026.1"
+  workerd: "1.20261117.1"
   wrangler: "^4.149.0"
   ws: "^8.21.0"
   yaml: "^2.9.1"
   yauzl: "^3.4.0"
+  z3-solver: "5.3.3"
   zod: "4.5.4"
 
 catalogs:
+  # Upstream's v2 line, which Alchemy's Vite plugin parity tests compare
+  # against (see packages/cloudflare-runtime/src/vite/PARITY.md).
+  cloudflare-vite-plugin-v2:
+    "@cloudflare/vite-plugin": "2.0.0-rc.1"
   # Cloudflare's worker test plugin does not yet support Vitest 5.
   cloudflare-test-compat:
     vitest: "^4.1.8"
@@ -287,8 +296,8 @@ catalogs:
     "@vitejs/plugin-react": "^5.1.4"
 
 overrides:
-  "@cloudflare/workers-types": 5.20261026.1
-  workerd: 1.20261026.1
+  "@cloudflare/workers-types": 5.20261117.1
+  workerd: 1.20261117.1
   effect: 4.1.4
   "@effect/platform-browser": 4.1.4
   "@effect/sql-d1": 4.1.4
@@ -315,13 +324,13 @@ minimumReleaseAgeExclude:
   - "@foldkit/vite-plugin@0.29.0"
   - foldkit@0.170.0
   - "@solidjs/start@2.0.6"
-  - "@cloudflare/workers-types@5.20261026.1"
-  - "@cloudflare/workerd-darwin-64@1.20261026.1"
-  - "@cloudflare/workerd-darwin-arm64@1.20261026.1"
-  - "@cloudflare/workerd-linux-64@1.20261026.1"
-  - "@cloudflare/workerd-linux-arm64@1.20261026.1"
-  - "@cloudflare/workerd-windows-64@1.20261026.1"
-  - workerd@1.20261026.1
+  - "@cloudflare/workers-types@5.20261117.1"
+  - "@cloudflare/workerd-darwin-64@1.20261117.1"
+  - "@cloudflare/workerd-darwin-arm64@1.20261117.1"
+  - "@cloudflare/workerd-linux-64@1.20261117.1"
+  - "@cloudflare/workerd-linux-arm64@1.20261117.1"
+  - "@cloudflare/workerd-windows-64@1.20261117.1"
+  - workerd@1.20261117.1
   - "@typescript/typescript-darwin-arm64@7.1.0-dev.20260923.1 || 7.1.0-dev.20261105.1"
   - "@typescript/typescript-darwin-x64@7.1.0-dev.20260923.1 || 7.1.0-dev.20261105.1"
   - "@typescript/typescript-linux-arm64@7.1.0-dev.20260923.1 || 7.1.0-dev.20261105.1"
@@ -342,7 +351,7 @@ minimumReleaseAgeExclude:
   - "@vitest/pretty-format@5.0.4"
   - "@vitest/mocker@5.0.4"
   - "@cloudflare/vitest-plugin@1.4.0"
-  - miniflare@5.20260930.0-alpha
+  - miniflare@5.20260930.0-alpha || 5.20261117.0-beta
   - wrangler@4.145.0
   - "@foldkit/ui@0.170.0"
   - drizzle-kit@1.0.0-rc.5
@@ -369,6 +378,10 @@ minimumReleaseAgeExclude:
   - "@effect/tsgo-win32-arm64@0.67.3"
   - "@effect/tsgo-win32-x64@0.67.3"
   - "@effect/tsgo@0.67.3"
+  - "@cloudflare/vite-plugin@1.70.0 || 2.0.0-rc.1"
+  - "@cloudflare/build-output-utils@1.0.0-rc.1"
+  - "@cloudflare/config@1.0.0-rc.1"
+  - "@cloudflare/runtime-types@0.1.30"
 
 catalogPrune: true
 

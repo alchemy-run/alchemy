@@ -911,10 +911,10 @@ export const Compute: Platform<
           return key;
         }),
       get: <T>(key: string) =>
-        // Runtime ConfigProvider lookups call back into RuntimeContext.get.
-        // Read the process env directly here to avoid re-entering that path.
+        // Read the raw process env: the runtime ConfigProvider unwraps bound
+        // markers before `unpackEnvValue` could see them.
         Effect.sync(() => {
-          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- runtime RuntimeContext.get must read process.env directly to avoid re-entering the ConfigProvider
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- runtime RuntimeContext.get must read the raw process.env, Config would unwrap packed values
           const value = process.env[key];
           if (value === undefined) {
             return undefined;

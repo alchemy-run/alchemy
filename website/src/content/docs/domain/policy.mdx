@@ -75,7 +75,7 @@ export const MainAccountProvisioningLive = MainAccountProvisioning.toLayer(
     const accounts = yield* Account;
     return Effect.fn(function* ({ source }) {
       yield* accounts
-        .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
+        .send(new OpenAccount({ accountId: AccountId.make(`${source.id}-main`), owner: source.id }))
         .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
     });
   }),
@@ -248,7 +248,7 @@ An external system is implemented by a Layer, so production can use the vendor's
 Commands sent by people pass through middleware that says who they are. A policy has no caller, so when a command's `decide` needs to know who's acting, the policy says so itself.
 
 ```typescript title="packages/domain/src/Fraud/FraudReview.policy.ts"
-yield* accounts.send(source, new FreezeAccount({ reason: `fraud risk ${risk}` })).pipe(
+yield* accounts.send(new FreezeAccount({ accountId: source.id, reason: `fraud risk ${risk}` })).pipe(
   Effect.provideService(CurrentActor, system("FraudReview")),
 ```
 

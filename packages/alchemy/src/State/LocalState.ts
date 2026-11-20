@@ -10,8 +10,16 @@ import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { writeFileAtomic } from "../Util/AtomicFile.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
-import { State, StateStoreError, type StateService } from "./State.ts";
-import { encodeState, reviveState } from "./StateEncoding.ts";
+import { markStoredInOldForm, State, StateStoreError, type StateService } from "./State.ts";
+import { type SealingScope, stateCodec } from "./StateEncryption.ts";
+import { checkStoreFormat, currentStoreFormat, parseStoreFormat } from "./StoreFormat.ts";
+
+/**
+ * The local store's format record, kept beside the state directory rather
+ * than in it: versions from before format records list every entry of the
+ * state directory as a stack, and fail on one that isn't a directory.
+ */
+export const LOCAL_STORE_FORMAT_FILE = "state.format.json";
 
 export const localState = () =>
   Layer.effect(
@@ -32,6 +40,8 @@ export const makeLocalState = () =>
     const dotAlchemy = yield* dotAlchemyDirectory;
     // Keep the store anchored across deploy/destroy even if another task changes cwd.
     const stateDir = path.resolve(initialCwd, dotAlchemy, "state");
+    // Secrets are encrypted when a StateEncryption is provided to the store.
+    const codec = yield* stateCodec;
 
     const fail = (err: PlatformError) =>
       Effect.fail(
@@ -100,22 +110,18 @@ export const makeLocalState = () =>
     const writeAtomic = (file: string, contents: string) =>
       writeFileAtomic(fs, file, contents, 0o600);
 
-    // Only a genuinely missing file represents absent state. A zero-length
-    // or malformed file is corrupted persisted state, not a greenfield
-    // resource: treating it as absent could silently rotate a saved key.
-    // Never include file contents in the error (they may hold Redacted secrets).
-    const parseState = (contents: string) =>
-      Effect.try({
-        try: () => {
-          if (contents.trim().length === 0) throw new Error("Empty persisted state");
-          return JSON.parse(contents, reviveState);
-        },
-        catch: () =>
-          new StateStoreError({
-            message:
-              "Stored state is empty or malformed. Refusing to treat an existing record as absent; restore it from a trusted backup.",
-          }),
-      });
+    // A genuinely missing file is absent, but a zero-length persisted file
+    // may have held a secret. Never treat damaged state as a new resource.
+    // The codec handles the new StateEncryption format and malformed JSON.
+    const parseState = <T>(scope: SealingScope, file: string, contents: string) =>
+      contents.trim().length === 0
+        ? Effect.fail(
+            new StateStoreError({
+              message:
+                "Stored state is empty or malformed. Refusing to treat an existing record as absent; restore it from a trusted backup.",
+            }),
+          )
+        : codec.decode<T>(scope, contents, `state file '${file}'`);
 
     const created = new Set<string>();
 
@@ -123,18 +129,61 @@ export const makeLocalState = () =>
       created.has(dir)
         ? Effect.void
         : Effect.gen(function* () {
-            // Create private from the outset, before writing any state data;
-            // chmod below additionally repairs older, permissive directories.
-            yield* fs.makeDirectory(dir, { recursive: true, mode: 0o700 });
-            // The file's mode alone is not sufficient: a historical stack or
-            // stage directory may have been created with 0755. Restrict all
-            // state ancestors even when they already exist. Do not chmod the
-            // shared .alchemy directory (it also contains public artifacts).
-            for (const ancestor of [stateDir, path.dirname(dir), dir]) {
-              yield* fs.chmod(ancestor, 0o700);
+            const privateStateDirectory = dir === stateDir || dir.startsWith(stateDir + path.sep);
+            // The format record lives in the shared .alchemy directory.
+            // Restrict only the state tree, never its shared parent.
+            yield* fs.makeDirectory(dir, {
+              recursive: true,
+              ...(privateStateDirectory ? { mode: 0o700 } : {}),
+            });
+            if (privateStateDirectory) {
+              for (const ancestor of [stateDir, path.dirname(dir), dir]) {
+                if (ancestor !== path.dirname(stateDir)) {
+                  yield* fs.chmod(ancestor, 0o700);
+                }
+              }
             }
             created.add(dir);
           });
+
+    // The store's format record: checked before reading, written before the
+    // first write, so a directory this version never wrote to stays as it is.
+    const formatFile = path.resolve(initialCwd, dotAlchemy, LOCAL_STORE_FORMAT_FILE);
+    const checkFormat = yield* Effect.cached(
+      fs.readFileString(formatFile).pipe(
+        recover,
+        Effect.flatMap((text) =>
+          checkStoreFormat(
+            "Local state store",
+            text === undefined ? undefined : parseStoreFormat(text)?.format,
+          ),
+        ),
+      ),
+    );
+    const stampFormat = yield* Effect.cached(
+      checkFormat.pipe(
+        Effect.andThen(
+          ensure(path.dirname(formatFile)).pipe(
+            Effect.andThen(writeAtomic(formatFile, JSON.stringify(currentStoreFormat(), null, 2))),
+            recover,
+          ),
+        ),
+      ),
+    );
+
+    /**
+     * Read a state file. One the codec calls stale (a secret in plaintext
+     * while encrypting, or sealed while turning encryption off) is marked,
+     * not written back: this store holds no lock, and other stacks and plans
+     * read it too. The stage's next deploy commits it.
+     */
+    const readState = Effect.fn(function* <T>(scope: SealingScope, file: string) {
+      yield* checkFormat;
+      const contents = yield* fs.readFileString(file).pipe(recover);
+      if (contents === undefined) return undefined;
+      const value = yield* parseState<T>(scope, file, contents);
+      return codec.stale(contents) ? markStoredInOldForm(value) : value;
+    });
 
     const state: StateService = {
       id: "local",
@@ -149,13 +198,7 @@ export const makeLocalState = () =>
           recover,
           Effect.map((files) => files ?? []),
         ),
-      get: (request) =>
-        fs.readFile(resource(request)).pipe(
-          recover,
-          Effect.flatMap((file) =>
-            file === undefined ? Effect.undefined : parseState(file.toString()),
-          ),
-        ),
+      get: (request) => readState(request, resource(request)),
       getReplacedResources: Effect.fn(function* (request) {
         return (yield* Effect.forEach(yield* state.list(request), (fqn) =>
           state.get({
@@ -166,11 +209,14 @@ export const makeLocalState = () =>
         )).filter((r) => r?.status === "replaced");
       }),
       set: (request) =>
-        ensure(stageDir(request)).pipe(
-          Effect.flatMap(() =>
-            writeAtomic(resource(request), JSON.stringify(encodeState(request.value), null, 2)),
+        stampFormat.pipe(
+          Effect.andThen(codec.encode(request, request.value, 2)),
+          Effect.flatMap((text) =>
+            ensure(stageDir(request)).pipe(
+              Effect.flatMap(() => writeAtomic(resource(request), text)),
+              recover,
+            ),
           ),
-          recover,
           Effect.map(() => request.value),
         ),
       delete: (request) => fs.remove(resource(request)).pipe(recover),
@@ -229,22 +275,16 @@ export const makeLocalState = () =>
               .map((file) => decodeFqn(file.replace(/\.json$/, ""))),
           ),
         ),
-      getOutput: (request) =>
-        fs.readFile(outputFile(request)).pipe(
-          recover,
-          Effect.flatMap((file) =>
-            file === undefined ? Effect.undefined : parseState(file.toString()),
-          ),
-        ),
+      getOutput: (request) => readState(request, outputFile(request)),
       setOutput: (request) =>
-        ensure(stageDir(request)).pipe(
-          Effect.flatMap(() =>
-            writeAtomic(
-              outputFile(request),
-              JSON.stringify(encodeState(request.value as any), null, 2),
+        stampFormat.pipe(
+          Effect.andThen(codec.encode(request, request.value, 2)),
+          Effect.flatMap((text) =>
+            ensure(stageDir(request)).pipe(
+              Effect.flatMap(() => writeAtomic(outputFile(request), text)),
+              recover,
             ),
           ),
-          recover,
           Effect.map(() => request.value),
         ),
     };

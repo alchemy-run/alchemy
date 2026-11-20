@@ -35,14 +35,16 @@ export const STATE_STORE_SCRIPT_NAME = DEFAULT_STATE_STORE_NAME;
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
-// v9: new state entries are encrypted with authenticated AES-256-GCM and
-// bound to their storage keys. Legacy AES-CTR entries remain readable, but
-// decryption failures fail closed instead of appearing to be missing state.
+// v10: new Durable Object entries use authenticated AES-256-GCM bound to
+// their storage keys. Legacy AES-CTR records remain readable, and failed
+// decryption is never mistaken for missing state.
+// v9: records may contain secrets sealed by a client's StateEncryption layer;
+// older clients must refuse the store instead of reading a sealed envelope.
 // v8: failures behind the auth middleware answer as a typed `StateStoreFailure`
 // (v7 encoded them through `Unauthorized`'s schema and answered a bare 500),
 // FQNs longer than 100 URI-encoded chars are routed, secret reads retry, and
 // requests for the legacy bootstrap stack are refused.
-export const STATE_STORE_VERSION = 9 as const;
+export const STATE_STORE_VERSION = 10 as const;
 
 /**
  * The stack older Alchemy versions deployed the store itself with. Those

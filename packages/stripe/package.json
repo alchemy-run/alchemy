@@ -28,6 +28,7 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./AWS": "./src/AWS/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
   },
@@ -38,6 +39,12 @@
         "bun": "./src/index.ts",
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
+      },
+      "./AWS": {
+        "types": "./lib/AWS/index.d.ts",
+        "bun": "./src/AWS/index.ts",
+        "worker": "./src/AWS/index.ts",
+        "default": "./lib/AWS/index.js"
       },
       "./internal/*": null,
       "./*": {
@@ -59,14 +66,21 @@
     "@distilled.cloud/stripe": "workspace:*"
   },
   "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@alchemy.run/aws": {
+      "optional": true
+    }
   },
   "alchemy": {
     "contributes": [

@@ -9,7 +9,11 @@ import * as NodePath from "@effect/platform-node/NodePath";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { describe, it } from "vitest";
-import { createAssetsIgnoreFunction, getContentType } from "../helpers.ts";
+import {
+  createAssetsIgnoreFunction,
+  getContentType,
+  InvalidAssetsIgnoreError,
+} from "../helpers.ts";
 
 describe("assets", () => {
   const tmpDir = mkdtempSync(join(tmpdir(), "wrangler-tests"));
@@ -18,7 +22,10 @@ describe("assets", () => {
 
   describe(".assetsignore", () => {
     it("should ignore metafiles by default", async ({ expect }) => {
-      const { assetsIgnoreFunction } = await Effect.runPromise(makeAssetsIgnore);
+      const { assetsIgnoreFunction, assetsIgnoreFilePresent } =
+        await Effect.runPromise(makeAssetsIgnore);
+
+      expect(assetsIgnoreFilePresent).toBe(false);
 
       expect(assetsIgnoreFunction(".assetsignore")).toBeTruthy();
       expect(assetsIgnoreFunction("_redirects")).toBeTruthy();
@@ -54,6 +61,47 @@ describe("assets", () => {
       expect(assetsIgnoreFunction(join("child", "yup.svg"))).toBeTruthy();
       expect(assetsIgnoreFunction(join("child", "a", "b", "c", "yup.svg"))).toBeTruthy();
       expect(assetsIgnoreFunction(join("child", "nope.svg"))).toBeFalsy();
+    });
+
+    it.for(["", "\ufeff"])(
+      "reads UTF-8 patterns with an optional BOM (%j)",
+      async (bom, { expect }) => {
+        await writeFile(
+          join(tmpDir, ".assetsignore"),
+          `${bom}café.txt\r\nchild/*.txt\r\n!child/keep.txt\r\n`,
+        );
+        const { assetsIgnoreFunction, assetsIgnoreFilePresent } =
+          await Effect.runPromise(makeAssetsIgnore);
+
+        expect(assetsIgnoreFilePresent).toBe(true);
+        expect(assetsIgnoreFunction("café.txt")).toBe(true);
+        expect(assetsIgnoreFunction("child/ignore.txt")).toBe(true);
+        expect(assetsIgnoreFunction("child/keep.txt")).toBe(false);
+      },
+    );
+
+    it.for([
+      ["UTF-16 LE", Buffer.from("\ufeffignored.txt", "utf16le")],
+      ["UTF-16 BE", Buffer.from("\ufeffignored.txt", "utf16le").swap16()],
+      ["UTF-16 without a BOM", Buffer.from("ignored.txt", "utf16le")],
+      ["invalid UTF-8", Buffer.from([0xff])],
+      ["null characters", Buffer.from("ignored\0.txt")],
+    ] as const)("rejects %s instead of ignoring its patterns", async ([, contents], { expect }) => {
+      await writeFile(join(tmpDir, ".assetsignore"), contents);
+
+      const error = await Effect.runPromise(Effect.flip(makeAssetsIgnore));
+      expect(error).toBeInstanceOf(InvalidAssetsIgnoreError);
+      expect(error.message).toContain("Save the file as UTF-8 and try again.");
+    });
+
+    it("preserves an intentionally empty ignore file", async ({ expect }) => {
+      await writeFile(join(tmpDir, ".assetsignore"), "");
+      const { assetsIgnoreFunction, assetsIgnoreFilePresent } =
+        await Effect.runPromise(makeAssetsIgnore);
+
+      expect(assetsIgnoreFilePresent).toBe(true);
+      expect(assetsIgnoreFunction("keep.txt")).toBe(false);
+      expect(assetsIgnoreFunction(".assetsignore")).toBe(true);
     });
   });
 });

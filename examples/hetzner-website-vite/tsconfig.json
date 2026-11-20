@@ -16,6 +16,7 @@
     },
     { "path": "../../packages/neon/tsconfig.json" },
     { "path": "../../packages/hetzner/tsconfig.json" },
-    { "path": "../../packages/drizzle/tsconfig.json" }
+    { "path": "../../packages/drizzle/tsconfig.json" },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
   ]
 }
