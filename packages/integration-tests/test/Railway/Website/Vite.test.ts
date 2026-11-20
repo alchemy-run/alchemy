@@ -83,6 +83,25 @@ test.provider(
       );
       expect(health).toContain("ok");
 
+      // `name` renames the site's Service in place.
+      const generated = deployed.site.service!.name;
+      const name = generated.slice(0, -1) + (generated.endsWith("z") ? "y" : "z");
+      const renamed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, environment } = yield* suitePartition;
+          const site = yield* Railway.Website.Vite("Web", {
+            project,
+            environment,
+            rootDir,
+            name,
+            memo: { include: ["index.html", "src/**", "package.json"] },
+          });
+          return { site };
+        }),
+      );
+      expect(renamed.site.service!.serviceId).toEqual(deployed.site.service!.serviceId);
+      expect(renamed.site.service!.name).toEqual(name);
+
       const serviceId = deployed.site.service!.serviceId;
       yield* stack.destroy();
       const gone = yield* waitUntilGone(serviceId);
