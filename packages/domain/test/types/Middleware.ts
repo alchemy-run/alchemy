@@ -29,9 +29,8 @@ class BanCheck extends RpcMiddleware.Service<BanCheck, { requires: Principal }>(
 class Posted extends Domain.Event("Posted", { text: Schema.String }) {}
 
 class Post extends Domain.Command("Post", {
-  target: Schema.String,
   middleware: [Session, BanCheck],
-  input: { text: Schema.String },
+  input: { id: Schema.String, text: Schema.String },
   events: [Posted],
 }) {}
 
@@ -41,9 +40,8 @@ assertType<Equals<Rpc.ExtractRequires<typeof Post.rpc, "Post">, never>>(true);
 assertType<Equals<Rpc.ExtractProvides<typeof Post.rpc, "Post">, Principal>>(true);
 
 class PostUnchecked extends Domain.Command("PostUnchecked", {
-  target: Schema.String,
   middleware: [BanCheck, Session],
-  input: { text: Schema.String },
+  input: { id: Schema.String, text: Schema.String },
   events: [Posted],
 }) {}
 
