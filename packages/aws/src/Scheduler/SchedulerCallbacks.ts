@@ -396,8 +396,10 @@ export const SchedulerCallbacks = <R = never>(options: SchedulerCallbacksOptions
             yield* put(recovery);
             yield* Effect.scoped(run(envelope.payload));
             const after = yield* read(envelope.callback, name);
-            // Scheduled again or cancelled while it ran: that stands.
-            if (after?.token !== recovery.token) return;
+            // Scheduled again or cancelled while it ran: that stands. A read
+            // right after the recovery write can still return the job as it
+            // was before it, which is ours too.
+            if (after?.token !== recovery.token && after?.token !== envelope.token) return;
             const { attempts: _, retryAt: __, ...job } = recovery;
             return yield* put({
               ...job,
