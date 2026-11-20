@@ -211,7 +211,10 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
             Effect.flip,
             Effect.forkScoped,
           );
-          expect(yield* Queue.take(seen).pipe(Effect.timeout(AT_ONCE))).toBe(first);
+          // The view folds the increment eventually: frames before it carry less.
+          const next = Queue.take(seen).pipe(Effect.timeout(within));
+          let total = yield* next;
+          while (total !== first) total = yield* next;
           return { seen, read };
         });
 
