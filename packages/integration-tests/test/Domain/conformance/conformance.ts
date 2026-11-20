@@ -389,7 +389,7 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
   );
 
   test(
-    "a policy starts a saga, and the saga's step commits",
+    "a policy starts a saga, and its step commits once when it runs again",
     Effect.gen(function* () {
       const id = fresh("saga");
       yield* call(`/increment/${id}?by=7`);
@@ -397,6 +397,9 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       yield* call(`/increment/${id}?by=1`);
       const echo = yield* eventually<{ total: number }>(`/echo/${id}`, (e) => e.total > 0);
       expect(echo).toEqual({ total: 7 });
+      // The step's second attempt sent the same command: it never commits again.
+      yield* Effect.sleep("3 seconds");
+      expect(yield* call(`/echo/${id}`)).toEqual({ total: 7 });
     }),
     options,
   );

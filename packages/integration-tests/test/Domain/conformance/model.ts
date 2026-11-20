@@ -167,11 +167,18 @@ const TotalWriterLive = TotalWriter.toLayer(
   }),
 );
 
-/** Mirrors a counter's first increment onto its Echo; one run per counter. */
+/**
+ * Mirrors a counter's first increment onto its Echo; one run per counter.
+ * Its step fails its first attempt after it sends, so the step runs again:
+ * the second attempt sends the same command, which must commit once.
+ */
 export class MirrorFirst extends Domain.Saga("MirrorFirst", {
   key: Schema.String,
   input: { by: Schema.Int },
 }) {}
+
+/** The first attempt of {@link MirrorFirst}'s step fails after its send. */
+export class MirrorFlaky extends Schema.TaggedError<MirrorFlaky>()("MirrorFlaky", {}) {}
 
 const MirrorFirstLive = MirrorFirst.toLayer(
   Effect.gen(function* () {
@@ -179,8 +186,12 @@ const MirrorFirstLive = MirrorFirst.toLayer(
     return Effect.fn(function* ({ key, by }) {
       yield* Activity.make({
         name: "mirror",
-        execute: echoes.send(new Mirror({ id: key, by })).pipe(Effect.orDie),
-      });
+        error: MirrorFlaky,
+        execute: Effect.gen(function* () {
+          yield* echoes.send(new Mirror({ id: key, by })).pipe(Effect.orDie);
+          if ((yield* Activity.CurrentAttempt) === 1) return yield* new MirrorFlaky();
+        }),
+      }).pipe(Activity.retry({ times: 2 }), Effect.orDie);
     });
   }),
 );
