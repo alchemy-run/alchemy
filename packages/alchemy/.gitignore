@@ -1,1 +1,3 @@
 .tmp
+# left by an interrupted test/Bundle/SourceMapPaths.test.ts run
+build:*
