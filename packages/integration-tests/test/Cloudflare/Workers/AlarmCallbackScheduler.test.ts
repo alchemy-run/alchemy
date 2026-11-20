@@ -550,7 +550,7 @@ describe(
             progress: undefined,
           });
           expect(fixture.db.query("SELECT version FROM alchemy_alarm_schema").get()).toEqual({
-            version: 3,
+            version: 2,
           });
           expect(
             fixture.db.query("SELECT version, payload FROM alchemy_alarm_callbacks").get(),
@@ -735,6 +735,44 @@ describe(
         yield* fixture.fire;
         // The replacement ran once and was acknowledged, like any one-off job.
         expect(yield* replaced.getStatus("a")).toBeUndefined();
+        expect(fixture.alarm).toBeNull();
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
+    );
+
+    it.effect("adds recurrence to a version-two table without changing its version", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeAlarmScheduler;
+        const callback = yield* fixture.register("tick", (_: null) => Effect.void);
+        fixture.seal();
+        // A table as releases without recurrence left it.
+        yield* callback.getStatus("a");
+        fixture.db.exec("ALTER TABLE alchemy_alarm_callbacks DROP COLUMN recurrence");
+        fixture.restart();
+        const restarted = yield* fixture.register("tick", (_: null) => Effect.void);
+        fixture.seal();
+        yield* restarted.schedule("a", { every: "10 seconds", payload: null });
+        expect(fixture.db.query("SELECT version FROM alchemy_alarm_schema").get()).toEqual({
+          version: 2,
+        });
+        expect(
+          fixture.db
+            .query("SELECT recurrence IS NOT NULL AS recurring FROM alchemy_alarm_callbacks")
+            .get(),
+        ).toEqual({ recurring: 1 });
+      }).pipe(Effect.provide(RuntimeContext.phantom)),
+    );
+
+    it.effect("runs a recurring job once after a release without recurrence replaced it", () =>
+      Effect.gen(function* () {
+        const fixture = yield* makeAlarmScheduler;
+        const callback = yield* fixture.register("tick", (_: null) => Effect.void);
+        fixture.seal();
+        yield* callback.schedule("a", { every: "10 seconds", payload: null });
+        // An older release rescheduling the job writes a new version and
+        // leaves the column it doesn't know about.
+        fixture.db.exec("UPDATE alchemy_alarm_callbacks SET version = 'older-release'");
+        yield* fixture.fire;
+        expect(yield* callback.getStatus("a")).toBeUndefined();
         expect(fixture.alarm).toBeNull();
       }).pipe(Effect.provide(RuntimeContext.phantom)),
     );

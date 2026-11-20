@@ -103,7 +103,10 @@ type AlarmRow = {
   parked: number;
   progress: number;
   payload: string;
-  /** A recurring job's {@link CallbackRecurrence}, as JSON; `null` for one run. */
+  /**
+   * A recurring job's {@link CallbackRecurrence} and the row version it was
+   * written with, as JSON; `null` for one run.
+   */
   recurrence: string | null;
 };
 type AlarmRef = Pick<AlarmRow, "callback" | "id" | "version">;
@@ -374,7 +377,7 @@ const makeAlarmCallback = <Payload, E, R>(
                 attempts,
                 parked ? 1 : 0,
                 Math.max(progress, schedule.progress ?? -1),
-                recurrence === undefined ? null : JSON.stringify(recurrence),
+                recurrence === undefined ? null : JSON.stringify({ version, recurrence }),
               ),
             );
             if (
@@ -569,7 +572,14 @@ export const dispatchAlarmCallbacks = (state: cf.DurableObjectState, hasLegacyHa
           stored === null
             ? undefined
             : yield* Effect.try({
-                try: () => JSON.parse(stored) as CallbackRecurrence,
+                try: () => {
+                  const { version, recurrence } = JSON.parse(stored) as {
+                    readonly version: string;
+                    readonly recurrence: CallbackRecurrence;
+                  };
+                  // Written by a release without recurrence after this was set.
+                  return version === job.version ? recurrence : undefined;
+                },
                 catch: (cause) =>
                   new CallbackError({
                     callback: job.callback,

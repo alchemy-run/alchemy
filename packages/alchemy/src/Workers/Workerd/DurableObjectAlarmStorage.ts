@@ -3,7 +3,7 @@ import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 2;
 
 export class UnsupportedAlarmSchemaVersion extends Data.TaggedError(
   "UnsupportedAlarmSchemaVersion",
@@ -25,8 +25,8 @@ export const ensureAlarmTables = (storage: cf.DurableObjectStorage) =>
           .exec<{ version: number }>("SELECT version FROM alchemy_alarm_schema WHERE id = 1")
           .one().version
       : 0;
-    if (version === SCHEMA_VERSION) return;
-    if (version !== 0 && version !== 1 && version !== 2) {
+    if (version === SCHEMA_VERSION) return ensureRecurrenceColumn(storage);
+    if (version !== 0 && version !== 1) {
       throw new UnsupportedAlarmSchemaVersion({
         version,
         supportedVersion: SCHEMA_VERSION,
@@ -63,25 +63,38 @@ export const ensureAlarmTables = (storage: cf.DurableObjectStorage) =>
           ON CONFLICT (id) DO UPDATE SET version = excluded.version;
       `);
       }
-      if (version < 2) {
-        // Keep run_at as the indexed effective wake deadline. Existing rows have
-        // no recoverable original deadline, so their current wake is the baseline.
-        storage.sql.exec(`
+      // Keep run_at as the indexed effective wake deadline. Existing rows have
+      // no recoverable original deadline, so their current wake is the baseline.
+      storage.sql.exec(`
         ALTER TABLE alchemy_alarm_callbacks ADD COLUMN scheduled_at INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE alchemy_alarm_callbacks ADD COLUMN retry_at INTEGER;
         ALTER TABLE alchemy_alarm_callbacks ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE alchemy_alarm_callbacks ADD COLUMN parked INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE alchemy_alarm_callbacks ADD COLUMN progress INTEGER NOT NULL DEFAULT -1;
         UPDATE alchemy_alarm_callbacks SET scheduled_at = run_at;
+        UPDATE alchemy_alarm_schema SET version = 2 WHERE id = 1;
       `);
-      }
-      // A recurring job's schedule; existing jobs run once.
-      storage.sql.exec(`
-        ALTER TABLE alchemy_alarm_callbacks ADD COLUMN recurrence TEXT;
-        UPDATE alchemy_alarm_schema SET version = 3 WHERE id = 1;
-      `);
+      ensureRecurrenceColumn(storage);
     });
   });
+
+/**
+ * A recurring job's schedule, added without a version bump: releases that
+ * predate it read and write these rows unchanged, so rolling back never fails
+ * on the table. Their recurring jobs run once more and stop. The column holds
+ * the row version it was written with, so a job an older release replaced
+ * doesn't turn recurring again after rolling forward.
+ */
+const withRecurrence = new WeakSet<cf.DurableObjectStorage>();
+const ensureRecurrenceColumn = (storage: cf.DurableObjectStorage) => {
+  if (withRecurrence.has(storage)) return;
+  const columns = storage.sql
+    .exec<{ name: string }>("SELECT name FROM pragma_table_info('alchemy_alarm_callbacks')")
+    .toArray();
+  // Cached only once seen: a transaction this runs in can roll the column back.
+  if (columns.some((column) => column.name === "recurrence")) withRecurrence.add(storage);
+  else storage.sql.exec("ALTER TABLE alchemy_alarm_callbacks ADD COLUMN recurrence TEXT");
+};
 
 // Both schedulers share the Durable Object's single native alarm. Inside a
 // transaction, workerd defers the native wake to commit and rolls it back
