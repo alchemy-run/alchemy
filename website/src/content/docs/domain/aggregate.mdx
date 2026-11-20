@@ -345,7 +345,7 @@ const receipt = yield* accounts.import(
 yield* Ledger.caughtUp(receipt);
 ```
 
-An import commits its events together under its `commandId`, stamped with the current time. To keep the time an event was first committed, pass it as `{ event, at }`; its envelope's `at` then says when it happened, for every view and projection that reads it.
+An import commits its events together under its `commandId`, stamped with the current time. To keep the time an event was first committed, pass it as `{ event, at }`; its envelope's `at` then says when it happened, for every view and projection that reads it. Times only go forward: an import whose times go back, start before the instance's latest event, or pass the platform's clock fails with `ImportOutOfOrder` and commits nothing, because views rebuild their history in commit-time order.
 
 ```typescript title="src/ImportAccount.ts"
 const receipt = yield* accounts.import(

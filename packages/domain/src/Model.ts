@@ -1135,6 +1135,16 @@ const aggregateClient = (
             version: result.version,
           });
         }
+        if (result._tag === "OutOfOrder") {
+          return yield* new Aggregate.ImportOutOfOrder({
+            aggregate: aggregate.aggregateName,
+            id,
+            commandId: options.commandId,
+            index: result.index,
+            at: DateTime.makeUnsafe(result.at),
+            after: DateTime.makeUnsafe(result.after),
+          });
+        }
         return {
           stream: result.receipt.stream,
           version: result.receipt.version,

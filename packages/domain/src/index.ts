@@ -120,6 +120,9 @@ export type NotScheduled = AggregateModule.NotScheduled;
 /** An import found the instance at another version than it expected. */
 export const UnexpectedVersion = AggregateModule.UnexpectedVersion;
 export type UnexpectedVersion = AggregateModule.UnexpectedVersion;
+/** An import's commit times went back, or past the platform's clock. */
+export const ImportOutOfOrder = AggregateModule.ImportOutOfOrder;
+export type ImportOutOfOrder = AggregateModule.ImportOutOfOrder;
 
 export declare namespace Decision {
   /** Any Decision class. */

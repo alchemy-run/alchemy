@@ -12,15 +12,15 @@
  * - `/hidden/:id?version=n` waits, server-side, until the view no client may read has folded `n` commits
  * - `/record/:id?by=n` sends `Increment`, waits for `TotalWriter.caughtUp`, then lists what it recorded
  * - `/place/:id`, `/release/:id`, `/hold/:id` place, release and read a hold
- * - `/import/:id?n=&id=commandId&expected=&at=ms&on=echo` imports `n` events adding 1 into
- *   the counter (or the echo), the i-th committed at `ms + i` when `at` is given;
- *   `{ version }` or `{ rejected: tag, version }`
+ * - `/import/:id?n=&id=commandId&expected=&at=ms&step=&on=echo` imports `n` events adding 1
+ *   into the counter (or the echo), the i-th committed at `ms + i * step` when `at` is given;
+ *   `{ version }`, `{ rejected: tag, version }` or `{ rejected: tag, index }`
  * - `/times/:id` reads when the counter's first and latest events were committed
  * - `/api` serves {@link ConformanceApi}: calls over HTTP, live reads over WebSockets
  * - `/bench/:id?shape=&n=&consistency=&fresh=&lag=` times `n` commands sent one after
  *   another through {@link LatencyApi}, from inside the front: see `latency.ts`
  */
-import type { UnexpectedVersion } from "@alchemy.run/domain";
+import type { ImportOutOfOrder, UnexpectedVersion } from "@alchemy.run/domain";
 import * as Model from "@alchemy.run/domain/Model";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -165,9 +165,13 @@ export const app = Effect.gen(function* () {
           commandId: url.searchParams.get("id") ?? `import:${id}`,
           expectedVersion: Number(url.searchParams.get("expected") ?? "0"),
         };
+        const step = Number(url.searchParams.get("step") ?? "1");
         const stamped = <E>(event: E, i: number) =>
-          at === null ? event : { event, at: DateTime.makeUnsafe(Number(at) + i) };
-        const imported: Effect.Effect<{ readonly version: number }, UnexpectedVersion> =
+          at === null ? event : { event, at: DateTime.makeUnsafe(Number(at) + i * step) };
+        const imported: Effect.Effect<
+          { readonly version: number },
+          UnexpectedVersion | ImportOutOfOrder
+        > =
           url.searchParams.get("on") === "echo"
             ? echoes.import(
                 Echo.ref(id),
@@ -184,6 +188,9 @@ export const app = Effect.gen(function* () {
             Effect.map((receipt) => ({ version: receipt.version })),
             Effect.catchTag("UnexpectedVersion", (refused) =>
               Effect.succeed({ rejected: refused._tag, version: refused.version }),
+            ),
+            Effect.catchTag("ImportOutOfOrder", (refused) =>
+              Effect.succeed({ rejected: refused._tag, index: refused.index }),
             ),
           ),
         );

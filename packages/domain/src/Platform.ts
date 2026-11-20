@@ -191,7 +191,16 @@ export type SendResult =
  */
 export type ImportResult =
   | { readonly _tag: "Imported"; readonly receipt: ReceiptJson }
-  | { readonly _tag: "UnexpectedVersion"; readonly version: number };
+  | { readonly _tag: "UnexpectedVersion"; readonly version: number }
+  | {
+      readonly _tag: "OutOfOrder";
+      /** The position of the first event out of order. */
+      readonly index: number;
+      /** Its commit time, in epoch milliseconds. */
+      readonly at: number;
+      /** The commit time it may not precede (or the clock it may not pass), in epoch milliseconds. */
+      readonly after: number;
+    };
 
 /**
  * What {@link AggregateStore.import} receives with the events.
@@ -586,6 +595,29 @@ export interface ListRange {
   /** At most this many entries. */
   readonly limit?: number;
 }
+
+/**
+ * The first imported event whose commit time comes before the event ahead of
+ * it (`latest` for the first: the instance's last commit time, `0` if it has
+ * none) or after `now`, or `undefined` when they are in order. An event
+ * without a time (`null`) commits at `now`. Views are rebuilt in commit-time
+ * order, so a history out of order would replay out of order.
+ */
+export const outOfOrder = (
+  at: ReadonlyArray<number | null> | undefined,
+  count: number,
+  latest: number,
+  now: number,
+): Extract<ImportResult, { readonly _tag: "OutOfOrder" }> | undefined => {
+  let after = latest;
+  for (let index = 0; index < count; index++) {
+    const time = at?.[index] ?? now;
+    if (time < after) return { _tag: "OutOfOrder", index, at: time, after };
+    if (time > now) return { _tag: "OutOfOrder", index, at: time, after: now };
+    after = time;
+  }
+  return undefined;
+};
 
 /** The entries of `entries` (sorted by `seq`) in `range`, for platforms that hold them in memory. */
 export const inRange = <A extends { readonly seq: number }>(

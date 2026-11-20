@@ -21,6 +21,7 @@ import {
   emptyStreamMeta,
   hostedModels,
   inRange,
+  outOfOrder,
   Platform,
   type Json,
   type ModelHost,
@@ -930,6 +931,13 @@ export const make = (
                     return { _tag: "Imported", receipt: duplicate.receipt } as const;
                   if (current.version !== meta.expectedVersion)
                     return { _tag: "UnexpectedVersion", version: current.version } as const;
+                  const refused = outOfOrder(
+                    meta.at,
+                    events.length,
+                    current.events.at(-1)?.envelope.at ?? 0,
+                    now(),
+                  );
+                  if (refused) return refused;
                   const receipt = yield* append(id, events, meta.commandId, meta.at);
                   current.receipts.set(meta.commandId, { _tag: "Accepted", receipt });
                   return { _tag: "Imported", receipt } as const;

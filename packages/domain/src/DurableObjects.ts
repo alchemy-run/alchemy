@@ -56,6 +56,7 @@ import {
   type ImportMeta,
   type ImportResult,
   inRange,
+  outOfOrder,
   type Json,
   type ListRange,
   type ModelHost,
@@ -985,13 +986,21 @@ const aggregateObject = (
           const imported: ImportResult = { _tag: "UnexpectedVersion", version: current.version };
           return { imported, kick: false };
         }
+        const now = yield* Clock.currentTimeMillis;
+        const latest =
+          current.version === 0
+            ? 0
+            : ((yield* state.storage.get<StoredEvent>(`event:${pad(current.version)}`))?.envelope
+                .at ?? 0);
+        const refused = outOfOrder(meta.at, events.length, latest, now);
+        if (refused) return { imported: refused as ImportResult, kick: false };
         const result = yield* kit.seed({
           id,
           state: current.state,
           version: current.version,
           events,
           commandId: meta.commandId,
-          now: yield* Clock.currentTimeMillis,
+          now,
           ...(meta.at === undefined ? {} : { at: meta.at }),
         });
         const receipt = {

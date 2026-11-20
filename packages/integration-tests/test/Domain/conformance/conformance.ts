@@ -410,7 +410,7 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       const id = fresh("import");
       // History from another system, committed at its own times.
       const at = Date.parse("2020-01-01T00:00:00Z");
-      type Imported = { version: number; rejected?: string };
+      type Imported = { version: number; rejected?: string; index?: number };
       expect(yield* call<Imported>(`/import/${id}?n=3&id=a&at=${at}`)).toEqual({ version: 3 });
       // A retried import commits nothing and answers its first receipt.
       expect(yield* call<Imported>(`/import/${id}?n=3&id=a&at=${at}`)).toEqual({ version: 3 });
@@ -423,6 +423,14 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       expect(yield* call<Imported>(`/import/${id}?n=2&id=c&expected=3&at=${at + 3}`)).toEqual({
         version: 5,
       });
+      // Times only go forward: from the instance's latest event, within a batch, up to now.
+      const refused = (index: number) => ({ rejected: "ImportOutOfOrder", index });
+      expect(yield* call(`/import/${id}?n=2&id=d&expected=5&at=${at}`)).toEqual(refused(0));
+      expect(yield* call(`/import/${id}?n=2&id=e&expected=5&at=${at + 9}&step=-1`)).toEqual(
+        refused(1),
+      );
+      const future = Date.parse("2100-01-01T00:00:00Z");
+      expect(yield* call(`/import/${id}?n=1&id=f&expected=5&at=${future}`)).toEqual(refused(0));
       expect(yield* call(`/counter/${id}`)).toEqual({ total: 5 });
       const times = yield* eventually<{ first: number; last: number }>(
         `/times/${id}`,
