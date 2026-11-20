@@ -21,6 +21,7 @@ import {
   type ServerHost,
 } from "alchemy/Runtime/Process";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
 import { moduleExtension } from "alchemy/Util/Node";
@@ -1002,10 +1003,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
             },
           ]
         : undefined,
-    environment: Object.entries(props.env ?? {}).map(([name, value]) => ({
-      name,
-      value: typeof value === "string" ? value : JSON.stringify(value),
-    })),
+    environment: Object.entries(envStrings(props.env)).map(([name, value]) => ({ name, value })),
     environmentFiles: props.environmentFiles,
     logConfiguration: {
       logDriver: "awslogs",

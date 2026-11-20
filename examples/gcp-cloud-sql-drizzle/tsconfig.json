@@ -14,6 +14,7 @@
     },
     { "path": "../../packages/sql/tsconfig.json" },
     { "path": "../../packages/gcp/tsconfig.json" },
-    { "path": "../../packages/drizzle/tsconfig.json" }
+    { "path": "../../packages/drizzle/tsconfig.json" },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
   ]
 }

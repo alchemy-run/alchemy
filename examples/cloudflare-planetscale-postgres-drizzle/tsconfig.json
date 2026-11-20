@@ -16,6 +16,7 @@
     },
     { "path": "../../packages/cloudflare/tsconfig.json" },
     { "path": "../../packages/planetscale/tsconfig.json" },
-    { "path": "../../packages/drizzle/tsconfig.json" }
+    { "path": "../../packages/drizzle/tsconfig.json" },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
   ]
 }

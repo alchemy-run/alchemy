@@ -20,6 +20,7 @@ import {
   DuplicateFlag,
   ReservedFlag,
 } from "./DefinitionError.ts";
+import { sendPayload } from "./internal.ts";
 import {
   exposedOf,
   isMethod,
@@ -164,7 +165,7 @@ const descriptionOfField = (ast: SchemaAST.AST): string | undefined =>
 /**
  * The fields of a call's payload, as the wire carries them (the encoded
  * side). A command's or a query's `input` is flattened into flags of its
- * own fields (`--amount`), next to `--target` and `--command-id`, or
+ * own fields (`--account-id`, `--amount`), next to `--command-id`, or
  * `--after` and `--take`. A field whose flag
  * the CLI reserves, or that another field takes, is a definition problem.
  */
@@ -205,7 +206,7 @@ const fieldsOf = (
   const outer = new Set(ast.propertySignatures.map((property) => kebab(String(property.name))));
   return ast.propertySignatures.flatMap((property) => {
     const input = flattenInput && property.name === "input" ? property.type : undefined;
-    // An input field named like `target` keeps the whole input as `--input`'s JSON.
+    // An input field named like `commandId` keeps the whole input as `--input`'s JSON.
     const flat =
       input !== undefined &&
       SchemaAST.isObjects(input) &&
@@ -295,13 +296,7 @@ const invoke = (
 ): Effect.Effect<unknown, unknown> => {
   const served = (client as Record<string, unknown>)[op.name];
   if (op.operation === "send") {
-    const { target, input, commandId } = payload;
-    const send = served as (
-      target: unknown,
-      input: unknown,
-      options: unknown,
-    ) => Effect.Effect<unknown, unknown>;
-    return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
+    return sendPayload(served, payload, { headers });
   }
   if (op.operation === "ask") {
     const { input, ...options } = payload;
@@ -439,12 +434,12 @@ const commandOf = <E, R>(
  *   `account-summary`). A command or a query runs as that subcommand; a view
  *   or a stream has one subcommand per call (`get`, `list`,
  *   `snapshot`, `peek`). Live reads (`watch`, `events`) are left out.
- * - each payload field is a flag in kebab-case (`--target`, `--command-id`,
- *   `--key`), and a command's or a query's input fields are flags of their
- *   own (`--amount`, `--account`). A string, a number, a boolean or a set of string literals
+ * - each payload field is a flag in kebab-case (`--command-id`, `--key`),
+ *   and a command's or a query's input fields are flags of their own
+ *   (`--account-id`, `--amount`). A string, a number, a boolean or a set of string literals
  *   takes a typed flag; any other field takes its JSON (`--at-least
  *   '{"stream":"Account/a-1","version":3}'`). `--json` takes the flags as
- *   one object (`{"target":"a-1","amount":1000}`), and flags override it.
+ *   one object (`{"accountId":"a-1","amount":1000}`), and flags override it.
  * - two of them with one command name, or a field whose flag another field
  *   or the CLI takes, fail every run with a `DefinitionError`.
  * - the input is decoded against the call's schema before anything is sent;
@@ -483,7 +478,7 @@ const commandOf = <E, R>(
  *   Effect.provide(BunServices.layer),
  *   BunRuntime.runMain,
  * );
- * // $ bank deposit-money --target a-1 --amount 1000
+ * // $ bank deposit-money --account-id a-1 --amount 1000
  * // $ bank account-ledger --account a-1 --take 20
  * // $ bank account-summary get --key a-1
  * ```

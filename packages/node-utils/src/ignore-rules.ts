@@ -371,6 +371,9 @@ export const walkIgnoring = <E, R>({
           if (keeps(path, false)) entries.push({ path, type: child.type });
           continue;
         }
+        if (keeps(path, true)) entries.push({ path, type: "Directory" });
+        // A pruned directory's contents are excluded, but the directory itself
+        // may still be kept: `cache/**` sends an empty `cache`.
         if (
           rules !== undefined &&
           !isForced(path) &&
@@ -379,7 +382,6 @@ export const walkIgnoring = <E, R>({
         ) {
           continue;
         }
-        if (keeps(path, true)) entries.push({ path, type: "Directory" });
         pending.push(path);
       }
     }

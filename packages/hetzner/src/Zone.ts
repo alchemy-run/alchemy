@@ -36,6 +36,16 @@ export type ZoneDelegationStatus =
   | "unknown"
   | (string & {});
 
+/**
+ * Deletion was refused because the DNS zone has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class ZoneDeleteProtected extends Data.TaggedError("Hetzner.ZoneDeleteProtected")<{
+  readonly id: number;
+  readonly message: string;
+}> {}
+
 export interface ZoneProps {
   /**
    * Apex domain of the zone (e.g. `example.com`). Must be lowercase, must
@@ -372,12 +382,20 @@ export const ZoneProvider = () =>
 
       return toAttrs(current);
     }),
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const idOrName = String(output.zoneId);
       const current = yield* getZoneBy(idOrName);
       if (current === undefined) return;
 
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.protection.delete) {
+        if (force !== true) {
+          return yield* new ZoneDeleteProtected({
+            id: current.id,
+            message: `Hetzner zone '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         const { action } = yield* retryLocked(
           Hetzner.zoneActions.changeZoneProtection({ id_or_name: idOrName, delete: false }),
         );

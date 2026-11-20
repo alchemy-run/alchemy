@@ -12,6 +12,7 @@ import type * as Event from "./Event.ts";
 import { FilterJson } from "./Filter.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
+import * as Query from "./Query.ts";
 import * as Read from "./Read.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as View from "./View.ts";
@@ -95,9 +96,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
         Rpc.make(`${name}.peek`, {
           payload: {
             key,
-            atLeast: Schema.optional(
-              Schema.Struct({ stream: Schema.String, version: Schema.Number }),
-            ),
+            atLeast: Schema.optional(Query.AtLeastJson),
           },
           success: latest,
           error: waitError,
@@ -127,6 +126,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
         Rpc.make(`${name}.list`, {
           payload: {
             key,
+            atLeast: Schema.optional(Query.AtLeastJson),
             where: Schema.optional(FilterJson),
             order: Schema.optional(Schema.Literals(["asc", "desc"])),
             take: Schema.optional(Schema.Number),
@@ -136,7 +136,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
             entries: Schema.Array(recorded),
             cursor: Schema.NullOr(Schema.Number),
           }),
-          error,
+          error: waitError,
         }),
       ),
     };
@@ -154,9 +154,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
         Rpc.make(`${name}.get`, {
           payload: {
             key,
-            atLeast: Schema.optional(
-              Schema.Struct({ stream: Schema.String, version: Schema.Number }),
-            ),
+            atLeast: Schema.optional(Query.AtLeastJson),
             where: Schema.optional(FilterJson),
           },
           success: state,
@@ -187,9 +185,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
         Rpc.make(`${name}.list`, {
           payload: {
             key,
-            atLeast: Schema.optional(
-              Schema.Struct({ stream: Schema.String, version: Schema.Number }),
-            ),
+            atLeast: Schema.optional(Query.AtLeastJson),
             where: Schema.optional(FilterJson),
             order: Schema.optional(Schema.Literals(["asc", "desc"])),
             take: Schema.optional(Schema.Number),
@@ -206,9 +202,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
         Rpc.make(`${name}.snapshot`, {
           payload: {
             key,
-            atLeast: Schema.optional(
-              Schema.Struct({ stream: Schema.String, version: Schema.Number }),
-            ),
+            atLeast: Schema.optional(Query.AtLeastJson),
             where: Schema.optional(FilterJson),
           },
           success: snapshotSchema(state),
