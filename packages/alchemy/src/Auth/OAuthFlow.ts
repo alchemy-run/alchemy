@@ -3,6 +3,7 @@ import * as Clock from "effect/Clock";
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { Base64Url } from "effect/encoding";
@@ -153,6 +154,8 @@ export class CallbackServerError extends Data.TaggedError("CallbackServerError")
  * re-login.
  */
 export const OAuthCredentials = Schema.Struct({
+  tokenType: Schema.optional(Schema.Literals(["Bearer", "DPoP"])),
+  keyThumbprint: Schema.optional(Schema.String),
   type: Schema.Literal("oauth"),
   clientId: Schema.optional(Schema.String),
   access: Schema.RedactedFromValue(Schema.String),
@@ -196,6 +199,19 @@ export interface Authorization {
  * `endpoints.deviceAuthorization`. A client that only refreshes and revokes
  * existing grants needs neither.
  */
+export interface OAuthDpopSigner {
+  readonly keyThumbprint: string;
+  readonly sign: (
+    input: {
+      readonly method: string;
+      readonly url: string;
+      readonly nonce?: string;
+      readonly accessToken?: string;
+    },
+    now: Date,
+  ) => Effect.Effect<string, OAuthInvalidResponse>;
+}
+
 export interface OAuthClientSpec {
   readonly clientId: string;
   readonly endpoints: {
@@ -218,6 +234,7 @@ export interface OAuthClientSpec {
    */
   readonly auth:
     | { readonly kind: "pkce" }
+    | { readonly kind: "dpop"; readonly signer: OAuthDpopSigner }
     | { readonly kind: "clientSecret"; readonly clientSecret: Redacted.Redacted<string> };
   /**
    * How token-request parameters travel: URL-encoded POST body (the OAuth 2
@@ -233,6 +250,7 @@ export interface OAuthClientSpec {
 }
 
 export interface OAuthClient {
+  readonly dpopSigner?: OAuthDpopSigner;
   readonly clientId: string;
   /** Whether persisted credentials were issued to this client. */
   readonly usesCurrentClient: (credentials: { readonly clientId?: unknown }) => boolean;
@@ -327,6 +345,7 @@ const generatePKCE = Effect.fn(function* (length = 96) {
 
 const TokenResponse = Schema.Struct({
   access_token: Schema.String,
+  token_type: Schema.optional(Schema.String),
   refresh_token: Schema.optional(Schema.String),
   // WorkOS omits it; the access token's JWT `exp` claim is used instead.
   expires_in: Schema.optional(Schema.Number),
@@ -363,11 +382,92 @@ const TokenErrorResponse = Schema.Struct({
 
 export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
   const provideHttp = <A, E>(effect: Effect.Effect<A, E, HttpClient.HttpClient>) =>
-    effect.pipe(Effect.provide(FetchHttpClient.layer));
+    (spec.auth.kind === "dpop"
+      ? effect.pipe(Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }))
+      : effect
+    ).pipe(Effect.provide(FetchHttpClient.layer));
   const clientAuthParams = (): Record<string, string> =>
     spec.auth.kind === "clientSecret"
       ? { client_secret: Redacted.value(spec.auth.clientSecret) }
       : {};
+
+  const nonces = new Map<string, string>();
+  const signRequest = Effect.fn(function* (
+    request: HttpClientRequest.HttpClientRequest,
+    endpoint: string,
+    nonce?: string,
+  ) {
+    if (spec.auth.kind !== "dpop") return request;
+    if (!spec.auth.signer.keyThumbprint.trim())
+      return yield* new OAuthInvalidResponse({
+        endpoint,
+        status: 0,
+        reason: "DPoP key thumbprint is absent",
+      });
+    const url = yield* Effect.try({
+      try: () => new URL(endpoint),
+      catch: () =>
+        new OAuthInvalidResponse({
+          endpoint: "DPoP endpoint",
+          status: 0,
+          reason: "invalid endpoint URL",
+        }),
+    });
+    if (url.protocol !== "https:" || url.username || url.password || url.hash)
+      return yield* new OAuthInvalidResponse({
+        endpoint,
+        status: 0,
+        reason: "DPoP requires an HTTPS endpoint without credentials or fragment",
+      });
+    url.search = "";
+    const now = yield* DateTime.now;
+    const proof = yield* spec.auth.signer.sign(
+      { method: request.method, url: url.toString(), ...(nonce === undefined ? {} : { nonce }) },
+      DateTime.toDateUtc(now),
+    );
+    if (!proof)
+      return yield* new OAuthInvalidResponse({
+        endpoint,
+        status: 0,
+        reason: "DPoP signer returned no proof",
+      });
+    return HttpClientRequest.setHeader(request, "DPoP", proof);
+  });
+
+  const sendAuthorizedRequest = Effect.fn(function* (
+    request: HttpClientRequest.HttpClientRequest,
+    endpoint: string,
+  ) {
+    const client = yield* HttpClient.HttpClient;
+    const send = (nonce?: string) =>
+      signRequest(request, endpoint, nonce).pipe(
+        Effect.flatMap((signed) =>
+          client
+            .execute(signed)
+            .pipe(Effect.mapError((cause) => new OAuthNetworkError({ endpoint, cause }))),
+        ),
+      );
+    let response = yield* send(nonces.get(endpoint));
+    if (spec.auth.kind === "dpop" && response.status === 400 && response.headers["dpop-nonce"]) {
+      const challenge = yield* HttpClientResponse.schemaBodyJson(TokenErrorResponse)(response).pipe(
+        Effect.mapError(
+          () =>
+            new OAuthInvalidResponse({ endpoint, status: 400, reason: "invalid nonce challenge" }),
+        ),
+      );
+      if (challenge.error !== "use_dpop_nonce")
+        return yield* new OAuthError({
+          error: challenge.error,
+          errorDescription: challenge.error_description ?? "HTTP 400",
+        });
+      const nonce = response.headers["dpop-nonce"];
+      nonces.set(endpoint, nonce);
+      response = yield* send(nonce);
+    }
+    if (spec.auth.kind === "dpop" && response.headers["dpop-nonce"])
+      nonces.set(endpoint, response.headers["dpop-nonce"]);
+    return response;
+  });
 
   /**
    * POST form params to an authorization-server endpoint and decode the 2xx
@@ -380,16 +480,13 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
     success: Schema.ConstraintDecoder<A, never>,
     transport: "body" | "query" = "body",
   ) {
-    const client = yield* HttpClient.HttpClient;
     const request = HttpClientRequest.post(endpoint).pipe(
       HttpClientRequest.setHeader("Accept", "application/json"),
       transport === "query"
         ? HttpClientRequest.setUrlParams(params)
         : HttpClientRequest.bodyUrlParams(params),
     );
-    const response = yield* client
-      .execute(request)
-      .pipe(Effect.mapError((cause) => new OAuthNetworkError({ endpoint, cause })));
+    const response = yield* sendAuthorizedRequest(request, endpoint);
     const { status } = response;
     if (status < 200 || status >= 300) {
       const json = yield* HttpClientResponse.schemaBodyJson(TokenErrorResponse)(response).pipe(
@@ -417,6 +514,12 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
   ) {
     const endpoint = spec.endpoints.token;
     const json = yield* postForm(endpoint, params, TokenResponse, spec.tokenTransport);
+    if (spec.auth.kind === "dpop" && json.token_type?.toLowerCase() !== "dpop")
+      return yield* new OAuthInvalidResponse({
+        endpoint,
+        status: 200,
+        reason: "DPoP token type required; bearer downgrade refused",
+      });
     const refresh =
       json.refresh_token === undefined ? previous?.refresh : Redacted.make(json.refresh_token);
     if (!refresh) {
@@ -443,6 +546,9 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
     }
     return {
       type: "oauth" as const,
+      ...(spec.auth.kind === "dpop"
+        ? { tokenType: "DPoP" as const, keyThumbprint: spec.auth.signer.keyThumbprint }
+        : {}),
       clientId: spec.clientId,
       access: Redacted.make(json.access_token),
       refresh,
@@ -472,7 +578,8 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
       url.searchParams.set("scope", scopes.join(" "));
     }
     url.searchParams.set("state", state);
-    if (spec.auth.kind === "pkce") {
+    if (spec.auth.kind === "dpop") url.searchParams.set("dpop_jkt", spec.auth.signer.keyThumbprint);
+    if (spec.auth.kind === "pkce" || spec.auth.kind === "dpop") {
       const pkce = yield* generatePKCE();
       url.searchParams.set("code_challenge", pkce.challenge);
       url.searchParams.set("code_challenge_method", "S256");
@@ -501,6 +608,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
       {
         client_id: spec.clientId,
         ...(scopes === undefined ? {} : { scope: scopes.join(" ") }),
+        ...(spec.auth.kind === "dpop" ? { dpop_jkt: spec.auth.signer.keyThumbprint } : {}),
         ...clientAuthParams(),
       },
       DeviceAuthorizationResponse,
@@ -585,6 +693,19 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
   });
 
   const refresh = Effect.fn(function (credentials: OAuthCredentials) {
+    if (
+      (credentials.tokenType === "DPoP" || spec.auth.kind === "dpop") &&
+      (spec.auth.kind !== "dpop" ||
+        credentials.tokenType !== "DPoP" ||
+        credentials.keyThumbprint !== spec.auth.signer.keyThumbprint)
+    )
+      return Effect.fail(
+        new OAuthInvalidResponse({
+          endpoint: spec.endpoints.token,
+          status: 0,
+          reason: "DPoP credential key mismatch",
+        }),
+      );
     return tokenRequest(
       {
         grant_type: "refresh_token",
@@ -599,7 +720,17 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
   const revoke = Effect.fn(function* (credentials: OAuthCredentials) {
     const endpoint = spec.endpoints.revoke;
     if (endpoint === undefined) return;
-    const client = yield* HttpClient.HttpClient;
+    if (
+      (credentials.tokenType === "DPoP" || spec.auth.kind === "dpop") &&
+      (spec.auth.kind !== "dpop" ||
+        credentials.tokenType !== "DPoP" ||
+        credentials.keyThumbprint !== spec.auth.signer.keyThumbprint)
+    )
+      return yield* new OAuthInvalidResponse({
+        endpoint,
+        status: 0,
+        reason: "DPoP credential key mismatch",
+      });
     const request = HttpClientRequest.post(endpoint).pipe(
       HttpClientRequest.setHeader("Accept", "application/json"),
       HttpClientRequest.bodyUrlParams({
@@ -609,10 +740,13 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
         ...clientAuthParams(),
       }),
     );
-    yield* client.execute(request).pipe(
-      Effect.mapError((cause) => new OAuthNetworkError({ endpoint, cause })),
-      Effect.asVoid,
-    );
+    const response = yield* sendAuthorizedRequest(request, endpoint);
+    if (response.status < 200 || response.status >= 300)
+      return yield* new OAuthInvalidResponse({
+        endpoint,
+        status: response.status,
+        reason: "revocation was rejected",
+      });
   });
 
   const exchangeCallbackInput = Effect.fn(function* (input: string, authorization: Authorization) {
@@ -758,6 +892,7 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
 
   return {
     clientId: spec.clientId,
+    ...(spec.auth.kind === "dpop" ? { dpopSigner: spec.auth.signer } : {}),
     usesCurrentClient: (credentials) => credentials.clientId === spec.clientId,
     authorize,
     exchange: (...args) => provideHttp(exchange(...args)),
@@ -766,6 +901,18 @@ export const makeOAuthClient = (spec: OAuthClientSpec): OAuthClient => {
     deviceAuthorize: (scopes) => provideHttp(deviceAuthorize(scopes)),
     deviceToken: (authorization) => provideHttp(deviceToken(authorization)),
     refresh: (credentials) => provideHttp(refresh(credentials)),
-    revoke: (credentials) => provideHttp(revoke(credentials)),
+    revoke: (credentials) =>
+      provideHttp(
+        revoke(credentials).pipe(
+          Effect.mapError((error) =>
+            error._tag === "OAuthNetworkError"
+              ? error
+              : new OAuthNetworkError({
+                  endpoint: spec.endpoints.revoke ?? spec.endpoints.token,
+                  cause: "OAuth revocation request could not be authorized",
+                }),
+          ),
+        ),
+      ),
   };
 };
