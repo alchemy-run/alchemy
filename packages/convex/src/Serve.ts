@@ -1,3 +1,13 @@
+import type { ProviderCollectionLike } from "alchemy/Provider";
+import {
+  type BaseRuntimeContext,
+  RuntimeContext,
+  unpackEnvValue,
+  unwrapRedactedMarker,
+} from "alchemy/RuntimeContext";
+import type { Stack } from "alchemy/Stack";
+import { StackContext } from "alchemy/StackContext";
+import { Stage } from "alchemy/Stage";
 import type {
   GenericActionCtx,
   GenericMutationCtx,
@@ -56,12 +66,16 @@ const deterministic = new EffectScheduler.MixedScheduler("sync");
  * `Config` over the deployment's environment variables. Effect's default
  * provider reads `import.meta`, which Convex's runtime lacks, and lists
  * `process.env`, which Convex only answers by name. So each name is read
- * on its own: `Config.String("API_URL")` reads `process.env.API_URL`.
+ * on its own: `Config.String("API_URL")` reads `process.env.API_URL`, with
+ * a value `Convex.Functions` bound from a constructor's `Config` unwrapped.
  */
 const deploymentVariables = ConfigProvider.make((path) => {
   const value = process.env[path.map(String).join("_")];
+  // A secret Alchemy set is marker-packed; Config reads the plain value.
   return Effect.succeed(
-    value === undefined || value === "" ? undefined : ConfigProvider.makeValue(value),
+    value === undefined || value === ""
+      ? undefined
+      : ConfigProvider.makeValue(unwrapRedactedMarker(value)),
   );
 });
 
@@ -69,6 +83,44 @@ const deploymentVariables = ConfigProvider.make((path) => {
  * The services a function of `kind` runs with. The handler's type only lets
  * it ask for these, so the context covers what it needs.
  */
+/**
+ * What Alchemy bindings read at runtime: the variables `Convex.Functions`
+ * set on the deployment when it ran the constructors at deploy.
+ */
+const runtimeContext: BaseRuntimeContext = {
+  Type: "Convex.Functions",
+  id: "Convex.Functions",
+  env: {},
+  get: <T>(key: string) => Effect.sync(() => unpackEnvValue<T>(process.env[key])),
+  // `yield* output` sets, then gets. The value was set at deploy, so setting
+  // here only names the key.
+  set: (key) => Effect.succeed(key),
+};
+
+/**
+ * What a constructor may require beyond its own Layers: the providers of the
+ * resources it declares, which only deploy uses, and the stack.
+ */
+export type DeclarationServices = ProviderCollectionLike | Stack | Stage;
+
+/**
+ * The services a constructor resolves resources and bindings with: the
+ * runtime context, and the stack `Convex.Functions` deployed it from.
+ */
+const runtimeServices = () => {
+  const name = process.env.ALCHEMY_STACK_NAME;
+  const stage = process.env.ALCHEMY_STAGE;
+  return Layer.mergeAll(
+    Layer.succeed(RuntimeContext, runtimeContext),
+    name === undefined || stage === undefined
+      ? Layer.empty
+      : Layer.mergeAll(
+          Layer.succeed(StackContext, { name, stage, bindings: {}, resources: {}, actions: {} }),
+          Layer.succeed(Stage, stage),
+        ),
+  );
+};
+
 const servicesOf = (
   kind: FunctionDeclaration["kind"],
   ctx: AnyCtx,
@@ -91,6 +143,7 @@ const servicesOf = (
           runMutation: (reference, args) => ctx.runMutation!(reference, args),
           runAction: (reference, args) => ctx.runAction!(reference, args),
         }),
+        Context.add(RuntimeContext, runtimeContext),
       ) as Context.Context<ServicesOf<FunctionKind>>;
   }
 };
@@ -155,11 +208,17 @@ const toThrown = (fn: FunctionDeclaration, cause: Cause.Cause<unknown>) =>
  */
 export const serve = <F extends FunctionDeclaration & Context.Key<any, any>>(
   fn: F,
-  layer: Layer.Layer<F["Identifier"], unknown, never>,
+  layer: Layer.Layer<F["Identifier"], unknown, DeclarationServices>,
 ): Served<F> => {
   const program = (ctx: AnyCtx, rawArgs: unknown) =>
     Effect.gen(function* () {
-      const context = yield* Layer.buildWithMemoMap(layer, memoMap, isolateScope);
+      const context = yield* Layer.buildWithMemoMap(
+        // A binding's constructor reads what it bound at deploy from here.
+        // Declaring a resource needs its provider only at deploy.
+        Layer.provide(layer, runtimeServices()) as Layer.Layer<F["Identifier"], unknown, never>,
+        memoMap,
+        isolateScope,
+      );
       const handler = Context.get(context, fn) as Handler<any, any, any, any>;
       const args = yield* Schema.decodeUnknownEffect(fn.args)(rawArgs).pipe(Effect.orDie);
       const value = yield* handler(args).pipe(Effect.provideContext(servicesOf(fn.kind, ctx)));
@@ -169,6 +228,9 @@ export const serve = <F extends FunctionDeclaration & Context.Key<any, any>>(
     });
 
   const handler = async (ctx: AnyCtx, rawArgs: unknown) => {
+    // Bindings check this to skip their deploy-time wiring. Set here, not at
+    // import: the deploying program imports this module too.
+    globalThis.__ALCHEMY_RUNTIME__ = true;
     const configured = program(ctx, rawArgs).pipe(
       Effect.provideService(ConfigProvider.ConfigProvider, deploymentVariables),
     );

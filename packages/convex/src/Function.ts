@@ -1,3 +1,4 @@
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type {
   Auth as ConvexAuth,
   FunctionReference,
@@ -51,13 +52,15 @@ export class Runner extends Context.Service<Runner, RunnerShape>()("Convex.Runne
 /**
  * What each kind of function may use. A query only reads; a mutation reads,
  * writes and schedules, all in one transaction; an action calls other
- * functions and schedules. A handler that asks for more doesn't type-check.
+ * functions, schedules, and calls the clients of Alchemy bindings, which is
+ * what `RuntimeContext` stands for. A handler that asks for more doesn't
+ * type-check.
  */
 export type ServicesOf<Kind extends FunctionKind> = Kind extends "query"
   ? Reader | Auth
   : Kind extends "mutation"
     ? Reader | Writer | Scheduler | Auth
-    : Runner | Scheduler | Auth;
+    : Runner | Scheduler | Auth | RuntimeContext;
 
 type ValueOf<S> = S extends Codec ? S["Type"] : void;
 type FailureOf<S> = S extends Codec ? S["Type"] : never;
