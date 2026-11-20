@@ -90,6 +90,28 @@ describe.skipIf(!runLive)(
           );
 
           const url404 = site404.site.url! as string;
+          const staticConfig = yield* cloudfront.getDistributionConfig({
+            Id: site404.site.distribution!.distributionId,
+          });
+          const origin = staticConfig.DistributionConfig?.Origins?.Items?.find(
+            (item) => item.Id === "default",
+          );
+          expect(origin?.S3OriginConfig).toBeDefined();
+          expect(origin?.CustomOriginConfig).toBeUndefined();
+          expect(staticConfig.DistributionConfig?.CustomErrorResponses?.Items).toEqual([
+            {
+              ErrorCode: 403,
+              ResponseCode: "404",
+              ResponsePagePath: "/404.html",
+              ErrorCachingMinTTL: 0,
+            },
+            {
+              ErrorCode: 404,
+              ResponseCode: "404",
+              ResponsePagePath: "/404.html",
+              ErrorCachingMinTTL: 0,
+            },
+          ]);
           // Content still serves.
           yield* expectUrlContains(`${url404}/about`, ABOUT_MARKER, {
             label: "pretty url after update",

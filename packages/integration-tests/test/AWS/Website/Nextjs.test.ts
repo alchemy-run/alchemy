@@ -4,6 +4,7 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as S3 from "@distilled.cloud/aws/s3";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
@@ -94,6 +95,10 @@ describe.skipIf(!runLive || runEmulated)(
                 const site = yield* AWS.Website.Nextjs("NextjsSite", {
                   rootDir,
                   server,
+                  // Exercise the derived CloudFront timeout for both server
+                  // forms: an explicit 45-second timeout and the application's
+                  // conservative 60-second default cap.
+                  timeout: Duration.seconds(server === "web-function" ? 45 : 120),
                   forceDestroy: true,
                   invalidation: { paths: "all", wait: true },
                 });
@@ -125,6 +130,46 @@ describe.skipIf(!runLive || runEmulated)(
               expect(deployed.site.imageUrl).toContain(".lambda-url.");
               expect(deployed.site.revalidationQueue).toBeDefined();
               expect(deployed.site.tagCacheTable).toBeDefined();
+            }
+            const distributionConfig = yield* cloudfront.getDistributionConfig({
+              Id: deployed.site.distribution!.distributionId,
+            });
+            const origin = distributionConfig.DistributionConfig?.Origins?.Items?.find(
+              (item) => item.Id === "default",
+            );
+            expect(origin?.CustomOriginConfig?.OriginReadTimeout).toBe(
+              server === "web-function" ? 45 : 60,
+            );
+            expect(distributionConfig.DistributionConfig?.CustomErrorResponses?.Items).toEqual(
+              [400, 403, 404, 405, 414, 416, 500, 501, 502, 503, 504].map((ErrorCode) => ({
+                ErrorCode,
+                ErrorCachingMinTTL: 0,
+              })),
+            );
+            if (server === "function") {
+              const overridden = yield* stack.deploy(
+                Effect.gen(function* () {
+                  return yield* AWS.Website.Nextjs("NextjsSite", {
+                    rootDir,
+                    server,
+                    timeout: Duration.seconds(120),
+                    originReadTimeout: Duration.seconds(55),
+                    forceDestroy: true,
+                    invalidation: { paths: "all", wait: true },
+                  });
+                }),
+              );
+              expect(overridden.distribution?.distributionId).toBe(
+                deployed.site.distribution?.distributionId,
+              );
+              const overriddenConfig = yield* cloudfront.getDistributionConfig({
+                Id: overridden.distribution!.distributionId,
+              });
+              expect(
+                overriddenConfig.DistributionConfig?.Origins?.Items?.find(
+                  (item) => item.Id === "default",
+                )?.CustomOriginConfig?.OriginReadTimeout,
+              ).toBe(55);
             }
             yield* Effect.log(`site url: ${url} | server url: ${deployed.site.serverUrl}`);
 
