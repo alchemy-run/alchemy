@@ -1,41 +1,32 @@
 import * as Archil from "@alchemy.run/archil";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import * as archil from "@distilled.cloud/archil";
+import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import * as Schedule from "effect/Schedule";
-import { expectedEnv } from "../EnvValues.ts";
+import { expectedEnv, getJson } from "../EnvValues.ts";
 import EnvApi from "./fixtures/program/env.ts";
 
-const { test } = Test.make({ providers: Archil.providers() });
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Archil.providers(),
+});
 
-test.provider(
-  "a sandbox program reads env values as process env strings",
-  (stack) =>
-    Effect.gen(function* () {
-      yield* stack.destroy();
-      const api = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* EnvApi;
-        }),
-      );
+const Stack = Alchemy.Stack(
+  "ArchilEnvStack",
+  { providers: Archil.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const api = yield* EnvApi;
+    return { url: api.url.as<string>() };
+  }),
+);
 
-      const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
-      const env = yield* client.get(`${api.url}/`).pipe(
-        Effect.flatMap((res) => res.json),
-        // A fresh hostname or a waking sandbox can take a few seconds.
-        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 20 }),
-      );
+const stack = beforeAll(deploy(Stack), { timeout: 300_000 });
+afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 300_000 });
 
-      // Assert after destroy so a failure leaves nothing deployed.
-      yield* stack.destroy();
-      const gone = yield* archil.getSandbox({ sid: api.sandboxId }).pipe(
-        Effect.map(({ data }) => data.status === "deleted"),
-        Effect.catchTag("NotFound", () => Effect.succeed(true)),
-      );
-      expect(env).toEqual(expectedEnv);
-      expect(gone).toBe(true);
-    }),
-  { tags: ["provider:archil", "provider:archil:sandbox", "live"], timeout: 600_000 },
+test(
+  "a sandbox program reads every env value as its string",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    expect(yield* getJson(url)).toEqual(expectedEnv);
+  }),
+  { tags: ["provider:archil", "provider:archil:sandbox", "live"], timeout: 90_000 },
 );

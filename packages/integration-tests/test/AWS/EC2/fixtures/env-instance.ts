@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import path from "pathe";
-import { envValues, readEnvValues } from "../../../EnvValues.ts";
+import { echoEnv, envValues } from "../../../EnvValues.ts";
 
 export const ENV_PORT = 3000;
 
@@ -64,9 +64,7 @@ export default class EnvInstance extends AWS.EC2.Instance<EnvInstance>()(
   Effect.gen(function* () {
     return {
       fetch: Effect.gen(function* () {
-        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- asserts the raw deployed value
-        const env = yield* Effect.sync(() => readEnvValues(process.env));
-        return yield* HttpServerResponse.json(env);
+        return yield* HttpServerResponse.json(yield* echoEnv);
       }).pipe(Effect.orDie),
     };
   }),

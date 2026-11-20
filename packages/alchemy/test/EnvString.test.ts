@@ -1,8 +1,8 @@
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { dockerEnvFile, systemdEnvFile } from "@/EnvFile.ts";
 import { envString, envStrings, packEnvValue } from "@/RuntimeContext.ts";
+import { dockerEnvFile, systemdEnvFile } from "@/Util/envFile.ts";
 
 describe("envString", { tags: ["unit"] }, () => {
   it("keeps strings verbatim, the empty string and JSON-looking ones included", () => {

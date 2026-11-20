@@ -1,6 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
-import { envValuesWithout, readEnvValues } from "../../../EnvValues.ts";
+import { echoEnv, envValuesWithout } from "../../../EnvValues.ts";
 
 /** AWS Batch drops an empty env value, so the job skips it. */
 export const jobEnv = envValuesWithout("ENV_EMPTY");
@@ -27,12 +27,7 @@ export default class EnvJob extends AWS.Batch.JobDefinition<EnvJob>()(
   },
   Effect.gen(function* () {
     return {
-      run: Effect.sync(() =>
-        console.log(
-          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- asserts the raw deployed value
-          `${ENV_MARKER}${JSON.stringify(readEnvValues(process.env))}`,
-        ),
-      ),
+      run: echoEnv.pipe(Effect.map((env) => console.log(`${ENV_MARKER}${JSON.stringify(env)}`))),
     };
   }),
 ) {}

@@ -1,6 +1,6 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import { envString } from "./RuntimeContext.ts";
+import { envString } from "../RuntimeContext.ts";
 
 /** A Docker `--env-file` holds one line per variable, so it can't carry a newline. */
 export class MultilineEnvValue extends Data.TaggedError("MultilineEnvValue")<{

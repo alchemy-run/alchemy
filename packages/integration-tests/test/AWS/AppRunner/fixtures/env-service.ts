@@ -2,7 +2,7 @@ import * as AWS from "@alchemy.run/aws";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { envValues, readEnvValues } from "../../../EnvValues.ts";
+import { echoEnv, envValues } from "../../../EnvValues.ts";
 
 /**
  * App Runner service whose `env` holds every {@link envValues} case; `/env`
@@ -26,8 +26,7 @@ export default class EnvService extends AWS.AppRunner.Service<EnvService>()(
         const request = yield* HttpServerRequest;
         const url = new URL(request.url, "http://service");
         if (url.pathname === "/env") {
-          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- asserts the raw deployed value
-          return yield* HttpServerResponse.json(readEnvValues(process.env));
+          return yield* HttpServerResponse.json(yield* echoEnv);
         }
         return yield* HttpServerResponse.json({ ok: true });
       }).pipe(Effect.orDie),

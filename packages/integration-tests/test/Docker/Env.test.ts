@@ -3,9 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { inMemoryState } from "alchemy/State";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import * as Schedule from "effect/Schedule";
-import { expectedEnv } from "../EnvValues.ts";
+import { expectedEnv, getJson } from "../EnvValues.ts";
 import EnvService, { ENV_EXTERNAL_PORT } from "./fixtures/env-service.ts";
 import { ensureDockerSwarm } from "./Runtime.ts";
 
@@ -17,25 +15,15 @@ test.provider(
     Effect.gen(function* () {
       yield* ensureDockerSwarm;
       yield* stack.destroy();
-
       yield* stack.deploy(
         Effect.gen(function* () {
           return yield* EnvService;
         }),
       );
-
-      const body = yield* HttpClient.get(`http://localhost:${ENV_EXTERNAL_PORT}/env`).pipe(
-        Effect.flatMap((res) =>
-          res.status === 200 ? res.json : Effect.fail(new Error(`/env returned ${res.status}`)),
-        ),
-        Effect.timeout("10 seconds"),
-        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+      const env = yield* getJson(`http://localhost:${ENV_EXTERNAL_PORT}`).pipe(
         Effect.ensuring(stack.destroy().pipe(Effect.ignore)),
       );
-      expect(body).toEqual(expectedEnv);
+      expect(env).toEqual(expectedEnv);
     }),
-  {
-    tags: ["provider:docker", "provider:docker:service", "local"],
-    timeout: 300_000,
-  },
+  { tags: ["provider:docker", "provider:docker:service", "local"], timeout: 300_000 },
 );

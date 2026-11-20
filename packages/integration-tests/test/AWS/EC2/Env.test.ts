@@ -3,10 +3,8 @@ import { expect } from "@alchemy.run/test";
 import * as Alchemy from "alchemy";
 import * as State from "alchemy/State";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
-import * as Schedule from "effect/Schedule";
-import { envValuesWithout, expectedEnv, readEnvValues } from "../../EnvValues.ts";
+import { envValuesWithout, expectedEnv, getJson, readEnvValues } from "../../EnvValues.ts";
 import EnvInstance, { envContainerContext, envInstanceProps } from "./fixtures/env-instance.ts";
 import * as Test from "./VpcTest.ts";
 
@@ -31,12 +29,7 @@ const Stack = Alchemy.Stack(
       context: envContainerContext,
       env: containerEnv.values,
     });
-    return {
-      programUrl: program.url,
-      programId: program.instanceId,
-      containerUrl: container.url,
-      containerId: container.instanceId,
-    };
+    return { programUrl: program.url, containerUrl: container.url };
   }),
 );
 
@@ -45,29 +38,18 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 600_000 });
 
 // Polls until the instance boots and serves, then returns its echoed env.
 const fetchEnv = (url: string) =>
-  HttpClient.get(url).pipe(
-    Effect.timeout("10 seconds"),
-    Effect.flatMap((res) =>
-      res.status === 200 ? res.json : Effect.fail(new Error(`Request failed: ${res.status}`)),
-    ),
-    Effect.retry({ schedule: Schedule.spaced("8 seconds"), times: 75 }),
+  getJson(url, { times: 200 }).pipe(
     Effect.map((body) => readEnvValues(body as Record<string, string | undefined>)),
   );
 
 test.skipIf(!!process.env.FAST)(
-  "EC2 hosted program reads every env value as its string",
+  "EC2 program and container instances read every env value as its string",
   Effect.gen(function* () {
-    const { programUrl } = yield* stack;
-    expect(yield* fetchEnv(programUrl!)).toEqual(expectedEnv);
+    const { programUrl, containerUrl } = yield* stack;
+    expect({
+      program: yield* fetchEnv(programUrl!),
+      container: yield* fetchEnv(containerUrl!),
+    }).toEqual({ program: expectedEnv, container: containerEnv.expected });
   }).pipe(logLevel),
-  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 720_000 },
-);
-
-test.skipIf(!!process.env.FAST)(
-  "EC2 container instance reads every env value as its string",
-  Effect.gen(function* () {
-    const { containerUrl } = yield* stack;
-    expect(yield* fetchEnv(containerUrl!)).toEqual(containerEnv.expected);
-  }).pipe(logLevel),
-  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 720_000 },
+  { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 900_000 },
 );

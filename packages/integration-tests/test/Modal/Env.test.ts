@@ -3,10 +3,8 @@ import * as Modal from "@alchemy.run/modal";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import * as Schedule from "effect/Schedule";
-import { expectedEnv } from "../EnvValues.ts";
+import { expectedEnv, getJson } from "../EnvValues.ts";
 import EnvFunction from "./fixtures/env-function.ts";
 import { hostIdentity } from "./hostIdentity.ts";
 
@@ -25,11 +23,7 @@ test.provider(
         }),
       );
 
-      const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
-      const env = yield* client.get(host.functionUrl!).pipe(
-        Effect.flatMap((res) => res.json),
-        Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 8 }),
-      );
+      const env = yield* getJson(host.functionUrl!);
 
       // Assert after destroy so a failure leaves nothing deployed.
       yield* stack.destroy();

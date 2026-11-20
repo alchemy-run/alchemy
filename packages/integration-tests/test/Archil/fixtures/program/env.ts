@@ -1,7 +1,7 @@
 import * as Archil from "@alchemy.run/archil";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { envValues, readEnvValues } from "../../../EnvValues.ts";
+import { echoEnv, envValues } from "../../../EnvValues.ts";
 
 /**
  * A sandbox program deployed with every {@link envValues} case; `fetch`
@@ -20,9 +20,7 @@ export default class EnvApi extends Archil.Sandbox<EnvApi>()(
   },
   Effect.succeed({
     fetch: Effect.gen(function* () {
-      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- asserts the raw deployed value
-      const env = yield* Effect.sync(() => readEnvValues(process.env));
-      return yield* HttpServerResponse.json(env);
+      return yield* HttpServerResponse.json(yield* echoEnv);
     }),
   }),
 ) {}

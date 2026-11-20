@@ -3,9 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { getApp } from "@distilled.cloud/digitalocean";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import * as Schedule from "effect/Schedule";
-import { expectedEnv } from "../EnvValues.ts";
+import { expectedEnv, getJson } from "../EnvValues.ts";
 import EnvApp from "./fixtures/app/env-app.ts";
 import { isGone, logLevel, skipSlow, waitForAppHost } from "./support.ts";
 
@@ -25,13 +23,7 @@ test.provider.skipIf(skipSlow)(
       );
 
       yield* waitForAppHost(app.url);
-      const client = yield* HttpClient.HttpClient;
-      const env = yield* client.get(app.url).pipe(
-        Effect.flatMap((res) =>
-          res.status === 200 ? res.json : Effect.fail(new Error(`HTTP ${res.status}`)),
-        ),
-        Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 24 }),
-      );
+      const env = yield* getJson(app.url, { times: 40 });
 
       // Assert after destroy so a failure leaves nothing deployed.
       yield* stack.destroy();

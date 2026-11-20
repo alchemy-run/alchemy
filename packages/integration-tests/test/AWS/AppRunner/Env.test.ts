@@ -4,9 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
 import * as State from "alchemy/State";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
-import * as Schedule from "effect/Schedule";
-import { expectedEnv } from "../../EnvValues.ts";
+import { expectedEnv, getJson } from "../../EnvValues.ts";
 import EnvService from "./fixtures/env-service.ts";
 
 // App Runner closed to new customers on 2026-04-30; accounts that weren't
@@ -36,16 +34,7 @@ describe.skipIf(skip)("env values", () => {
     "App Runner service reads every env value as the expected string",
     Effect.gen(function* () {
       const { serviceUrl } = yield* stack;
-      const body = yield* HttpClient.get(`https://${serviceUrl}/env`).pipe(
-        Effect.timeout("10 seconds"),
-        Effect.flatMap((res) =>
-          res.status === 200 ? res.json : Effect.fail(new Error(`Request failed: ${res.status}`)),
-        ),
-        Effect.retry({
-          schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),
-        }),
-      );
-      expect(body).toEqual(expectedEnv);
+      expect(yield* getJson(`https://${serviceUrl}/env`)).toEqual(expectedEnv);
     }),
     { tags: ["provider:aws", "provider:aws:apprunner", "live"], timeout: 120_000 },
   );

@@ -1,7 +1,7 @@
 import * as Daytona from "@alchemy.run/daytona";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { envValues, readEnvValues } from "../../../EnvValues.ts";
+import { echoEnv, envValues } from "../../../EnvValues.ts";
 import { PROGRAM_PORT } from "./shared.ts";
 
 /**
@@ -14,9 +14,7 @@ export default class EnvAgent extends Daytona.Sandbox<EnvAgent>()(
   { main: import.meta.url, port: PROGRAM_PORT, public: true, env: envValues },
   Effect.succeed({
     fetch: Effect.gen(function* () {
-      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- asserts the raw deployed value
-      const env = yield* Effect.sync(() => readEnvValues(process.env));
-      return yield* HttpServerResponse.json(env);
+      return yield* HttpServerResponse.json(yield* echoEnv);
     }),
   }),
 ) {}

@@ -1,7 +1,7 @@
 import * as Docker from "@alchemy.run/docker";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { envValues, readEnvValues } from "../../EnvValues.ts";
+import { echoEnv, envValues } from "../../EnvValues.ts";
 
 /** Fixed host port published through the swarm ingress. */
 export const ENV_EXTERNAL_PORT = 43123;
@@ -22,9 +22,7 @@ export default class EnvService extends Docker.Service<EnvService>()(
   Effect.gen(function* () {
     return {
       fetch: Effect.gen(function* () {
-        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- asserts the raw deployed value
-        const env = yield* Effect.sync(() => readEnvValues(process.env));
-        return yield* HttpServerResponse.json(env);
+        return yield* HttpServerResponse.json(yield* echoEnv);
       }),
     };
   }),

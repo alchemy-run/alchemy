@@ -1,6 +1,6 @@
 import { Task } from "@alchemy.run/aws/ECS/Task";
 import * as Effect from "effect/Effect";
-import { envValues, readEnvValues } from "../../../EnvValues.ts";
+import { echoEnv, envValues } from "../../../EnvValues.ts";
 
 /** Prefix of the stdout line carrying the echoed env values as JSON. */
 export const ENV_MARKER = "ALCHEMY_ENV_VALUES ";
@@ -28,12 +28,7 @@ export default EnvTask.make(
   },
   Effect.gen(function* () {
     return {
-      run: Effect.sync(() =>
-        console.log(
-          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- asserts the raw deployed value
-          `${ENV_MARKER}${JSON.stringify(readEnvValues(process.env))}`,
-        ),
-      ),
+      run: echoEnv.pipe(Effect.map((env) => console.log(`${ENV_MARKER}${JSON.stringify(env)}`))),
     };
   }),
 );

@@ -8,9 +8,9 @@ import {
   type PackageInstall,
 } from "alchemy/Bundle/InstalledPackages";
 import { findCwdForBundle, resolveMainPath } from "alchemy/Bundle/TempRoot";
-import { dockerEnvFile, systemdEnvFile } from "alchemy/EnvFile";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
+import { dockerEnvFile, systemdEnvFile } from "alchemy/Util/envFile";
 import {
   contextRootOf,
   extraFileDestination,

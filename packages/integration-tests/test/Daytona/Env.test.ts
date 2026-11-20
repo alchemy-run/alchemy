@@ -3,9 +3,8 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as sandboxes from "@distilled.cloud/daytona/sandbox";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import { expectedEnv } from "../EnvValues.ts";
+import { expectedEnv, getJson } from "../EnvValues.ts";
 import EnvAgent from "./fixtures/program/env.ts";
 
 const { test } = Test.make({ providers: Daytona.providers() });
@@ -22,15 +21,7 @@ test.provider(
         }),
       );
 
-      // Retry while the preview proxy warms up.
-      const env = yield* HttpClient.get(agent.url!).pipe(
-        Effect.flatMap((res) =>
-          res.status === 200
-            ? res.json
-            : Effect.flatMap(res.text, (text) => Effect.fail(new Error(`${res.status}: ${text}`))),
-        ),
-        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }),
-      );
+      const env = yield* getJson(agent.url!);
 
       // Assert after destroy so a failure leaves nothing deployed.
       yield* stack.destroy();

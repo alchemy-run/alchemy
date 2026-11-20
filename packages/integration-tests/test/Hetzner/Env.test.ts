@@ -3,10 +3,9 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as servers from "@distilled.cloud/hetzner/servers";
 import * as Effect from "effect/Effect";
-import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { envValuesWithout, expectedEnv, readEnvValues } from "../EnvValues.ts";
+import { envValuesWithout, expectedEnv, getJson, readEnvValues } from "../EnvValues.ts";
 import EnvService, {
   ENV_CONTAINER_PORT,
   EnvBox,
@@ -33,12 +32,7 @@ const waitUntilGone = (id: number) =>
   );
 
 const fetchEnv = (url: string) =>
-  HttpClient.get(url).pipe(
-    Effect.timeout("10 seconds"),
-    Effect.flatMap((res) =>
-      res.status === 200 ? res.json : Effect.fail(new Error(`Request failed: ${res.status}`)),
-    ),
-    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }),
+  getJson(url, { times: 30 }).pipe(
     Effect.map((body) => readEnvValues(body as Record<string, string | undefined>)),
   );
 

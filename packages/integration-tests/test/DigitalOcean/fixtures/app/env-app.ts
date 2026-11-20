@@ -1,7 +1,7 @@
 import * as DigitalOcean from "@alchemy.run/digitalocean";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { envValues, readEnvValues } from "../../../EnvValues.ts";
+import { echoEnv, envValues } from "../../../EnvValues.ts";
 import { TestRegistry } from "./shared.ts";
 
 /**
@@ -14,9 +14,7 @@ export default class EnvApp extends DigitalOcean.App<EnvApp>()(
   { main: import.meta.url, registry: TestRegistry, region: "nyc", env: envValues },
   Effect.succeed({
     fetch: Effect.gen(function* () {
-      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- asserts the raw deployed value
-      const env = yield* Effect.sync(() => readEnvValues(process.env));
-      return yield* HttpServerResponse.json(env);
+      return yield* HttpServerResponse.json(yield* echoEnv);
     }),
   }),
 ) {}

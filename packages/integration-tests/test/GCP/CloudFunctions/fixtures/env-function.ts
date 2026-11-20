@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { envValues, readEnvValues } from "../../../EnvValues.ts";
+import { echoEnv, envValues } from "../../../EnvValues.ts";
 
 /**
  * Effect-native Cloud Function deployed with every {@link envValues} case;
@@ -14,9 +14,7 @@ export default class EnvFunction extends GCP.CloudFunctions.Function<EnvFunction
   Effect.gen(function* () {
     return {
       fetch: Effect.gen(function* () {
-        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- asserts the raw deployed value
-        const env = yield* Effect.sync(() => readEnvValues(process.env));
-        return yield* HttpServerResponse.json(env);
+        return yield* HttpServerResponse.json(yield* echoEnv);
       }),
     };
   }),
