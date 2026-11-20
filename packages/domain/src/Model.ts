@@ -1106,10 +1106,21 @@ const aggregateClient = (
           );
         }
         const expected = options.expectedVersion ?? 0;
-        const result = yield* store.import(id, yield* Effect.forEach(events, kernel.encodeEvent), {
-          commandId: options.commandId,
-          expectedVersion: expected,
-        });
+        const rows = events.map((row) =>
+          "_tag" in row
+            ? { event: row, at: null }
+            : { event: row.event, at: DateTime.toEpochMillis(row.at) },
+        );
+        const at = rows.map((row) => row.at);
+        const result = yield* store.import(
+          id,
+          yield* Effect.forEach(rows, (row) => kernel.encodeEvent(row.event)),
+          {
+            commandId: options.commandId,
+            expectedVersion: expected,
+            ...(at.some((ms) => ms !== null) ? { at } : {}),
+          },
+        );
         if (result._tag === "UnexpectedVersion") {
           return yield* new Aggregate.UnexpectedVersion({
             aggregate: aggregate.aggregateName,
@@ -1117,6 +1128,16 @@ const aggregateClient = (
             commandId: options.commandId,
             expected,
             version: result.version,
+          });
+        }
+        if (result._tag === "OutOfOrder") {
+          return yield* new Aggregate.ImportOutOfOrder({
+            aggregate: aggregate.aggregateName,
+            id,
+            commandId: options.commandId,
+            index: result.index,
+            at: DateTime.makeUnsafe(result.at),
+            after: DateTime.makeUnsafe(result.after),
           });
         }
         return {

@@ -281,6 +281,31 @@ export class UnexpectedVersion extends Data.TaggedError("UnexpectedVersion")<{
 }> {}
 
 /**
+ * An imported event's commit time came before the event ahead of it (the
+ * instance's latest event, for the first), or after the platform's clock.
+ * Views rebuild their history in commit-time order, so an import commits
+ * its events in that order or not at all.
+ */
+export class ImportOutOfOrder extends Data.TaggedError("ImportOutOfOrder")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+  /** The position of the first event out of order. */
+  readonly index: number;
+  /** Its commit time. */
+  readonly at: DateTime.Utc;
+  /** The time it may not precede, or the platform's clock it may not pass. */
+  readonly after: DateTime.Utc;
+}> {}
+
+/**
+ * One event for {@link Client.import}: the event alone, stamped with the
+ * platform's current time, or the event with the time it was originally
+ * committed, which its envelope's `at` keeps.
+ */
+export type Imported<Ev> = Ev | { readonly event: Ev; readonly at: DateTime.Utc };
+
+/**
  * Options for {@link Client.import}.
  */
 export interface ImportOptions {
@@ -427,19 +452,25 @@ export interface Client<Def extends AnyDefinition> {
    * another system, without running `decide`. `evolve` folds them into the
    * state; views and projections apply them like any other events, while
    * policies and sagas never react to them. All of them are committed at
-   * once, stamped with the platform's current time and `commandId`. Wait for
-   * a projection with `Projection.caughtUp(receipt)`.
+   * once under `commandId`. Each is stamped with the platform's current
+   * time, or with its original commit time when passed as `{ event, at }`.
+   * Wait for a projection with `Projection.caughtUp(receipt)`.
    *
    * Fails with `UnexpectedVersion` when the instance is not at
    * `expectedVersion` (`0` by default, so an instance with events refuses
-   * an import). Retrying with the same `commandId` returns the original
-   * receipt.
+   * an import), and with `ImportOutOfOrder` when an event's time comes
+   * before the event ahead of it (the instance's latest, for the first) or
+   * after the platform's clock. Retrying with the same `commandId` returns
+   * the original receipt.
    */
   readonly import: (
     target: Target<Def>,
-    events: ReadonlyArray<InstanceOf<Def["events"][number]>>,
+    events: ReadonlyArray<Imported<InstanceOf<Def["events"][number]>>>,
     options: ImportOptions,
-  ) => Effect.Effect<Receipt<InstanceOf<Def["events"][number]>, void>, UnexpectedVersion>;
+  ) => Effect.Effect<
+    Receipt<InstanceOf<Def["events"][number]>, void>,
+    UnexpectedVersion | ImportOutOfOrder
+  >;
   /**
    * Read the current state of an instance, as of its latest commit: `initial`
    * for one that has never committed.
@@ -473,9 +504,9 @@ export interface ClientImpl {
   ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
   readonly import: (
     target: unknown,
-    events: ReadonlyArray<{ readonly _tag: string }>,
+    events: ReadonlyArray<Imported<{ readonly _tag: string }>>,
     options: ImportOptions,
-  ) => Effect.Effect<Receipt, UnexpectedVersion>;
+  ) => Effect.Effect<Receipt, UnexpectedVersion | ImportOutOfOrder>;
   readonly get: (target: unknown) => Effect.Effect<unknown>;
 }
 

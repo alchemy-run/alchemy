@@ -60,7 +60,7 @@ export const ServicePool = (id: string, options: ServicePoolOptions = {}) =>
           ? { context: nodes.program.context }
           : {
               main: (yield* bundleNodes("railway", id, nodes.program)) as unknown as string,
-              build: { install: { rivetkit: RIVETKIT_VERSION } },
+              build: { install: { rivetkit: options.rivetkitVersion ?? RIVETKIT_VERSION } },
             }),
         publicDomain: false,
         region: options.region,
