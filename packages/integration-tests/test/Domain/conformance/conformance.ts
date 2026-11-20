@@ -17,7 +17,11 @@ import { ConformanceApi, SECRET } from "./model.ts";
 type TestFn = (
   name: string,
   effect: Effect.Effect<void, any, any>,
-  options?: { readonly timeout?: number; readonly tags?: ReadonlyArray<string> },
+  options?: {
+    readonly timeout?: number;
+    readonly tags?: ReadonlyArray<string>;
+    readonly exclusive?: boolean;
+  },
 ) => void;
 
 export interface ConformanceOptions {
@@ -481,5 +485,62 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       expect(yield* call(`/hold/${id}`)).toEqual({ status: "released" });
     }),
     options,
+  );
+};
+
+export interface RebuildOptions extends Omit<ConformanceOptions, "within"> {
+  /**
+   * Deploy the front over `ConformanceLive` (0) or `ConformanceLiveV1` (1),
+   * and wait until it serves.
+   */
+  readonly deploy: (version: 0 | 1) => Effect.Effect<void, any, any>;
+}
+
+/**
+ * A projection rebuilt by a version bump, writing a stream it wrote before:
+ * every entry is kept, none is appended twice, and what happens after the
+ * bump is appended. The case redeploys the front, so it runs alone and last.
+ */
+export const rebuild = ({ test, url, kind, deploy }: RebuildOptions) => {
+  const call = <T>(path: string) => Effect.flatMap(url, (base) => get<T>(base, path));
+  /** Read a run's tallies until they are `expected`, or give up with the last read. */
+  const tallies = (run: string, expected: ReadonlyArray<number>) =>
+    call<ReadonlyArray<number>>(`/tallies/${run}`).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("1 second"),
+        until: (got) => JSON.stringify(got) === JSON.stringify(expected),
+        times: 60,
+      }),
+    );
+
+  test(
+    "a projection rebuilt by a version bump keeps its stream and appends what follows",
+    Effect.gen(function* () {
+      yield* deploy(0);
+      const run = fresh("rebuild");
+      // Version 0 tallies increments and what a decision takes: three inputs.
+      expect(yield* call(`/increment/${run}~a?by=5`)).toMatchObject({ accepted: 5 });
+      expect(yield* call(`/give/${run}~a?to=${run}~b&by=2`)).toMatchObject({ accepted: 3 });
+      expect(yield* call(`/increment/${run}~a?by=1`)).toMatchObject({ accepted: 4 });
+      expect(yield* tallies(run, [5, -2, 1])).toEqual([5, -2, 1]);
+
+      // Version 1 tallies increments alone, rebuilt from the history: two inputs replayed.
+      yield* deploy(1);
+      expect(
+        yield* call<number>("/generation").pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (generation) => generation === 1,
+            times: 90,
+          }),
+        ),
+      ).toBe(1);
+      // A counter of the same run that is new to this version.
+      expect(yield* call(`/increment/${run}~c?by=3`)).toMatchObject({ accepted: 3 });
+      expect(yield* call(`/increment/${run}~c?by=4`)).toMatchObject({ accepted: 7 });
+      // The replay appends nothing again; the increments after the bump are appended.
+      expect(yield* tallies(run, [5, -2, 1, 3, 4])).toEqual([5, -2, 1, 3, 4]);
+    }),
+    { timeout: 900_000, tags: [kind], exclusive: true },
   );
 };

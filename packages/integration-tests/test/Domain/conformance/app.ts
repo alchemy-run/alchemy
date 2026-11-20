@@ -12,6 +12,7 @@
  * - `/totals/:id?order=&take=&after=` lists a page of the view's entries
  * - `/hidden/:id?version=n` waits, server-side, until the view no client may read has folded `n` commits
  * - `/record/:id?by=n` sends `Increment`, waits for `TotalWriter.caughtUp`, then lists what it recorded
+ * - `/tallies/:run` lists the tallies of a run's counters; `/generation` answers `TallyWriter`'s
  * - `/place/:id`, `/release/:id`, `/hold/:id` place, release and read a hold
  * - `/import/:id?n=&id=commandId&expected=&at=ms&step=&on=echo` imports `n` events adding 1
  *   into the counter (or the echo), the i-th committed at `ms + i * step` when `at` is given;
@@ -46,6 +47,7 @@ import {
   PlaceHold,
   Recorded,
   ReleaseHold,
+  Tallies,
   TotalWriter,
 } from "./model.ts";
 
@@ -60,6 +62,7 @@ export const app = Effect.gen(function* () {
   const hidden = yield* HiddenTotal;
   const api = yield* ConformanceApi;
   const recorded = yield* Recorded;
+  const tallies = yield* Tallies;
   const progress = yield* TotalWriter.Progress;
   const internals = yield* Model.Internals;
   const ones = yield* OneView;
@@ -242,6 +245,14 @@ export const app = Effect.gen(function* () {
         const { entries } = yield* recorded.list(Counter.ref(id));
         return yield* HttpServerResponse.json(entries.map((entry) => entry.event.total));
       }
+      case "tallies": {
+        const { entries } = yield* tallies.list(id);
+        return yield* HttpServerResponse.json(entries.map((entry) => entry.event.by));
+      }
+      case "generation":
+        return yield* HttpServerResponse.json(
+          internals.kernel.generationOf("projection", "TallyWriter"),
+        );
       case "place":
         yield* holds.send(new PlaceHold({ id }));
         return yield* HttpServerResponse.json(yield* holds.get(id));

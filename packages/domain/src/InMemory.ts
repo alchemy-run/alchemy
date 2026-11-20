@@ -29,7 +29,9 @@ import {
   type SendResult,
   type StoredEvent,
   type StreamEntry,
+  type StreamHandled,
   type StreamMeta,
+  type StreamWrite,
   type ViewEntry,
   type ViewSnapshot,
   RunWait,
@@ -1393,8 +1395,13 @@ export const make = (
               lock.withPermits(1)(
                 Effect.gen(function* () {
                   const current = yield* get(key);
-                  const meta = yield* SubscriptionRef.get(current.meta);
-                  if (!isAfter(write.origin, meta.origin)) return;
+                  const before = yield* SubscriptionRef.get(current.meta);
+                  const { meta, appends } = admitStreamWrite(before, write);
+                  if (!appends) {
+                    // A rebuilt writer's first write still starts its generation.
+                    if (meta !== before) yield* SubscriptionRef.set(current.meta, meta);
+                    return;
+                  }
                   const added: Array<StreamEntry> = write.events.map((event, index) => {
                     const seq = meta.seq + index + 1;
                     return {
@@ -1414,26 +1421,18 @@ export const make = (
                     ...added,
                   ]);
                   yield* SubscriptionRef.set(current.meta, {
+                    ...meta,
                     seq: meta.seq + added.length,
-                    origin: write.origin,
-                    checkpoints: {
-                      ...meta.checkpoints,
-                      [write.source]: Math.max(
-                        meta.checkpoints[write.source] ?? 0,
-                        write.sourceSeq,
-                      ),
-                    },
                   });
                 }),
               ),
-            advance: (key, checkpoints) =>
+            advance: (key, handled) =>
               lock.withPermits(1)(
                 Effect.gen(function* () {
                   const current = yield* get(key);
-                  yield* SubscriptionRef.update(current.meta, (meta) => ({
-                    ...meta,
-                    checkpoints: mergeCheckpoints(meta.checkpoints, checkpoints),
-                  }));
+                  yield* SubscriptionRef.update(current.meta, (meta) =>
+                    advanceStreamMeta(meta, handled),
+                  );
                 }),
               ),
             read: (key) =>
@@ -1589,4 +1588,60 @@ export const mergeCheckpoints = (
   const out: Record<string, number> = { ...a };
   for (const [source, seq] of Object.entries(b)) out[source] = Math.max(out[source] ?? 0, seq);
   return out;
+};
+
+/** A stream key's meta once a writer of `generation` writes it: a newer one starts its log. */
+const enterGeneration = (meta: StreamMeta, generation: number): StreamMeta =>
+  generation > (meta.generation ?? 0)
+    ? {
+        ...meta,
+        generation,
+        origin: [0, 0],
+        // Written before roots were recorded: a source's checkpoint is its root for an aggregate.
+        inherited: mergeCheckpoints(meta.inherited ?? {}, meta.roots ?? meta.checkpoints),
+      }
+    : meta;
+
+/**
+ * What a write does to a stream key: the meta to store, and whether its
+ * events are appended. A write from an older generation is dropped (the
+ * writer is rebuilt; the old one runs only on older code); a newer one starts
+ * its log, and drops the roots an earlier generation handled, which it is
+ * replaying; within a generation, a write not after the last is a repeat.
+ *
+ * @internal
+ */
+export const admitStreamWrite = (
+  meta: StreamMeta,
+  write: Pick<StreamWrite, "generation" | "origin" | "root" | "source" | "sourceSeq">,
+): { readonly meta: StreamMeta; readonly appends: boolean } => {
+  if (write.generation < (meta.generation ?? 0)) return { meta, appends: false };
+  const current = enterGeneration(meta, write.generation);
+  const replayed = write.root.seq <= (current.inherited?.[write.root.source] ?? 0);
+  if (replayed || !isAfter(write.origin, current.origin)) {
+    return { meta: current, appends: false };
+  }
+  return {
+    meta: {
+      ...current,
+      origin: write.origin,
+      checkpoints: mergeCheckpoints(current.checkpoints, { [write.source]: write.sourceSeq }),
+      roots: mergeCheckpoints(current.roots ?? {}, { [write.root.source]: write.root.seq }),
+    },
+    appends: true,
+  };
+};
+
+/** A stream key's meta once its writer handled `handled`, appends or not. @internal */
+export const advanceStreamMeta = (meta: StreamMeta, handled: StreamHandled): StreamMeta => {
+  // An older generation's progress still counts for reads that wait on it.
+  if (handled.generation < (meta.generation ?? 0)) {
+    return { ...meta, checkpoints: mergeCheckpoints(meta.checkpoints, handled.checkpoints) };
+  }
+  const current = enterGeneration(meta, handled.generation);
+  return {
+    ...current,
+    checkpoints: mergeCheckpoints(current.checkpoints, handled.checkpoints),
+    roots: mergeCheckpoints(current.roots ?? {}, handled.roots),
+  };
 };

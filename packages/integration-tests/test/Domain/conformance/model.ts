@@ -182,6 +182,65 @@ const TotalWriterLive = TotalWriter.toLayer(
   }),
 );
 
+export class Tallied extends Domain.Event("Tallied", { by: Schema.Int }) {}
+
+/** A run's tally key, for a counter of the rebuild case (`<run>~<counter>`); other counters have none. */
+export const tallyKey = (counter: string): string | undefined =>
+  counter.includes("~") ? counter.split("~")[0] : undefined;
+
+/** Every change to the counters of one run, keyed by the run (see {@link tallyKey}). */
+export class Tallies extends Domain.Stream("Tallies", {
+  key: Schema.String,
+  entries: [Tallied],
+}) {}
+
+/** Tallies increments and what a decision takes, through the view. */
+export class TallyWriter extends Domain.Projection("TallyWriter", {
+  from: [CounterTotal],
+  key: Schema.String,
+  keyOf: {
+    Incremented: ({ source }) => tallyKey(source.id),
+    Taken: ({ source }) => tallyKey(source.id),
+  },
+  on: [Incremented, Taken],
+  writes: [Tallies],
+}) {}
+
+/**
+ * The next version of {@link TallyWriter}: increments only. Bumped to 1, it
+ * is rebuilt from the history, which now gives each run fewer inputs than
+ * the version before it handled.
+ */
+export class TallyWriterV1 extends Domain.Projection("TallyWriter", {
+  from: [CounterTotal],
+  key: Schema.String,
+  keyOf: { Incremented: ({ source }) => tallyKey(source.id) },
+  on: [Incremented],
+  writes: [Tallies],
+}) {}
+
+const TallyWriterLive = TallyWriter.toLayer(
+  Effect.gen(function* () {
+    const tallies = yield* Tallies;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) {
+        const by = input.event._tag === "Taken" ? -input.event.by : input.event.by;
+        yield* tallies.append(input, new Tallied({ by }));
+      }
+    });
+  }),
+);
+
+const TallyWriterV1Live = TallyWriterV1.toLayer(
+  Effect.gen(function* () {
+    const tallies = yield* Tallies;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) yield* tallies.append(input, new Tallied({ by: input.event.by }));
+    });
+  }),
+  { version: 1 },
+);
+
 /**
  * Mirrors a counter's first increment onto its Echo; one run per counter.
  * Its step fails its first attempt after it sends, so the step runs again:
@@ -298,8 +357,19 @@ export class Conformance extends Domain.Model("Conformance", {
   aggregates: [Counter, Echo, Hold, ...latencyAggregates],
   decisions: [Giving],
   views: [CounterTotal, CounterTimes, HiddenTotal, ...latencyViews],
-  projections: [TotalWriter],
-  streams: [Recorded],
+  projections: [TotalWriter, TallyWriter],
+  streams: [Recorded, Tallies],
+  policies: [StartMirror, HoldDeadline],
+  sagas: [MirrorFirst],
+}) {}
+
+/** The model's next version: {@link TallyWriterV1} in place of {@link TallyWriter}. */
+export class ConformanceV1 extends Domain.Model("Conformance", {
+  aggregates: [Counter, Echo, Hold, ...latencyAggregates],
+  decisions: [Giving],
+  views: [CounterTotal, CounterTimes, HiddenTotal, ...latencyViews],
+  projections: [TotalWriter, TallyWriterV1],
+  streams: [Recorded, Tallies],
   policies: [StartMirror, HoldDeadline],
   sagas: [MirrorFirst],
 }) {}
@@ -318,13 +388,16 @@ export class LatencyApi extends Domain.Api("LatencyApi", {
   views: ["CounterTotal", "OneView", "ChainSecond", "SharedByGroup"],
 }) {}
 
-/** The model's Layer, given the platform it runs on. */
-export const ConformanceLive = Conformance.layer(
-  Layer.mergeAll(
-    StartMirrorLive,
-    MirrorFirstLive,
-    HoldDeadlineLive,
-    HiddenTotalLive,
-    TotalWriterLive,
-  ),
+const handlers = Layer.mergeAll(
+  StartMirrorLive,
+  MirrorFirstLive,
+  HoldDeadlineLive,
+  HiddenTotalLive,
+  TotalWriterLive,
 );
+
+/** The model's Layer, given the platform it runs on. */
+export const ConformanceLive = Conformance.layer(Layer.merge(handlers, TallyWriterLive));
+
+/** The next version's Layer: deployed over {@link ConformanceLive}, it rebuilds the tallies. */
+export const ConformanceLiveV1 = ConformanceV1.layer(Layer.merge(handlers, TallyWriterV1Live));
