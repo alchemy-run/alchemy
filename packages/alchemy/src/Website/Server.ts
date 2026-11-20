@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import { dotAlchemyDirectory } from "../AlchemyContext.ts";
 import { hashDirectory, type MemoOptions } from "../Command/Memo.ts";
 import { havePropsChanged, isResolved } from "../Diff.ts";
 import * as LocalProvider from "../Local/LocalProvider.ts";
@@ -549,7 +550,13 @@ export const ServerProviderLocal = () =>
               framework: props.framework,
               module: props.framework,
               rootDir: root,
-              env: definedEnv(props.env),
+              // The child runs from `root`, so give it the resolved runtime
+              // directory: a relative `ALCHEMY_DIR` would resolve against the
+              // wrong root there, and the Vite plugin denies serving it.
+              env: {
+                ...definedEnv(props.env),
+                ALCHEMY_DIR: path.resolve(yield* dotAlchemyDirectory),
+              },
               makeOptions: { ...props.options, root, target: props.target },
               devOptions: {
                 root,
