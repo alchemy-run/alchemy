@@ -30,7 +30,16 @@ export const PresignPutObjectToken = Layer.effect(
           key: request.key,
           expiresIn: request.expiresIn,
           headers:
-            request.contentType !== undefined ? { "content-type": request.contentType } : undefined,
+            request.contentType === undefined && request.contentLength === undefined
+              ? undefined
+              : {
+                  ...(request.contentType !== undefined
+                    ? { "content-type": request.contentType }
+                    : {}),
+                  ...(request.contentLength !== undefined
+                    ? { "content-length": String(request.contentLength) }
+                    : {}),
+                },
         }),
     }),
   ),
