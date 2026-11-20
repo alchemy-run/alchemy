@@ -439,7 +439,7 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
   );
 
   test(
-    "an import commits more events at once than one storage write takes",
+    "an import of 200 events commits them at once",
     Effect.gen(function* () {
       const id = fresh("bulk");
       expect(yield* call(`/import/${id}?on=echo&n=200`)).toEqual({ version: 200 });
