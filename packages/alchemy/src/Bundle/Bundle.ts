@@ -243,13 +243,14 @@ const PACKAGE_STORES = ["/node_modules/.pnpm/", "/node_modules/.bun/"];
  * - a module that is not a file (a plugin's `builtin:…` id) keeps its own
  *   name. Rolldown resolves such an id like a path, against the directory the
  *   process was started in, so only an id right below that directory counts:
- *   a colon in a real directory's name leaves the path alone.
+ *   a colon in the name of a directory deeper than that leaves the path alone.
  *
  * Every other source keeps rolldown's path, so whatever reads the map from
  * where it sits still finds a project file. A store dependency's new path is
- * a name only; the map's `sourcesContent` still carries its source. The bundle hash covers the map: without
- * this the same sources built in another CI job hashed differently and every
- * bundle was deployed again.
+ * a name only; unless `sourcemapExcludeSources` is set, the map's
+ * `sourcesContent` still carries its source. The bundle hash covers the map:
+ * without this the same sources built in another CI job hashed differently
+ * and every bundle was deployed again.
  */
 const stableSourcePath =
   (cwd: string) =>
