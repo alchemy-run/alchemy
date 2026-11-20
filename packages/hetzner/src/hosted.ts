@@ -505,6 +505,7 @@ WantedBy=multi-user.target
     entryRel?: string;
   }) {
     const appDir = `/opt/${input.unitName}`;
+    const envFile = yield* systemdEnvFile(input.env);
     yield* waitForSsh(input.ssh);
     yield* input.ssh.exec(
       [
@@ -538,10 +539,7 @@ WantedBy=multi-user.target
       ].join("\n"),
     );
     yield* input.ssh.scp(input.archive, `${appDir}/bundle.zip`);
-    yield* input.ssh.scp(
-      new TextEncoder().encode(yield* systemdEnvFile(input.env)),
-      `${appDir}/env`,
-    );
+    yield* input.ssh.scp(new TextEncoder().encode(envFile), `${appDir}/env`);
     yield* input.ssh.scp(
       new TextEncoder().encode(renderUnit(input.unitName, appDir, input.entryRel ?? "index.mjs")),
       `/etc/systemd/system/${input.unitName}.service`,
@@ -611,6 +609,7 @@ WantedBy=multi-user.target
     env: Record<string, unknown>;
   }) {
     const appDir = `/opt/${input.unitName}`;
+    const envFile = yield* containerEnvFile(input.env);
     yield* waitForSsh(input.ssh);
     yield* input.ssh.exec(
       [
@@ -632,10 +631,7 @@ WantedBy=multi-user.target
       ].join("\n"),
     );
     yield* input.ssh.scp(input.archive, `${appDir}/image.tar`);
-    yield* input.ssh.scp(
-      new TextEncoder().encode(yield* containerEnvFile(input.env)),
-      `${appDir}/env`,
-    );
+    yield* input.ssh.scp(new TextEncoder().encode(envFile), `${appDir}/env`);
     yield* input.ssh.scp(
       new TextEncoder().encode(renderImageUnit(input.unitName, appDir)),
       `/etc/systemd/system/${input.unitName}.service`,

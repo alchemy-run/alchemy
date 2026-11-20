@@ -706,14 +706,12 @@ systemctl enable --now ${unitName}.service
     bundleKey,
     envKey,
     archive,
-    env,
-    image,
+    envFile,
   }: {
     bundleKey: string;
     envKey: string;
     archive: Uint8Array<ArrayBufferLike>;
-    env: Record<string, any>;
-    image: boolean;
+    envFile: string;
   }) {
     const assets = yield* Assets;
     const contentHash = yield* sha256(archive);
@@ -723,7 +721,6 @@ systemctl enable --now ${unitName}.service
       Key: bundleKey,
       CopySource: `${yield* assets.bucketName}/${uploadedAssetKey}`,
     });
-    const envFile = yield* image ? containerEnvFile(env) : systemdEnvFile(env);
     yield* s3.putObject({
       Bucket: yield* assets.bucketName,
       Key: envKey,
@@ -828,6 +825,8 @@ systemctl enable --now ${unitName}.service
       ...(news.port !== undefined ? { PORT: news.port } : {}),
       ...news.env,
     };
+    // Before anything is built or published: a key systemd can't hold fails here.
+    const envFile = yield* image ? containerEnvFile(env) : systemdEnvFile(env);
 
     const { archive, hash } = image
       ? yield* Effect.gen(function* () {
@@ -845,8 +844,7 @@ systemctl enable --now ${unitName}.service
       bundleKey,
       envKey,
       archive,
-      env,
-      image,
+      envFile,
     });
 
     const hostedUserData = yield* renderHostedUserData({
