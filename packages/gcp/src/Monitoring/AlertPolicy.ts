@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import {
@@ -389,6 +390,32 @@ export type AlertPolicy = Resource<
  * });
  * ```
  *
+ * ### Alerting on a Log-Based Metric
+ * Cloud Monitoring rejects a new log-based metric for a few minutes after
+ * it is created; the policy retries until the metric is visible, so both
+ * deploy together.
+ *
+ * **Example:** Alert when a log-based metric counts an error
+ * ```typescript
+ * const errors = yield* GCP.Logging.Metric("Errors", {
+ *   filter: "severity>=ERROR",
+ * });
+ * const policy = yield* GCP.Monitoring.AlertPolicy("AnyError", {
+ *   conditions: [
+ *     {
+ *       displayName: "Any error",
+ *       conditionThreshold: {
+ *         filter: Output.interpolate`resource.type = "global" AND metric.type = "logging.googleapis.com/user/${errors.metricId}"`,
+ *         comparison: "COMPARISON_GT",
+ *         thresholdValue: 0,
+ *         duration: "0s",
+ *         aggregations: [{ alignmentPeriod: "60s", perSeriesAligner: "ALIGN_COUNT" }],
+ *       },
+ *     },
+ *   ],
+ * });
+ * ```
+ *
  * ### Updating a Policy
  * **Example:** Lower the threshold and disable the policy
  * ```typescript
@@ -572,6 +599,29 @@ const withConditionNames = (
   });
 };
 
+/**
+ * Cloud Monitoring rejects a condition on a log-based metric
+ * (`logging.googleapis.com/user/...`) for a few minutes after the metric is
+ * created, with `NotFound: Cannot find metric(s) that match type = ...`.
+ * Retry only that error, so a policy and its new `GCP.Logging.Metric`
+ * deploy together; any other `NotFound` still fails at once.
+ */
+const retryWhileMetricPending = <
+  A,
+  E extends { readonly _tag: string; readonly message?: string },
+  R,
+>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (error) =>
+        error._tag === "NotFound" && /Cannot find metric\(s\)/.test(error.message ?? ""),
+      schedule: Schedule.spaced("30 seconds"),
+      times: 20,
+    }),
+  );
+
 const getByName = (name: string) =>
   monitoring
     .getProjectsAlertPolicies({ name })
@@ -679,7 +729,10 @@ export const AlertPolicyProvider = () =>
               ),
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => findOwned(env.project, id)));
+          .pipe(
+            retryWhileMetricPending,
+            Effect.catchTag("Conflict", () => findOwned(env.project, id)),
+          );
         current = created ?? undefined;
       }
 
@@ -726,15 +779,17 @@ export const AlertPolicyProvider = () =>
       ].filter((field): field is string => field !== undefined);
 
       if (updateMask.length > 0) {
-        current = yield* monitoring.patchProjectsAlertPolicies({
-          name,
-          updateMask: updateMask.join(","),
-          body: {
-            ...body,
+        current = yield* monitoring
+          .patchProjectsAlertPolicies({
             name,
-            conditions: withConditionNames(news.conditions, current.conditions),
-          },
-        });
+            updateMask: updateMask.join(","),
+            body: {
+              ...body,
+              name,
+              conditions: withConditionNames(news.conditions, current.conditions),
+            },
+          })
+          .pipe(retryWhileMetricPending);
       }
 
       return toAttrs(current, env.project);
