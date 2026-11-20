@@ -473,6 +473,43 @@ describe.skipIf(!!process.env.FAST)(
       );
 
       test(
+        "an alarm whose node dies after RivetKit fired it, before it was claimed, runs on the next activation",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          const client = yield* HttpClient.HttpClient;
+          const docker = yield* Docker.Docker;
+          const ok = HttpClient.filterStatusOk(client);
+          const get = <T>(path: string) =>
+            Effect.suspend(() => ok.get(`${baseUrl}/abandoned-alarm/${name}/${path}`)).pipe(
+              Effect.flatMap((res) => res.json),
+              // While the pool's node restarts, calls fail.
+              Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+              Effect.map((body) => body as T),
+            );
+          const { node } = yield* get<{ node: string }>("node");
+          // Sent once: it sets the alarm, then holds storage while RivetKit fires it.
+          yield* Effect.forkChild(
+            Effect.ignore(client.get(`${baseUrl}/abandoned-alarm/${name}/arm-held`)),
+          );
+          yield* Effect.sleep("5 seconds");
+          // SIGKILL the node; Swarm starts another.
+          yield* docker.run(["kill", node]);
+          const final = yield* get<{ runs: number; done: number; node: string; alarm: null }>(
+            "state",
+          ).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (state) => state.done > 0,
+              times: 90,
+            }),
+          );
+          expect(final).toMatchObject({ runs: 1, done: 1, alarm: null });
+          expect(final.node).not.toBe(node);
+        }).pipe(Effect.provide(Docker.DockerLive)),
+        { timeout: 240_000 },
+      );
+
+      test(
         "a call whose node shuts down while it writes fails as one that never arrived",
         Effect.gen(function* () {
           const name = crypto.randomUUID();
