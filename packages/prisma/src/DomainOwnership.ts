@@ -32,49 +32,6 @@ export interface DomainOwnershipProps {
   dns?: DNS.DnsConfig;
 }
 
-/**
- * Proof that a Prisma workspace owns a domain. Prisma refuses a
- * `Prisma.CustomDomain` until the workspace owns its hostname, through an
- * exact hostname or a wildcard.
- *
- * The proof is a `TXT` record named `_prisma-verification.{domain}` whose
- * value is the same for every domain in the workspace. With `dns`, the
- * record is published for you. The deploy creates nothing while an
- * authoritative nameserver answers without the record, and succeeds once
- * Prisma reports the ownership `verified`. `status` and `expiresAt` are what Prisma
- * reported when the deploy last proved the domain; an unchanged redeploy
- * does not check again. Destroying the resource removes the ownership and
- * the record; custom domains attached under it stay attached.
- *
- * `Prisma.Website` composites prove their own hostname when `domain` names a
- * DNS host (`domain: { name, dns }`), so declare this resource only to prove
- * a wildcard once for many apps.
- *
- * ### Proving a Domain
- * **Example:** Prove a wildcard once for many apps
- * ```typescript
- * yield* Prisma.DomainOwnership("example.com", {
- *   project,
- *   domain: "*.example.com",
- *   dns: Cloudflare.DNS.Adapter(),
- * });
- * yield* Prisma.CustomDomain("api", { app: api, hostname: "api.example.com" });
- * yield* Prisma.CustomDomain("admin", { app: admin, hostname: "admin.example.com" });
- * ```
- *
- * **Example:** Publish the record with your own DNS host
- * ```typescript
- * // fails with PrismaDomainOwnershipRequired until
- * // TXT _prisma-verification.app.example.com resolves
- * const ownership = yield* Prisma.DomainOwnership("app", {
- *   project,
- *   domain: "app.example.com",
- * });
- * ```
- *
- * @resource
- * @product Compute
- */
 const publishVerificationRecord = (
   project: Input<ProjectReference>,
   domain: string,
@@ -91,6 +48,50 @@ const publishVerificationRecord = (
     });
   });
 
+/**
+ * Proof that a Prisma workspace owns a wildcard domain, so every
+ * `Prisma.RoutingUrl` under it serves without a `TXT` record of its own.
+ *
+ * A RoutingUrl needs no domain ownership declared: Prisma creates one for its
+ * exact hostname. Declare this resource to prove a wildcard such as
+ * `*.example.com` once for many hostnames. Don't declare it for the exact
+ * hostname of a RoutingUrl: it takes over the domain ownership Prisma created
+ * for that RoutingUrl and deletes it on destroy.
+ *
+ * The proof is a `TXT` record named `_prisma-verification.{domain}` whose
+ * value is the same for every domain in the workspace; a wildcard and its apex
+ * share one record name. With `dns`, the record is published for you. The
+ * deploy creates nothing while an authoritative nameserver answers without the
+ * record, and succeeds once Prisma reports the ownership `verified`. `status`
+ * and `expiresAt` are what Prisma reported when the deploy last proved the
+ * domain; an unchanged redeploy does not check again. Destroying the resource
+ * removes the ownership and the record.
+ *
+ * ### Proving a Wildcard
+ * **Example:** Prove a wildcard once for many hostnames
+ * ```typescript
+ * yield* Prisma.DomainOwnership("example.com", {
+ *   project,
+ *   domain: "*.example.com",
+ *   dns: Cloudflare.DNS.Adapter(),
+ * });
+ * yield* Prisma.RoutingUrl("api", { app: api, hostname: "api.example.com" });
+ * yield* Prisma.RoutingUrl("admin", { app: admin, hostname: "admin.example.com" });
+ * ```
+ *
+ * **Example:** Publish the record with your own DNS host
+ * ```typescript
+ * // fails with PrismaDomainOwnershipRequired until
+ * // TXT _prisma-verification.example.com resolves
+ * const ownership = yield* Prisma.DomainOwnership("example.com", {
+ *   project,
+ *   domain: "*.example.com",
+ * });
+ * ```
+ *
+ * @resource
+ * @product Compute
+ */
 export const DomainOwnership = (id: string, props: DomainOwnershipProps) =>
   Effect.gen(function* () {
     const published = props.dns

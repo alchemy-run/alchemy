@@ -50,6 +50,8 @@ export interface WaitOptions {
   readonly nameservers: NameserverSearch;
   /** `once` checks without waiting for the records to appear. */
   readonly attempts?: "until-seen" | "once";
+  /** Find the nameservers of this name instead of the record's own name. */
+  readonly serversOf?: string;
 }
 
 export interface SwitchboardWaitOptions extends WaitOptions {
@@ -244,13 +246,17 @@ const waitUntilVisible = <A>(
   });
 
 /** Wait until every authoritative nameserver for `record.name` returns the record. */
-export const waitForAuthoritativeRecord = (
+export const checkAuthoritativeRecord = (
   record: ExpectedRecord,
   options: WaitOptions,
 ): Effect.Effect<RecordVisibility> =>
   Effect.gen(function* () {
     const dns = yield* DnsLookups;
-    const servers = yield* authoritativeServers(dns, record.name, options.nameservers);
+    const servers = yield* authoritativeServers(
+      dns,
+      options.serversOf ?? record.name,
+      options.nameservers,
+    );
     if (servers.length === 0) return "unknown";
     const matches = (answer: string) =>
       record.type === "TXT"
@@ -278,7 +284,7 @@ export const waitForAuthoritativeRecord = (
  * pointing at the switchboard: a CNAME to it, or, with no CNAME, A or AAAA
  * answers that include an address of the switchboard.
  */
-export const waitForSwitchboardDns = (
+export const checkSwitchboardDns = (
   expected: ExpectedSwitchboardDns,
   options: SwitchboardWaitOptions,
 ): Effect.Effect<SwitchboardDnsVisibility> =>
@@ -339,14 +345,17 @@ export const waitForSwitchboardDns = (
     );
   });
 
-/** The record check `Prisma.DomainOwnership` and `Prisma.CustomDomain` run; tests replace it. */
-export const AuthoritativeRecordCheck = Context.Reference<typeof waitForAuthoritativeRecord>(
+/**
+ * The record check domain ownerships, custom domains and a RoutingUrl's
+ * hostname change run before Prisma looks the record up; tests replace it.
+ */
+export const AuthoritativeRecordCheck = Context.Reference<typeof checkAuthoritativeRecord>(
   "@alchemy.run/prisma/AuthoritativeRecordCheck",
-  { defaultValue: () => waitForAuthoritativeRecord },
+  { defaultValue: () => checkAuthoritativeRecord },
 );
 
 /** The `dnsPointsAtSwitchboard` check `Prisma.RoutingUrl` runs; tests replace it. */
-export const SwitchboardDnsCheck = Context.Reference<typeof waitForSwitchboardDns>(
+export const SwitchboardDnsCheck = Context.Reference<typeof checkSwitchboardDns>(
   "@alchemy.run/prisma/SwitchboardDnsCheck",
-  { defaultValue: () => waitForSwitchboardDns },
+  { defaultValue: () => checkSwitchboardDns },
 );

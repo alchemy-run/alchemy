@@ -162,7 +162,7 @@ testFor(withDns).test.provider(
 
 const dnsChange = makeUrlCloud();
 testFor(dnsChange).test.provider(
-  "with dns, a hostname change publishes the new records, passes on the TXT, and removes the old records after the PATCH",
+  "with dns, a hostname change goes through because the new hostname's TXT is seen, and the old records are removed after the PATCH",
   (stack) =>
     Effect.gen(function* () {
       dnsChange.reset({ fromZone: true }, routingUrl("url-1", { status: "active" }));
@@ -211,7 +211,7 @@ testFor(dnsRefused).test.provider(
       dnsRefused.fake.captured.length = 0;
       const refusal = yield* refusalOf(stack.deploy(dnsStack("new.example.com")));
 
-      expect(refusal?.ownershipDns).toBe("absent");
+      expect(refusal?.ownership).toBe("absent");
       expect(PATCHES(dnsRefused)).toEqual([]);
       expect(dnsRefused.rows.get("url-1")?.hostname).toBe(HOSTNAME);
       expect(dnsRefused.zone.records).toEqual([
@@ -223,6 +223,34 @@ testFor(dnsRefused).test.provider(
       dnsRefused.state.txt = undefined;
       yield* stack.destroy();
       expect(dnsRefused.zone.records).toEqual([]);
+    }),
+  { tags },
+);
+
+const similarNames = makeUrlCloud();
+testFor(similarNames).test.provider(
+  "with dns, keeps separate records for hostnames that differ only in where a dot and a hyphen are",
+  (stack) =>
+    Effect.gen(function* () {
+      similarNames.reset(
+        { fromZone: true },
+        routingUrl("url-1", { status: "active", hostname: "a-b.example.com" }),
+      );
+      yield* stack.destroy();
+      yield* stack.deploy(dnsStack("a-b.example.com"));
+
+      similarNames.state.txt = "absent";
+      const refusal = yield* refusalOf(stack.deploy(dnsStack("a.b-example.com")));
+
+      expect(refusal?.ownership).toBe("absent");
+      expect(similarNames.zone.records).toEqual([
+        ...recordsFor("a-b.example.com"),
+        ...recordsFor("a.b-example.com"),
+      ]);
+      expect(similarNames.zone.removed).toEqual([]);
+
+      similarNames.state.txt = undefined;
+      yield* stack.destroy();
     }),
   { tags },
 );
@@ -393,7 +421,7 @@ testFor(refusedChange).test.provider(
       const refusal = yield* refusalOf(stack.deploy(urlStack("new.example.com")));
 
       expect(refusal?.switchboardDns).toBe("absent");
-      expect(refusal?.ownershipDns).toBe("absent");
+      expect(refusal?.ownership).toBe("absent");
       expect(refusal?.records).toEqual([
         { type: "TXT", name: "_prisma-verification.new.example.com", value: TXT.value },
         { type: "CNAME", name: "new.example.com", value: SWITCHBOARD },
@@ -457,7 +485,7 @@ testFor(txtMissing).test.provider(
       });
       const absent = yield* refusalOf(stack.deploy(urlStack("new.example.com")));
 
-      expect(absent?.ownershipDns).toBe("absent");
+      expect(absent?.ownership).toBe("absent");
       expect(absent?.records).toEqual([
         { type: "TXT", name: "_prisma-verification.new.example.com", value: TXT.value },
       ]);
@@ -468,7 +496,7 @@ testFor(txtMissing).test.provider(
       txtMissing.state.txt = "unknown";
       const unknown = yield* refusalOf(stack.deploy(urlStack("new.example.com")));
 
-      expect(unknown?.ownershipDns).toBe("unknown");
+      expect(unknown?.ownership).toBe("unknown");
       expect(txtMissing.state.txtAttempts).toEqual(["once", "once"]);
       expect(txtMissing.state.checked.map(([, options]) => options.attempts)).toEqual([
         "once",

@@ -5,8 +5,8 @@ import * as TestClock from "effect/testing/TestClock";
 import {
   DnsLookups,
   DnsQueryFailed,
-  waitForAuthoritativeRecord,
-  waitForSwitchboardDns,
+  checkAuthoritativeRecord,
+  checkSwitchboardDns,
 } from "../../../prisma/src/internal/AuthoritativeDns.ts";
 
 const SWITCHBOARD = "switchboard.cdg.prisma.build";
@@ -94,7 +94,7 @@ const switchboardDns = (
   name: string,
   attempts: "until-seen" | "once" = "until-seen",
 ) =>
-  waitForSwitchboardDns(
+  checkSwitchboardDns(
     { name, switchboard: SWITCHBOARD },
     { margin: "if-unseen", nameservers: "name", attempts },
   ).pipe(Effect.provideService(DnsLookups, dns.lookups));
@@ -341,7 +341,7 @@ describe("Prisma authoritative DNS checks", { tags: ["unit", "provider:prisma", 
       });
 
       const visibility = yield* runWaiting(
-        waitForAuthoritativeRecord(
+        checkAuthoritativeRecord(
           { type: "TXT", name, value: "prisma-verification=abc" },
           { margin: "if-unseen", nameservers: "parent" },
         ).pipe(Effect.provideService(DnsLookups, dns.lookups)),
@@ -358,7 +358,7 @@ describe("Prisma authoritative DNS checks", { tags: ["unit", "provider:prisma", 
         "NS shop.example.com": { code: "ESERVFAIL" },
       });
 
-      const visibility = yield* waitForAuthoritativeRecord(
+      const visibility = yield* checkAuthoritativeRecord(
         { type: "TXT", name, value: "prisma-verification=abc" },
         { margin: "if-unseen", nameservers: "parent" },
       ).pipe(Effect.provideService(DnsLookups, dns.lookups));
@@ -375,7 +375,7 @@ describe("Prisma authoritative DNS checks", { tags: ["unit", "provider:prisma", 
         const name = "_prisma-verification.example.com";
         const dns = exampleZone(onBoth({ [`TXT ${name}`]: ["prisma-verification=abc"] }));
 
-        const visibility = yield* waitForAuthoritativeRecord(
+        const visibility = yield* checkAuthoritativeRecord(
           { type: "TXT", name, value: "prisma-verification=abc" },
           { margin: "if-unseen", nameservers: "parent" },
         ).pipe(Effect.provideService(DnsLookups, dns.lookups));
@@ -387,11 +387,53 @@ describe("Prisma authoritative DNS checks", { tags: ["unit", "provider:prisma", 
       }),
   );
 
+  it.effect("reports a TXT unknown, not absent, when the hostname's nameserver lookup fails", () =>
+    Effect.gen(function* () {
+      const name = "_prisma-verification.shop.example.com";
+      const dns = exampleZone(onBoth({}), { "NS shop.example.com": { code: "ESERVFAIL" } });
+
+      const visibility = yield* checkAuthoritativeRecord(
+        { type: "TXT", name, value: "prisma-verification=abc" },
+        {
+          margin: "if-unseen",
+          nameservers: "name",
+          serversOf: "shop.example.com",
+          attempts: "once",
+        },
+      ).pipe(Effect.provideService(DnsLookups, dns.lookups));
+
+      expect(visibility).toBe("unknown");
+      expect(dns.asked).not.toContain("NS example.com");
+    }),
+  );
+
+  it.effect("finds a TXT through the hostname's nameservers, never asking about the TXT name", () =>
+    Effect.gen(function* () {
+      const name = "_prisma-verification.shop.example.com";
+      const dns = exampleZone(onBoth({ [`TXT ${name}`]: ["prisma-verification=abc"] }));
+
+      const visibility = yield* checkAuthoritativeRecord(
+        { type: "TXT", name, value: "prisma-verification=abc" },
+        {
+          margin: "if-unseen",
+          nameservers: "name",
+          serversOf: "shop.example.com",
+          attempts: "once",
+        },
+      ).pipe(Effect.provideService(DnsLookups, dns.lookups));
+
+      expect(visibility).toBe("seen");
+      expect(dns.asked.some((query) => query.endsWith(` ${name}`) && !query.includes("TXT"))).toBe(
+        false,
+      );
+    }),
+  );
+
   it.effect("reports a record unknown for an apex searched from its parent", () =>
     Effect.gen(function* () {
       const dns = exampleZone(onBoth({ "CNAME example.com": [SWITCHBOARD] }));
 
-      const visibility = yield* waitForAuthoritativeRecord(
+      const visibility = yield* checkAuthoritativeRecord(
         { type: "CNAME", name: "example.com" },
         { margin: "if-unseen", nameservers: "parent" },
       ).pipe(Effect.provideService(DnsLookups, dns.lookups));

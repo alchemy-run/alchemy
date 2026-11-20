@@ -3,16 +3,15 @@ import type { MemoOptions } from "alchemy/Command/Memo";
 import * as DNS from "alchemy/DNS/Adapter";
 import * as Output from "alchemy/Output";
 import { ProviderModePolicy } from "alchemy/ProviderMode";
-import type { ResourceLike } from "alchemy/Resource";
 import type { WebsiteAssetsProps } from "alchemy/Website/assets";
 import { Server, type ServerDevProps } from "alchemy/Website/Server";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { Compute, type ComputeProps } from "../Compute.ts";
-import { switchboardTarget } from "../internal/Switchboard.ts";
+import { websiteDomain } from "../internal/WebsiteDomain.ts";
 import { Project } from "../Project.ts";
 import type { Providers } from "../Providers.ts";
-import { RoutingUrl } from "../RoutingUrl.ts";
+import type { RoutingUrl } from "../RoutingUrl.ts";
 import type { PrismaRegionId } from "../Types.ts";
 import { WebsiteArtifact } from "./Artifact.ts";
 
@@ -53,6 +52,8 @@ export type WebsiteDomain =
        * `Prisma.RoutingUrl`'s `dns` does (see
        * [DNS Adapters](/infrastructure-as-code/dns-adapters)), e.g.
        * `Cloudflare.DNS.Adapter()`. Omitted: publish `domain.records` yourself.
+       * Removing it removes the `TXT` and `CNAME`; to publish them with another
+       * tool, publish them there first, copied from your DNS host.
        */
       dns?: DNS.DnsConfig;
     };
@@ -174,30 +175,6 @@ export const deployWebsite = Effect.fn(function* (
     project,
     domain,
   };
-});
-
-/** The site's custom hostname: a RoutingUrl, its records published through `domain.dns`. */
-export const websiteDomain = Effect.fn(function* (domain: WebsiteDomain, compute: Compute) {
-  const hostname = websiteDomainName(domain)!;
-  const dns = typeof domain === "object" ? domain.dns : undefined;
-  if (dns === undefined) {
-    return yield* RoutingUrl("Url", { app: compute, hostname }).pipe(Effect.orDie);
-  }
-  const url = yield* RoutingUrl("Url", { app: compute, hostname, dns }).pipe(Effect.orDie);
-  // Keeps the CNAME record a site from an earlier version published, so the
-  // upgrade updates it in place instead of deleting it after the RoutingUrl's
-  // records are published. It changes only once the RoutingUrl is saved.
-  const { proxied: _proxied, ...options } = dns.options ?? {};
-  yield* (yield* DNS.resolve({ ...dns, options })).alias("DomainAlias", {
-    name: hostname,
-    target: {
-      hostname: Output.map(
-        Output.all(Output.of(url as ResourceLike), compute.appEndpointDomain),
-        ([, endpoint]) => switchboardTarget(endpoint),
-      ),
-    },
-  });
-  return url;
 });
 
 /** Compose a real framework build/dev server with a traced Prisma artifact. */

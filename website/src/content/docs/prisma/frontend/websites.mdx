@@ -187,6 +187,8 @@ The deploy does not wait for the hostname to serve. `site.domain` is the Routing
 
 :::note
 A site whose DNS is not ready now deploys and reports `pending`. Before, the deploy failed until the DNS was published.
+
+`site.domain` is now the hostname's `Prisma.RoutingUrl`, not a `Prisma.CustomDomain`. Read `records` where you read `dnsRecords`, `status` (`pending` or `active`) and `firstUnmetCondition` where you read `foundryStatus` and `failureReason`, and `routingUrlId` where you read `customDomainId`.
 :::
 
 To publish both records in the same deploy, pass the DNS host as `dns`:
@@ -199,7 +201,9 @@ const site = yield* Prisma.Website.Astro("Web", {
 
 `AWS.Route53.Adapter()` and `Hetzner.DNS.Adapter()` work the same way. See [DNS Adapters](/infrastructure-as-code/dns-adapters) and [Routing URLs](/prisma/compute/apps#routing-urls) for what `dns` publishes and when.
 
-A site deployed with an earlier version keeps serving through the upgrade: the RoutingUrl takes over the hostname Prisma recorded for the site's custom domain, and the hostname's records stay published.
+A site deployed with an earlier version keeps serving through the upgrade: the RoutingUrl takes over the hostname Prisma recorded for the site's custom domain, and the hostname's records stay published. Deploy the upgrade with the same `domain` first, and change the hostname in a later deploy. A deploy that upgrades and changes the hostname at once stops serving the old hostname without checking that the new one can serve.
+
+Removing `dns` from a site removes its `TXT` and `CNAME`. To publish them with another tool instead, publish them there first: `_prisma-verification.<hostname>` with your workspace's value and the `CNAME` to the switchboard. Copy them from your DNS host, because `site.domain.records` is empty once the hostname is `active`.
 
 Changing the hostname of a site that serves it is refused until the new hostname can serve. See [Routing URLs](/prisma/compute/apps#routing-urls).
 

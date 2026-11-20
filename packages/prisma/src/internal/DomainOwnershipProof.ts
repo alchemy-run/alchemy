@@ -229,7 +229,9 @@ const ProviderLive = () =>
           // Prisma looks the record up through a caching resolver, so it
           // must be visible at every authoritative nameserver first.
           // When the nameservers cannot be found or reached, Prisma's own
-          // lookup decides.
+          // lookup decides, since a miss there only leaves the domain
+          // ownership unverified. A RoutingUrl's hostname change refuses
+          // instead, because a wrong guess there takes a serving hostname down.
           const visibility = yield* checkRecord(
             { type: "TXT", name: record.name, value: record.value },
             { margin: "always", nameservers: "parent" },

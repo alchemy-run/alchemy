@@ -5,7 +5,7 @@ import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as Prisma from "@alchemy.run/prisma";
 import type { Compute } from "@alchemy.run/prisma/Compute";
 import { CustomDomain } from "@alchemy.run/prisma/CustomDomain";
-import { websiteDomain, type WebsiteDomain } from "@alchemy.run/prisma/Website/FrameworkSite";
+import type { WebsiteDomain } from "@alchemy.run/prisma/Website/FrameworkSite";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
@@ -14,6 +14,8 @@ import {
   getDomainOwnership,
   getDomain,
   getProject,
+  getServiceUrls,
+  getWorkspaceDomainOwnerships,
   getService,
   getUrl,
 } from "@distilled.cloud/prisma/management";
@@ -29,7 +31,14 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { DomainVerification } from "../../../../prisma/src/internal/DomainVerification.ts";
 import { switchboardTarget } from "../../../../prisma/src/internal/Switchboard.ts";
+import {
+  RELEASED_ALIAS_ID,
+  RELEASED_CUSTOM_DOMAIN_ID,
+  WEBSITE_ROUTING_URL_ID,
+  websiteDomain,
+} from "../../../../prisma/src/internal/WebsiteDomain.ts";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import {
   AppRef,
@@ -64,12 +73,12 @@ const releasedSiteDomain = (domain: WebsiteDomain) =>
       const name = typeof domain === "string" ? domain : domain.name;
       const routing =
         typeof domain === "object" && domain.dns
-          ? yield* (yield* DNS.resolve(domain.dns)).alias("DomainAlias", {
+          ? yield* (yield* DNS.resolve(domain.dns)).alias(RELEASED_ALIAS_ID, {
               name,
               target: { hostname: Output.map(app.appEndpointDomain, switchboardTarget) },
             })
           : undefined;
-      return yield* CustomDomain("Domain", {
+      return yield* CustomDomain(RELEASED_CUSTOM_DOMAIN_ID, {
         app: app.appId,
         hostname:
           routing === undefined ? name : Output.map(Output.of(routing as ResourceLike), () => name),
@@ -95,7 +104,7 @@ testFor(withDns).test.provider(
       const url = yield* stack.deploy(siteDomain({ name: SITE_HOST, dns: TEST_DNS }));
 
       expect(url.status).toBe("pending");
-      expect(url.logicalId).toBe("Site/Url");
+      expect(url.logicalId).toBe(`Site/${WEBSITE_ROUTING_URL_ID}`);
       expect(byName(withDns.zone.records)).toEqual(byName(recordsFor(SITE_HOST)));
       expect(domainsRoutes(withDns)).toEqual([]);
       expect(ownershipWrites(withDns)).toEqual([]);
@@ -147,7 +156,7 @@ testFor(upgrade).test.provider(
 
       expect(url.routingUrlId).toBe(recorded?.id);
       expect(Array.from(upgrade.rows.keys())).toEqual([recorded?.id]);
-      expect(upgrade.rows.get(recorded!.id)?.logicalId).toBe("Site/Url");
+      expect(upgrade.rows.get(recorded!.id)?.logicalId).toBe(`Site/${WEBSITE_ROUTING_URL_ID}`);
       expect(upgrade.domains.has(customDomain!)).toBe(true);
       expect(upgrade.routes().filter((route) => route.startsWith("DELETE"))).toEqual([]);
       expect(byName(upgrade.zone.records)).toEqual(byName(recordsFor(SITE_HOST)));
@@ -194,7 +203,7 @@ testFor(siteChange).test.provider(
         url.routingUrlId,
         routingUrl(url.routingUrlId, {
           status: "active",
-          logicalId: "Site/Url",
+          logicalId: `Site/${WEBSITE_ROUTING_URL_ID}`,
           hostname: SITE_HOST,
         }),
       );
@@ -397,10 +406,19 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       );
       expect(body).toContain(MARKER);
 
+      // Read before destroy deletes the project the lookup goes through.
+      const workspaceId = (yield* getProject({ id: projectId })).data.workspace.id;
       yield* stack.destroy();
 
       expect(yield* recordsUnder(zoneId, HOSTNAME)).toEqual([]);
       expect(yield* routingUrlGone(domain.routingUrlId)).toBe("gone");
+      // Prisma created this domain ownership for the RoutingUrl; the stack does
+      // not own it, so destroy leaves it.
+      const ownerships = (yield* getWorkspaceDomainOwnerships({ workspaceId, domain: HOSTNAME }))
+        .data;
+      expect(
+        ownerships.filter((ownership) => ownership.domain === HOSTNAME).map((o) => o.status),
+      ).toEqual(["verified"]);
       expect(
         yield* getProject({ id: projectId }).pipe(
           Effect.as("found" as const),
@@ -495,6 +513,104 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       "provider:prisma",
       "provider:prisma:routingurl",
       "provider:prisma:branch",
+      "provider:prisma:website",
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "live",
+    ],
+    timeout: 900_000,
+  },
+);
+
+test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
+  "a site deployed with the released domain wiring keeps one row and its records through the upgrade",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const zoneId = yield* resolveZoneId;
+      const hostname = `prisma-upgrade-${stack.stage.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.${ZONE}`;
+      const cwd = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-prisma-upgrade-",
+        tempRoot,
+        entries: ["src", "build.sh"],
+      });
+      const siteProps = { cwd, command: "bash build.sh", shell: true, outdir: "dist" };
+      // Prisma has required the ownership TXT for a new custom domain since
+      // 2026-10-24; it stays declared in both deploys, outside the site.
+      const ownershipTxt = (site: Prisma.Website.Website) =>
+        Effect.gen(function* () {
+          const verification = yield* DomainVerification("Verification", {
+            project: site.project as Prisma.Project,
+            domain: hostname,
+          });
+          return yield* Cloudflare.DNS.Record("OwnershipTxt", {
+            zoneId,
+            name: verification.recordName,
+            type: "TXT",
+            content: verification.recordValue,
+          });
+        });
+
+      // What the released Alchemy declared for `domain: { name, dns }`.
+      const released = yield* stack.deploy(
+        Effect.gen(function* () {
+          const site = yield* Prisma.Website.StaticSite("Site", siteProps);
+          const txt = yield* ownershipTxt(site);
+          const compute = site.compute!;
+          return yield* Effect.gen(function* () {
+            const alias = yield* (yield* DNS.resolve(Cloudflare.DNS.Adapter())).alias(
+              RELEASED_ALIAS_ID,
+              {
+                name: hostname,
+                target: { hostname: Output.map(compute.appEndpointDomain, switchboardTarget) },
+              },
+            );
+            const customDomain = yield* CustomDomain(RELEASED_CUSTOM_DOMAIN_ID, {
+              app: compute,
+              hostname: Output.map(
+                Output.all(Output.of(alias as ResourceLike), Output.of(txt as ResourceLike)),
+                () => hostname,
+              ),
+            });
+            return { site, customDomain };
+          }).pipe(Namespace.push("Site"));
+        }),
+      );
+      const appId = released.site.compute!.appId;
+      const rowsFor = getServiceUrls({ serviceId: appId }).pipe(
+        Effect.map(({ data }) => data.filter((row) => trimDot(row.hostname) === hostname)),
+      );
+      const [recorded] = yield* rowsFor;
+      expect(recorded?.logicalId).toBe(null);
+
+      const upgraded = yield* stack.deploy(
+        Effect.gen(function* () {
+          const site = yield* Prisma.Website.StaticSite("Site", {
+            ...siteProps,
+            domain: { name: hostname, dns: Cloudflare.DNS.Adapter() },
+          });
+          yield* ownershipTxt(site);
+          return site;
+        }),
+      );
+
+      expect(upgraded.domain!.routingUrlId).toBe(recorded!.id);
+      expect((yield* rowsFor).map((row) => row.id)).toEqual([recorded!.id]);
+      expect(
+        (yield* getDomain({ domainId: released.customDomain.customDomainId })).data.hostname,
+      ).toBe(hostname);
+      const published = yield* recordsUnder(zoneId, hostname);
+      expect(published.map((record) => record.type).sort()).toEqual(["CNAME", "TXT"]);
+
+      yield* stack.destroy();
+      expect(yield* routingUrlGone(recorded!.id)).toBe("gone");
+      expect(yield* recordsUnder(zoneId, hostname)).toEqual([]);
+    }),
+  {
+    tags: [
+      "provider:prisma",
+      "provider:prisma:routingurl",
+      "provider:prisma:customdomain",
       "provider:prisma:website",
       "provider:cloudflare",
       "provider:cloudflare:dns",

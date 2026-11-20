@@ -1,6 +1,7 @@
 import { CustomDomain, CustomDomainProvider } from "@alchemy.run/prisma/CustomDomain";
 import { RoutingUrlProvider, RoutingUrlResources } from "@alchemy.run/prisma/RoutingUrl";
 import * as Test from "@alchemy.run/test/Alchemy";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as DNS from "alchemy/DNS/Adapter";
 import * as Provider from "alchemy/Provider";
@@ -30,10 +31,9 @@ import {
   wireProject,
 } from "./FakeManagementApi.ts";
 
-/**
- * Prisma's RoutingUrl, domain ownership and custom domain routes for one
- * service, over the fake Management API, and an in-memory DNS host.
- */
+// Prisma's RoutingUrl, domain ownership and custom domain routes for one
+// service, over the fake Management API, and an in-memory DNS host.
+
 export const HOSTNAME = "api.example.com";
 export const TXT = {
   type: "TXT",
@@ -315,6 +315,8 @@ export const makeUrlCloud = () => {
               body && "logicalId" in body ? (body.logicalId as string | null) : row.logicalId,
             status: hostname === row.hostname ? (row.status as "pending" | "active") : "pending",
           }),
+          // Prisma changes only the fields it is given; a new hostname loses the custom domain.
+          customDomain: hostname === row.hostname ? row.customDomain : null,
         };
         rows.set(row.id, updated);
         return data(updated);
@@ -414,6 +416,18 @@ export const testDns = (zone: Zone) =>
         }),
     }),
     Provider.succeed(DnsAlias, {
+      // As Cloudflare's alias records do, a CNAME already at the name that
+      // this alias has no state for is reported as not owned by the stack.
+      read: ({ output, olds }) =>
+        Effect.sync(() => {
+          if (output !== undefined) return output;
+          const existing = zone.records.find(
+            (record) => record.type === "CNAME" && record.name === olds?.name,
+          );
+          return existing === undefined
+            ? undefined
+            : Unowned({ name: existing.name, value: existing.value });
+        }),
       reconcile: ({ news, output }) =>
         Effect.sync(() => {
           const atName = (name: string) => (record: DNS.DnsRecord) =>

@@ -13,7 +13,7 @@ import {
 } from "@distilled.cloud/prisma/management";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as DNS from "alchemy/DNS/Adapter";
-import type { InputProps } from "alchemy/Input";
+import type { Input } from "alchemy/Input";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
@@ -24,11 +24,23 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import type { App } from "./App.ts";
-import type { Compute } from "./Compute.ts";
 import { AuthoritativeRecordCheck, SwitchboardDnsCheck } from "./internal/AuthoritativeDns.ts";
 import { attrOrString, devId, devProvider } from "./internal/DevStub.ts";
 import { concreteIdOf, isPrismaDevId } from "./internal/Refs.ts";
+import {
+  type AppReference,
+  appIdValue,
+  normalizeHostname,
+  publishedRecordsId,
+  requiredRecords,
+  resolveServiceId,
+  RoutingUrlOperationFailed,
+  RoutingUrlRequiredRecords,
+  RoutingUrlRequiredRecordsProvider,
+} from "./internal/RoutingUrlRequiredRecords.ts";
+import { isManagedByRoutingUrl } from "./internal/RoutingUrlTakeover.ts";
+
+export { RoutingUrlOperationFailed } from "./internal/RoutingUrlRequiredRecords.ts";
 import { switchboardTarget } from "./internal/Switchboard.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -68,7 +80,7 @@ export class RoutingUrlServiceOnAnotherBranch extends Data.TaggedError(
 /**
  * A serving RoutingUrl's hostname change was refused before anything changed,
  * because the new hostname could not be shown to serve yet. Publish `records`,
- * then redeploy. When `switchboardDns` or `ownershipDns` is `unknown`, this
+ * then redeploy. When `switchboardDns` or `ownership` is `unknown`, this
  * machine could not check the new hostname's DNS, and publishing `records`
  * may not be enough.
  */
@@ -94,58 +106,58 @@ export class RoutingUrlHostnameChangeRefused extends Data.TaggedError(
    */
   readonly switchboardDns: "seen" | "absent" | "unknown";
   /**
-   * How the workspace was shown to own the new hostname: `verified` by a
-   * domain ownership, or the `TXT` record `seen` at every authoritative
-   * nameserver; otherwise `absent`, or `unknown` when it could not be checked
-   * from this machine.
+   * Whether the workspace was shown to own the new hostname: `verified` when
+   * a domain ownership covers it, `seen` when every authoritative nameserver
+   * answers its `TXT` record with the workspace's value, `absent` when one
+   * answers without it, and `unknown` when this machine could not check.
    */
-  readonly ownershipDns: "verified" | "seen" | "absent" | "unknown";
+  readonly ownership: "verified" | "seen" | "absent" | "unknown";
 }> {}
-
-export class RoutingUrlOperationFailed extends Data.TaggedError("RoutingUrlOperationFailed")<{
-  readonly message: string;
-  readonly cause?: unknown;
-}> {}
-
-type AppReference = string | App | Compute;
 
 type ApiRoutingUrl = GetUrlResponseData;
 
 export interface RoutingUrlProps {
-  /**
-   * App ID or Compute output whose service the hostname serves.
-   */
-  app: AppReference;
+  /** App ID or Compute output whose service the hostname serves. */
+  app: Input<AppReference>;
   /**
    * Hostname to serve, such as `api.example.com`. Case and a trailing dot are
-   * ignored.
+   * ignored. With `dns`, a plain string.
    */
-  hostname: string;
+  hostname: Input<string>;
   /**
    * Identity of the RoutingUrl on its Branch. A RoutingUrl found on the
    * Branch with this `logicalId` is this resource's.
    * @default the resource's fully qualified name
    */
-  logicalId?: string;
+  logicalId?: Input<string>;
   /**
    * DNS host that publishes the hostname's `TXT` and `CNAME` records, e.g.
    * `Cloudflare.DNS.Adapter()` (see
-   * [DNS Adapters](/infrastructure-as-code/dns-adapters)). Needs `hostname`
-   * as a plain string. Omitted: publish `records` yourself; removing `dns`
-   * from a deployed RoutingUrl removes the records it published.
+   * [DNS Adapters](/infrastructure-as-code/dns-adapters)). Omitted: publish
+   * `records` yourself. Removing `dns` from a deployed RoutingUrl removes the
+   * records it published; to publish them with another tool instead, publish
+   * them there first: `_prisma-verification.<hostname>` with the workspace's
+   * value, and the `CNAME` to the switchboard.
    */
   dns?: DNS.DnsConfig;
 }
 
-/** Props the `Prisma.RoutingUrl` resource receives from {@link RoutingUrl}. */
-export interface RoutingUrlRowProps extends Omit<RoutingUrlProps, "dns"> {
-  /** This deploy publishes the hostname's records, so the hostname-change check waits for them. */
-  recordsPublished?: boolean;
-}
-
 export interface RoutingUrl extends Resource<
   "Prisma.RoutingUrl",
-  RoutingUrlRowProps,
+  {
+    /** App ID or Compute output whose service the hostname serves. */
+    app: AppReference;
+    /** Hostname to serve. */
+    hostname: string;
+    /** Identity of the RoutingUrl on its Branch. */
+    logicalId?: string;
+    /**
+     * Wait up to about a minute for the new hostname's `TXT` to appear at its
+     * authoritative nameservers before refusing a hostname change. Set when
+     * `dns` publishes the records in the same deploy.
+     */
+    waitForRecords?: boolean;
+  },
   {
     /** Prisma RoutingUrl ID. */
     routingUrlId: string;
@@ -219,8 +231,10 @@ export interface RoutingUrl extends Resource<
  * removes them. The deploy does not wait for the hostname to become
  * `active`, so a hostname that serves from another host today stops serving
  * there as soon as its `CNAME` is replaced; publish the records yourself to
- * move it. A create Prisma refuses leaves both records published until the
- * next deploy or destroy. Nothing is published under `alchemy dev`. A zone
+ * move it. A create Prisma refuses leaves both records published until you
+ * change or remove the RoutingUrl. A record already published with the same
+ * value is treated as this RoutingUrl's, and destroy removes it. Nothing is
+ * published under `alchemy dev`. A zone
  * apex such as `example.com` needs a DNS host that flattens a `CNAME` at the
  * apex; at any other host, omit `dns` and publish an ALIAS or ANAME yourself.
  *
@@ -246,35 +260,33 @@ export interface RoutingUrl extends Resource<
  * @resource
  * @product Compute
  */
-export const RoutingUrl = (id: string, props: RoutingUrlInput) =>
+export const RoutingUrl = (id: string, props: RoutingUrlProps) =>
   Effect.gen(function* () {
     const { dns, ...rowProps } = props;
     if (dns === undefined || !(yield* publishesDns)) return yield* RoutingUrlRow(id, rowProps);
-    const hostname = normalizeHostname(props.hostname);
-    if (hostname.startsWith("*.")) {
+    const requested = props.hostname;
+    if (typeof requested !== "string") {
       return yield* new RoutingUrlInvalidHostname({
-        message: `'${props.hostname}' is a wildcard, which a RoutingUrl cannot serve; nothing was published.`,
+        message: `With dns, the hostname of RoutingUrl '${id}' must be a plain string: its DNS records are kept per hostname.`,
       });
     }
-    const key = hostname.replaceAll(/[^a-z0-9-]/g, "-");
-    const published = yield* Effect.gen(function* () {
-      const adapter = yield* DNS.resolve(dns);
-      const required = yield* RoutingUrlDnsRecords(`RequiredRecords-${key}`, {
-        app: props.app,
-        hostname,
+    const hostname = normalizeHostname(requested);
+    if (hostname.startsWith("*.")) {
+      return yield* new RoutingUrlInvalidHostname({
+        message: `'${requested}' is a wildcard, which a RoutingUrl cannot serve; nothing was published.`,
       });
-      return yield* adapter.records(`Records-${key}`, { records: required.records });
-    }).pipe(Namespace.push(id));
+    }
+    const required = yield* requiredRecords(id, props.app, hostname);
+    const adapter = yield* DNS.resolve(dns);
+    const published = yield* adapter
+      .records(publishedRecordsId(hostname), { records: required.records })
+      .pipe(Namespace.push(id));
     return yield* RoutingUrlRow(id, {
       ...rowProps,
-      hostname: Output.map(Output.of(published as ResourceLike), () => props.hostname),
-      recordsPublished: true,
+      hostname: Output.map(Output.of(published as ResourceLike), () => requested),
+      waitForRecords: true,
     });
   });
-
-/** Props of {@link RoutingUrl}; `dns` needs `hostname` as a plain string. */
-export type RoutingUrlInput = InputProps<Omit<RoutingUrlProps, "dns">> &
-  ({ dns?: undefined } | { dns: DNS.DnsConfig; hostname: string });
 
 /** `alchemy dev` publishes no DNS, unless the RoutingUrl is `Alchemy.remote()`. */
 const publishesDns = Effect.gen(function* () {
@@ -285,39 +297,12 @@ const publishesDns = Effect.gen(function* () {
 
 const RoutingUrlRow = Resource<RoutingUrl>("Prisma.RoutingUrl");
 
-export interface RoutingUrlDnsRecordsProps {
-  /** App ID or Compute output whose service the hostname serves. */
-  app: AppReference;
-  /** Hostname, normalized. */
-  hostname: string;
-}
-
 /**
- * The `TXT` and `CNAME` a RoutingUrl's hostname needs, read from Prisma: the
- * workspace's verification value and the app's regional switchboard. They do
- * not depend on what Prisma still lists as unmet, so they are the same on
- * every deploy. Nothing exists in Prisma for it; deleting it is a no-op.
+ * The resource types {@link RoutingUrl} declares, for a provider collection
+ * built by hand, e.g. `Provider.collection([...Prisma.RoutingUrlResources])`
+ * with `Prisma.RoutingUrlProvider()`.
  */
-export interface RoutingUrlDnsRecords extends Resource<
-  "Prisma.RoutingUrlDnsRecords",
-  RoutingUrlDnsRecordsProps,
-  {
-    serviceId: string;
-    workspaceId: string;
-    hostname: string;
-    records: DNS.DnsRecord[];
-  },
-  never,
-  Providers
-> {}
-
-const RoutingUrlDnsRecords = Resource<RoutingUrlDnsRecords>("Prisma.RoutingUrlDnsRecords");
-
-/**
- * The resources {@link RoutingUrl} declares, for a provider collection built
- * by hand; {@link RoutingUrlProvider} provides them.
- */
-export const RoutingUrlResources = [RoutingUrlRow, RoutingUrlDnsRecords] as const;
+export const RoutingUrlResources = [RoutingUrlRow, RoutingUrlRequiredRecords] as const;
 
 const attrsFrom = (url: ApiRoutingUrl): RoutingUrl["Attributes"] => ({
   routingUrlId: url.id,
@@ -334,19 +319,6 @@ const attrsFrom = (url: ApiRoutingUrl): RoutingUrl["Attributes"] => ({
   customDomainSyncError: url.customDomainSyncError,
   setupUrl: url.setupUrl,
 });
-
-const normalizeHostname = (hostname: string) => hostname.trim().replace(/\.$/, "").toLowerCase();
-
-const appIdValue = (app: AppReference | undefined) => (typeof app === "string" ? app : app?.appId);
-
-const resolveServiceId = (app: AppReference) => {
-  const value = appIdValue(app);
-  return typeof value === "string"
-    ? Effect.succeed(value)
-    : Effect.fail(
-        new RoutingUrlOperationFailed({ message: "Unable to resolve the Prisma app id." }),
-      );
-};
 
 const serviceOf = (serviceId: string) =>
   Effect.gen(function* () {
@@ -382,7 +354,7 @@ const ownRow = (
   urls.find((url) => url.logicalId === logicalId) ??
   urls.find(
     (url) =>
-      url.logicalId === null &&
+      !isManagedByRoutingUrl(url) &&
       url.serviceId === serviceId &&
       normalizeHostname(url.hostname) === hostname,
   );
@@ -434,7 +406,7 @@ const ProviderLive = () =>
         service: Service,
         from: string,
         to: string,
-        recordsPublished: boolean,
+        waitForRecords: boolean,
       ) =>
         Effect.gen(function* () {
           const workspaceId = (yield* getProject({ id: service.projectId })).data.workspace.id;
@@ -447,18 +419,19 @@ const ProviderLive = () =>
           const verification = ownerships.flat().some((row) => row.status === "verified")
             ? undefined
             : (yield* getWorkspaceDomainOwnershipsVerification({ workspaceId, domain: to })).data;
-          const ownershipDns =
+          const ownership =
             verification === undefined
               ? ("verified" as const)
               : yield* checkRecord(
                   { type: "TXT", name: verification.name, value: verification.value },
                   {
                     margin: "if-unseen",
-                    nameservers: "parent",
-                    attempts: recordsPublished ? "until-seen" : "once",
+                    nameservers: "name",
+                    serversOf: to,
+                    attempts: waitForRecords ? "until-seen" : "once",
                   },
                 );
-          const owned = ownershipDns === "verified" || ownershipDns === "seen";
+          const owned = ownership === "verified" || ownership === "seen";
           const target = switchboardTarget(service.appEndpointDomain);
           const dns = yield* checkSwitchboardDns(
             { name: to, switchboard: target },
@@ -472,10 +445,10 @@ const ProviderLive = () =>
               : []),
             ...(cnameMissing ? [{ type: "CNAME" as const, name: to, value: target }] : []),
           ];
-          const ownership =
+          const unowned =
             owned || verification === undefined
               ? ""
-              : ownershipDns === "unknown"
+              : ownership === "unknown"
                 ? ` No verified domain ownership covers '${to}', and whether every authoritative nameserver answers TXT ${verification.name} with the workspace's value could not be checked from this machine.`
                 : ` No verified domain ownership covers '${to}', and not every authoritative nameserver answers TXT ${verification.name} with the workspace's value.`;
           const unchecked =
@@ -493,8 +466,8 @@ const ProviderLive = () =>
             to,
             records,
             switchboardDns: dns.visibility,
-            ownershipDns,
-            message: `Prisma RoutingUrl '${from}' is serving, and '${to}' cannot be shown to serve yet.${ownership}${unchecked}${publish}`,
+            ownership,
+            message: `Prisma RoutingUrl '${from}' is serving, and '${to}' cannot be shown to serve yet.${unowned}${unchecked}${publish}`,
           });
         });
 
@@ -552,7 +525,7 @@ const ProviderLive = () =>
               service,
               observed.hostname,
               hostname,
-              news.recordsPublished === true,
+              news.waitForRecords === true,
             );
           }
           const updated = yield* updateUrl({ id: observed.id, ...change }).pipe(
@@ -594,52 +567,11 @@ const ProviderLocal = () =>
     setupUrl: null,
   }));
 
-const DnsRecordsProvider = () =>
-  Provider.effect(
-    RoutingUrlDnsRecords,
-    Effect.gen(function* () {
-      return {
-        read: Effect.fn(function* ({ output }) {
-          return output;
-        }),
-        reconcile: Effect.fn(function* ({ news }) {
-          const serviceId = yield* resolveServiceId(news.app);
-          const service = (yield* getService({ serviceId })).data;
-          if (!service.appEndpointDomain) {
-            return yield* new RoutingUrlOperationFailed({
-              message: `Prisma app '${serviceId}' has no endpoint domain, so '${news.hostname}' has no switchboard to point at; nothing was published.`,
-            });
-          }
-          const workspaceId = (yield* getProject({ id: service.projectId })).data.workspace.id;
-          const hostname = normalizeHostname(news.hostname);
-          const verification = (yield* getWorkspaceDomainOwnershipsVerification({
-            workspaceId,
-            domain: hostname,
-          })).data;
-          return {
-            serviceId,
-            workspaceId,
-            hostname,
-            records: [
-              { name: verification.name, type: "TXT" as const, value: verification.value },
-              {
-                name: hostname,
-                type: "CNAME" as const,
-                value: switchboardTarget(service.appEndpointDomain),
-              },
-            ],
-          };
-        }),
-        delete: Effect.fn(function* () {}),
-      };
-    }),
-  );
-
 export const RoutingUrlProvider = () =>
   Layer.mergeAll(
     ProviderLayer.dual(RoutingUrlRow, {
       local: () => ProviderLocal(),
       live: () => ProviderLive(),
     }),
-    DnsRecordsProvider(),
+    RoutingUrlRequiredRecordsProvider(),
   );

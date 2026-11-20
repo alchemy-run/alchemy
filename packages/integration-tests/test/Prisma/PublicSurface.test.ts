@@ -356,7 +356,7 @@ describe("Prisma public surface", { tags: ["unit", "provider:prisma", "local"] }
   it("exports every resource Prisma.RoutingUrl declares, for a hand-built provider collection", () => {
     expect(Prisma.RoutingUrlResources.map((resource) => resource.Type)).toEqual([
       "Prisma.RoutingUrl",
-      "Prisma.RoutingUrlDnsRecords",
+      "Prisma.RoutingUrlRequiredRecords",
     ]);
   });
 

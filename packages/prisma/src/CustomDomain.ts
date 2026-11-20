@@ -24,6 +24,7 @@ import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevS
 import { ownershipRequiredOf, withoutRetriedCreate } from "./internal/DomainOwnership.ts";
 import { PrismaPaginationError } from "./internal/Pagination.ts";
 import { concreteIdOf, concreteIdsChanged, isInputObject, isPrismaDevId } from "./internal/Refs.ts";
+import { hostnameManagedByRoutingUrl } from "./internal/RoutingUrlTakeover.ts";
 import type { Providers } from "./Providers.ts";
 
 /** A custom domain as the Management API returns it. */
@@ -400,10 +401,10 @@ const ProviderLive = () =>
             Effect.map((response) => response.data),
             Effect.catchTag("NotFound", () => Effect.succeed([])),
           );
-          const takenOver = urls.some(
-            (url) => url.logicalId !== null && sameHostname(url.hostname, output.hostname),
-          );
-          if (takenOver) return;
+          // Alchemy deletes removed resources after every create and update, so a
+          // RoutingUrl that took this row over in the same deploy has already
+          // written its logicalId.
+          if (hostnameManagedByRoutingUrl(urls, output.hostname)) return;
           yield* deleteDomain({ domainId: customDomainId }).pipe(
             Effect.catchTag("NotFound", () => Effect.void),
           );
