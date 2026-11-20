@@ -174,21 +174,31 @@ const locking = Effect.fn(function* (options: {
     Config.withDefault(false),
     Effect.orElseSucceed(() => false),
   );
+  // Asked for by whoever runs the test, as a snapshot is rewritten: never under CI.
+  const update =
+    !ci &&
+    (yield* Config.String("VERIFY_LOCK").pipe(
+      Config.withDefault(""),
+      Effect.orElseSucceed(() => ""),
+    )) === "update";
   const short = path.basename(file);
+  /** What falls short of the lock: why the check fails, or with `update`, what was relocked. */
+  const fallen: Array<string> = [];
   const reasons: Array<string> = [];
   const next: Record<string, { readonly kind: string; readonly source: string }> = {};
   for (const [name, entry] of Object.entries(entries)) {
     const now = inspected.sources.get(name);
-    next[name] = entry;
     if (!now) {
-      reasons.push(`${name} is locked in ${short}, and is no longer a rule of ${options.key}`);
+      if (!update) next[name] = entry;
+      fallen.push(`${name} is locked in ${short}, and is no longer a rule of ${options.key}`);
       continue;
     }
+    next[name] = entry;
     if (Lock.normal(now.source) === Lock.normal(entry.source)) continue;
     const compared = inspected.compared.get(name);
-    if (compared?._tag === "Kept") next[name] = now;
-    else
-      reasons.push(
+    if (compared?._tag === "Kept" || update) next[name] = now;
+    if (compared?._tag !== "Kept")
+      fallen.push(
         compared?._tag === "Weaker"
           ? `${name} says less than the rule locked in ${short}: ${Symbolic.show(compared.state)} passes it now, and the locked rule refuses it`
           : compared?._tag === "Unknown"
@@ -196,6 +206,7 @@ const locking = Effect.fn(function* (options: {
             : `${name} changed from the rule locked in ${short}: only an invariant of an aggregate is compared with the one it was`,
       );
   }
+  if (!update) reasons.push(...fallen);
   const added = [...inspected.sources].filter(([name]) => !(name in entries));
   if (ci)
     reasons.push(
@@ -205,10 +216,13 @@ const locking = Effect.fn(function* (options: {
       ),
     );
   else for (const [name, now] of added) next[name] = now;
-  if (reasons.length > 0)
+  if (reasons.length > 0 && !ci)
     reasons.push(
-      `to change a rule on purpose, delete its entry from ${short}: the next run locks it as it is written`,
+      `to change a rule on purpose, run the test once with VERIFY_LOCK=update: it locks each rule as it is written, and says which`,
     );
+  const relocked = update ? fallen : [];
+  // A run that passes prints no report: what was let go is said where it will be seen.
+  for (const line of relocked) yield* Effect.logWarning(`${short} relocked: ${line}`);
   const changed =
     added.length > 0 || Object.keys(entries).some((name) => next[name] !== entries[name]);
   if (!ci && (changed || !exists)) {
@@ -225,8 +239,14 @@ const locking = Effect.fn(function* (options: {
       Effect.mapError(failed),
     );
   }
-  return reasons;
+  return { reasons, relocked };
 });
+
+/** Nothing was held against a lock. */
+const UNLOCKED: {
+  readonly reasons: ReadonlyArray<string>;
+  readonly relocked: ReadonlyArray<string>;
+} = { reasons: [], relocked: [] };
 
 /** The verification could not start: a file did not load, or the solver is missing. */
 export class VerifyError extends Data.TaggedError("VerifyError")<{ readonly message: string }> {}
@@ -292,6 +312,11 @@ export interface Report {
   readonly unrun: number;
   /** Each part of the check that was not done. */
   readonly undone: ReadonlyArray<string>;
+  /**
+   * With `VERIFY_LOCK=update`: each rule the lock no longer holds the code
+   * to, because it was taken out or changed, and was locked again as written.
+   */
+  readonly relocked: ReadonlyArray<string>;
   /** What the verification takes for granted. */
   readonly assumptions: ReadonlyArray<string>;
 }
@@ -544,7 +569,7 @@ export const report = (
     const rules = rulesOf(explored);
     const unlocked =
       options.lock === undefined
-        ? []
+        ? UNLOCKED
         : yield* locking({
             lock: options.lock,
             from,
@@ -565,8 +590,9 @@ export const report = (
       undone: [
         ...Explore.undone(explored, options.allow ?? {}),
         ...required(rules, options.require),
-        ...unlocked,
+        ...unlocked.reasons,
       ],
+      relocked: unlocked.relocked,
       // Only a model with a decision takes its commit for granted.
       assumptions: explored.decisions.length > 0 ? [...ASSUMPTIONS, Prove.ATOMIC] : ASSUMPTIONS,
     };
@@ -647,7 +673,9 @@ export interface AggregateOptions {
    * code fails the verification, and so does one that changed, unless it is
    * an invariant of an aggregate that still refuses every state it refused.
    * A new rule is added to the file, and one made to say more replaces the
-   * one kept. To change a rule on purpose, delete its entry.
+   * one kept. To change a rule on purpose, run the test once with
+   * `VERIFY_LOCK=update`: every rule is locked as it is written, and the
+   * report's `relocked` says which ones no longer say what they did.
    */
   readonly lock?: URL | string;
 }
@@ -680,6 +708,8 @@ export interface AggregateReport {
   readonly explored: Explore.Report;
   /** Each part of the check that was not done. */
   readonly undone: ReadonlyArray<string>;
+  /** With `VERIFY_LOCK=update`: each rule that was locked again as written, as for a model. */
+  readonly relocked: ReadonlyArray<string>;
 }
 
 /** An aggregate's rule is broken, or part of the check was not done. */
@@ -687,6 +717,11 @@ export class AggregateNotVerified extends Data.TaggedError("NotVerified")<{
   readonly message: string;
   readonly report: AggregateReport;
 }> {}
+
+const relockedLines = (relocked: ReadonlyArray<string>): ReadonlyArray<string> =>
+  relocked.length === 0
+    ? []
+    : ["Relocked with VERIFY_LOCK=update", ...relocked.map((line) => `  ! ${line}`), ""];
 
 const renderAggregate = (report: AggregateReport): string => {
   const out: Array<string> = [
@@ -734,6 +769,7 @@ const renderAggregate = (report: AggregateReport): string => {
   out.push(Prove.agreed(report.proof.agreement), "");
   if (report.undone.length > 0)
     out.push("Not done", ...report.undone.map((reason) => `  ✗ ${reason}`), "");
+  out.push(...relockedLines(report.relocked));
   if (report.proof.unkept.length > 0)
     out.push(
       "Schema checks not proved kept",
@@ -771,7 +807,7 @@ export const aggregate = (
     const proof = yield* Prove.report(target, { source }).pipe(Effect.mapError(failed));
     const unlocked =
       options.lock === undefined
-        ? []
+        ? UNLOCKED
         : yield* locking({
             lock: options.lock,
             from,
@@ -818,8 +854,9 @@ export const aggregate = (
         ...Explore.undone(explored, options.allow ?? {}),
         ...required(rules, options.require),
         ...proof.agreement.differs,
-        ...unlocked,
+        ...unlocked.reasons,
       ],
+      relocked: unlocked.relocked,
     };
     return made.rules.some((rule) => rule.standing === "broken") || made.undone.length > 0
       ? yield* new AggregateNotVerified({ message: `\n${renderAggregate(made)}`, report: made })
@@ -985,6 +1022,7 @@ export const render = (report: Report | AggregateReport): string => {
 
   if (report.undone.length > 0)
     out.push("Not done", ...report.undone.map((reason) => `  ✗ ${reason}`), "");
+  out.push(...relockedLines(report.relocked));
 
   if (explored.disagreements.length > 0)
     out.push(
