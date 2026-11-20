@@ -115,7 +115,10 @@ export const pathsWithoutJson = (
         ...ast.indexSignatures.flatMap((signature) => within(signature.type, `${path}[key]`)),
       ];
     case "Arrays":
-      return [...ast.elements, ...ast.rest].flatMap((element) => within(element, `${path}[]`));
+      return [
+        ...ast.elements.flatMap((element, index) => within(element, `${path}[${index}]`)),
+        ...ast.rest.flatMap((element) => within(element, `${path}[]`)),
+      ];
     case "Union":
       return ast.types.flatMap((type) => within(type));
     case "Suspend": {
