@@ -1,0 +1,148 @@
+---
+title: "Part 4: Replies and cleanup"
+description: Continue an issue's conversation when someone replies, steer a run that is still going, and remove the sandbox when the issue closes.
+sidebar:
+  order: 4
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+The bot answers an issue once. A person who replies should reach the same conversation, with everything the agent already read. And an issue that closes should stop costing anything.
+
+## Add a reply to the conversation
+
+A reply is another input to the issue's conversation. `whenBusy: "steer"` adds it to a run that is still going, so the agent sees it before it answers:
+
+```diff lang="typescript"
+          yield* conversation.submit({
+            type: "input",
+            content: `Issue #${issue.number}: ${issue.title}\n\n${issue.body}`,
+            requestId: deliveryId,
+          });
+        }),
++        commented: Effect.fn(function* (text: string, deliveryId: string) {
++          yield* harness.submit("issue", {
++            type: "input",
++            content: text,
++            requestId: deliveryId,
++            whenBusy: "steer",
++          });
++        }),
+```
+
+The conversation still has the issue, the files the agent read and its first answer. The sandbox is the same one too, resumed if Boat had stopped it.
+
+## Mark the bot's own comments
+
+The bot's comments are comments too, and GitHub will deliver them. Mark each one with a hidden HTML comment, so the Worker can tell them apart:
+
+```diff lang="typescript"
+import { Repo } from "./Repo.ts";
+
++export const MARKER = "<!-- issue-bot -->";
++
+export class Comment extends AI.Tool<Comment>()("comment", {
+```
+
+```diff lang="typescript"
+    return Effect.fn(function* ({ body }) {
+      const issue = yield* state.storage.get<number>("issue").pipe(Effect.orDie);
+-      const comment = yield* createComment({ issue_number: issue!, body }).pipe(Effect.orDie);
++      const comment = yield* createComment({
++        issue_number: issue!,
++        body: `${body}\n\n${MARKER}`,
++      }).pipe(Effect.orDie);
+      return { url: comment.html_url };
+    });
+```
+
+## Consume comments
+
+Subscribe to `issue_comment` as well. `event.name` says which event arrived, and narrows `event.payload` to its type:
+
+```diff lang="typescript"
+import Issue from "./Issue.ts";
+import { owner, repository } from "./Repo.ts";
++import { MARKER } from "./tools.ts";
+```
+
+```diff lang="typescript"
+    yield* GitHub.consumeRepositoryEvents(
+-      { owner, repository, events: ["issues"] },
++      { owner, repository, events: ["issues", "issue_comment"] },
+      Effect.fn(function* (event) {
+-        const { action, issue } = event.payload;
+-        if (action === "opened") {
+-          yield* issues
+-            .getByName(String(issue.number))
+-            .opened({ number: issue.number, title: issue.title, body: issue.body ?? "" }, event.id);
+-        }
++        const issue = issues.getByName(String(event.payload.issue.number));
++        if (event.name === "issues") {
++          const { action, issue: opened } = event.payload;
++          if (action === "opened") {
++            yield* issue.opened(
++              { number: opened.number, title: opened.title, body: opened.body ?? "" },
++              event.id,
++            );
++          }
++          return;
++        }
++        const { action, comment } = event.payload;
++        if (action === "created" && !comment.body.includes(MARKER)) {
++          yield* issue.commented(comment.body, event.id);
++        }
+      }, Effect.orDie),
+    );
+```
+
+## Remove the sandbox when the issue closes
+
+A closed issue's sandbox is no longer needed. Add a method that removes it:
+
+```diff lang="typescript"
+            whenBusy: "steer",
+          });
+        }),
++        closed: () => harness.removeSandbox("issue"),
+```
+
+And call it when the issue closes:
+
+```diff lang="typescript"
+          if (action === "opened") {
+            yield* issue.opened(
+              { number: opened.number, title: opened.title, body: opened.body ?? "" },
+              event.id,
+            );
+          }
++          if (action === "closed") yield* issue.closed();
+          return;
+        }
+```
+
+The conversation stays in the Durable Object. An issue that is reopened and replied to gets a new sandbox from the snapshot, and the agent still remembers the conversation.
+
+## Deploy and reply
+
+<PackageManagers run="alchemy deploy" />
+
+Reply on the issue from Part 3: "How many lines does README.md have? Count them with `wc -l`." The agent runs `wc -l` in the same sandbox and comments with the answer. Close the issue, and its sandbox is gone from your Boat dashboard.
+
+## What you built
+
+- A Durable Object for each issue, holding a Pi conversation that survives evictions.
+- A sandbox for each issue, started from a snapshot of the repository and removed when the issue closes.
+- A tool that comments through a GitHub binding, with the token kept in the Durable Object.
+- An event source that turns issues and replies into inputs, each delivered exactly once.
+
+## Where next
+
+- [Conversations](/pi/conversations): steer, stop, reset and configure a conversation.
+- [Surviving a crash](/pi/durability): what happens when the object is evicted mid-run.
+- [Extensions](/pi/extensions): block a tool call, or keep a run going.
+- [Webhooks & events](/github/events): the other GitHub events a Worker can consume.
+
+## Tear down
+
+<PackageManagers run="alchemy destroy" />

@@ -1,0 +1,59 @@
+---
+title: OpenCode's own API
+description: Call any route of OpenCode's HTTP server in a session's sandbox, pass OpenCode configuration through the harness, and run a harness outside a Durable Object.
+---
+
+A harness covers prompting a session and reading its transcript. OpenCode's server does more: diffs, reverts, sharing, its own agents. The harness lets you reach all of it.
+
+## Call OpenCode's server
+
+`session.request` calls a route of OpenCode's HTTP server in the session's sandbox and returns the response's JSON:
+
+```typescript
+const session = harness.session("pr-142");
+const id = yield* session.id;
+const diff = yield* session.request("GET", `/session/${id}/diff`);
+```
+
+`session.id` is OpenCode's own id for the session. The call goes over the sandbox's `exec`, like everything else, so the server is never exposed.
+
+## OpenCode's configuration
+
+`config` is OpenCode's own configuration, the contents of an `opencode.json`. It is merged under what the harness sets:
+
+```typescript
+const harness = yield* OpenCode.Harness({
+  models: [Fast],
+  tools: [AI.CodingTools],
+  config: {
+    agent: { review: { prompt: "You review diffs. You never edit files." } },
+  },
+});
+```
+
+A prompt then picks that agent:
+
+```typescript
+const reply = yield* session.prompt("Review the last commit.", { agent: "review" });
+```
+
+The harness always sets the model provider, its own tools' server and where skills are found, and it turns off OpenCode's auto-update and session sharing.
+
+## Outside a Durable Object
+
+The harness needs an id for the instance it runs in, so two instances never share a sandbox. In a Durable Object that is `OpenCodeCloudflare.DurableObjectInstance`. In one long-lived process, such as a Fly Machine or an ECS task, name it:
+
+```typescript
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  BoatSandbox,
+  OpenCode.CodingTools,
+  OpenCode.NamedInstance("agent-1"),
+);
+```
+
+OpenCode still runs in a sandbox there. The process only drives it.
+
+## The version of OpenCode
+
+The harness installs one version of OpenCode, the one it was tested with, and checks the download's hash. A newer OpenCode arrives with a newer `@alchemy.run/opencode`.

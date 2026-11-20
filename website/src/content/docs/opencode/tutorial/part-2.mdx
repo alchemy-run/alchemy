@@ -1,0 +1,141 @@
+---
+title: "Part 2: A sandbox with the repository"
+description: Start every issue's sandbox from a snapshot with the repository cloned, and make it the directory OpenCode works in.
+sidebar:
+  order: 2
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+OpenCode needs the repository to answer a question about it. Cloning on every issue would be slow, so the clone happens once, at deploy, into the snapshot every sandbox starts from.
+
+## Install
+
+<PackageManagers add="@alchemy.run/github" />
+
+## Declare the repository
+
+Declare the repository the bot works on. Use your own account as `owner`:
+
+```typescript title="src/Repo.ts"
+import * as GitHub from "@alchemy.run/github";
+
+export const owner = "acme";
+export const repository = "issue-bot-demo";
+
+export const Repo = GitHub.Repository("Repo", {
+  owner,
+  name: repository,
+  visibility: "public",
+  autoInit: true,
+});
+```
+
+The deploy creates the repository with a README. It is public, so a sandbox can clone it without a token.
+
+## Clone it into the snapshot
+
+Replace the `Base` snapshot with one that clones the repository to `~/repo`:
+
+```diff lang="typescript"
+import * as AI from "@alchemy.run/ai";
+import * as Boat from "@alchemy.run/boat";
++import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
++import { Repo } from "./Repo.ts";
+
+export const Sandbox = Layer.effect(
+  AI.Sandboxes,
+  Effect.gen(function* () {
+-    const base = yield* Boat.Snapshot("Base", { run: ["git --version"] });
+-    const sandboxes = yield* Boat.CreateSandbox(base);
++    const repo = yield* Repo;
++    const checkout = yield* Boat.Snapshot("Checkout", {
++      run: [Output.interpolate`git clone ${repo.cloneUrl} ~/repo`],
++    });
++    const sandboxes = yield* Boat.CreateSandbox(checkout);
+    const find = (key: string) => sandboxes.list({ labels: { key } });
+```
+
+The snapshot's command uses the repository's clone URL, so the deploy creates the repository first and builds the snapshot after.
+
+## Work in the repository
+
+`cwd` is the directory sessions work in. Point it at the clone:
+
+```diff lang="typescript"
+-    const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
++    const harness = yield* OpenCode.Harness({
++      models: [Fast],
++      tools: [AI.CodingTools],
++      cwd: "/home/user/repo",
++    });
+```
+
+OpenCode now starts in the repository, so relative paths and `git` work as they would in a checkout on your machine.
+
+## Tell the model what it is doing
+
+```diff lang="typescript"
++const instructions = [
++  "You answer issues on a GitHub repository, which is your working directory.",
++  "Read the files that matter with your tools before you answer.",
++].join("\n");
++
+export default class Issue extends Cloudflare.DurableObject<Issue>()(
+```
+
+```diff lang="typescript"
+      const session = harness.session("issue", {
+        tools: [AI.Bash, AI.Read, AI.Grep],
+-        instructions: "You answer questions about the files in your working directory.",
++        instructions,
+      });
+```
+
+## Add the GitHub provider
+
+The Stack now deploys to GitHub too, and declares the repository:
+
+```diff lang="typescript"
+import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
++import * as GitHub from "@alchemy.run/github";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Bot from "./src/Bot.ts";
++import { Repo } from "./src/Repo.ts";
+
+export default Alchemy.Stack(
+  "IssueBot",
+  {
+-    providers: Layer.mergeAll(Cloudflare.providers(), Boat.providers()),
++    providers: Layer.mergeAll(Cloudflare.providers(), Boat.providers(), GitHub.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
++    const repo = yield* Repo;
+    const bot = yield* Bot;
+-    return { url: bot.url };
++    return { url: bot.url, repository: repo.htmlUrl };
+  }),
+);
+```
+
+## Deploy and try it
+
+<PackageManagers run="alchemy deploy" />
+
+Ask about a file, on a new issue number so the session gets a sandbox from the new snapshot:
+
+```sh
+curl -X POST "$URL/issues/8" -d "What does README.md say?"
+```
+
+OpenCode reads `README.md` with its own `read` tool and answers from the file.
+
+## Next
+
+[Part 3](/opencode/tutorial/part-3) connects the bot to the repository's issues.

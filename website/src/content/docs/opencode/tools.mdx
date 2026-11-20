@@ -1,0 +1,116 @@
+---
+title: Tools
+description: OpenCode runs its own coding tools in the sandbox and calls your tools in your Durable Object. Choose which a prompt may use, and replace any of OpenCode's with your own.
+---
+
+An OpenCode session has two kinds of tool. OpenCode's own tools run inside the sandbox, as part of OpenCode. Your tools are [`AI.Tool`](/ai/tools) declarations that run in the Durable Object, with its bindings, and OpenCode reaches them through the bridge.
+
+## OpenCode's coding tools
+
+`OpenCode.CodingTools` provides OpenCode's own tool for each of the six [coding tool](/ai/coding-tools) names:
+
+```typescript
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  BoatSandbox,
+  OpenCode.CodingTools,
+  OpenCodeCloudflare.DurableObjectInstance,
+);
+
+const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
+```
+
+Their descriptions and parameters are OpenCode's. The Layers hold no code: listing a name switches that tool on in OpenCode. Each has its own Layer (`OpenCode.Bash`, `OpenCode.Read`, `OpenCode.Edit`, `OpenCode.Write`, `OpenCode.Grep`, `OpenCode.Glob`).
+
+## Tools only OpenCode has
+
+`OpenCode.WebFetch`, `OpenCode.TodoWrite` and `OpenCode.Task` are listed as they are and need no Layer:
+
+```typescript
+const harness = yield* OpenCode.Harness({
+  models: [Fast],
+  tools: [AI.CodingTools, OpenCode.WebFetch],
+});
+```
+
+## Your tools
+
+List an `AI.Tool` and provide its Layer. The handler runs in the Durable Object:
+
+```typescript title="src/tools.ts"
+import * as AI from "@alchemy.run/ai";
+import * as GitHub from "@alchemy.run/github";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import { Repo } from "./Repo.ts";
+
+export class SearchIssues extends AI.Tool<SearchIssues>()("search_issues", {
+  description: "Search this repository's issues and pull requests.",
+  parameters: Schema.Struct({ query: Schema.String }),
+  success: Schema.Struct({
+    issues: Schema.Array(Schema.Struct({ number: Schema.Number, title: Schema.String })),
+  }),
+}) {}
+
+export const SearchIssuesLive = SearchIssues.make(
+  Effect.gen(function* () {
+    const search = yield* GitHub.SearchIssues(yield* Repo);
+
+    return Effect.fn(function* ({ query }) {
+      const found = yield* search({ q: query, per_page: 10 }).pipe(Effect.orDie);
+      return {
+        issues: found.items.map((issue) => ({ number: issue.number, title: issue.title })),
+      };
+    });
+  }),
+).pipe(Layer.provide(GitHub.SearchIssuesHttp));
+```
+
+```typescript
+const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools, SearchIssues] });
+```
+
+The GitHub token stays in the Durable Object. The sandbox only sees the tool's result.
+
+## How your tools are named
+
+OpenCode names a tool it did not ship after where it came from. Yours are `alchemy_<name>`, so the model sees `alchemy_search_issues`. The harness's `name` option changes the prefix:
+
+```typescript
+const harness = yield* OpenCode.Harness({ name: "acme", models: [Fast], tools: [SearchIssues] });
+```
+
+## Tools in the session's sandbox
+
+A tool of yours reaches the session's sandbox through `AI.Sandbox`. It is the same sandbox OpenCode works in:
+
+```typescript
+export const CountBytesLive = CountBytes.make(
+  Effect.fn(function* ({ path }) {
+    const sandbox = yield* AI.Sandbox;
+    const text = yield* sandbox.readTextFile(path).pipe(Effect.orDie);
+    return { bytes: new TextEncoder().encode(text).length };
+  }),
+);
+```
+
+## Choose tools for a prompt
+
+A prompt's `tools` are exactly what the model may use:
+
+```typescript
+const reply = yield* session.prompt("Which issues mention the login test?", {
+  tools: [AI.Read, AI.Grep, SearchIssues],
+});
+```
+
+Everything else is switched off for that prompt, including tools the sandbox's image configured for OpenCode. A tool that is not on the harness fails with `NotOnHarness`.
+
+## Tools that fail
+
+A tool's declared [`failure`](/ai/tools#fail-with-a-declared-error) reaches OpenCode as a failed tool call, with the error's tag and fields as its text. The model reads it and can try something else.
+
+## Replace one of OpenCode's tools
+
+A name can be [your own tool](/ai/coding-tools#replace-one-with-your-own) instead of OpenCode's. Provide `AI.Bash.make(...)` in place of `OpenCode.Bash`: the harness serves yours as `alchemy_bash` and leaves OpenCode's `bash` switched off.

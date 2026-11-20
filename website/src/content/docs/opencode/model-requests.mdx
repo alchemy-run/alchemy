@@ -1,0 +1,55 @@
+---
+title: Model requests
+description: OpenCode in the sandbox never holds an API key. Its model requests go to a bridge on the sandbox's loopback, and the harness answers them with your AI.Model Layer.
+---
+
+import Sequence from "../../../components/diagrams/Sequence.astro";
+
+OpenCode asks a model provider for every answer. Running it in a sandbox would normally mean putting a provider key there, next to code the model writes and runs. A harness doesn't. OpenCode in the sandbox is configured with one provider, and that provider is a **bridge** on the sandbox's own loopback address. The harness in your Durable Object answers each request with the model's Layer.
+
+<Sequence
+  actors={[
+    { id: "opencode", label: "OpenCode", type: "in the sandbox" },
+    { id: "bridge", label: "bridge", type: "127.0.0.1" },
+    { id: "harness", label: "harness", type: "Durable Object", tone: "accent" },
+    { id: "model", label: "Fast", type: "model Layer" },
+  ]}
+  steps={[
+    { from: "harness", to: "bridge", label: "exec: follow requests" },
+    { from: "opencode", to: "bridge", label: "chat completion" },
+    { from: "bridge", to: "harness", label: "the request", dashed: true },
+    { from: "harness", to: "model", label: "streamText" },
+    { from: "model", to: "harness", label: "text and tool calls", dashed: true },
+    { from: "harness", to: "bridge", label: "exec: the reply" },
+    { from: "bridge", to: "opencode", label: "completion", dashed: true },
+  ]}
+  caption="The harness follows the bridge with one long-running command. OpenCode's request waits in the bridge until the harness has asked the model in the Durable Object and sent the answer back with another command. Every arrow from the harness starts in your runtime."
+/>
+
+## What is in the sandbox
+
+Two programs: OpenCode's server, and the bridge. Both listen only on `127.0.0.1`. The bridge speaks the OpenAI chat completions format to OpenCode, and holds each request until it is answered.
+
+There is no provider key in the sandbox, and nothing there knows your runtime's address.
+
+## How the harness reaches it
+
+The harness uses the one thing every sandbox platform has: running a command in the sandbox. One command follows the bridge and prints each waiting request. Another sends a reply. Both are started by the harness, so the sandbox needs no public port and accepts no inbound connection.
+
+## How a request is answered
+
+The harness turns the request into an Effect AI prompt and runs it on the `AI.Model` the prompt chose. That is the Layer you provided: Workers AI, an AI Gateway, or any other provider. The tools OpenCode offered are passed through, and tool calls go back to OpenCode, which runs them itself.
+
+```typescript
+const reply = yield* harness.session("pr-142").prompt("Fix the failing test.", { model: Smart });
+```
+
+Logging, caching, rate limits and spend caps on your gateway apply to OpenCode's requests, because they are your runtime's requests.
+
+## Calls to your tools
+
+Your tools travel the same way. OpenCode sees them as tools of an MCP server the bridge serves, calls one, and the bridge holds the call until the harness has run the handler in the Durable Object. See [Tools](/opencode/tools).
+
+## When the Durable Object is evicted
+
+A request waits in the bridge until a harness answers it. A prompt whose Durable Object is evicted midway stops being answered, and nothing wakes the object by itself. Run prompts from the object's alarm with a `requestId`, so the job is delivered again and the retried prompt joins the one still running. See [Sessions & prompts](/opencode/sessions#prompts-take-minutes).

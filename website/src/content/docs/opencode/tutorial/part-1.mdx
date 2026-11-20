@@ -1,0 +1,233 @@
+---
+title: "Part 1: A harness in a Durable Object"
+description: Start an issue bot. Declare a model and where sandboxes run, yield an OpenCode harness in a Durable Object for each issue, and prompt it from a Worker.
+sidebar:
+  order: 1
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+Build a bot that answers issues on a GitHub repository. When someone opens an issue, OpenCode reads the repository in a sandbox and the bot replies with a comment. When they reply, it continues the same session.
+
+Each issue gets its own Durable Object, with its own OpenCode session and sandbox. This part builds that object and prompts it over HTTP. The later parts give it the repository, connect it to GitHub and clean up after it.
+
+The finished code is in [`examples/cloudflare-opencode-github`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-opencode-github).
+
+## Prerequisites
+
+Finish [Cloudflare setup](/cloudflare/setup) and [Boat setup](/boat/setup). Part 2 also needs [GitHub setup](/github/setup).
+
+## Install
+
+<PackageManagers add="@alchemy.run/opencode @alchemy.run/ai @alchemy.run/cloudflare @alchemy.run/boat" />
+
+## Declare the model
+
+A model is a name. `FastLive` says which LLM answers under it: Llama 3.3 on Workers AI, through the Worker's own AI binding.
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const ai = yield* Cloudflare.Workers.AI();
+    return Fast.layer(
+      ai.model({
+        model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+        parameters: { temperature: 0, maxTokens: 1024 },
+      }),
+    );
+  }),
+).pipe(Layer.provide(Cloudflare.Workers.AIBinding));
+```
+
+OpenCode will run in a sandbox, and this Layer stays in your Durable Object. The sandbox never has a key for the model.
+
+## Say where sandboxes run
+
+OpenCode needs a machine, so every session runs in a sandbox. An `AI.Sandboxes` Layer opens, suspends and removes one by a `key` the harness chooses:
+
+```typescript title="src/Sandbox.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Boat from "@alchemy.run/boat";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export const Sandbox = Layer.effect(
+  AI.Sandboxes,
+  Effect.gen(function* () {
+    const base = yield* Boat.Snapshot("Base", { run: ["git --version"] });
+    const sandboxes = yield* Boat.CreateSandbox(base);
+    const find = (key: string) => sandboxes.list({ labels: { key } });
+
+    return {
+      open: Effect.fn(function* (key) {
+        const [existing] = yield* find(key);
+        if (existing === undefined) {
+          return yield* sandboxes.create({
+            type: "small",
+            noEnv: true,
+            autoStop: "10 minutes",
+            labels: { key },
+          });
+        }
+        const sandbox = yield* sandboxes.connect(existing.id);
+        yield* sandbox.resume({ autoStop: "10 minutes" });
+        return sandbox;
+      }),
+      suspend: Effect.fn(function* (key) {
+        const [existing] = yield* find(key);
+        if (existing === undefined) return;
+        const sandbox = yield* sandboxes.connect(existing.id);
+        yield* sandbox.stop();
+      }),
+      remove: Effect.fn(function* (key) {
+        const found = yield* find(key);
+        yield* Effect.forEach(found, (sandbox) => sandboxes.delete(sandbox.id));
+      }),
+    };
+  }),
+).pipe(Layer.provide(Boat.CreateSandboxHttp));
+```
+
+`open` finds the sandbox labelled with the key, or creates one from the `Base` snapshot. Boat stops a sandbox ten minutes after its last use and keeps its disk, and `resume` starts it again.
+
+## Yield a harness in a Durable Object
+
+The harness is yielded in the Durable Object's outer Effect, and its Layers are provided once, at the end.
+
+```typescript title="src/Issue.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as OpenCode from "@alchemy.run/opencode";
+import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive } from "./models.ts";
+import { Sandbox } from "./Sandbox.ts";
+
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  Sandbox,
+  OpenCode.CodingTools,
+  OpenCodeCloudflare.DurableObjectInstance,
+);
+
+export default class Issue extends Cloudflare.DurableObject<Issue>()(
+  "Issue",
+  Effect.gen(function* () {
+    const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
+
+    return Effect.gen(function* () {
+      return {};
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+`AI.CodingTools` names `bash`, `read`, `edit`, `write`, `grep` and `glob`, and `OpenCode.CodingTools` says they are OpenCode's own, which OpenCode runs in the sandbox. `DurableObjectInstance` keys sandboxes on this object's id, so two issues never share one.
+
+## Prompt a session
+
+Add a method that prompts the object's session and returns the answer's text:
+
+```diff lang="typescript"
+  Effect.gen(function* () {
+    const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
+
+    return Effect.gen(function* () {
+-      return {};
++      const session = harness.session("issue", {
++        tools: [AI.Bash, AI.Read, AI.Grep],
++        instructions: "You answer questions about the files in your working directory.",
++      });
++
++      return {
++        ask: Effect.fn(function* (text: string) {
++          const reply = yield* session.prompt(text);
++          return reply.text;
++        }),
++      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+```
+
+`harness.session("issue", defaults)` is this object's one session. Its prompts get three of the coding tools, the ones that read. The first `prompt` opens the sandbox, installs OpenCode there and starts it.
+
+## Reach it from a Worker
+
+A Worker yields `Issue` to bind it, and reaches the object for an issue by the issue's number:
+
+```typescript title="src/Bot.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import Issue from "./Issue.ts";
+
+export default class Bot extends Cloudflare.Worker<Bot>()(
+  "Bot",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const issues = yield* Issue;
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const [, area, number] = new URL(request.url, "http://bot").pathname.split("/");
+        if (area !== "issues" || number === undefined) {
+          return HttpServerResponse.text("not found", { status: 404 });
+        }
+        const answer = yield* issues.getByName(number).ask(yield* request.text);
+        return HttpServerResponse.text(answer);
+      }).pipe(Effect.orDie),
+    };
+  }),
+) {}
+```
+
+`POST /issues/7` stands in for GitHub until Part 3.
+
+## Add the Stack
+
+```typescript title="alchemy.run.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Bot from "./src/Bot.ts";
+
+export default Alchemy.Stack(
+  "IssueBot",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Boat.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const bot = yield* Bot;
+    return { url: bot.url };
+  }),
+);
+```
+
+## Deploy and try it
+
+<PackageManagers run="alchemy deploy" />
+
+The first deploy builds the snapshot, which takes a couple of minutes. Then ask the session to run a command:
+
+```sh
+curl -X POST "$URL/issues/7" -d "Run uname -a with bash and tell me the kernel version."
+```
+
+The first prompt on a new issue waits for its sandbox and for OpenCode to install. The answer comes from OpenCode's `bash`, run in the sandbox, with the model answering from your Durable Object.
+
+## Next
+
+[Part 2](/opencode/tutorial/part-2) puts the repository in the sandbox.

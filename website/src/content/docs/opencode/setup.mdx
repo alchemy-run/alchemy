@@ -1,0 +1,99 @@
+---
+title: Setup
+description: Install @alchemy.run/opencode and @alchemy.run/ai, choose a sandbox platform, and add an OpenCode harness to a Cloudflare Durable Object.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+You need:
+
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
+- An Alchemy app on Cloudflare. See [Cloudflare setup](/cloudflare/setup).
+- An account on a sandbox platform: [Boat](/boat/setup), [E2B](/e2b/setup), [Daytona](/daytona/setup), [Modal](/modal/setup) or [Archil](/archil/setup)
+
+OpenCode needs no account, and you don't install it: the harness downloads it into each new sandbox.
+
+## Install
+
+Install the harness, the shared AI package and your sandbox platform's provider:
+
+<PackageManagers add="@alchemy.run/opencode @alchemy.run/ai @alchemy.run/boat" />
+
+## Add the sandbox provider
+
+OpenCode runs in a sandbox, so the Stack needs the platform's provider next to Cloudflare's:
+
+```typescript title="alchemy.run.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Api from "./src/Api.ts";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), Boat.providers()),
+    state: Cloudflare.state(),
+  },
+  Effect.gen(function* () {
+    const api = yield* Api;
+    return { url: api.url };
+  }),
+);
+```
+
+Sign in to the platform with your profile:
+
+<PackageManagers run="alchemy profile edit --add Boat" />
+
+## A model and sandboxes
+
+A harness needs a model and an `AI.Sandboxes` Layer. See [Models](/ai/models) and [Sandboxes](/ai/sandboxes#say-where-sandboxes-run) for both.
+
+## A harness
+
+Yield the harness in a Durable Object's outer Effect and provide its Layers once:
+
+```typescript title="src/Coder.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as OpenCode from "@alchemy.run/opencode";
+import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { FastLive, Fast } from "./models.ts";
+import { BoatSandbox } from "./sandboxes.ts";
+
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  BoatSandbox,
+  OpenCode.CodingTools,
+  OpenCodeCloudflare.DurableObjectInstance,
+);
+
+export default class Coder extends Cloudflare.DurableObject<Coder>()(
+  "Coder",
+  Effect.gen(function* () {
+    const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
+
+    return Effect.gen(function* () {
+      return {
+        prompt: Effect.fn(function* (name: string, text: string) {
+          const reply = yield* harness.session(name).prompt(text);
+          return reply.text;
+        }),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+`OpenCodeCloudflare.DurableObjectInstance` keys the harness's sandboxes on the Durable Object's id, so two objects with a session of the same name never share one.
+
+## What the sandbox image needs
+
+The harness installs OpenCode with `sh`, `curl`, `tar` and `sha512sum`, from `registry.npmjs.org`, and checks the download against a known hash. Boat's own image and `node:22-bookworm` have what it needs. A new sandbox's first prompt waits for that install.
+
+Next: the [tutorial](/opencode/tutorial/part-1).

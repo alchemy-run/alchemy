@@ -1,33 +1,33 @@
 ---
 title: OpenCode
-description: Run OpenCode agent harnesses with Alchemy. Each session runs OpenCode in a sandbox of its own, with the models, tools and skills of the Durable Object that hosts it.
+description: Run the OpenCode coding agent with Alchemy. A sandbox for each session, your models and tools answered from your own runtime, and no API key in the sandbox.
 ---
 
-[OpenCode](https://opencode.ai) is a coding agent that runs as a program: it needs a file system and a shell. `@alchemy.run/opencode` runs it in a sandbox, one per session, and connects it to the harness you yield in your runtime. The harness answers OpenCode's model requests with your model Layers and runs your tools where your bindings are.
+import HubMap from "../../../components/HubMap.astro";
 
-```sh
-npm install @alchemy.run/opencode @alchemy.run/ai
-```
+[OpenCode](https://opencode.ai) is an open-source coding agent that runs as a server: it keeps sessions, runs its own tools on the machine it is on, and asks a model provider for each answer. Alchemy runs it in a sandbox for each session, and answers its model requests and its calls to your tools from your Durable Object. The sandbox holds no API key. Models, tools, skills and sandboxes are the ones you declare with [`@alchemy.run/ai`](/ai).
 
-Models, tools, skills, MCP servers and sandboxes come from `@alchemy.run/ai`. They are declared once and run on any Alchemy harness, so the declarations on this page are the same ones the [Pi](/pi) harness takes.
+**New to OpenCode?** Start with [What is OpenCode?](/opencode/what-is-opencode).
 
-## A harness in a Durable Object
+## A quick example
 
-Name a model once. Which LLM answers is the Layer you back it with:
+A model, and where sandboxes run:
 
-```typescript title="src/models.ts"
-import * as AI from "@alchemy.run/ai";
-
-export class Fast extends AI.Model<Fast>()("fast") {}
-```
-
-Say where sessions run. An `AI.Sandboxes` Layer opens, suspends and removes a sandbox on its platform:
-
-```typescript title="src/sandboxes/Boat.ts"
+```typescript title="src/agent.ts"
 import * as AI from "@alchemy.run/ai";
 import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const ai = yield* Cloudflare.Workers.AI();
+    return Fast.layer(ai.model({ model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" }));
+  }),
+).pipe(Layer.provide(Cloudflare.Workers.AIBinding));
 
 export const BoatSandbox = Layer.effect(
   AI.Sandboxes,
@@ -40,15 +40,10 @@ export const BoatSandbox = Layer.effect(
       open: Effect.fn(function* (key) {
         const [existing] = yield* find(key);
         if (existing === undefined) {
-          return yield* sandboxes.create({
-            type: "small",
-            noEnv: true,
-            autoStop: "10 minutes",
-            labels: { key },
-          });
+          return yield* sandboxes.create({ type: "small", noEnv: true, labels: { key } });
         }
         const sandbox = yield* sandboxes.connect(existing.id);
-        yield* sandbox.resume({ autoStop: "10 minutes" });
+        yield* sandbox.resume();
         return sandbox;
       }),
       suspend: Effect.fn(function* (key) {
@@ -66,7 +61,7 @@ export const BoatSandbox = Layer.effect(
 ).pipe(Layer.provide(Boat.CreateSandboxHttp));
 ```
 
-Yield the harness in the Durable Object's outer Effect, where its Layers are provided, and prompt a session by name:
+A Durable Object yields the harness and prompts a session by name:
 
 ```typescript title="src/Coder.ts"
 import * as AI from "@alchemy.run/ai";
@@ -75,22 +70,14 @@ import * as OpenCode from "@alchemy.run/opencode";
 import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { Gateway } from "./Gateway.ts";
-import { Fast } from "./models.ts";
-import { BoatSandbox } from "./sandboxes/Boat.ts";
-
-const ModelsLive = Layer.unwrap(
-  Effect.map(Cloudflare.AI.QueryGateway(Gateway), (gateway) =>
-    Fast.layer(gateway.model({ model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" })),
-  ),
-);
+import { BoatSandbox, Fast, FastLive } from "./agent.ts";
 
 const HarnessLive = Layer.mergeAll(
-  ModelsLive,
+  FastLive,
   BoatSandbox,
   OpenCode.CodingTools,
   OpenCodeCloudflare.DurableObjectInstance,
-).pipe(Layer.provideMerge(Cloudflare.AI.QueryGatewayBinding));
+);
 
 export default class Coder extends Cloudflare.DurableObject<Coder>()(
   "Coder",
@@ -109,139 +96,12 @@ export default class Coder extends Cloudflare.DurableObject<Coder>()(
 ) {}
 ```
 
-`AI.CodingTools` names `bash`, `read`, `edit`, `write`, `grep` and `glob`. A name says nothing about how the tool works: `OpenCode.CodingTools` provides OpenCode's own tool for each, with OpenCode's description and schema. The same list runs on another harness with that harness's Layer.
+## Where to start
 
-`harness.session(name)` does nothing until it is used. Its first call opens the session's sandbox, installs OpenCode there and starts it; later calls find it running. `requestId` makes a prompt exactly-once while its sandbox runs: a retried call waits for the original answer.
+**Want to build?** Follow [Setup](/opencode/setup), then the [tutorial](/opencode/tutorial/part-1): a bot that answers issues on a GitHub repository.
 
-## How a session reaches your model
+**Looking for something specific?** Every section of these docs is listed below. Models, tools, skills, MCP servers and sandboxes are shared by every harness, and are covered in the [AI docs](/ai).
 
-OpenCode never gets an API key. The harness configures it with one provider that points at a bridge on the sandbox's loopback, and follows the bridge's requests over the sandbox's own `exec`. Each model request is answered by the `AI.Model` Layer in your Durable Object, and each call to one of your tools runs there too. Nothing in the sandbox can reach your runtime, and the sandbox needs no inbound address.
+## The docs
 
-## Your tools
-
-An `AI.Tool` runs in the harness, with the bindings of the runtime that yields it:
-
-```typescript title="src/tools.ts"
-import * as AI from "@alchemy.run/ai";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-
-export class RunTests extends AI.Tool<RunTests>()("run_tests", {
-  description: "Run the test suite and report its exit code.",
-  parameters: Schema.Struct({}),
-  success: Schema.Struct({ exitCode: Schema.Number }),
-}) {}
-
-export const RunTestsLive = RunTests.make(
-  Effect.gen(function* () {
-    return Effect.fn(function* () {
-      const sandbox = yield* AI.Sandbox;
-      const result = yield* sandbox.exec(["npm", "test"]).pipe(Effect.orDie);
-      return { exitCode: result.exitCode };
-    });
-  }),
-);
-```
-
-`AI.Sandbox` is the sandbox of the session the call belongs to, the same one OpenCode works in. List the tool on the harness and provide its Layer:
-
-```typescript
-const harness = yield* OpenCode.Harness({
-  models: [Fast],
-  tools: [AI.CodingTools, RunTests],
-});
-```
-
-OpenCode names a tool it did not ship after the server it came from, so the model sees `alchemy_run_tests`. An `AI.McpServer` listed in `tools` gives every tool it has, as `<server>_<tool>`.
-
-## What a prompt runs with
-
-A prompt uses the harness's first model and every listed tool unless it says otherwise:
-
-```typescript
-const reply = yield* harness.session("pr-142").prompt("Run the tests and fix what fails.", {
-  model: Smart,
-  tools: [AI.Bash, AI.Read, AI.Edit, RunTests],
-  instructions: "Use pnpm, never npm.",
-});
-```
-
-`tools` is exact: the model gets these and nothing else, including any tools the sandbox image configured for OpenCode. Defaults for every prompt of a session go on the session:
-
-```typescript
-const session = harness.session("pr-142", { tools: [AI.CodingTools, RunTests] });
-```
-
-A coding tool can also be yours. `AI.Bash.make` takes the description, the schema and the handler, and the harness then serves it instead of OpenCode's `bash`:
-
-```typescript title="src/AuditedBash.ts"
-import * as AI from "@alchemy.run/ai";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-
-export const AuditedBashLive = AI.Bash.make(
-  {
-    description: "Run a shell command in the workspace. Every command is logged.",
-    parameters: Schema.Struct({ command: Schema.String }),
-    success: Schema.Struct({ exitCode: Schema.Number, output: Schema.String }),
-  },
-  Effect.fn(function* ({ command }) {
-    const sandbox = yield* AI.Sandbox;
-    yield* Effect.log(command);
-    const result = yield* sandbox.exec(["sh", "-c", command]).pipe(Effect.orDie);
-    return { exitCode: result.exitCode, output: result.stdout };
-  }),
-);
-```
-
-The tools only OpenCode has stay its own: `OpenCode.WebFetch`, `OpenCode.TodoWrite` and `OpenCode.Task` are listed as they are and need no Layer.
-
-## Skills
-
-An `AI.Skill` becomes an OpenCode skill. The model sees its name and description and loads its instructions when a task calls for it:
-
-```typescript
-export class Releasing extends AI.Skill<Releasing>()("releasing", {
-  description: "Cut and upload a release. Use when the user asks to ship.",
-  instructions: "Run the tests, bump the version, build, then call alchemy_deploy.",
-}) {}
-
-const harness = yield* OpenCode.Harness({ models: [Fast], skills: [Releasing] });
-```
-
-## The session's sandbox
-
-```typescript
-const session = harness.session("pr-142");
-
-yield* session.suspendSandbox;
-yield* session.removeSandbox;
-```
-
-`suspendSandbox` stops paying for compute and keeps the disk where the platform can. The session's transcript is OpenCode's own, on that disk, so the next prompt resumes the sandbox and continues the same session. `removeSandbox` deletes both.
-
-## OpenCode's own API
-
-`messages` returns the session's transcript as OpenCode stores it, and `request` calls any route of OpenCode's HTTP server in the sandbox:
-
-```typescript
-const messages = yield* session.messages;
-const diff = yield* session.request("GET", `/session/${yield* session.id}/diff`);
-```
-
-OpenCode's configuration (`opencode.json`) passes through `config`, under what the harness sets:
-
-```typescript
-const harness = yield* OpenCode.Harness({
-  models: [Fast],
-  config: { agent: { review: { prompt: "You review diffs. You never edit files." } } },
-});
-```
-
-## Other hosts
-
-The harness needs an id for the instance it runs in, so two instances never share a sandbox. In a Durable Object that is `OpenCodeCloudflare.DurableObjectInstance`. In one long-lived process (a Fly Machine, an ECS task), name it:
-
-```typescript
-const HarnessLive = Layer.mergeAll(ModelsLive, BoatSandbox, OpenCode.NamedInstance("agent-1"));
-```
+<HubMap />
