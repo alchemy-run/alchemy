@@ -98,6 +98,8 @@ An aggregate's state is never read by clients directly: a view projects what the
 
 `Aggregate.ref(id)` builds a reference for stories and views.
 
+To move history in from another system, `accounts.import(id, events, { commandId })` appends already-decided events without `decide`: views and projections apply them, policies and sagas never react. A retry with the same `commandId` returns the first receipt; it fails with `UnexpectedVersion` unless the instance is at `expectedVersion` (default `0`, so import in batches by passing the previous receipt's `version`). Wait with `Projection.caughtUp(receipt)`.
+
 More: [Aggregate](https://alchemy.run/domain/aggregate).
 
 ### Patterns for decide, evolve and reply

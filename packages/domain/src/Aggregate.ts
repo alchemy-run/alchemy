@@ -267,6 +267,38 @@ export class NotScheduled extends Data.TaggedError("NotScheduled")<{
 }> {}
 
 /**
+ * The instance was not at the version an import expected: it already has
+ * events, or other events were committed since the previous import.
+ */
+export class UnexpectedVersion extends Data.TaggedError("UnexpectedVersion")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+  /** The version the import expected. */
+  readonly expected: number;
+  /** The instance's version. */
+  readonly version: number;
+}> {}
+
+/**
+ * Options for {@link Client.import}.
+ */
+export interface ImportOptions {
+  /**
+   * Names the import on its instance. An import retried with an id the
+   * instance has already seen commits nothing and returns the original
+   * receipt.
+   */
+  readonly commandId: string;
+  /**
+   * The version the instance must be at: `0` (no events yet) by default.
+   * Import a long history in batches by passing the previous receipt's
+   * `version`.
+   */
+  readonly expectedVersion?: number;
+}
+
+/**
  * Options for {@link Client.schedule}: when to send, absolutely or after a
  * delay, and the command id that names it.
  */
@@ -391,6 +423,24 @@ export interface Client<Def extends AnyDefinition> {
     commandId: string,
   ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
   /**
+   * Append events that were decided elsewhere, such as history moved from
+   * another system, without running `decide`. `evolve` folds them into the
+   * state; views and projections apply them like any other events, while
+   * policies and sagas never react to them. All of them are committed at
+   * once, stamped with the platform's current time and `commandId`. Wait for
+   * a projection with `Projection.caughtUp(receipt)`.
+   *
+   * Fails with `UnexpectedVersion` when the instance is not at
+   * `expectedVersion` (`0` by default, so an instance with events refuses
+   * an import). Retrying with the same `commandId` returns the original
+   * receipt.
+   */
+  readonly import: (
+    target: Target<Def>,
+    events: ReadonlyArray<InstanceOf<Def["events"][number]>>,
+    options: ImportOptions,
+  ) => Effect.Effect<Receipt<InstanceOf<Def["events"][number]>, void>, UnexpectedVersion>;
+  /**
    * Read the current state of an instance, as of its latest commit: `initial`
    * for one that has never committed.
    */
@@ -421,6 +471,11 @@ export interface ClientImpl {
     target: unknown,
     commandId: string,
   ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
+  readonly import: (
+    target: unknown,
+    events: ReadonlyArray<{ readonly _tag: string }>,
+    options: ImportOptions,
+  ) => Effect.Effect<Receipt, UnexpectedVersion>;
   readonly get: (target: unknown) => Effect.Effect<unknown>;
 }
 

@@ -776,6 +776,41 @@ export const make = (
             });
           const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
             lock.withPermits(1)(commit(id, command, meta));
+          // Events decided elsewhere (seeded or imported): history to views, never to policies.
+          // Callers hold `lock`.
+          const append = (id: string, events: ReadonlyArray<Json>, commandId: string) =>
+            Effect.gen(function* () {
+              const current = instance(id);
+              const result = yield* kit.seed({
+                id,
+                state: current.state,
+                version: current.version,
+                events,
+                commandId,
+                now: now(),
+              });
+              if (current.version === 0) yield* register({ source: kit.name, id });
+              const live = yield* Backfill.routeCommit(
+                sourceRole(id),
+                kit.targets,
+                current.routed,
+                current.version,
+                result.version,
+                result.deliveries,
+              );
+              current.routed = live.routed;
+              current.state = result.state;
+              current.version = result.version;
+              current.events.push(...result.events);
+              yield* announce(id);
+              yield* enqueue(live.send, kit.deliver);
+              return {
+                stream: `${kit.name}/${id}`,
+                version: result.version,
+                events: result.events.map((e) => e.event),
+                reply: null,
+              };
+            });
           recorders.set(kit.name, {
             lock,
             read: (id) => ({ state: instance(id).state, version: instance(id).version }),
@@ -876,31 +911,22 @@ export const make = (
               ),
             seed: (id, events) =>
               lock.withPermits(1)(
+                Effect.suspend(() => append(id, events, `seed:${id}:${instance(id).version}`)).pipe(
+                  Effect.asVoid,
+                ),
+              ),
+            import: (id, events, meta) =>
+              lock.withPermits(1)(
                 Effect.gen(function* () {
                   const current = instance(id);
-                  const result = yield* kit.seed({
-                    id,
-                    state: current.state,
-                    version: current.version,
-                    events,
-                    commandId: `seed:${id}:${current.version}`,
-                    now: now(),
-                  });
-                  if (current.version === 0) yield* register({ source: kit.name, id });
-                  const live = yield* Backfill.routeCommit(
-                    sourceRole(id),
-                    kit.targets,
-                    current.routed,
-                    current.version,
-                    result.version,
-                    result.deliveries,
-                  );
-                  current.routed = live.routed;
-                  current.state = result.state;
-                  current.version = result.version;
-                  current.events.push(...result.events);
-                  yield* announce(id);
-                  yield* enqueue(live.send, kit.deliver);
+                  const duplicate = current.receipts.get(meta.commandId);
+                  if (duplicate?._tag === "Accepted")
+                    return { _tag: "Imported", receipt: duplicate.receipt } as const;
+                  if (current.version !== meta.expectedVersion)
+                    return { _tag: "UnexpectedVersion", version: current.version } as const;
+                  const receipt = yield* append(id, events, meta.commandId);
+                  current.receipts.set(meta.commandId, { _tag: "Accepted", receipt });
+                  return { _tag: "Imported", receipt } as const;
                 }),
               ),
           };

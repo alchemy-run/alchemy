@@ -18,6 +18,7 @@ import {
  */
 import type { HttpEffect } from "alchemy/Http";
 import { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
@@ -52,6 +53,8 @@ import {
   emptyStreamMeta,
   type HostedModel,
   hostedModels,
+  type ImportMeta,
+  type ImportResult,
   inRange,
   type Json,
   type ListRange,
@@ -209,6 +212,14 @@ export interface Host<R = never> {
 }
 
 const pad = (n: number) => n.toString().padStart(12, "0");
+
+/** Put rows in batches: Cloudflare's storage takes at most 128 keys a put. */
+const putRows = <T>(storage: ObjectStorage, rows: ReadonlyArray<readonly [string, T]>) =>
+  Effect.forEach(
+    Arr.chunksOf(rows, 128),
+    (batch) => storage.put(Object.fromEntries(batch) as Record<string, T>),
+    { discard: true },
+  );
 
 /** The storage list that reads exactly the `entry:` rows in `range`. */
 const entryRange = (range: ListRange | undefined): ListOptions => {
@@ -374,11 +385,10 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
         Effect.gen(function* () {
           if (rows.length === 0) return;
           const last = ((yield* state.storage.get<number>(`${name}-seq`)) ?? 0) + rows.length;
-          const entries: Record<string, Row> = {};
-          rows.forEach((row, index) => {
-            entries[`${prefix}${pad(last - rows.length + index + 1)}`] = row;
-          });
-          yield* state.storage.put(entries);
+          yield* putRows(
+            state.storage,
+            rows.map((row, index) => [`${prefix}${pad(last - rows.length + index + 1)}`, row]),
+          );
           yield* state.storage.put(`${name}-seq`, last);
           // The backstop: delivered even if this instance dies before `kick` runs.
           // Its rows are progress, so a callback staging them doesn't hand it
@@ -961,6 +971,46 @@ const aggregateObject = (
         );
         return { sent, kick };
       });
+    // Callers run it through `whenFree`: an import never lands under a decision's intent.
+    const importEvents = (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
+      Effect.gen(function* () {
+        const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
+        if (duplicate?._tag === "Accepted") {
+          const imported: ImportResult = { _tag: "Imported", receipt: duplicate.receipt };
+          return { imported, kick: false };
+        }
+        const current = yield* storedMeta;
+        if (current.held) return yield* new InstanceHeld();
+        if (current.version !== meta.expectedVersion) {
+          const imported: ImportResult = { _tag: "UnexpectedVersion", version: current.version };
+          return { imported, kick: false };
+        }
+        const result = yield* kit.seed({
+          id,
+          state: current.state,
+          version: current.version,
+          events,
+          commandId: meta.commandId,
+          now: yield* Clock.currentTimeMillis,
+        });
+        const receipt = {
+          stream: `${kit.name}/${id}`,
+          version: result.version,
+          events: result.events.map((e) => e.event),
+          reply: null,
+        };
+        const kick = yield* state.storage.transaction(
+          Effect.gen(function* () {
+            yield* state.storage.put<SendResult>(`receipt:${meta.commandId}`, {
+              _tag: "Accepted",
+              receipt,
+            });
+            return yield* persist(id, current.version, result);
+          }),
+        );
+        const imported: ImportResult = { _tag: "Imported", receipt };
+        return { imported, kick };
+      });
     /**
      * Store decided events, the state after them and their deliveries. Call
      * inside the storage transaction that commits them; `true` when there are
@@ -968,9 +1018,10 @@ const aggregateObject = (
      */
     const persist = (id: string, from: number, result: SeedResult) =>
       Effect.gen(function* () {
-        const events: Record<string, StoredEvent> = {};
-        for (const event of result.events) events[`event:${pad(event.envelope.seq)}`] = event;
-        yield* state.storage.put(events);
+        yield* putRows(
+          state.storage,
+          result.events.map((event) => [`event:${pad(event.envelope.seq)}`, event]),
+        );
         yield* state.storage.put("meta", { state: result.state, version: result.version });
         // Listed in the directory after the call returns, not before it commits.
         yield* listAfterCommit(runtime.jobs, id);
@@ -1324,6 +1375,12 @@ const aggregateObject = (
           yield* timers.cancel(name);
           return "Cancelled" as const;
         }).pipe(exclusively, reportDefects),
+      importEvents: (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
+        Effect.gen(function* () {
+          const { imported, kick } = yield* whenFree(id, importEvents(id, events, meta));
+          if (kick) yield* outbox.kick;
+          return imported;
+        }).pipe(reportDefects),
       state: () => reportDefects(currentMeta),
       after: (after: number) => reportDefects(eventsAfter(after)),
       // A decision, with this instance as its primary: see `TwoPhase.decide`.
@@ -2342,6 +2399,14 @@ export const makePlatform = <R>(
                               return Effect.fail(new NotScheduled(fields));
                             return Effect.void;
                           },
+                        ),
+                      ),
+                    import: (id, events, meta) =>
+                      announce.pipe(
+                        Effect.andThen(
+                          unwrapDefects<ImportResult>(
+                            namespace.getByName(id).importEvents(id, events, meta),
+                          ),
                         ),
                       ),
                     state: (id) =>
