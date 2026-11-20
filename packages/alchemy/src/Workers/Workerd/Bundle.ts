@@ -21,6 +21,12 @@ import { workerModulePlugin } from "./WorkerModulePlugin.ts";
  */
 export interface WorkerBuildOptions extends Bundle.BundleConfig {
   /**
+   * Named exports from an Effect-native Worker's `main` module to preserve,
+   * such as native `WorkerEntrypoint` classes. Defaults to `[]`; the default
+   * export remains Alchemy's generated bridge.
+   */
+  nativeExports?: string[];
+  /**
    * Rolldown output options merged over Alchemy's defaults. Use this to
    * control chunking (`codeSplitting`), minification, etc.
    */
