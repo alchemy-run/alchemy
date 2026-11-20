@@ -43,6 +43,7 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
+      { label: "Convex", link: "/convex" },
       { label: "E2B", link: "/e2b" },
       { label: "Daytona", link: "/daytona" },
       { label: "Modal", link: "/modal" },
@@ -1712,6 +1713,50 @@ export default defineConfig({
           ],
         },
         {
+          label: "Convex",
+          items: [
+            { label: "Overview", link: "/convex" },
+            { label: "Setup", link: "/convex/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "convex/tutorial" } }],
+            },
+            {
+              label: "Deployments",
+              items: [
+                { label: "Projects", link: "/convex/deployments/projects" },
+                { label: "Deployments", link: "/convex/deployments/deployments" },
+                { label: "Deploy keys", link: "/convex/deployments/deploy-keys" },
+                { label: "Custom domains", link: "/convex/deployments/custom-domains" },
+                { label: "Canonical URLs", link: "/convex/deployments/canonical-urls" },
+                { label: "Usage limits", link: "/convex/deployments/usage-limits" },
+              ],
+            },
+            {
+              label: "Functions",
+              items: [
+                { label: "Push functions", link: "/convex/functions/functions" },
+                { label: "Environment variables", link: "/convex/functions/environment-variables" },
+                { label: "Connect", link: "/convex/functions/connect" },
+                { label: "Calling functions", link: "/convex/functions/calling-functions" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [{ label: "Log streams", link: "/convex/observability/log-streams" }],
+            },
+            {
+              label: "Self-hosted",
+              items: [
+                { label: "Backend", link: "/convex/self-hosted/backend" },
+                { label: "Platform", link: "/convex/self-hosted/platform" },
+                { label: "Two AWS accounts", link: "/convex/self-hosted/two-accounts" },
+              ],
+            },
+            providerResourcesEntry("Convex"),
+          ],
+        },
+        {
           label: "Neon",
           items: [
             { label: "Overview", link: "/neon" },
@@ -2002,6 +2047,8 @@ export default defineConfig({
               items: [
                 { label: "Story", link: "/domain/story" },
                 { label: "Testing a model", link: "/domain/testing-models" },
+                { label: "Verifying a model", link: "/domain/verifying-models" },
+                { label: "What the prover reads", link: "/domain/verifiable-code" },
                 { label: "Testing an Api", link: "/domain/testing-apis" },
               ],
             },

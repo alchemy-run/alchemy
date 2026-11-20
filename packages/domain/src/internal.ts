@@ -257,7 +257,15 @@ export const sendPayload = (
   payload: unknown,
   options: object,
 ): Effect.Effect<unknown, unknown> => {
-  const { input, commandId } = payload as { readonly input: unknown; readonly commandId?: string };
+  const { input, commandId, consistency } = payload as {
+    readonly input: unknown;
+    readonly commandId?: string;
+    readonly consistency?: string;
+  };
   const call = send as (input: unknown, options: object) => Effect.Effect<unknown, unknown>;
-  return call(input, { ...options, ...(commandId === undefined ? {} : { commandId }) });
+  return call(input, {
+    ...options,
+    ...(commandId === undefined ? {} : { commandId }),
+    ...(consistency === undefined ? {} : { consistency }),
+  });
 };

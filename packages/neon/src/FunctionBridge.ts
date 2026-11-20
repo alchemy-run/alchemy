@@ -1,11 +1,10 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { waitUntil as nativeWaitUntil } from "@neon/functions";
 import { safeHttpEffect } from "alchemy/Http";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { makeEntrypointLayer, RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Self } from "alchemy/Self";
 import { StackContext } from "alchemy/StackContext";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
@@ -39,16 +38,7 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
     FetchHttpClient.layer,
     SecureRandom.layerWebCrypto,
     Layer.succeed(FunctionEnvironment, process.env),
-    Layer.succeed(
-      ConfigProvider.ConfigProvider,
-      reifyBoundConfigProvider(
-        ConfigProvider.orElse(
-          ConfigProvider.fromUnknown({ ALCHEMY_PHASE: "runtime" }),
-          ConfigProvider.fromEnv(),
-        ),
-        process.env,
-      ),
-    ),
+    RuntimeConfigProviderLive,
     Layer.succeed(StackContext, {
       name: process.env.ALCHEMY_STACK_NAME ?? "NeonFunction",
       stage: process.env.ALCHEMY_STAGE ?? "runtime",

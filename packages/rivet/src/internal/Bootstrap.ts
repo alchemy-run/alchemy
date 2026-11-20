@@ -5,14 +5,13 @@
  * @internal
  */
 import { NodeServices } from "@effect/platform-node";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
   entrypointLayer,
   entrypointTag,
   runProcess,
   stackFromEnv,
 } from "alchemy/Runtime/Bootstrap";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -36,15 +35,7 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
     NodeServices.layer,
     FetchHttpClient.layer,
     Logger.layer([Logger.consolePretty()]),
-  ).pipe(
-    Layer.provideMerge(stackFromEnv),
-    Layer.provideMerge(
-      Layer.succeed(
-        ConfigProvider.ConfigProvider,
-        reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
-      ),
-    ),
-  );
+  ).pipe(Layer.provideMerge(stackFromEnv), Layer.provideMerge(RuntimeConfigProviderLive));
 
   const program = Effect.gen(function* () {
     // Every class this node hosts: its exported ones, and those Layers host themselves.

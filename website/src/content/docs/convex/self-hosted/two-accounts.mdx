@@ -1,0 +1,119 @@
+---
+title: Two AWS accounts
+description: Keep production in its own account and give every other stage a preview in a shared development account.
+---
+
+Run production in its own account, and every other branch as a preview in a development account, from the same code.
+
+| Branch | Stage | Account | Convex API | HTTP actions |
+| --- | --- | --- | --- | --- |
+| `main` | `prod` | production | `cloud.example.com` | `site.example.com` |
+| `staging` | `staging` | development | `staging.cloud.previews.example.com` | `staging.site.previews.example.com` |
+| `dev/christian-stamati` | `christian-stamati` | development | `christian-stamati.cloud.previews.example.com` | `christian-stamati.site.previews.example.com` |
+| `feat/users`, PR 11 | `pr-11` | development | `pr-11.cloud.previews.example.com` | `pr-11.site.previews.example.com` |
+
+Each account has one platform, and each platform has one domain: `example.com` in production, `previews.example.com` in development. A backend's hosts are `[<stage>.]cloud.<domain>` and `[<stage>.]site.<domain>`, and the production backend leaves the stage out. The stage is always one label in front of a fixed name, so the certificate the platform gets once covers every stage, and a new preview never waits for one.
+
+Deploying one platform per account keeps a preview from reaching production, because the two share no network, database, role or DNS zone.
+
+## Delegate the previews domain
+
+The `example.com` zone lives in the production account, so the development account needs its own zone for `previews.example.com`. Do this once, in the development account:
+
+```sh
+aws route53 create-hosted-zone --name previews.example.com --caller-reference previews-zone --profile admin-dev
+```
+
+Note its four name servers, then add an `NS` record for `previews.example.com` holding them in the `example.com` zone, in the production account. Previews then write only to their own zone.
+
+The certificate validates over DNS, so this delegation has to exist before the first platform deploy.
+
+:::note
+Previews share `example.com` with production, so a cookie set for `.example.com` reaches them. If that matters, give previews a domain of their own, such as `example-previews.com`.
+:::
+
+## Bootstrap each account
+
+Each account needs Alchemy's assets bucket once:
+
+```sh
+alchemy provider aws bootstrap --aws-profile admin-dev --region eu-central-1
+```
+
+## Deploy the platforms
+
+The development platform has no database server, because previews run on SQLite:
+
+```sh
+CONVEX_DOMAIN=previews.example.com alchemy deploy stacks/platform.ts --stage dev --profile dev --yes
+```
+
+Production's platform has Postgres:
+
+```sh
+CONVEX_DOMAIN=example.com alchemy deploy stacks/platform.ts --stage prod --profile production --yes
+```
+
+The account comes from the Alchemy profile, which you set with `--profile` or `ALCHEMY_PROFILE`. `AWS_PROFILE` has no effect on a deploy, and with neither set, Alchemy uses its `default` profile.
+
+The platform and app stacks must use the same state store. `AWS.state()` keeps state per account, which is what you want here.
+
+## Point a stage at its platform
+
+```typescript
+const isProd = stage === "prod";
+const { convex } = yield* Platform.stage[isProd ? "prod" : "dev"]!;
+const backend = yield* Convex.Backend("Backend", {
+  platform: convex,
+  image,
+  db: isProd ? undefined : { engine: "sqlite" },
+});
+```
+
+A preview keeps its data in SQLite on its task's own disk, so it comes up in minutes and needs no RDS. That data starts empty whenever a new task does, and `Convex.Functions` pushes again then. Production gets its own database on the production server.
+
+Only plain values cross stacks. The database master password stays in SSM and only its parameter name crosses, so it never lands in a stage's state.
+
+## Deploy a stage
+
+```sh
+alchemy deploy --stage christian-stamati --profile dev --yes
+```
+
+```sh
+alchemy deploy --stage prod --profile production --yes
+```
+
+## Map branches to stages in CI
+
+A stage name becomes a hostname label, so keep it short and stable. Map `main` to `prod`, keep `staging` as it is, drop a `dev/` prefix, and name a pull request after its number:
+
+```yaml
+- env:
+    BRANCH: ${{ github.head_ref || github.ref_name }}
+  run: |
+    case "$BRANCH" in
+      main) echo "STAGE=prod" >> "$GITHUB_ENV" ;;
+      staging) echo "STAGE=staging" >> "$GITHUB_ENV" ;;
+      dev/*) echo "STAGE=${BRANCH#dev/}" >> "$GITHUB_ENV" ;;
+      *) echo "STAGE=pr-${{ github.event.number }}" >> "$GITHUB_ENV" ;;
+    esac
+- run: alchemy deploy --stage "$STAGE" --yes
+```
+
+Characters a hostname can't hold become hyphens, so a stage named `dev_sam` gets `dev-sam.cloud.previews.example.com`.
+
+## Run staging on Postgres
+
+Staging should look like production. Give the development platform a database, and leave `db` off for staging:
+
+```typescript
+db: stage === "staging" || isProd ? undefined : { engine: "sqlite" },
+```
+
+```typescript
+const convex = yield* Convex.Platform("Convex", {
+  domain,
+  db: { engine: "postgres", instanceClass: "db.t4g.micro", storage: 20 },
+});
+```

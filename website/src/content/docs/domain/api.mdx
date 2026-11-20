@@ -68,13 +68,15 @@ A command becomes a method that takes its input, and returns the receipt with th
 
 The receipt has the `stream` and `version` the command committed at. `commits` lists every stream it committed to: more than one for a command a decision implements.
 
+The method answers at the commit, a moment before the model's views have the command. Pass `consistency: "strong"` to answer once they have applied it, so a read of a view after it includes the command. See [Choose when it answers](/domain/command#choose-when-it-answers).
+
 ```typescript title="packages/server/test/apiEntries.ts"
 const { reply } = yield* bank.DepositMoney({ accountId, amount: 500 });
 ```
 
 ### Views
 
-A view becomes a namespace with five reads: `get` for the current state, `watch` for the state and every change, each with its cursor, `events` for its emitted events (history, a `CaughtUp` frame, then live), `list` for a page of them, and `snapshot` for the state with the cursor it is valid at. Streams send the same shapes; see [Know when a live read is current](/domain/view#know-when-a-live-read-is-current). `get`, `list` and `snapshot` also take `atLeast`, to read your own write, and fail with `ConsistencyTimeout` if the view hasn't applied it within 10 seconds. Its middleware and its Layer's `validate` decide who may read which key, on every read and on every change while a client watches.
+A view becomes a namespace with five reads: `get` for the current state, `watch` for the state and every change, each with its cursor, `events` for its emitted events (history, a `CaughtUp` frame, then live), `list` for a page of them, and `snapshot` for the state with the cursor it is valid at. Streams send the same shapes; see [Know when a live read is current](/domain/view#know-when-a-live-read-is-current). `get`, `list` and `snapshot` also take `atLeast`, one receipt or several, to wait for a command that answered at its commit, and fail with `ConsistencyTimeout` if the view hasn't applied it within 10 seconds. Its middleware and its Layer's `validate` decide who may read which key, on every read and on every change while a client watches.
 
 ```typescript title="packages/server/test/apiEntries.ts"
 const summary = yield* bank.AccountSummary.get(accountId);

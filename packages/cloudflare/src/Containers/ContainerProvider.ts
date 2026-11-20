@@ -9,15 +9,16 @@ import { AlchemyContext } from "alchemy/AlchemyContext";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { deepEqual, isResolved, stripEffects } from "alchemy/Diff";
 import { collectMountCapabilities, mountInstallLines, MountUnsupported } from "alchemy/Mount";
+import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { type ResourceBinding } from "alchemy/Resource";
+import { envStrings } from "alchemy/RuntimeContext";
 import { sha256Object } from "alchemy/Util/sha256";
 import { normalizeNulls } from "alchemy/Util/stable";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Path from "effect/Path";
@@ -25,7 +26,7 @@ import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
-import { isLiveId } from "../LocalRuntime.ts";
+import { generateLocalId, isLiveId } from "../LocalRuntime.ts";
 import { CloudflareLogs, type TelemetryFilter } from "../Logs.ts";
 import type {
   AnyContainerApplicationProps,
@@ -48,7 +49,7 @@ import {
   isDurableObjectContainer,
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
-import { waitForContainerImage } from "./ContainerImagePreparation.ts";
+import { resolveContainerBuildPaths, waitForContainerImage } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 import { retryContainerPublication } from "./ContainerPublication.ts";
 import { retryNamespacePropagation } from "./DurableObjectApplication.ts";
@@ -195,7 +196,6 @@ export const LiveContainerProvider = () =>
     ContainerPlatform,
     Effect.gen(function* () {
       const { dotAlchemy } = yield* AlchemyContext;
-      const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
       const docker = yield* Docker;
       const http = yield* HttpClient.HttpClient;
@@ -265,9 +265,9 @@ export const LiveContainerProvider = () =>
           memory: props.memory,
           memoryMib: props.memoryMib,
           disk: props.disk,
-          environmentVariables: Object.entries(env).map(([name, value]) => ({
+          environmentVariables: Object.entries(envStrings(env)).map(([name, value]) => ({
             name,
-            value: Redacted.isRedacted(value) ? Redacted.value(value) : value,
+            value,
           })),
           labels: props.labels,
           network: props.network,
@@ -575,10 +575,10 @@ export const LiveContainerProvider = () =>
 
         // Variant 3b — user-supplied Dockerfile path + build context
         // directory.
-        const context = yield* fs.realPath(props.context ?? ".");
-        const dockerfile = props.dockerfile
-          ? yield* fs.realPath(props.dockerfile)
-          : path.join(context, "Dockerfile");
+        const { context, dockerfile } = yield* resolveContainerBuildPaths({
+          context: props.context,
+          dockerfile: props.dockerfile,
+        });
         // Hash what Docker can consume, including gitignored files and file
         // modes, but excluding ancestor lockfiles outside the build context.
         const contextHash = yield* hashDockerBuildInputs(
@@ -1452,8 +1452,8 @@ export const LiveContainerProvider = () =>
           }
         }),
         observe: Effect.fn(function* ({ id, news = {}, previous }) {
-          // Precreate creates — or adopts and updates — the application
-          // named here; ownership follows `read`.
+          // Reconcile after precreate creates — or adopts and updates — the
+          // application named here; ownership follows `read`.
           if (!isResolved(nameOf(news))) return Unresolved;
           const name = yield* createApplicationName(id, nameOf(news));
           const existing = yield* findApplicationByName(name);
@@ -1498,27 +1498,25 @@ export const LiveContainerProvider = () =>
             configuration,
           );
 
-          // Precreate intentionally omits the Durable Object attachment so the
-          // worker can bind to this application id and break the circular
-          // dependency. The final create step recreates the application with the
-          // resolved namespace when needed.
-          const result = yield* createApplication({
-            id,
-            news,
-            // Precreate runs before the engine resolves bindings (that is what
-            // breaks the worker <-> container cycle), so binding-injected env
-            // lands on the following reconcile.
-            bindings: [],
-            name,
-            configuration,
-            durableObjects: undefined,
-            session: {
-              ...session,
-              note: (message) => session.note(message.replace("Creating", "Pre-creating")),
-            },
-          });
+          // Precreate publishes the image but creates no application: the
+          // Worker needs only the image, and Cloudflare rejects a default
+          // application created without its Durable Object binding ("This
+          // account requires a Durable Object binding when creating a default
+          // application."). The `dev:` id is never live, so reconcile creates
+          // the application once, with the namespace the Worker resolved.
           return {
-            ...("applicationId" in result ? result : toAttributes(result)),
+            applicationId: generateLocalId(),
+            applicationName: name,
+            accountId,
+            schedulingPolicy: news.schedulingPolicy ?? "default",
+            instances: undefined,
+            maxInstances: undefined,
+            constraints: undefined,
+            affinities: undefined,
+            configuration: {},
+            durableObjects: undefined,
+            createdAt: "",
+            version: undefined,
             hash: {
               image: imageHash,
               digest: published.digest,
@@ -1590,16 +1588,21 @@ export const LiveContainerProvider = () =>
           // An observed detached application being re-attached reconciles
           // unattached, like precreate: the Worker publishes the namespace in
           // the same apply and the convergence pass attaches it. A missing
-          // application is never created without its attachment.
+          // application is never created without its attachment: a cycle
+          // whose Worker hasn't published the namespace yet (a deployed
+          // Worker gaining this Container) keeps precreate's placeholder, and
+          // the convergence pass creates the application once it has.
           if (hasUnresolvedAttachment && durableObjectsForRecovery === undefined && !existing) {
+            if (output && !isLiveId(output.applicationId)) return output;
             return yield* new ContainerProviderOperationFailed({
               message: `Container application "${name}" has an unresolved Durable Object namespace and no recorded attachment. Reconcile its Worker first.`,
             });
           }
           const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
 
-          // Special case: precreate produced an application without the
-          // durable object attachment, but the real reconcile now has one.
+          // Special case: the observed application's durable object
+          // attachment differs from the desired one (e.g. an adopted or
+          // detached application that is now attached).
           // The DO attachment is immutable, so we delete
           // and recreate. Adoption-by-namespace is preferred when an app
           // already owns the namespace.
@@ -1729,14 +1732,31 @@ export const LiveContainerProvider = () =>
             dev,
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
-          // A `dev:` applicationId only exists locally — there is no live
-          // application to delete on Cloudflare.
-          if (!output.applicationId || !isLiveId(output.applicationId)) return;
+        delete: Effect.fn(function* ({ id, instanceId, output }) {
+          let applicationId = output.applicationId;
+          // A Durable Object Container records no application: its Durable
+          // Object class owns it.
+          if (!applicationId) return;
+          // A `dev:` applicationId is precreate's placeholder: a deploy
+          // interrupted after precreate may still have created the
+          // application under its generated name. An explicit name never
+          // establishes ownership, so only this generation's generated name
+          // is looked up, in the account the placeholder recorded. An
+          // explicitly named application created just before such a crash is
+          // left behind on purpose; a redeploy adopts it instead.
+          if (!isLiveId(applicationId)) {
+            const generated = yield* createPhysicalName({ id, instanceId, lowercase: true });
+            if (output.applicationName !== generated) return;
+            const found = yield* Containers.listContainerApplications({
+              accountId: output.accountId,
+            }).pipe(Effect.map((apps) => apps.find((app) => app.name === generated)));
+            if (found === undefined) return;
+            applicationId = found.id;
+          }
           yield* Effect.logInfo(`Cloudflare Container delete: deleting ${output.applicationName}`);
           yield* Containers.deleteContainerApplication({
             accountId: output.accountId,
-            applicationId: output.applicationId,
+            applicationId,
           }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.void));
         }),
         read: Effect.fn(function* ({ id, olds, output, previous }) {

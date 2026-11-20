@@ -91,6 +91,8 @@ const answer = LanguageModel.generateText({
 
 A rejection (`InsufficientFunds`) or a middleware error (`Unauthenticated`) comes back to the model as the tool's typed failure, so the model can tell the user or try again. Any other error is a defect: the model does not see it.
 
+A command's tool answers at the commit, so a read tool called straight after can be a moment behind. An agent carries no receipt between the two calls. Provide [`Domain.DefaultConsistency`](/domain/command#set-it-for-a-whole-client) as `"strong"` to the tools' Layer, and every command tool answers once the views have applied it. The same holds for an MCP server.
+
 ## An MCP server
 
 `DomainAi.toMcp` registers the tools on Effect's `McpServer`. Provide a transport and the model:

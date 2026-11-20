@@ -10,6 +10,7 @@ import {
 import { findCwdForBundle, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
+import { containerEnvFile, DOCKER_ENV, systemdEnvFile } from "alchemy/Util/envFile";
 import {
   contextRootOf,
   extraFileDestination,
@@ -86,17 +87,6 @@ const matchesConfiguredExternal = (
 };
 
 export { extraFileDestination };
-
-const quoteEnvValue = (value: unknown) => {
-  const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
-  return `'${text.replaceAll(/'/g, `'""'`).replaceAll(/\n/g, "\\n")}'`;
-};
-
-export const renderEnvFile = (env: Record<string, unknown>) =>
-  Object.entries(env)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}=${quoteEnvValue(value)}`)
-    .join("\n");
 
 export const collectBindingState = (bindings: ResourceBinding<ServiceBinding>[]) => {
   const active = bindings.filter(
@@ -515,6 +505,7 @@ WantedBy=multi-user.target
     entryRel?: string;
   }) {
     const appDir = `/opt/${input.unitName}`;
+    const envFile = yield* systemdEnvFile(input.env);
     yield* waitForSsh(input.ssh);
     yield* input.ssh.exec(
       [
@@ -548,7 +539,7 @@ WantedBy=multi-user.target
       ].join("\n"),
     );
     yield* input.ssh.scp(input.archive, `${appDir}/bundle.zip`);
-    yield* input.ssh.scp(new TextEncoder().encode(renderEnvFile(input.env)), `${appDir}/env`);
+    yield* input.ssh.scp(new TextEncoder().encode(envFile), `${appDir}/env`);
     yield* input.ssh.scp(
       new TextEncoder().encode(renderUnit(input.unitName, appDir, input.entryRel ?? "index.mjs")),
       `/etc/systemd/system/${input.unitName}.service`,
@@ -588,17 +579,6 @@ WantedBy=multi-user.target
     );
   });
 
-  /** A `docker run --env-file`: one literal `NAME=value` per line, no quoting. */
-  const renderDockerEnvFile = (env: Record<string, unknown>) =>
-    Object.entries(env)
-      .filter(([, value]) => value !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => {
-        const text = typeof value === "string" ? value : JSON.stringify(value);
-        return `${key}=${text.replaceAll("\n", " ")}`;
-      })
-      .join("\n");
-
   const renderImageUnit = (unitName: string, appDir: string) => `[Unit]
 Description=Alchemy Hetzner Service ${unitName}
 After=network-online.target docker.service
@@ -608,7 +588,8 @@ Requires=docker.service
 [Service]
 Type=simple
 ExecStartPre=-/usr/bin/docker rm -f ${unitName}
-ExecStart=/bin/sh -c 'exec docker run --rm --name ${unitName} --network host --env-file ${appDir}/env "$(cat ${appDir}/image)"'
+EnvironmentFile=-${appDir}/env
+ExecStart=/usr/bin/docker run --rm --name ${unitName} --network host $${DOCKER_ENV} alchemy-${unitName}:latest
 ExecStop=/usr/bin/docker stop ${unitName}
 Restart=always
 RestartSec=5
@@ -628,6 +609,7 @@ WantedBy=multi-user.target
     env: Record<string, unknown>;
   }) {
     const appDir = `/opt/${input.unitName}`;
+    const envFile = yield* containerEnvFile(input.env);
     yield* waitForSsh(input.ssh);
     yield* input.ssh.exec(
       [
@@ -649,7 +631,7 @@ WantedBy=multi-user.target
       ].join("\n"),
     );
     yield* input.ssh.scp(input.archive, `${appDir}/image.tar`);
-    yield* input.ssh.scp(new TextEncoder().encode(renderDockerEnvFile(input.env)), `${appDir}/env`);
+    yield* input.ssh.scp(new TextEncoder().encode(envFile), `${appDir}/env`);
     yield* input.ssh.scp(
       new TextEncoder().encode(renderImageUnit(input.unitName, appDir)),
       `/etc/systemd/system/${input.unitName}.service`,
@@ -658,7 +640,6 @@ WantedBy=multi-user.target
       [
         `set -euo pipefail`,
         loadImageArchiveScript(`${appDir}/image.tar`),
-        `echo "$IMAGE" > ${JSON.stringify(`${appDir}/image`)}`,
         `systemctl daemon-reload`,
         `systemctl enable ${input.unitName}.service`,
         `systemctl restart ${input.unitName}.service`,
