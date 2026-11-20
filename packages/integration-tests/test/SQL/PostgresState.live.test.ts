@@ -1,8 +1,14 @@
 import { makePostgresState } from "@alchemy.run/sql/PostgresState";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as PgClient from "@effect/sql-pg/PgClient";
 import { StateStoreError, type StateService } from "alchemy/State/State";
+import { StateEncryption, type StateEncryptionService } from "alchemy/State/StateEncryption";
+import { STATE_STORE_FORMAT } from "alchemy/State/StoreFormat";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
+import * as SqlClient from "effect/sql/SqlClient";
 
 /**
  * Live counterpart of `PostgresState.test.ts`. The hermetic suite answers the
@@ -121,4 +127,54 @@ describe.skipIf(!runLive)("Postgres state store against real Postgres", { tags: 
       { concurrency: 2 },
     ),
   );
+
+  it.effect("renames a database's value column, so versions before format records fail on it", () =>
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      // The schema an earlier version created, with a row in it.
+      yield* sql`drop table if exists alchemy_resource_state, alchemy_stack_output, alchemy_state_store`;
+      yield* sql`create table alchemy_resource_state (stack text not null, stage text not null, fqn text not null, value jsonb not null, updated_at timestamptz not null default now(), primary key (stack, stage, fqn))`;
+      yield* sql`create table alchemy_stack_output (stack text not null, stage text not null, value jsonb not null, updated_at timestamptz not null default now(), primary key (stack, stage))`;
+      yield* sql`insert into alchemy_resource_state (stack, stage, fqn, value) values (${request.stack}, ${request.stage}, ${request.fqn}, ${JSON.stringify({ status: "created", logicalId: "db" })}::jsonb)`;
+
+      yield* withLiveStore((store) =>
+        Effect.gen(function* () {
+          expect(yield* store.get(request)).toMatchObject({ status: "created" });
+          yield* store.deleteStack({ stack });
+        }),
+      );
+
+      const [format] = yield* sql`select format from alchemy_state_store`;
+      expect(Number(format!.format)).toBe(STATE_STORE_FORMAT);
+      // What an earlier version runs to read a record now fails.
+      const old = yield* sql`select value from alchemy_resource_state`.pipe(Effect.flip);
+      expect(Cause.pretty(Cause.fail(old))).toContain('column "value" does not exist');
+    }).pipe(Effect.provide(PgClient.layer({ url: Redacted.make(liveUrl ?? "") }))),
+  );
+
+  it.effect("keeps a StateEncryption's ciphertext in the row, readable by status", () =>
+    withLiveStore((store) =>
+      Effect.gen(function* () {
+        yield* store.deleteStack({ stack });
+        yield* store.set({
+          ...request,
+          value: { ...(sampleState as object), status: "replaced" } as never,
+        });
+        const replaced = (yield* store.getReplacedResources(request)) as unknown as ReadonlyArray<{
+          output: { password: Redacted.Redacted<string> };
+        }>;
+        expect(replaced.length).toBe(1);
+        expect(Redacted.value(replaced[0]!.output.password)).toBe("s3cret");
+        yield* store.deleteStack({ stack });
+      }),
+    ).pipe(Effect.provide(Layer.succeed(StateEncryption, testEncryption))),
+  );
 });
+
+/** A fixed-key StateEncryption, enough to exercise the store's use of it. */
+const fixedKey = new Uint8Array(32).fill(7);
+const testEncryption: StateEncryptionService = {
+  id: "test",
+  generate: () => Effect.succeed({ plaintext: fixedKey, wrapped: "Zml4ZWQ=" }),
+  unwrap: () => Effect.succeed(fixedKey),
+};

@@ -327,20 +327,22 @@ export const DataProductsDataAssetProvider = () =>
     }),
 
     delete: Effect.fn(function* ({ output }) {
-      const operation = yield* dataplex
-        // No etag: the recorded one goes stale as the server settles an
-        // update ("Provided etag is out of date"), and delete is unconditional.
-        .deleteProjectsLocationsDataProductsDataAssets({
-          name: output.name,
-        })
-        .pipe(
-          Effect.retry({
-            while: (error) => error._tag === "Conflict",
-            times: 8,
-            schedule: Schedule.spaced("2 seconds"),
-          }),
-          Effect.catchTag("NotFound", () => Effect.undefined),
-        );
+      const operation = yield* (
+        dataplex
+          // No etag: the recorded one goes stale as the server settles an
+          // update ("Provided etag is out of date"), and delete is unconditional.
+          .deleteProjectsLocationsDataProductsDataAssets({
+            name: output.name,
+          })
+          .pipe(
+            Effect.retry({
+              while: (error) => error._tag === "Conflict",
+              times: 8,
+              schedule: Schedule.spaced("2 seconds"),
+            }),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          )
+      );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

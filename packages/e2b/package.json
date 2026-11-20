@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/e2b",
-  "version": "2.0.0-beta.86",
+  "version": "2.0.0-beta.87",
   "description": "E2B sandboxes, templates, snapshots, volumes and secrets for Alchemy.",
   "keywords": [
     "agents",

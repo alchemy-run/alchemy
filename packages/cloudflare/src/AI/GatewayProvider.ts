@@ -257,15 +257,17 @@ export const GatewayProviderProvider = () =>
       });
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* aiGateway
-        .deleteProviderConfig({
-          accountId: output.accountId,
-          gatewayId: output.gatewayId,
-          id: output.providerConfigId,
-        })
-        // Cloudflare reports both a missing config and a missing parent
-        // gateway with code 7002 — either way it's already gone.
-        .pipe(Effect.catchTag("ProviderConfigNotFound", () => Effect.void));
+      yield* (
+        aiGateway
+          .deleteProviderConfig({
+            accountId: output.accountId,
+            gatewayId: output.gatewayId,
+            id: output.providerConfigId,
+          })
+          // Cloudflare reports both a missing config and a missing parent
+          // gateway with code 7002 — either way it's already gone.
+          .pipe(Effect.catchTag("ProviderConfigNotFound", () => Effect.void))
+      );
     }),
     // Provider configs are nested under an AI Gateway, with no account-wide
     // collection endpoint. Enumerate every gateway in the account, then fan

@@ -65,14 +65,14 @@ import type { BetterAuthMigrationError } from "./Errors.ts";
  * @provides BetterAuth.Database
  * @product D1
  */
-export const CloudflareD1 = (
-  database: Cloudflare.D1.Database | Effect.Effect<Cloudflare.D1.Database, never, any>,
+export const CloudflareD1 = <R = never>(
+  database: Cloudflare.D1.Database | Effect.Effect<Cloudflare.D1.Database, never, R>,
 ) =>
   Layer.effect(
     Database,
     Effect.gen(function* () {
       const db = Effect.isEffect(database)
-        ? yield* database as Effect.Effect<Cloudflare.D1.Database>
+        ? yield* database as Effect.Effect<Cloudflare.D1.Database, never, R>
         : database;
       const client = yield* Cloudflare.D1.QueryDatabase(db);
       const service: DatabaseService = {

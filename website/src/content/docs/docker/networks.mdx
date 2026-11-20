@@ -106,6 +106,33 @@ const dualStack = yield* Docker.Network("dual-stack", {
 
 `driver` picks the kind of network: `bridge` by default on one engine, `overlay` across a [swarm](/docker/swarm), or `macvlan` for addresses on the host's own network. `driverOpts` passes driver settings through as they are.
 
+## Configure each container attachment
+
+How a container joins a network is set on the container. Each entry in `networks` can pin addresses from the network's subnets:
+
+```typescript
+const api = yield* Docker.Container("api", {
+  image: "nginx:alpine",
+  hostname: "api",
+  networks: [
+    {
+      name: dualStack.name,
+      aliases: ["api"],
+      ipv4Address: "10.51.0.10",
+      ipv6Address: "fd51:3456:789a::10",
+      gatewayPriority: 1,
+    },
+  ],
+  start: true,
+});
+```
+
+Leave the addresses out and Docker assigns them. `gatewayPriority` picks which network carries the default route, highest first. An entry's `driverOpts` configures this one attachment, not the network.
+
+A container with `networks` joins only those networks. Docker's default `bridge` is left out, so a container on an `internal` network really has no way out. A container created before this joined `bridge` too; its next deploy disconnects it. Networks attached by other tools stay.
+
+Changing an attachment reconnects it in place, and the container keeps running. If Docker refuses the new settings, Alchemy reconnects the old ones.
+
 ## What a change does
 
 A network's settings are fixed when it's created, so changing any of them replaces the network. Docker refuses to remove a network while containers are attached, and Alchemy doesn't disconnect containers it doesn't manage. Settle a network's settings before you attach anything long-lived to it.

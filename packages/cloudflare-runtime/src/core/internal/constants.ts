@@ -1,11 +1,12 @@
 export const SOCKET_USER_ENTRY = "user-entry";
+export const SOCKET_USER_ENTRY_UNIX = "user-entry-unix";
 export const SERVICE_USER_WORKER = "user-worker";
 
 /**
  * Default date shared by deployed Workers, framework runners, previews, and
  * internal isolates.
  */
-export const DEFAULT_COMPATIBILITY_DATE = "2026-08-31";
+export const DEFAULT_COMPATIBILITY_DATE = "2026-11-17";
 
 export const NODEJS_COMPAT_DEFAULT_ON = "2026-08-04";
 

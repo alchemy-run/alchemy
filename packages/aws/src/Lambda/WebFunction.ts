@@ -13,6 +13,7 @@ import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
+import { envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import {
   createInternalTags,
@@ -1039,17 +1040,14 @@ export const WebFunctionProvider = () =>
             Effect.map((policy): unknown => JSON.parse(decodeURIComponent(policy.PolicyDocument))),
             Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           );
+        const readTags = LambdaWeb.listTags({ resource: functionArn }).pipe(
+          Effect.map((r) => tagRecord(r.tags)),
+          Effect.catchTag("ResourceNotFoundException", () =>
+            Effect.succeed({} as Record<string, string>),
+          ),
+        );
         const [tags, bindingPolicy, guardPolicy] = yield* Effect.all(
-          [
-            LambdaWeb.listTags({ resource: functionArn }).pipe(
-              Effect.map((r) => tagRecord(r.tags)),
-              Effect.catchTag("ResourceNotFoundException", () =>
-                Effect.succeed({} as Record<string, string>),
-              ),
-            ),
-            readInlinePolicy(policyName),
-            readInlinePolicy(LOG_GROUP_GUARD_POLICY),
-          ],
+          [readTags, readInlinePolicy(policyName), readInlinePolicy(LOG_GROUP_GUARD_POLICY)],
           { concurrency: "unbounded" },
         );
         return {
@@ -1248,12 +1246,7 @@ export const WebFunctionProvider = () =>
             news.bundle !== false &&
             (sourcemap === "inline" ||
               ((news.uploadSourceMap ?? true) && (sourcemap === true || sourcemap === "hidden")));
-          const userEnv = Object.fromEntries(
-            Object.entries({ ...bindingEnv, ...news.env }).map(([k, v]) => [
-              k,
-              typeof v === "string" ? v : JSON.stringify(v),
-            ]),
-          );
+          const userEnv = envStrings({ ...bindingEnv, ...news.env });
           const nodeOptions = [
             userEnv.NODE_OPTIONS,
             enableSourceMaps ? "--enable-source-maps" : undefined,

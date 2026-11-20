@@ -20,6 +20,7 @@ import {
   type ServerHost,
 } from "alchemy/Runtime/Process";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
@@ -272,7 +273,7 @@ const createJobDefinitionRuntimeContext = (id: string): JobDefinitionRuntimeCont
     // generated container entrypoint) instead of booting an HTTP server.
     serve: ((_handler, options) => {
       const run = (options?.shape as { run?: unknown } | undefined)?.run;
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped impl shape; runner is a host-provided Effect
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- untyped impl shape; runner is a host-provided Effect
       return Effect.isEffect(run) ? base.run(run as Effect.Effect<void, never, any>) : Effect.void;
     }) as HostRuntimeContext["serve"],
   } as JobDefinitionRuntimeContext;
@@ -1165,21 +1166,16 @@ await bootstrap(entrypoint);
               vcpus: String(news.vcpus ?? 0.25),
               memory: String(news.memory ?? 512),
               environment: {
-                // Bindings + alchemy runtime env first (JSON-encoded), then
-                // the caller's `env`, then plain `environment` wins last.
-                ...Object.fromEntries(
-                  Object.entries({
-                    ...bindingEnv,
-                    ...alchemyEnv,
-                    // Fargate does not inject AWS_REGION — the bundled
-                    // program's `Region.fromEnv()` needs it.
-                    AWS_REGION: region,
-                    ...news.env,
-                  }).map(([key, value]) => [
-                    key,
-                    typeof value === "string" ? value : JSON.stringify(value),
-                  ]),
-                ),
+                // Bindings + alchemy runtime env first, then the caller's
+                // `env`, then plain `environment` wins last.
+                ...envStrings({
+                  ...bindingEnv,
+                  ...alchemyEnv,
+                  // Fargate does not inject AWS_REGION — the bundled
+                  // program's `Region.fromEnv()` needs it.
+                  AWS_REGION: region,
+                  ...news.env,
+                }),
                 ...news.environment,
               },
               jobRoleArn,

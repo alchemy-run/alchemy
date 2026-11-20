@@ -30,3 +30,4 @@ export * from "./Pool.ts";
 export * from "./Providers.ts";
 export * from "./Services.ts";
 export * as Workflows from "./Workflows/index.ts";
+export * from "./WebSocket.ts";

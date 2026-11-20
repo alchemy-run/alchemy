@@ -39,8 +39,8 @@ import {
   makeImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
+  type EcrRegistryImageSource,
   type ImageSourceLike,
-  type RegistryImageSource,
 } from "../ECR/ImageSource.ts";
 import type { ListenerAction, ListenerRuleCondition } from "../ELBv2/common.ts";
 import { Listener } from "../ELBv2/Listener.ts";
@@ -828,8 +828,8 @@ export interface BundledServiceProps extends ImageOwningServicePropsBase, Bundle
 /** Build the user's own Dockerfile into the service's image. */
 export interface DockerfileServiceProps
   extends ImageOwningServicePropsBase, DockerfileImageSource {}
-/** Run a pre-built registry image, mirrored into ECR. */
-export interface ImageServiceProps extends ImageOwningServicePropsBase, RegistryImageSource {}
+/** Run a pre-built registry image, mirrored into ECR unless `mirror: false`. */
+export interface ImageServiceProps extends ImageOwningServicePropsBase, EcrRegistryImageSource {}
 
 /**
  * Service props — either reference an existing task definition (`task:`) or
@@ -980,7 +980,8 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  *
  * The service's image comes from one of four sources:
  *
- * - `image` — run a pre-built registry image, mirrored into ECR.
+ * - `image` — run a pre-built registry image, mirrored into ECR unless
+ *   `mirror: false`.
  * - `context` — build your own Dockerfile.
  * - `main` — bundle an inline Effect program (servers return `{ fetch }`).
  * - `task:` — deploy an existing `AWS.ECS.Task`'s definition; the Service
@@ -1401,14 +1402,9 @@ export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRu
   transformProps: (id, props) => transformServiceProps(id, props),
   // Autoscaling references the service's own Output attributes (cluster/name/
   // target-group ARNs), so it composes AFTER the resource exists.
-  onCreate: (resource, props) =>
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- Platform onCreate hook type is Effect<void, never, any>; failures still propagate at runtime
-    composeServiceScaling(
-      resource as Service,
-      props as ServiceProps,
-      // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer)
-      // surface through the deploy like any resource-construction error.
-    ) as Effect.Effect<void, never, any>,
+  // Typed failures (e.g. RequestCountScalingRequiresLoadBalancer) surface
+  // through the deploy like any resource-construction error.
+  onCreate: (resource, props) => composeServiceScaling(resource as Service, props as ServiceProps),
 });
 
 /** The BYO task reference, when the props use the `task:` form. */
@@ -1699,10 +1695,7 @@ const composeServiceRegistry = (id: string, props: ServiceProps) =>
  * namespace and rewrite the props to reference their outputs (the internal
  * `ingress` prop and `serviceRegistries`). A no-op at runtime.
  */
-const transformServiceProps = (
-  id: string,
-  props: ServiceProps,
-): Effect.Effect<ServiceProps, unknown, any> =>
+const transformServiceProps = (id: string, props: ServiceProps) =>
   Effect.gen(function* () {
     // Composition is a plan/deploy concern — never runs inside bundles.
     if (globalThis.__ALCHEMY_RUNTIME__) {
@@ -2350,10 +2343,7 @@ const composeManagedIngress = (
  * because the scalable target's `resourceId` and the request-count metric's
  * `ResourceLabel` are derived from the service's own Output attributes.
  */
-const composeServiceScaling = (
-  service: Service,
-  props: ServiceProps | undefined,
-): Effect.Effect<void, unknown, any> =>
+const composeServiceScaling = (service: Service, props: ServiceProps | undefined) =>
   Effect.gen(function* () {
     // Composition is a plan/deploy concern — never runs inside bundles.
     if (globalThis.__ALCHEMY_RUNTIME__) {

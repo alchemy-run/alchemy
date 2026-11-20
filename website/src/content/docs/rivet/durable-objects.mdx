@@ -49,6 +49,12 @@ const kitchen = rooms.getByName("kitchen");
 
 You never create an instance. Every name exists from the start, and the first call to a name brings its instance to life.
 
+A name is a key of one part. When an instance is identified by several values, such as a tenant and a room, address it by every part with `getByKey`, so no value can pass for another by containing a separator. It is the same key a RivetKit client passes to `getOrCreate`, and the instance reads it back from `DurableObjectState`'s `key`:
+
+```typescript title="src/api.ts"
+const room = rooms.getByKey(["acme", "lobby"]);
+```
+
 ## One instance per name
 
 However many callers ask for the lobby, from however many servers, they all reach the same instance. There's never a second lobby with a different idea of who's in it.
@@ -105,7 +111,7 @@ return Effect.gen(function* () {
 
 ## Give it methods
 
-Every function the inner Effect returns, apart from `fetch` and `alarm`, is a method callers can run:
+Every function the inner Effect returns, apart from `fetch`, `alarm`, `onSleep`, `onDestroy` and the `webSocket*` handlers, is a method callers can run:
 
 ```typescript title="src/room.ts"
 return {
@@ -140,6 +146,30 @@ return {
 
 Callers forward a request to it with `room.fetch(request)`.
 
+## Hold WebSockets
+
+`fetch` can accept a WebSocket instead of answering. `Rivet.upgrade()` accepts it and returns the `101` response to hand back:
+
+```typescript title="src/room.ts"
+return {
+  fetch: Effect.gen(function* () {
+    const [response, socket] = yield* Rivet.upgrade({ tags: ["chat"] });
+    yield* socket.send(`welcome to ${state.id.name}`);
+    return response;
+  }),
+  webSocketMessage: (socket: Rivet.WebSocket, message: string | Uint8Array) =>
+    Effect.gen(function* () {
+      for (const peer of yield* state.getWebSockets("chat")) yield* peer.send(message);
+    }),
+};
+```
+
+A caller passes the upgrade request along with `room.fetch(request)`, and Rivet's gateway carries the socket to the instance that owns the name. The room receives its messages in `webSocketMessage`, and `webSocketClose` and `webSocketError` when it ends. `state.getWebSockets(tag)` finds every open socket with a tag, and the room stays awake while it holds any.
+
+:::caution
+Rivet 3 doesn't hibernate WebSockets yet, so a room holding open sockets stays awake. Hibernatable WebSockets are coming soon.
+:::
+
 ## Wake it with alarm
 
 Return an `alarm` handler, and Rivet calls it when the room's alarm comes due:
@@ -154,6 +184,20 @@ return {
 ```
 
 `alarm` isn't a method; callers can't run it. The room sets the alarm itself with `state.storage.setAlarm`. See [Storage](/rivet/storage#set-an-alarm).
+
+## Wind it down with onSleep and onDestroy
+
+An instance sleeps once it has been idle for a while, and wakes with its storage intact on its next call. Return `onSleep` to finish or hand off work in flight before it does, and `onDestroy` to release what the instance owns outside its storage before it is destroyed:
+
+```typescript title="src/room.ts"
+return {
+  close: () => state.destroy(),
+  onSleep: () => Effect.log("room going to sleep"),
+  onDestroy: () => Effect.log("room destroyed"),
+};
+```
+
+`state.sleep()` puts the instance to sleep without waiting for it to go idle; `onSleep` runs, and its next call wakes it with its storage intact. `state.destroy()` destroys the instance and its storage once its calls finish, and the next call to the same name starts an empty instance. Neither hook is a method, and neither runs for an instance that took no call since it last woke.
 
 ## Keep its code out of its callers
 

@@ -1470,10 +1470,10 @@ const makePlan = <A>(
     ]);
 
     // Resources that participate in a cycle when both prop and binding
-    // edges are considered. Used below to decide whether an acyclic
-    // binding edge should also become a downstream edge.
+    // edges are considered, each mapped to the members of its own cycle.
+    // Used below to decide whether a binding edge stays inside one cycle
+    // or should also become a downstream edge.
     const combinedCycles = findCycles(allUpstreamDependencies);
-    const combinedCycleMembers = new Set(combinedCycles.keys());
     const peersOf = (fqn: string): Peers | undefined => {
       const members = combinedCycles.get(fqn);
       return members && { members };
@@ -1524,11 +1524,7 @@ const makePlan = <A>(
         if (downFqn === upFqn) continue;
         // Binding-only edge — exclude when both endpoints sit inside
         // the same SCC of the combined graph.
-        if (
-          !propDeps.has(upFqn) &&
-          combinedCycleMembers.has(upFqn) &&
-          combinedCycleMembers.has(downFqn)
-        ) {
+        if (!propDeps.has(upFqn) && combinedCycles.get(downFqn)?.has(upFqn)) {
           continue;
         }
         let downstream = directDownstream.get(upFqn);
@@ -2674,7 +2670,12 @@ const makePlan = <A>(
     // `RemovalPolicy.protect()`: refuse the whole plan, before anything is
     // applied, when it would start replacing or delete a protected resource. Both
     // the declaration and the persisted row count, so dropping `protect()`
-    // in the same deploy as the replacement is refused too.
+    // in the same deploy as the replacement is refused too. An `updating` row
+    // carries the declared policy of an update that may have failed, so the
+    // last successful deploy's policy on `old` counts as well.
+    const isProtected = (row: ResourceState | undefined) =>
+      row?.removalPolicy === "protect" ||
+      (row?.status === "updating" && row.old?.removalPolicy === "protect");
     yield* Effect.forEach(
       // An Action declared at a protected resource's FQN would overwrite its
       // row without ever planning a delete, abandoning the resource.
@@ -2690,15 +2691,15 @@ const makePlan = <A>(
             // Finishing a `replaced` row's drain only deletes an old generation
             // the dependents already left; the current one is untouched.
             !(node.state.status === "replaced" && !node.restart) &&
-            (node.resource.RemovalPolicy === "protect" || node.state.removalPolicy === "protect")
+            (node.resource.RemovalPolicy === "protect" || isProtected(node.state))
               ? [{ fqn, action: "replace" as const }]
               : [],
           ),
           ...Object.entries(deletions).flatMap(([fqn, node]) =>
-            node?.state.removalPolicy === "protect" ? [{ fqn, action: "delete" as const }] : [],
+            isProtected(node?.state) ? [{ fqn, action: "delete" as const }] : [],
           ),
           ...takenOverByActions.flatMap(([fqn, row]) =>
-            !isActionState(row) && (row as ResourceState | undefined)?.removalPolicy === "protect"
+            !isActionState(row) && isProtected(row as ResourceState | undefined)
               ? [{ fqn, action: "delete" as const }]
               : [],
           ),

@@ -15,7 +15,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Alchemy.localState(),
 });
 
-const stack = beforeAll(deploy(Stack));
+const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
 afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 
 const { executeWhenReady } = Test;
