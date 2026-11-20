@@ -3,15 +3,15 @@ import type { MemoOptions } from "alchemy/Command/Memo";
 import * as DNS from "alchemy/DNS/Adapter";
 import * as Output from "alchemy/Output";
 import { ProviderModePolicy } from "alchemy/ProviderMode";
-import type { ResourceLike } from "alchemy/Resource";
 import type { WebsiteAssetsProps } from "alchemy/Website/assets";
 import { Server, type ServerDevProps } from "alchemy/Website/Server";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { Compute, type ComputeProps } from "../Compute.ts";
-import { CustomDomain } from "../CustomDomain.ts";
+import { websiteDomain } from "../internal/WebsiteDomain.ts";
 import { Project } from "../Project.ts";
 import type { Providers } from "../Providers.ts";
+import type { RoutingUrl } from "../RoutingUrl.ts";
 import type { PrismaRegionId } from "../Types.ts";
 import { WebsiteArtifact } from "./Artifact.ts";
 
@@ -48,10 +48,12 @@ export type WebsiteDomain =
       name: string;
       /**
        * DNS host that publishes the hostname's `CNAME` to the app's regional
-       * switchboard (`switchboard.{region}.prisma.build`) before the domain
-       * is registered — Prisma verifies it on registration (see
+       * switchboard and the workspace's ownership `TXT` record, as
+       * `Prisma.RoutingUrl`'s `dns` does (see
        * [DNS Adapters](/infrastructure-as-code/dns-adapters)), e.g.
-       * `Cloudflare.DNS.Adapter()`. Omitted: publish it yourself first.
+       * `Cloudflare.DNS.Adapter()`. Omitted: publish `domain.records` yourself.
+       * Removing it removes the `TXT` and `CNAME`; to publish them with another
+       * tool, publish them there first, copied from your DNS host.
        */
       dns?: DNS.DnsConfig;
     };
@@ -59,17 +61,6 @@ export type WebsiteDomain =
 /** The hostname of a {@link WebsiteDomain}. */
 export const websiteDomainName = (domain: WebsiteDomain | undefined): string | undefined =>
   domain === undefined || typeof domain === "string" ? domain : domain.name;
-
-/**
- * The regional switchboard a custom hostname CNAMEs to, derived from the
- * app endpoint (`https://{app}.{region}.prisma.build` →
- * `switchboard.{region}.prisma.build`).
- */
-const switchboardTarget = (endpoint: string | undefined) => {
-  const host = (endpoint ?? "").replace(/^https?:\/\//, "").replace(/\/.*$/, "");
-  const dot = host.indexOf(".");
-  return dot < 0 ? host : `switchboard${host.slice(dot)}`;
-};
 
 /** Shared contract for Prisma's framework website composites. */
 export interface FrameworkSiteProps {
@@ -86,14 +77,11 @@ export interface FrameworkSiteProps {
   /** Native framework development server options, including external-server mode. */
   dev?: ServerDevProps;
   /**
-   * Custom hostname attached using `Prisma.CustomDomain`.
-   *
-   * A string (or `{ name }`) leaves DNS to you: Prisma verifies the
-   * hostname's `CNAME` to `switchboard.{region}.prisma.build` when the
-   * domain is registered, so publish it first (`domain.dnsRecords` lists
-   * it). Set `dns` (e.g.
-   * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`) to
-   * publish it through the DNS host before registration. See
+   * Custom hostname, saved as a `Prisma.RoutingUrl`. The deploy does not wait
+   * for it to serve: `domain.status` is `pending` and `domain.records` lists
+   * the `TXT` and `CNAME` to publish until Prisma finds them. Set `dns` (e.g.
+   * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`) to publish
+   * them through the DNS host. See
    * [DNS Adapters](/infrastructure-as-code/dns-adapters).
    */
   domain?: WebsiteDomain;
@@ -117,8 +105,8 @@ export interface Website {
   compute: Compute | undefined;
   /** Project resource or existing project reference. Undefined during native development. */
   project: WebsiteProjectReference | undefined;
-  /** Custom-domain resource, including DNS records and certificate status. Undefined without domain or during native development. */
-  domain: CustomDomain | undefined;
+  /** The custom hostname's RoutingUrl, with its `status` and the `records` still to publish. Undefined without domain or during native development. */
+  domain: RoutingUrl | undefined;
 }
 
 /** Internal framework-to-Node-target wiring. */
@@ -179,27 +167,8 @@ export const deployWebsite = Effect.fn(function* (
       NODE_ENV: "production",
     },
   });
-  const domainName = websiteDomainName(props.domain);
-  // Prisma verifies the CNAME when the domain is registered, so the record
-  // must exist first: the CustomDomain's hostname depends on it.
-  const routing =
-    domainName && typeof props.domain === "object" && props.domain.dns
-      ? yield* (yield* DNS.resolve(props.domain.dns)).alias("DomainAlias", {
-          name: domainName,
-          target: {
-            hostname: Output.map(compute.appEndpointDomain, switchboardTarget),
-          },
-        })
-      : undefined;
-  const domain = domainName
-    ? yield* CustomDomain("Domain", {
-        app: compute,
-        hostname:
-          routing === undefined
-            ? domainName
-            : Output.map(Output.of(routing as ResourceLike), () => domainName),
-      })
-    : undefined;
+  const domain =
+    props.domain === undefined ? undefined : yield* websiteDomain(props.domain, compute);
   return {
     url: domain ? Output.map(domain.hostname, (hostname) => `https://${hostname}`) : compute.url,
     compute,

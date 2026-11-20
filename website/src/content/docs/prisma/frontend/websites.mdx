@@ -115,7 +115,7 @@ export default Alchemy.Stack(
 The result is `{ url, compute, project, domain }`. `site.url` is the
 Compute endpoint on deploy and the local dev-server address during
 `alchemy dev`; the three backing resources are undefined during native
-dev. `domain` is also undefined when no custom hostname is requested.
+dev. `domain` is the hostname's `Prisma.RoutingUrl`, undefined when no custom hostname is requested.
 `Alchemy.localState()` keeps state on this machine; keep that state
 available for subsequent deploys and teardown.
 
@@ -181,15 +181,17 @@ const site = yield* Prisma.Website.Astro("Web", {
 });
 ```
 
-`domain` creates a [`Prisma.CustomDomain`](/providers/prisma/customdomain)
-and changes `site.url` to `https://app.example.com`.
+`domain` saves the hostname as a [`Prisma.RoutingUrl`](/prisma/compute/apps#routing-urls) and changes `site.url` to `https://app.example.com` from the first deploy.
 
-Domain provisioning is asynchronous. `site.domain` is the created
-CustomDomain resource. Configure its `dnsRecords` with your DNS provider
-and inspect `status`, `foundryStatus`, and `failureReason` before
-sending production traffic.
+The deploy does not wait for the hostname to serve. `site.domain` is the RoutingUrl: its `status` is `pending` until Prisma finds the hostname's DNS records, and its `records` lists the `TXT` record that proves your workspace owns the hostname and the `CNAME` to the regional switchboard. Publish them with your DNS host; Prisma makes the RoutingUrl `active` once it finds them.
 
-To publish `dnsRecords` automatically, pass the DNS host as `dns`:
+:::note
+A site whose DNS is not ready now deploys and reports `pending`. Before, the deploy failed until the DNS was published.
+
+`site.domain` is now the hostname's `Prisma.RoutingUrl`, not a `Prisma.CustomDomain`. Read `records` where you read `dnsRecords`, `status` (`pending` or `active`) and `firstUnmetCondition` where you read `foundryStatus` and `failureReason`, and `routingUrlId` where you read `customDomainId`.
+:::
+
+To publish both records in the same deploy, pass the DNS host as `dns`:
 
 ```typescript
 const site = yield* Prisma.Website.Astro("Web", {
@@ -197,11 +199,13 @@ const site = yield* Prisma.Website.Astro("Web", {
 });
 ```
 
-`AWS.Route53.Adapter()` and `Hetzner.DNS.Adapter()` work the same way. See
-[DNS Adapters](/infrastructure-as-code/dns-adapters). Changing an existing
-domain's hostname or app is rejected; add a second domain, verify DNS
-and TLS, cut traffic over, then remove the old one. See
-[Compute custom domains](/prisma/compute/apps#custom-domains).
+`AWS.Route53.Adapter()` and `Hetzner.DNS.Adapter()` work the same way. See [DNS Adapters](/infrastructure-as-code/dns-adapters) and [Routing URLs](/prisma/compute/apps#routing-urls) for what `dns` publishes and when.
+
+A site deployed with an earlier version keeps serving through the upgrade: the RoutingUrl takes over the hostname Prisma recorded for the site's custom domain, and the hostname's records stay published. Deploy the upgrade with the same `domain` first, and change the hostname in a later deploy. A deploy that upgrades and changes the hostname at once stops serving the old hostname without checking that the new one can serve.
+
+Removing `dns` from a site removes its `TXT` and `CNAME`. To publish them with another tool instead, publish them there first: `_prisma-verification.<hostname>` with your workspace's value and the `CNAME` to the switchboard. Copy them from your DNS host, because `site.domain.records` is empty once the hostname is `active`.
+
+Changing the hostname of a site that serves it is refused until the new hostname can serve. See [Routing URLs](/prisma/compute/apps#routing-urls).
 
 ## Where next
 

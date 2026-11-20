@@ -56,7 +56,7 @@ Hetzner can't, so an apex hostname on those hosts needs an AWS alias target
 | `Fly.Website.*` | You publish the records | The ACME challenge `CNAME`; `A`/`AAAA` records at the site |
 | `Railway.Website.*` | You publish the records | The `CNAME` and verification `TXT` Railway requires |
 | `Neon.Website.*` | You publish the records | A `CNAME` to the custom domain's target |
-| `Prisma.Website.*` | You publish the records | A `CNAME` to the app's regional switchboard, published before the domain is registered |
+| `Prisma.Website.*` and `Prisma.RoutingUrl` | You publish the records | The ownership `TXT` and a `CNAME` to the app's regional switchboard |
 | `Hetzner.Website.*` | An `A` record in `zone` | An `A` record at the server |
 
 A plain string `domain` keeps each platform's default. Setting `dns` never
