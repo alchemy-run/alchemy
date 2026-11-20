@@ -101,6 +101,26 @@ const AddValue = Add.make(({ a, b }) => a + b);
 type _ShortHandlersNeedNothing = Assert<
   Equals<Layer.Services<typeof AddFn> | Layer.Services<typeof AddValue>, never>
 >;
+// A declared failure is a schema, so it can be a union. The handler may fail with nothing else.
+class TooBig extends Schema.TaggedError<TooBig>()("TooBig", { limit: Schema.Number }) {}
+class Missing extends Schema.TaggedError<Missing>()("Missing", { path: Schema.String }) {}
+class Size extends AI.Tool<Size>()("size", {
+  description: "Measure a file.",
+  parameters: Schema.Struct({ path: Schema.String }),
+  success: Schema.Number,
+  failure: Schema.Union([TooBig, Missing]),
+}) {}
+const SizeLive = Size.make(
+  Effect.fn(function* ({ path }) {
+    if (path === "") return yield* new Missing({ path });
+    if (path.length > 10) return yield* new TooBig({ limit: 10 });
+    return path.length;
+  }),
+);
+type _UnionFailureLayer = Assert<Equals<Layer.Success<typeof SizeLive>, Size>>;
+// @ts-expect-error an undeclared failure is not allowed
+Size.make(() => Effect.fail(new Error("no")));
+
 class Touch extends AI.Tool<Touch>()("touch", {
   description: "Create an empty file.",
   parameters: Schema.Struct({ path: Schema.String }),

@@ -17,3 +17,28 @@ export const AddLive = Add.make(
     });
   }),
 );
+
+export class InsufficientFunds extends Schema.TaggedError<InsufficientFunds>()(
+  "InsufficientFunds",
+  { balance: Schema.Number },
+) {}
+export class AccountFrozen extends Schema.TaggedError<AccountFrozen>()("AccountFrozen", {
+  account: Schema.String,
+}) {}
+
+/** A tool that fails with one of two declared errors. */
+export class Withdraw extends AI.Tool<Withdraw>()("withdraw", {
+  description: "Withdraw money from an account. Always use this tool to withdraw.",
+  parameters: Schema.Struct({ account: Schema.String, amount: Schema.Number }),
+  success: Schema.Struct({ balance: Schema.Number }),
+  failure: Schema.Union([InsufficientFunds, AccountFrozen]),
+  replay: "safe",
+}) {}
+
+export const WithdrawLive = Withdraw.make(
+  Effect.fn(function* ({ account, amount }) {
+    if (account === "frozen") return yield* new AccountFrozen({ account });
+    if (amount > 137) return yield* new InsufficientFunds({ balance: 137 });
+    return { balance: 137 - amount };
+  }),
+);

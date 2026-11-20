@@ -8,7 +8,7 @@ import * as Schema from "effect/Schema";
 import { Guard, Greeting } from "./extensions.ts";
 import { Gateway, Notes } from "./infra.ts";
 import { Fast } from "./models.ts";
-import { Add, AddLive } from "./tools.ts";
+import { Add, AddLive, Withdraw, WithdrawLive } from "./tools.ts";
 
 const ModelsLive = Layer.unwrap(
   Effect.map(Cloudflare.AI.QueryGateway(Gateway), (gateway) =>
@@ -24,6 +24,7 @@ const ModelsLive = Layer.unwrap(
 const HarnessLive = Layer.mergeAll(
   ModelsLive,
   AddLive,
+  WithdrawLive,
   Pi.CodeModeAsync.pipe(Layer.provide(PiCloudflare.EvalInline())),
   PiCloudflare.DurableObjectStorage,
   Cloudflare.KV.ReadWriteNamespaceBinding,
@@ -50,7 +51,7 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
 
     const harness = yield* Pi.Harness({
       models: [Fast],
-      tools: [Add, SaveNote],
+      tools: [Add, SaveNote, Withdraw],
       extensions: [Guard, Greeting, Pi.CodeMode],
     });
 
@@ -79,10 +80,15 @@ export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
             last.content.some((part) => part.type === "text" && part.text.length > 0)
           );
         }),
-        create: Effect.fn(function* (name: string, tools: ReadonlyArray<"add" | "save_note">) {
+        create: Effect.fn(function* (
+          name: string,
+          tools: ReadonlyArray<"add" | "save_note" | "withdraw">,
+        ) {
           const conversation = yield* harness.createConversation({
             name,
-            tools: tools.map((tool) => (tool === "add" ? Add : SaveNote)),
+            tools: tools.map((tool) =>
+              tool === "add" ? Add : tool === "withdraw" ? Withdraw : SaveNote,
+            ),
             instructions: "You are terse. Use your tools whenever they apply.",
           });
           return conversation.id;

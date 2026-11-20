@@ -117,6 +117,34 @@ test(
 );
 
 test(
+  "a tool's declared failure reaches the model with its tag and fields",
+  Effect.gen(function* () {
+    const user = `user-${Date.now()}`;
+    yield* call(`/${user}/bank/create`, { tools: ["withdraw"] });
+    yield* call(`/${user}/bank/prompt`, {
+      text: 'Withdraw 500 from the account "checking".',
+      requestId: "withdraw-1",
+    });
+    yield* call(`/${user}/bank/prompt`, {
+      text: 'Now withdraw 5 from the account "frozen".',
+      requestId: "withdraw-2",
+    });
+    const results = (yield* call(`/${user}/bank/results`)) as ReadonlyArray<{
+      tool: string;
+      isError: boolean;
+      text: string;
+    }>;
+    const failures = results
+      .filter((result) => result.tool === "withdraw" && result.isError)
+      .map((result) => result.text);
+    // Each error of the union, encoded by its schema.
+    expect(failures).toContain('{"_tag":"InsufficientFunds","balance":137}');
+    expect(failures).toContain('{"_tag":"AccountFrozen","account":"frozen"}');
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
   "tools are enabled and disabled per conversation at runtime",
   Effect.gen(function* () {
     const user = `user-${Date.now()}`;

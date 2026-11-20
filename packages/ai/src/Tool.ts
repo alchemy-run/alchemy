@@ -34,10 +34,11 @@ export interface ToolSpec {
    */
   readonly success: Schema.Top;
   /**
-   * The tagged error the tool fails with. It reaches the model as an error
-   * result that keeps its `_tag` and fields.
+   * What the tool fails with: a `Schema.TaggedError` class, or a
+   * `Schema.Union` of several. A failure reaches the model as an error
+   * result that keeps its `_tag` and fields, encoded by this schema.
    */
-  readonly failure?: abstract new (...args: any) => { readonly _tag: string };
+  readonly failure?: Schema.Top;
   /**
    * Whether a call cut off by a crash may run again when its harness
    * resumes. Otherwise the model is told the call was interrupted. A
@@ -48,10 +49,8 @@ export interface ToolSpec {
 }
 
 type SuccessOf<Spec extends ToolSpec> = Spec["success"]["Type"];
-type FailureOf<Spec extends ToolSpec> = Spec["failure"] extends abstract new (
-  ...args: any
-) => infer E
-  ? E
+type FailureOf<Spec extends ToolSpec> = Spec["failure"] extends Schema.Top
+  ? Spec["failure"]["Type"]
   : never;
 
 /**
@@ -209,6 +208,30 @@ export interface ToolConstructor {
  *       yield* releases.put(`releases/${version}.tgz`, archive).pipe(Effect.orDie);
  *       return { url: `https://releases.example.com/${version}.tgz` };
  *     });
+ *   }),
+ * );
+ * ```
+ *
+ * **Example:** A tool that fails with one of several errors
+ * ```typescript
+ * export class NotFound extends Schema.TaggedError<NotFound>()("NotFound", {
+ *   version: Schema.String,
+ * }) {}
+ * export class Forbidden extends Schema.TaggedError<Forbidden>()("Forbidden", {
+ *   reason: Schema.String,
+ * }) {}
+ *
+ * export class Deploy extends AI.Tool<Deploy>()("deploy", {
+ *   description: "Upload a release archive.",
+ *   parameters: Schema.Struct({ version: Schema.String }),
+ *   success: Schema.Struct({ url: Schema.String }),
+ *   failure: Schema.Union([NotFound, Forbidden]),
+ * }) {}
+ *
+ * export const DeployLive = Deploy.make(
+ *   Effect.fn(function* ({ version }) {
+ *     if (version === "0.0.0") return yield* new NotFound({ version });
+ *     return { url: `https://releases.example.com/${version}.tgz` };
  *   }),
  * );
  * ```
@@ -379,13 +402,17 @@ export const callTool = (
       }
       const failure = exit.cause.reasons.find(Cause.isFailReason);
       if (failure === undefined) return Effect.failCause(exit.cause as Cause.Cause<never>);
-      const error = failure.error as { readonly _tag: string; readonly message?: string };
-      const fields = JSON.parse(JSON.stringify(error)) as Record<string, unknown>;
-      return Effect.succeed({
-        text: `${error._tag}${error.message ? `: ${error.message}` : ""} ${JSON.stringify(fields)}`,
-        ...(returns ? { structured: fields } : {}),
-        isError: true,
-      });
+      // The handler's type allows only the declared failure, so the schema encodes it.
+      return Schema.encodeUnknownEffect(spec.failure as Schema.Codec<unknown, unknown>)(
+        failure.error,
+      ).pipe(
+        Effect.orDie,
+        Effect.map((fields): ToolResult => ({
+          text: typeof fields === "string" ? fields : JSON.stringify(fields),
+          ...(returns ? { structured: fields } : {}),
+          isError: true,
+        })),
+      );
     }),
   );
 };
