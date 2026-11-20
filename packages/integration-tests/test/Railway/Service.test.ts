@@ -1,5 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Railway from "@alchemy.run/railway";
+import { serviceCheckSuites } from "@alchemy.run/railway/ServiceChecks";
 import { activeReplicaRegions, serviceRegionPlacement } from "@alchemy.run/railway/ServiceRegion";
 import { withEnvironmentConfigLock } from "@alchemy.run/railway/transient";
 import { expect } from "@alchemy.run/test";
@@ -720,6 +721,63 @@ test.provider.skipIf(!githubEntitled)(
       "live",
     ],
     timeout: 120_000,
+  },
+);
+
+// Deploys a real repo, so it takes an explicit one instead of the first
+// repo the GitHub connection lists: RAILWAY_TEST_GITHUB_REPO=owner/name,
+// built from its `main` branch.
+const checksRepo = process.env.RAILWAY_TEST_GITHUB_REPO;
+
+test.provider.skipIf(checksRepo === undefined)(
+  "wait for checks on a github repo service",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deployWith = (waitForChecks: boolean | undefined) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const { project, environment } = yield* suitePartition;
+            const api = yield* Railway.Service("Checks", {
+              project,
+              environment,
+              repo: checksRepo!,
+              branch: "main",
+              waitForChecks,
+            });
+            return { api };
+          }),
+        );
+      const observed = (api: { projectId: string; environmentId: string; serviceId: string }) =>
+        readEnvironmentConfig(api.environmentId, api.projectId).pipe(
+          Effect.flatMap((row) => serviceCheckSuites(row.config, api.serviceId)),
+        );
+
+      const on = yield* deployWith(true);
+      expect(yield* observed(on.api)).toBe(true);
+
+      // Omitted leaves the setting as it is.
+      const kept = yield* deployWith(undefined);
+      expect(kept.api.serviceId).toEqual(on.api.serviceId);
+      expect(yield* observed(kept.api)).toBe(true);
+
+      const off = yield* deployWith(false);
+      expect(off.api.serviceId).toEqual(on.api.serviceId);
+      expect(yield* observed(off.api)).toBe(false);
+
+      yield* stack.destroy();
+      expect(yield* waitUntilGone(on.api.serviceId)).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 180_000,
   },
 );
 
