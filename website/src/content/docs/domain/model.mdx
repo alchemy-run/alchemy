@@ -325,7 +325,7 @@ import * as Layer from "effect/Layer";
 import { Bank, BankHandlers } from "../src/Bank.model.ts";
 
 it.effect("the model is well defined", () =>
-  Layer.build(Bank.layer(BankHandlers)).pipe(Effect.scoped, Effect.provide(InMemory)),
+  Layer.build(Bank.layer(BankHandlers)).pipe(Effect.provide(InMemory)),
 );
 ```
 

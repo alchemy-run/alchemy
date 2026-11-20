@@ -149,7 +149,7 @@ Building the model's Layer dies with a `Domain.DefinitionError` for every defini
 
 ```ts
 it.effect("the model is well defined", () =>
-  Layer.build(Bank.layer(BankHandlers)).pipe(Effect.scoped, Effect.provide(InMemory)),
+  Layer.build(Bank.layer(BankHandlers)).pipe(Effect.provide(InMemory)),
 );
 ```
 

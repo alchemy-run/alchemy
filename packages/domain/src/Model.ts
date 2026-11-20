@@ -459,13 +459,11 @@ type HandledBy<
  *
  * **Example:** A unit test for the whole Model
  * ```typescript
- * import * as Effect from "effect/Effect";
+ * import { it } from "@effect/vitest";
  * import * as Layer from "effect/Layer";
- * import { expect, it } from "vitest";
  * import { BankInMemory } from "./Bank.ts";
  *
- * it("the model is well defined", () =>
- *   Layer.build(BankInMemory).pipe(Effect.scoped, Effect.runPromise));
+ * it.effect("the model is well defined", () => Layer.build(BankInMemory));
  * ```
  *
  * ### Deciding across aggregates
