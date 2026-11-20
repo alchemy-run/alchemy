@@ -368,6 +368,7 @@ describe("skipped resources", { tags: ["unit", "local"] }, () => {
 
       expect(result.resources.MyBucket).toMatchObject({
         action: "skipped",
+        skip: "unreadable",
         resourceType: "Test.Bucket",
       });
       expect(result.resources.MyBucket?.reason).toContain("read");
@@ -398,6 +399,7 @@ describe("skipped resources", { tags: ["unit", "local"] }, () => {
 
       expect(result.resources.Stuck?.action).toEqual("skipped");
       expect(result.resources.Stuck?.reason).toContain("creating");
+      expect(result.resources.Stuck?.skip).toEqual("unstable");
       // no lifecycle operation ran against the unstable resource
       expect(cloud.calls).toEqual([]);
     }).pipe(withCloud(cloud));
