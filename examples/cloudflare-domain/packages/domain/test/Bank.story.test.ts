@@ -31,16 +31,16 @@ import {
 import { type Actor, agent, customer, system } from "../src/Actor.ts";
 import { Bank, BankHandlers } from "../src/Bank.model.ts";
 import { CurrentActor } from "../src/CurrentActor.context.ts";
-import { UsernameClaimed } from "../src/Customer/ClaimUsername.command.ts";
-import { CustomerRegistered } from "../src/Customer/ConfirmRegistration.command.ts";
 import { Customer } from "../src/Customer/Customer.aggregate.ts";
 import { CustomerId } from "../src/Customer/Customer.id.ts";
 import { CustomerDashboard } from "../src/Customer/CustomerDashboard.view.ts";
 import {
+  CustomerRegistered,
   RegisterCustomer,
-  RegistrationRequested,
+  UsernameClaimed,
+  UsernameTaken,
 } from "../src/Customer/RegisterCustomer.command.ts";
-import { RegistrationRejected } from "../src/Customer/RejectRegistration.command.ts";
+import { Registration } from "../src/Customer/Registration.decision.ts";
 import { Username } from "../src/Customer/Username.ts";
 import { UsernameClaim } from "../src/Customer/UsernameClaim.aggregate.ts";
 import { DailyOutflow } from "../src/Fraud/DailyOutflow.view.ts";
@@ -96,15 +96,11 @@ const samsName = Username.make("sam");
 const opened = (customerId = "c-1") =>
   new AccountOpened({ customerId: CustomerId.make(customerId), owner: "sam" });
 
-it.effect("registering claims the username, then opens a main account", () =>
+it.effect("registering claims the username with it, then opens a main account", () =>
   story(
     as(sam),
-    when(c1, new RegisterCustomer({ name: "sam", username: samsName })),
-    then(
-      c1,
-      new RegistrationRequested({ name: "sam", username: samsName }),
-      new CustomerRegistered({ name: "sam", username: samsName }),
-    ),
+    when(new RegisterCustomer({ customerId: c1.id, name: "sam", username: samsName })),
+    then(c1, new CustomerRegistered({ name: "sam", username: samsName })),
     then(UsernameClaim.ref("sam"), new UsernameClaimed({ customerId: c1.id })),
     then(
       Account.ref(mainAccountId(CustomerId.make("c-1"))),
@@ -120,24 +116,19 @@ it.effect("registering claims the username, then opens a main account", () =>
   ),
 );
 
-it.effect("a taken username rejects the registration, and nothing else happens", () =>
+it.effect("a taken username rejects the registration, and nothing is recorded", () =>
   story(
     given(UsernameClaim.ref("sam"), new UsernameClaimed({ customerId: c1.id })),
     as(alex),
-    when(c2, new RegisterCustomer({ name: "alex", username: samsName })),
-    then(
-      c2,
-      new RegistrationRequested({ name: "alex", username: samsName }),
-      new RegistrationRejected({ username: samsName, reason: "username taken" }),
-    ),
+    when(new RegisterCustomer({ customerId: c2.id, name: "alex", username: samsName })),
+    rejected(new UsernameTaken()),
+    then(c2),
     then(Account.ref(mainAccountId(CustomerId.make("c-2")))),
     // The customer can try again with another name.
-    when(c2, new RegisterCustomer({ name: "alex", username: Username.make("alex") })),
-    then(
-      c2,
-      new RegistrationRequested({ name: "alex", username: Username.make("alex") }),
-      new CustomerRegistered({ name: "alex", username: Username.make("alex") }),
+    when(
+      new RegisterCustomer({ customerId: c2.id, name: "alex", username: Username.make("alex") }),
     ),
+    then(c2, new CustomerRegistered({ name: "alex", username: Username.make("alex") })),
     then(UsernameClaim.ref("alex"), new UsernameClaimed({ customerId: c2.id })),
     then(
       Account.ref(mainAccountId(CustomerId.make("c-2"))),
@@ -150,7 +141,7 @@ it.effect("withdraw replies with the new balance and updates projections", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     as(sam),
-    when(a1, new WithdrawMoney({ amount: 30 })),
+    when(new WithdrawMoney({ accountId: a1.id, amount: 30 })),
     then(a1, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
     replied({ balance: 70 }),
     view(AccountSummary, a1, { balance: 70 }),
@@ -165,7 +156,7 @@ it.effect("overdraft is rejected with evidence", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 50, balanceAfter: 50 })),
     as(sam),
-    when(a1, new WithdrawMoney({ amount: 80 })),
+    when(new WithdrawMoney({ accountId: a1.id, amount: 80 })),
     rejected(new InsufficientFunds({ balance: 50, requested: 80 })),
   ),
 );
@@ -174,7 +165,7 @@ it.effect("a customer can't withdraw from someone else's account", () =>
   story(
     given(a1, opened("c-1"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     as(alex),
-    when(a1, new WithdrawMoney({ amount: 30 })),
+    when(new WithdrawMoney({ accountId: a1.id, amount: 30 })),
     rejected(new NotOwner()),
   ),
 );
@@ -184,14 +175,14 @@ it.effect("the daily limit uses the story clock", () =>
     clock("2026-10-09T09:00:00Z"),
     given(a1, opened(), new MoneyDeposited({ amount: 300_000, balanceAfter: 300_000 })),
     as(sam),
-    when(a1, new WithdrawMoney({ amount: 40_000 })),
-    when(a1, new WithdrawMoney({ amount: 40_000 })),
+    when(new WithdrawMoney({ accountId: a1.id, amount: 40_000 })),
+    when(new WithdrawMoney({ accountId: a1.id, amount: 40_000 })),
     call(FraudCheck.score, { accountId: a1.id, amount: 80_000 }),
     succeed(FraudCheck.score, { risk: 0.1 }),
-    when(a1, new WithdrawMoney({ amount: 30_000 })),
+    when(new WithdrawMoney({ accountId: a1.id, amount: 30_000 })),
     rejected(new DailyLimitExceeded({ remaining: 20_000 })),
     clock("2026-10-10T00:00:01Z"),
-    when(a1, new WithdrawMoney({ amount: 30_000 })),
+    when(new WithdrawMoney({ accountId: a1.id, amount: 30_000 })),
     then(
       a1,
       new MoneyWithdrawn({ amount: 40_000, balanceAfter: 260_000 }),
@@ -205,7 +196,7 @@ it.effect("freezing twice records nothing", () =>
   story(
     given(a1, opened(), new AccountFrozen({ reason: "kyc", by: agent("support-7") })),
     as(agent("support-7")),
-    when(a1, new FreezeAccount({ reason: "again" })),
+    when(new FreezeAccount({ accountId: a1.id, reason: "again" })),
     then(a1),
     state(a1, (s) => expect(s).toMatchObject({ frozen: "kyc" })),
   ),
@@ -217,12 +208,12 @@ it.effect(
     story(
       given(a1, opened(), new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 })),
       as(sam),
-      when(a1, new WithdrawMoney({ amount: 60_000 })),
+      when(new WithdrawMoney({ accountId: a1.id, amount: 60_000 })),
       then(a1, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 30_000 })),
       call(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
       succeed(FraudCheck.score, { risk: 0.95 }),
       then(a1, new AccountFrozen({ reason: "fraud risk 0.95", by: system("FraudReview") })),
-      when(a1, new WithdrawMoney({ amount: 10 })),
+      when(new WithdrawMoney({ accountId: a1.id, amount: 10 })),
       rejected(new Frozen({ reason: "fraud risk 0.95" })),
     ),
 );
@@ -233,8 +224,8 @@ it.effect(
     story(
       given(a1, opened(), new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 })),
       as(sam),
-      when(a1, new WithdrawMoney({ amount: 30_000 })),
-      when(a1, new WithdrawMoney({ amount: 30_000 })),
+      when(new WithdrawMoney({ accountId: a1.id, amount: 30_000 })),
+      when(new WithdrawMoney({ accountId: a1.id, amount: 30_000 })),
       then(
         a1,
         new MoneyWithdrawn({ amount: 30_000, balanceAfter: 60_000 }),
@@ -251,9 +242,9 @@ it.effect("race: the account is closed while the fraud check is pending", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 60_000, balanceAfter: 60_000 })),
     as(sam),
-    when(a1, new WithdrawMoney({ amount: 60_000 })),
+    when(new WithdrawMoney({ accountId: a1.id, amount: 60_000 })),
     call(FraudCheck.score, { accountId: a1.id, amount: 60_000 }),
-    when(a1, new CloseAccount()),
+    when(new CloseAccount({ accountId: a1.id })),
     then(a1, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 0 }), new AccountClosed()),
     succeed(FraudCheck.score, { risk: 0.95 }),
     then(a1),
@@ -266,7 +257,7 @@ it.effect("a transfer completes: the process manager drives both accounts", () =
     given(a1, opened("c-1"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     given(a2, opened("c-2")),
     as(sam),
-    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 40 })),
+    when(new RequestTransfer({ transferId: t1.id, from: a1.id, to: a2.id, amount: 40 })),
     then(
       t1,
       new TransferRequested({
@@ -292,7 +283,7 @@ it.effect("a customer can't move money out of someone else's account with a tran
     given(a1, opened("c-1"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     given(a2, opened("c-2")),
     as(alex),
-    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 40 })),
+    when(new RequestTransfer({ transferId: t1.id, from: a1.id, to: a2.id, amount: 40 })),
     then(
       t1,
       new TransferRequested({
@@ -314,7 +305,7 @@ it.effect("a large transfer waits for a support agent's approval", () =>
     given(a1, opened("c-1"), new MoneyDeposited({ amount: 100_000, balanceAfter: 100_000 })),
     given(a2, opened("c-2")),
     as(sam),
-    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 20_000 })),
+    when(new RequestTransfer({ transferId: t1.id, from: a1.id, to: a2.id, amount: 20_000 })),
     then(
       t1,
       new TransferRequested({
@@ -331,7 +322,7 @@ it.effect("a large transfer waits for a support agent's approval", () =>
       expect(TransferStatus.computed.status(v)).toBe("awaiting-approval"),
     ),
     as(agent("support-7")),
-    when(t1, new ApproveTransfer()),
+    when(new ApproveTransfer({ transferId: t1.id })),
     then(
       t1,
       new TransferApproved({
@@ -355,7 +346,7 @@ it.effect("an unapproved transfer expires when its approval window closes", () =
     given(a1, opened("c-1"), new MoneyDeposited({ amount: 100_000, balanceAfter: 100_000 })),
     given(a2, opened("c-2")),
     as(sam),
-    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 20_000 })),
+    when(new RequestTransfer({ transferId: t1.id, from: a1.id, to: a2.id, amount: 20_000 })),
     then(
       t1,
       new TransferRequested({
@@ -373,7 +364,7 @@ it.effect("an unapproved transfer expires when its approval window closes", () =
     then(t1, new TransferFailed({ transferId: t1.id, reason: "not approved in time" })),
     // Approval and expiry race on the Transfer; expiry won, so approval is too late.
     as(agent("support-7")),
-    when(t1, new ApproveTransfer()),
+    when(new ApproveTransfer({ transferId: t1.id })),
     rejected(new NotAwaitingApproval()),
     then(a1),
   ),
@@ -384,7 +375,7 @@ it.effect("a transfer to a closed account is compensated", () =>
     given(a1, opened("c-1"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     given(a2, opened("c-2"), new AccountClosed()),
     as(sam),
-    when(t1, new RequestTransfer({ from: a1.id, to: a2.id, amount: 40 })),
+    when(new RequestTransfer({ transferId: t1.id, from: a1.id, to: a2.id, amount: 40 })),
     then(
       t1,
       new TransferRequested({
@@ -409,7 +400,7 @@ it.effect("a transfer to a closed account is compensated", () =>
 it.effect("a settlement on a closed account can't be rejected, so it is refunded", () =>
   story(
     given(a1, opened(), new AccountClosed()),
-    when(a1, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
+    when(new RecordSettlement({ accountId: a1.id, settlementId: "st_1", amount: 500 })),
     then(a1, new SettlementOnClosedAccount({ settlementId: "st_1", amount: 500 })),
     call(Payments.refund, { settlementId: "st_1", amount: 500 }),
     succeed(Payments.refund, { refundId: "re_1" }),
@@ -426,10 +417,10 @@ it.effect("only agents reassign accounts, and the dashboards re-key", () =>
     given(a1, opened("c-1"), new MoneyDeposited({ amount: 100, balanceAfter: 100 })),
     view(CustomerDashboard, c1, (d) => expect(d.balances).toEqual({ ["a-1"]: 100 } as any)),
     as(sam),
-    when(a1, new ChangeOwner({ customerId: c2.id })),
+    when(new ChangeOwner({ accountId: a1.id, customerId: c2.id })),
     rejected(new NotPermitted()),
     as(agent("support-7")),
-    when(a1, new ChangeOwner({ customerId: c2.id })),
+    when(new ChangeOwner({ accountId: a1.id, customerId: c2.id })),
     then(a1, new OwnerChanged({ previous: c1.id, customerId: c2.id, by: agent("support-7") })),
     view(CustomerDashboard, c1, (d) => expect(d.balances).toEqual({} as any)),
     view(CustomerDashboard, c2, (d) =>
@@ -442,7 +433,7 @@ it.effect("an unasserted rejection fails the story", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 1, balanceAfter: 1 })),
     as(sam),
-    when(a1, new WithdrawMoney({ amount: 5 })),
+    when(new WithdrawMoney({ accountId: a1.id, amount: 5 })),
   ).pipe(
     Effect.flip,
     Effect.map((failure) => expect(failure.message).toMatch(/InsufficientFunds/)),
@@ -453,7 +444,7 @@ it.effect("an unanswered external system call fails the story", () =>
   story(
     given(a1, opened(), new MoneyDeposited({ amount: 90_000, balanceAfter: 90_000 })),
     as(sam),
-    when(a1, new WithdrawMoney({ amount: 60_000 })),
+    when(new WithdrawMoney({ accountId: a1.id, amount: 60_000 })),
   ).pipe(
     Effect.flip,
     Effect.map((failure) => expect(failure.message).toMatch(/unanswered external system calls/)),
@@ -468,7 +459,7 @@ it.effect(
     story(
       given(a1, opened(), new MoneyDeposited({ amount: 10_000, balanceAfter: 10_000 })),
       as(sam),
-      when(a1, new WithdrawMoney({ amount: 2_500 })),
+      when(new WithdrawMoney({ accountId: a1.id, amount: 2_500 })),
       then(a1, new MoneyWithdrawn({ amount: 2_500, balanceAfter: 7_500 })),
       query(AccountLedger, { account: a1.id }, [
         { kind: "MoneyDeposited", amount: 10_000, balanceAfter: 10_000 },
@@ -506,7 +497,7 @@ it.effect("the AccountCards projection appends a card on every balance change", 
       new CardChanged({ customerId: c1.id, owner: "sam", balance: 10_000, frozen: false }),
     ),
     as(sam),
-    when(a1, new WithdrawMoney({ amount: 2_500 })),
+    when(new WithdrawMoney({ accountId: a1.id, amount: 2_500 })),
     then(a1, new MoneyWithdrawn({ amount: 2_500, balanceAfter: 7_500 })),
     streamed(
       AccountCard,

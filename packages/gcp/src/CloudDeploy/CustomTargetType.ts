@@ -282,9 +282,7 @@ const toCustomActions = (
         includeSkaffoldModules: value.includeSkaffoldModules,
       };
 
-const toContainerTask = (
-  value: clouddeploy.ContainerTask | undefined,
-): ContainerTask | undefined =>
+const toContainerTask = (value: clouddeploy.ContainerTask | undefined): ContainerTask | undefined =>
   value === undefined
     ? undefined
     : {
@@ -297,9 +295,7 @@ const toContainerTask = (
 const toTask = (value: clouddeploy.Task | undefined): Task | undefined =>
   value === undefined ? undefined : { container: toContainerTask(value.container) };
 
-const toTasks = (
-  value: clouddeploy.CustomTargetTasks | undefined,
-): CustomTargetTasks | undefined =>
+const toTasks = (value: clouddeploy.CustomTargetTasks | undefined): CustomTargetTasks | undefined =>
   value === undefined
     ? undefined
     : {

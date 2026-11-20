@@ -192,7 +192,7 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
     Effect.gen(function* () {
       const base = yield* url;
       const api = yield* ConformanceApi.clientWebSocket(`${base}/api`);
-      const exit = yield* api.Explode(fresh("explode")).pipe(Effect.exit);
+      const exit = yield* api.Explode({ id: fresh("explode") }).pipe(Effect.exit);
       if (!Exit.isFailure(exit)) return yield* Effect.die("Explode committed");
       expect(Cause.hasDies(exit.cause)).toBe(true);
       expect(String((Cause.squash(exit.cause) as { message?: unknown }).message)).toBe(
@@ -270,6 +270,98 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
   );
 
   test(
+    "a decision commits to every instance it reads",
+    Effect.gen(function* () {
+      const [from, to] = [fresh("give-from"), fresh("give-to")];
+      yield* call(`/increment/${from}?by=5`);
+      expect(yield* call(`/give/${from}?to=${to}&by=3`)).toEqual({
+        accepted: 2,
+        commits: [
+          { stream: `Counter/${from}`, version: 2 },
+          { stream: `Counter/${to}`, version: 1 },
+        ],
+      });
+      expect(yield* call(`/counter/${from}`)).toEqual({ total: 2 });
+      expect(yield* call(`/counter/${to}`)).toEqual({ total: 3 });
+      // Each instance takes its own commands again, and its view follows.
+      expect(yield* call(`/increment/${to}?by=1`)).toMatchObject({ accepted: 4 });
+      const view = yield* eventually<{ total: number }>(`/total/${to}`, (v) => v.total === 4);
+      expect(view).toMatchObject({ total: 4 });
+    }),
+    options,
+  );
+
+  test(
+    "a rejected decision commits nothing",
+    Effect.gen(function* () {
+      const [from, to] = [fresh("short-from"), fresh("short-to")];
+      yield* call(`/increment/${from}?by=2`);
+      expect(yield* call(`/give/${from}?to=${to}&by=3`)).toEqual({ rejected: "Short" });
+      expect(yield* call(`/counter/${from}`)).toEqual({ total: 2 });
+      expect(yield* call(`/counter/${to}`)).toEqual({ total: 0 });
+    }),
+    options,
+  );
+
+  test(
+    "a decision sent twice under one id commits once",
+    Effect.gen(function* () {
+      const [from, to] = [fresh("once-from"), fresh("once-to")];
+      yield* call(`/increment/${from}?by=5`);
+      const first = yield* call(`/give/${from}?to=${to}&by=2&id=give-${from}`);
+      expect(yield* call(`/give/${from}?to=${to}&by=2&id=give-${from}`)).toEqual(first);
+      expect(yield* call(`/counter/${from}`)).toEqual({ total: 3 });
+      expect(yield* call(`/counter/${to}`)).toEqual({ total: 2 });
+    }),
+    options,
+  );
+
+  test(
+    "decisions that share instances commit one at a time, in both directions",
+    Effect.gen(function* () {
+      const [left, right] = [fresh("swap-left"), fresh("swap-right")];
+      yield* call(`/increment/${left}?by=10`);
+      yield* call(`/increment/${right}?by=10`);
+      type Given = { accepted?: number; rejected?: string };
+      const results = yield* Effect.forEach(
+        Array.from({ length: 12 }, (_, i) => i),
+        (i) =>
+          call<Given>(
+            i % 2 === 0 ? `/give/${left}?to=${right}&by=4` : `/give/${right}?to=${left}&by=4`,
+          ),
+        { concurrency: "unbounded" },
+      );
+      const totals = [
+        (yield* call<{ total: number }>(`/counter/${left}`)).total,
+        (yield* call<{ total: number }>(`/counter/${right}`)).total,
+      ];
+      // Nothing is lost or made up, and nobody goes below zero.
+      expect(totals[0]! + totals[1]!).toBe(20);
+      expect(Math.min(...totals)).toBeGreaterThanOrEqual(0);
+      expect(results.filter((result) => result.accepted !== undefined).length).toBeGreaterThan(0);
+    }),
+    options,
+  );
+
+  test(
+    "a decision's command is served by an Api, with no target",
+    Effect.gen(function* () {
+      const [from, to] = [fresh("api-from"), fresh("api-to")];
+      const base = yield* url;
+      yield* call(`/increment/${from}?by=5`);
+      const api = yield* ConformanceApi.clientHttp(`${base}/api`);
+      const receipt = yield* api.Give({ from, to, by: 3 });
+      expect(receipt.reply).toEqual({ total: 2 });
+      expect(receipt.commits.map((commit) => commit.stream)).toEqual([
+        `Counter/${from}`,
+        `Counter/${to}`,
+      ]);
+      expect(yield* Effect.flip(api.Give({ from, to, by: 30 }))).toMatchObject({ _tag: "Short" });
+    }).pipe(Effect.scoped),
+    options,
+  );
+
+  test(
     "a view applies every event once, in order",
     Effect.gen(function* () {
       const id = fresh("view");
@@ -297,7 +389,7 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
   );
 
   test(
-    "a policy starts a saga, and the saga's step commits",
+    "a policy starts a saga, and its step commits once when it runs again",
     Effect.gen(function* () {
       const id = fresh("saga");
       yield* call(`/increment/${id}?by=7`);
@@ -305,6 +397,61 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
       yield* call(`/increment/${id}?by=1`);
       const echo = yield* eventually<{ total: number }>(`/echo/${id}`, (e) => e.total > 0);
       expect(echo).toEqual({ total: 7 });
+      // The step's second attempt sent the same command: it never commits again.
+      yield* Effect.sleep("3 seconds");
+      expect(yield* call(`/echo/${id}`)).toEqual({ total: 7 });
+    }),
+    options,
+  );
+
+  test(
+    "an import appends history once, which views and projections apply and policies ignore",
+    Effect.gen(function* () {
+      const id = fresh("import");
+      // History from another system, committed at its own times.
+      const at = Date.parse("2020-01-01T00:00:00Z");
+      type Imported = { version: number; rejected?: string; index?: number };
+      expect(yield* call<Imported>(`/import/${id}?n=3&id=a&at=${at}`)).toEqual({ version: 3 });
+      // A retried import commits nothing and answers its first receipt.
+      expect(yield* call<Imported>(`/import/${id}?n=3&id=a&at=${at}`)).toEqual({ version: 3 });
+      // Another import into an instance with events is refused.
+      expect(yield* call<Imported>(`/import/${id}?n=3&id=b`)).toEqual({
+        rejected: "UnexpectedVersion",
+        version: 3,
+      });
+      // The next batch continues from the last.
+      expect(yield* call<Imported>(`/import/${id}?n=2&id=c&expected=3&at=${at + 3}`)).toEqual({
+        version: 5,
+      });
+      // Times only go forward: from the instance's latest event, within a batch, up to now.
+      const refused = (index: number) => ({ rejected: "ImportOutOfOrder", index });
+      expect(yield* call(`/import/${id}?n=2&id=d&expected=5&at=${at}`)).toEqual(refused(0));
+      expect(yield* call(`/import/${id}?n=2&id=e&expected=5&at=${at + 9}&step=-1`)).toEqual(
+        refused(1),
+      );
+      const future = Date.parse("2100-01-01T00:00:00Z");
+      expect(yield* call(`/import/${id}?n=1&id=f&expected=5&at=${future}`)).toEqual(refused(0));
+      expect(yield* call(`/counter/${id}`)).toEqual({ total: 5 });
+      const times = yield* eventually<{ first: number; last: number }>(
+        `/times/${id}`,
+        (view) => view.last === at + 4,
+      );
+      expect(times).toEqual({ first: at, last: at + 4 });
+      // A live command after it: the projection has every imported total, then the new one.
+      expect(yield* call(`/record/${id}?by=7`)).toEqual([1, 2, 3, 4, 5, 12]);
+      // The policy reacts to the live command alone: the saga mirrors 7, not an imported 1.
+      const echo = yield* eventually<{ total: number }>(`/echo/${id}`, (e) => e.total > 0);
+      expect(echo).toEqual({ total: 7 });
+    }),
+    options,
+  );
+
+  test(
+    "an import of 200 events commits them at once",
+    Effect.gen(function* () {
+      const id = fresh("bulk");
+      expect(yield* call(`/import/${id}?on=echo&n=200`)).toEqual({ version: 200 });
+      expect(yield* call(`/echo/${id}`)).toEqual({ total: 200 });
     }),
     options,
   );

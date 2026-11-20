@@ -148,7 +148,7 @@ export interface PolicyKey<Name extends string> {
  *     const accounts = yield* Account;
  *     return Effect.fn(function* ({ source }) {
  *       yield* accounts
- *         .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
+ *         .send(new OpenAccount({ accountId: AccountId.make(`${source.id}-main`), owner: source.id }))
  *         .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
  *     });
  *   }),

@@ -15,14 +15,17 @@ import { type Routed, targetId } from "./CatchUp.ts";
 import * as InMemoryWorkflows from "./InMemoryWorkflows.ts";
 import {
   type Accepted,
+  type DecisionResult,
   type Delivery,
   emptySnapshot,
   emptyStreamMeta,
   hostedModels,
   inRange,
+  outOfOrder,
   Platform,
   type Json,
   type ModelHost,
+  type RecordInput,
   type SendResult,
   type StoredEvent,
   type StreamEntry,
@@ -522,6 +525,19 @@ export const make = (
     const limits: Backfill.Limits = { ...Backfill.defaultLimits, pollMillis: 0 };
     // The source and consumer parts of each hosted entity, as of the latest build.
     const sourceRoles = new Map<string, (id: string) => Backfill.Source>();
+    /** What a decision needs of each aggregate type: its lock, its instances, and how to record on one. */
+    const recorders = new Map<
+      string,
+      {
+        readonly lock: Semaphore.Semaphore;
+        readonly read: (id: string) => { readonly state: Json; readonly version: number };
+        /** Callers hold `lock`. */
+        readonly record: (
+          id: string,
+          input: Omit<RecordInput, "id" | "state" | "version">,
+        ) => Effect.Effect<void>;
+      }
+    >();
     const consumerRoles = new Map<string, (key: string) => Backfill.Consumer>();
     const consumerRole = (target: string, key: string) => {
       const { kind, name } = Backfill.consumerOf(target);
@@ -761,6 +777,78 @@ export const make = (
             });
           const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
             lock.withPermits(1)(commit(id, command, meta));
+          // Events decided elsewhere (seeded or imported): history to views, never to policies.
+          // Callers hold `lock`.
+          const append = (
+            id: string,
+            events: ReadonlyArray<Json>,
+            commandId: string,
+            at?: ReadonlyArray<number | null>,
+          ) =>
+            Effect.gen(function* () {
+              const current = instance(id);
+              const result = yield* kit.seed({
+                id,
+                state: current.state,
+                version: current.version,
+                events,
+                commandId,
+                now: now(),
+                ...(at === undefined ? {} : { at }),
+              });
+              if (current.version === 0) yield* register({ source: kit.name, id });
+              const live = yield* Backfill.routeCommit(
+                sourceRole(id),
+                kit.targets,
+                current.routed,
+                current.version,
+                result.version,
+                result.deliveries,
+              );
+              current.routed = live.routed;
+              current.state = result.state;
+              current.version = result.version;
+              current.events.push(...result.events);
+              yield* announce(id);
+              yield* enqueue(live.send, kit.deliver);
+              return {
+                stream: `${kit.name}/${id}`,
+                version: result.version,
+                events: result.events.map((e) => e.event),
+                reply: null,
+              };
+            });
+          recorders.set(kit.name, {
+            lock,
+            read: (id) => ({ state: instance(id).state, version: instance(id).version }),
+            record: (id, input) =>
+              Effect.gen(function* () {
+                const current = instance(id);
+                const result = yield* kit.record({
+                  ...input,
+                  id,
+                  state: current.state,
+                  version: current.version,
+                });
+                if (current.version === 0) yield* register({ source: kit.name, id });
+                const live = yield* Backfill.routeCommit(
+                  sourceRole(id),
+                  kit.targets,
+                  current.routed,
+                  current.version,
+                  result.version,
+                  result.deliveries,
+                );
+                current.routed = live.routed;
+                current.state = result.state;
+                current.version = result.version;
+                for (let i = 0; i < result.events.length; i++)
+                  commits.push({ aggregate: kit.name, id, index: current.events.length + i });
+                current.events.push(...result.events);
+                yield* announce(id);
+                yield* enqueue(live.send, kit.deliver);
+              }),
+          });
           return {
             send,
             schedule: (id, name, command, meta, due) =>
@@ -830,33 +918,84 @@ export const make = (
               ),
             seed: (id, events) =>
               lock.withPermits(1)(
+                Effect.suspend(() => append(id, events, `seed:${id}:${instance(id).version}`)).pipe(
+                  Effect.asVoid,
+                ),
+              ),
+            import: (id, events, meta) =>
+              lock.withPermits(1)(
                 Effect.gen(function* () {
                   const current = instance(id);
-                  const result = yield* kit.seed({
-                    id,
-                    state: current.state,
-                    version: current.version,
-                    events,
-                    commandId: `seed:${id}:${current.version}`,
-                    now: now(),
-                  });
-                  if (current.version === 0) yield* register({ source: kit.name, id });
-                  const live = yield* Backfill.routeCommit(
-                    sourceRole(id),
-                    kit.targets,
-                    current.routed,
-                    current.version,
-                    result.version,
-                    result.deliveries,
+                  const duplicate = current.receipts.get(meta.commandId);
+                  if (duplicate?._tag === "Accepted")
+                    return { _tag: "Imported", receipt: duplicate.receipt } as const;
+                  if (current.version !== meta.expectedVersion)
+                    return { _tag: "UnexpectedVersion", version: current.version } as const;
+                  const refused = outOfOrder(
+                    meta.at,
+                    events.length,
+                    current.events.at(-1)?.envelope.at ?? 0,
+                    now(),
                   );
-                  current.routed = live.routed;
-                  current.state = result.state;
-                  current.version = result.version;
-                  current.events.push(...result.events);
-                  yield* announce(id);
-                  yield* enqueue(live.send, kit.deliver);
+                  if (refused) return refused;
+                  const receipt = yield* append(id, events, meta.commandId, meta.at);
+                  current.receipts.set(meta.commandId, { _tag: "Accepted", receipt });
+                  return { _tag: "Imported", receipt } as const;
                 }),
               ),
+          };
+        }),
+
+      // One process: a decision holds the lock of every aggregate type it
+      // reads (taken in name order, so two decisions never deadlock), decides,
+      // and records on each instance before it lets go.
+      decision: (_decision, kit) =>
+        Effect.sync(() => {
+          const { receipts } = stored(`decision:${kit.name}`, () => ({
+            receipts: new Map<string, DecisionResult>(),
+          }));
+          return {
+            send: (command, meta) =>
+              Effect.gen(function* () {
+                const reads = yield* kit.reads(command);
+                const types = [...new Set(reads.map((read) => read.aggregate))].sort();
+                const decide = Effect.gen(function* () {
+                  const duplicate = receipts.get(meta.commandId);
+                  if (duplicate) return duplicate;
+                  const at = now();
+                  const result = yield* kit.decide({
+                    command,
+                    commandId: meta.commandId,
+                    context: meta.context,
+                    now: at,
+                    correlationId: meta.correlationId,
+                    trace: meta.trace,
+                    link: meta.link,
+                    states: reads.map((read) => ({
+                      ...read,
+                      ...recorders.get(read.aggregate)!.read(read.id),
+                    })),
+                  });
+                  if (result._tag === "Rejected") return result satisfies DecisionResult;
+                  for (const write of result.writes) {
+                    if (write.events.length === 0) continue;
+                    yield* recorders.get(write.aggregate)!.record(write.id, {
+                      events: write.events,
+                      commandId: meta.commandId,
+                      now: at,
+                      correlationId: result.correlationId,
+                      trace: result.trace,
+                    });
+                  }
+                  const sent: DecisionResult = { _tag: "Accepted", receipt: result.receipt };
+                  receipts.set(meta.commandId, sent);
+                  return sent;
+                });
+                return yield* types.reduceRight(
+                  (held, type) => recorders.get(type)!.lock.withPermits(1)(held),
+                  decide,
+                );
+              }),
           };
         }),
 

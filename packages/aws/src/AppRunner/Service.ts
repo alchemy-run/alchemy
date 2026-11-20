@@ -18,6 +18,7 @@ import {
   type HostRuntimeContext,
   type ServerHost,
 } from "alchemy/Runtime/Process";
+import { envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "alchemy/Tags";
 import { toSeconds } from "alchemy/Util/Duration";
@@ -1370,17 +1371,11 @@ await bootstrap(entrypoint);
               port,
             });
 
-            // App Runner env values must be strings — JSON-encode the rest.
-            const runtimeEnvironmentVariables = Object.fromEntries(
-              Object.entries({
-                ...bindingEnv,
-                ...alchemyEnv,
-                ...news.env,
-              }).map(([key, value]) => [
-                key,
-                typeof value === "string" ? value : JSON.stringify(value),
-              ]),
-            );
+            const runtimeEnvironmentVariables = envStrings({
+              ...bindingEnv,
+              ...alchemyEnv,
+              ...news.env,
+            });
 
             effective = {
               ...news,

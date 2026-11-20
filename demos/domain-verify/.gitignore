@@ -1,0 +1,2 @@
+# Stills are scratch output; the rendered video is checked in. Regenerate with `pnpm render`.
+out/stills/

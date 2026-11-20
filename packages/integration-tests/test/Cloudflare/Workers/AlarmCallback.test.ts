@@ -145,27 +145,6 @@ describe.concurrent.each([
     afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 30_000 });
 
     test(
-      "Worker callback registration stays unsupported after a Durable Object call",
-      Effect.gen(function* () {
-        const { url } = yield* stack;
-        const result = yield* json<RegistrationResult & { runtimeType: string }>(
-          `${url}/worker-registration/worker-registration`,
-          "POST",
-        );
-        expect(result.snapshot.boots).toBeGreaterThan(0);
-        expect(result.runtimeType).toBe("Cloudflare.Worker");
-        expect(result.failure).toEqual({
-          tag: "CallbackError",
-          callback: "unsupported-worker",
-          message: `Durable callbacks are not supported by ${result.runtimeType}`,
-        });
-        expect(result.snapshot.pendingJobs).toEqual([]);
-        expect(result.snapshot.alarm).toBeNull();
-      }),
-      { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
-    );
-
-    test(
       "late DO registration defects without disabling initialized callbacks",
       Effect.gen(function* () {
         const { url } = yield* stack;

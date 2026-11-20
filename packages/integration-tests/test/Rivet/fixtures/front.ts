@@ -5,7 +5,9 @@
 import * as Docker from "@alchemy.run/docker";
 import * as Rivet from "@alchemy.run/rivet";
 import * as StreamFormat from "@alchemy.run/rivet/StreamFormat";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -14,6 +16,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { conformanceFetch } from "../../Cloudflare/Workers/conformance/routes.ts";
+import AbandonedAlarm from "./abandoned-alarm.ts";
 import { BinaryLog, ChatLog } from "./chat-log.ts";
 import { Cluster, FRONT_PORT, Services } from "./cluster.ts";
 import Counter from "./counter.ts";
@@ -42,6 +45,7 @@ export default class Front extends Docker.Service<Front>()(
     const counters = yield* Counter;
     const greeters = yield* Greeter;
     const lifecycles = yield* Lifecycle;
+    const abandonedAlarms = yield* AbandonedAlarm;
     const parallelTallies = yield* Tally;
     const gatedTallies = yield* GatedTally;
     const reentrants = yield* Reentrant;
@@ -181,10 +185,34 @@ export default class Front extends Docker.Service<Front>()(
           if (step === "value") {
             return yield* HttpServerResponse.json({ value: yield* instance.get() });
           }
+          // Calls each hook as a method, which the instance must refuse.
+          if (step === "call-hooks") {
+            const refusal = (call: Effect.Effect<void, unknown>) =>
+              Effect.map(Effect.exit(call), (exit) => {
+                if (Exit.isSuccess(exit)) return "ran";
+                const error = Cause.squash(exit.cause) as { _tag?: unknown; status?: unknown };
+                return `${String(error?._tag)} ${String(error?.status)}`;
+              });
+            return yield* HttpServerResponse.json({
+              onSleep: yield* refusal(instance.onSleep()),
+              onDestroy: yield* refusal(instance.onDestroy()),
+            });
+          }
           return yield* HttpServerResponse.json({
             slept: yield* counters.getByName(`slept-${name}`).get(),
             destroyed: yield* counters.getByName(`destroyed-${name}`).get(),
           });
+        }
+        // `/abandoned-alarm/<name>/<step>`: `arm` sets an alarm whose first
+        // run hangs; `state` reads its runs, finished runs and alarm.
+        if (group === "abandoned-alarm" && name !== undefined) {
+          const step = url.pathname.split("/").filter((segment) => segment.length > 0)[2];
+          const instance = abandonedAlarms.getByName(name);
+          if (step === "arm") {
+            yield* instance.arm();
+            return yield* HttpServerResponse.json({ ok: true });
+          }
+          return yield* HttpServerResponse.json(yield* instance.alarmState());
         }
         if (group === "greet" && name !== undefined) {
           const greeting = yield* greeters.getByName("front").greet(name);
