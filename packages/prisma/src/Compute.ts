@@ -30,7 +30,7 @@ import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import type { ProcessContext, ProcessServices } from "alchemy/Runtime/Process";
-import { RuntimeContext } from "alchemy/RuntimeContext";
+import { RuntimeContext, packEnvValueKeepRedacted, unpackEnvValue } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { logChildLine } from "alchemy/Util/LogRecord";
 import { sha256Object } from "alchemy/Util/sha256";
@@ -896,44 +896,14 @@ export const Compute: Platform<
           // runtime `get` receives the key this returns, so both halves
           // agree without a second mapping.
           const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_").toUpperCase();
-          env[key] = output.pipe(
-            Output.map((value) =>
-              Redacted.isRedacted(value)
-                ? Redacted.make(
-                    JSON.stringify({
-                      _tag: "Redacted",
-                      value: Redacted.value(value),
-                    }),
-                  )
-                : JSON.stringify(value),
-            ),
-          );
+          env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
           return key;
         }),
       get: <T>(key: string) =>
         // Read the raw process env: the runtime ConfigProvider unwraps bound
         // markers before `unpackEnvValue` could see them.
-        Effect.sync(() => {
-          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- runtime RuntimeContext.get must read the raw process.env, Config would unwrap packed values
-          const value = process.env[key];
-          if (value === undefined) {
-            return undefined;
-          }
-          try {
-            const parsed = JSON.parse(value);
-            if (
-              parsed !== null &&
-              typeof parsed === "object" &&
-              (parsed as { _tag?: unknown })._tag === "Redacted" &&
-              "value" in (parsed as object)
-            ) {
-              return Redacted.make((parsed as { value: string }).value) as T;
-            }
-            return parsed as T;
-          } catch {
-            return value as T;
-          }
-        }),
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- runtime RuntimeContext.get must read the raw process.env, Config would unwrap packed values
+        Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       run,
       serve,
       exports: Effect.sync(() => ({
