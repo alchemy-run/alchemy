@@ -438,7 +438,7 @@ export interface ToolTagClass<Self, Name extends string> extends Context.Service
   ): Layer.Layer<Self, never, Exclude<R, Scope.Scope> | Sandboxes>;
   /**
    * Use a coding agent's own tool of this name. A harness package builds
-   * its Layers with it (`OpenCode.BashLive`, `Pi.BashLive`).
+   * its Layers with it (`OpenCode.Bash`, `Pi.Bash`).
    */
   native(engine: string, tool: unknown): Layer.Layer<Self>;
 }
