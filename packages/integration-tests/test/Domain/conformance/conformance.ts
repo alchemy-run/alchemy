@@ -503,15 +503,9 @@ export interface RebuildOptions extends Omit<ConformanceOptions, "within"> {
  */
 export const rebuild = ({ test, url, kind, deploy }: RebuildOptions) => {
   const call = <T>(path: string) => Effect.flatMap(url, (base) => get<T>(base, path));
-  /** Read a run's tallies until they are `expected`, or give up with the last read. */
-  const tallies = (run: string, expected: ReadonlyArray<number>) =>
-    call<ReadonlyArray<number>>(`/tallies/${run}`).pipe(
-      Effect.repeat({
-        schedule: Schedule.spaced("1 second"),
-        until: (got) => JSON.stringify(got) === JSON.stringify(expected),
-        times: 60,
-      }),
-    );
+  /** Increment a counter of the run, and read the run's tallies once they have it. */
+  const tally = (counter: string, by: number) =>
+    call<ReadonlyArray<number>>(`/tally/${counter}?by=${by}`);
 
   test(
     "a projection rebuilt by a version bump keeps its stream and appends what follows",
@@ -521,8 +515,7 @@ export const rebuild = ({ test, url, kind, deploy }: RebuildOptions) => {
       // Version 0 tallies increments and what a decision takes: three inputs.
       expect(yield* call(`/increment/${run}~a?by=5`)).toMatchObject({ accepted: 5 });
       expect(yield* call(`/give/${run}~a?to=${run}~b&by=2`)).toMatchObject({ accepted: 3 });
-      expect(yield* call(`/increment/${run}~a?by=1`)).toMatchObject({ accepted: 4 });
-      expect(yield* tallies(run, [5, -2, 1])).toEqual([5, -2, 1]);
+      expect(yield* tally(`${run}~a`, 1)).toEqual([5, -2, 1]);
 
       // Version 1 tallies increments alone, rebuilt from the history: two inputs replayed.
       yield* deploy(1);
@@ -536,10 +529,9 @@ export const rebuild = ({ test, url, kind, deploy }: RebuildOptions) => {
         ),
       ).toBe(1);
       // A counter of the same run that is new to this version.
-      expect(yield* call(`/increment/${run}~c?by=3`)).toMatchObject({ accepted: 3 });
-      expect(yield* call(`/increment/${run}~c?by=4`)).toMatchObject({ accepted: 7 });
+      expect(yield* tally(`${run}~c`, 3)).toEqual([5, -2, 1, 3]);
       // The replay appends nothing again; the increments after the bump are appended.
-      expect(yield* tallies(run, [5, -2, 1, 3, 4])).toEqual([5, -2, 1, 3, 4]);
+      expect(yield* tally(`${run}~c`, 4)).toEqual([5, -2, 1, 3, 4]);
     }),
     { timeout: 900_000, tags: [kind], exclusive: true },
   );

@@ -12,7 +12,8 @@
  * - `/totals/:id?order=&take=&after=` lists a page of the view's entries
  * - `/hidden/:id?version=n` waits, server-side, until the view no client may read has folded `n` commits
  * - `/record/:id?by=n` sends `Increment`, waits for `TotalWriter.caughtUp`, then lists what it recorded
- * - `/tallies/:run` lists the tallies of a run's counters; `/generation` answers `TallyWriter`'s
+ * - `/tally/:id?by=n` sends `Increment` to a counter of the rebuild case, waits for the tallies
+ *   to catch up, then lists its run's; `/generation` answers `TallyWriter`'s generation
  * - `/place/:id`, `/release/:id`, `/hold/:id` place, release and read a hold
  * - `/import/:id?n=&id=commandId&expected=&at=ms&step=&on=echo` imports `n` events adding 1
  *   into the counter (or the echo), the i-th committed at `ms + i * step` when `at` is given;
@@ -48,6 +49,7 @@ import {
   Recorded,
   ReleaseHold,
   Tallies,
+  tallyKey,
   TotalWriter,
 } from "./model.ts";
 
@@ -245,8 +247,13 @@ export const app = Effect.gen(function* () {
         const { entries } = yield* recorded.list(Counter.ref(id));
         return yield* HttpServerResponse.json(entries.map((entry) => entry.event.total));
       }
-      case "tallies": {
-        const { entries } = yield* tallies.list(id);
+      case "tally": {
+        const receipt = yield* counters.send(new Increment({ id, by })).pipe(Effect.orDie);
+        // A rebuild's first input to a key waits for its catch-up run: allow minutes.
+        yield* internals.caughtUp.get("Tallies")!(receipt, { timeout: "5 minutes" }).pipe(
+          Effect.orDie,
+        );
+        const { entries } = yield* tallies.list(tallyKey(id) ?? id);
         return yield* HttpServerResponse.json(entries.map((entry) => entry.event.by));
       }
       case "generation":
