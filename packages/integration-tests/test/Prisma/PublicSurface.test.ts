@@ -126,6 +126,7 @@ const publicExports = [
   "DomainOwnership",
   "RoutingUrl",
   "RoutingUrlProvider",
+  "RoutingUrlResources",
   "RoutingUrlQuotaExceeded",
   "RoutingUrlLogicalIdTaken",
   "RoutingUrlHostnameTaken",
@@ -351,6 +352,13 @@ describe("Prisma public surface", { tags: ["unit", "provider:prisma", "local"] }
     },
     { tags: ["provider:prisma:database"] },
   );
+
+  it("exports every resource Prisma.RoutingUrl declares, for a hand-built provider collection", () => {
+    expect(Prisma.RoutingUrlResources.map((resource) => resource.Type)).toEqual([
+      "Prisma.RoutingUrl",
+      "Prisma.RoutingUrlDnsRecords",
+    ]);
+  });
 
   it("does not expose removed Compute deep imports", async () => {
     for (const moduleName of removedPrismaDeepImports) {

@@ -28,12 +28,11 @@ import {
 } from "./internal/DomainOwnershipProof.ts";
 import { DomainVerification, DomainVerificationProvider } from "./internal/DomainVerification.ts";
 import { PrismaHttpClientLive, PrismaUploadClientLive } from "./internal/HttpClient.ts";
-import { RoutingUrlResource } from "./internal/RoutingUrlResource.ts";
 import { Contract, ContractProvider } from "./ORM/Contract.ts";
 import { Migrate, MigrateProvider } from "./ORM/Migrate.ts";
 import { fromProfile } from "./PrismaEnvironment.ts";
 import { Project, ProjectProvider } from "./Project.ts";
-import { RoutingUrlProvider } from "./RoutingUrl.ts";
+import { RoutingUrlProvider, RoutingUrlResources } from "./RoutingUrl.ts";
 import { SourceRepository, SourceRepositoryProvider } from "./SourceRepository.ts";
 import { WebsiteArtifact, WebsiteArtifactProvider } from "./Website/Artifact.ts";
 
@@ -191,7 +190,7 @@ export const providers = () =>
       CustomDomain,
       DomainVerification,
       DomainOwnershipProof,
-      RoutingUrlResource,
+      ...RoutingUrlResources,
       EnvironmentVariable,
       SourceRepository,
       Contract,
