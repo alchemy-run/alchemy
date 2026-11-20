@@ -333,7 +333,7 @@ describe.concurrent(
     );
 
     test.provider(
-      "a full deploy reads back its deployment and does not drift",
+      "a full deploy reads back its upload receipt and does not drift",
       (stack) =>
         Effect.gen(function* () {
           const { accountId } = yield* yield* CloudflareEnvironment;
@@ -346,16 +346,19 @@ describe.concurrent(
               workersDev: false,
             }),
           );
-          const { deployments } = yield* workers.listScriptDeployments({
+          const version = yield* workers.getScriptVersion({
             accountId,
             scriptName: worker.workerName,
+            versionId: worker.versionId!,
           });
-          expect(worker.deploymentId).toEqual(deployments[0]?.id);
+          expect(worker.versionId).toEqual(version.id);
+          expect(worker.deploymentId).toBeUndefined();
 
-          // `read` must return the recorded deployment, or every deployed
-          // Worker compares unequal to state and reads as drifted.
+          // `read` must preserve the upload receipt without manufacturing a
+          // deployment record ID, or every deployed Worker reads as drifted.
           const detected = yield* Drift.detect(stack).pipe(Effect.provide(stack.state));
           expect(detected.resources.DeploymentWorker?.action).toBe("unchanged");
+          expect(detected.resources.DeploymentWorker?.attr.versionId).toEqual(worker.versionId);
           expect(detected.resources.DeploymentWorker?.attr.deploymentId).toEqual(
             worker.deploymentId,
           );

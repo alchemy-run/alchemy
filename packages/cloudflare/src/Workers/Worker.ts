@@ -1406,8 +1406,8 @@ export type Worker<Bindings = any> = Resource<
     previewDoClasses?: string[] | undefined;
     /**
      * The id of the version uploaded by the most recent deploy. Set for
-     * every Worker outside a dispatch namespace: a full deploy records the
-     * version serving 100% of traffic, a gradual rollout
+     * every Worker outside a dispatch namespace: a full deploy records its
+     * script upload receipt, a gradual rollout
      * (`version.traffic` < 100) and a version worker (`version.parent`)
      * record the version they uploaded.
      */
@@ -1421,11 +1421,12 @@ export type Worker<Bindings = any> = Resource<
      */
     versionAlias?: string | undefined;
     /**
-     * The id of the deployment created by the most recent deploy. A full
-     * deploy records the active deployment; a version with `traffic > 0`
-     * records the deployment it created through the deployments API.
+     * The id of the deployment created through the deployments API by the
+     * most recent deploy. Set for a version with `traffic > 0` or a gradual
+     * rollout that creates a deployment. Full script uploads do not return a
+     * deployment record ID; their `deployment_id` receipt is the `versionId`.
      * Preview-only versions (`traffic: 0`) and Workers in a dispatch
-     * namespace have no deployment.
+     * namespace also leave this attribute unset.
      */
     deploymentId?: string | undefined;
     /**

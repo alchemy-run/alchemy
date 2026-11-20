@@ -62,19 +62,28 @@ describe.concurrent(
                 Effect.repeat({
                   schedule: Schedule.spaced("1 second"),
                   times: 10,
-                  until: ({ version }) =>
+                  until: ({ deployment, version }) =>
+                    deployment?.versions[0]?.versionId === worker.versionId &&
                     version.annotations?.workersTag === tag &&
                     version.annotations?.workersMessage === message,
                 }),
               );
               expect(deployment?.versions).toHaveLength(1);
               expect(deployment?.versions[0].percentage).toEqual(100);
-              expect(worker.deploymentId).toBeDefined();
+              // Script PUT returns the uploaded version, not a deployment record ID.
+              expect(worker.deploymentId).toBeUndefined();
               expect(worker.versionId).toBeDefined();
-              expect(worker.deploymentId).toEqual(deployment?.id);
               expect(worker.versionId).toEqual(deployment?.versions[0].versionId);
               expect(version.annotations?.workersTag).toEqual(tag);
               expect(version.annotations?.workersMessage).toEqual(message);
+              const uploaded = yield* workers.getScriptVersion({
+                accountId,
+                scriptName: worker.workerName,
+                versionId: worker.versionId!,
+              });
+              expect(uploaded.id).toEqual(worker.versionId);
+              expect(uploaded.annotations?.workersTag).toEqual(tag);
+              expect(uploaded.annotations?.workersMessage).toEqual(message);
             }
 
             yield* stack.destroy();

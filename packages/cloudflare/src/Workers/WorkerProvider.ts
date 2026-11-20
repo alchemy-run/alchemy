@@ -1216,6 +1216,9 @@ const resolveWorkerMetadataHash = ({
   selfUrl,
 }: WorkerMetadataHashInput): Effect.Effect<string> =>
   resolveMetadataHashValue({
+    // Reconcile legacy state once: older providers could save a stale version
+    // UUID alongside the current bundle hash after a successful script PUT.
+    uploadReceiptVersion: 1,
     accountId,
     selfUrl,
     stack: { name: stack.name, stage: stack.stage },
@@ -1268,6 +1271,29 @@ const resolveWorkerMetadataHash = ({
         }
       : undefined,
   }).pipe(Effect.flatMap((metadata) => sha256Object({ metadata })));
+
+/** The script PUT's deployment_id identifies its uploaded version, not a deployment record. */
+export const uploadedWorkerVersionId = (
+  receipt: string | null | undefined,
+  scriptName: string,
+): Effect.Effect<string, WorkerVersionConfigError> =>
+  Effect.gen(function* () {
+    if (
+      typeof receipt !== "string" ||
+      (receipt.length !== 32 && receipt.length !== 36) ||
+      !/^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.test(
+        receipt,
+      )
+    ) {
+      return yield* new WorkerVersionConfigError({
+        message: `Cloudflare did not return a valid upload version receipt for '${scriptName}'.`,
+      });
+    }
+    return receipt
+      .toLowerCase()
+      .replaceAll("-", "")
+      .replace(/^(........)(....)(....)(....)(............)$/, "$1-$2-$3-$4-$5");
+  });
 
 export const WorkerProvider = () =>
   ProviderLayer.dual(Worker, {
@@ -3991,6 +4017,7 @@ export const LiveWorkerProvider = () =>
         let versionId: string | undefined;
         let deploymentId: string | undefined;
         let worker: {
+          deploymentId?: string | null;
           id?: string | null;
           logpush?: boolean | null;
           /** The immutable script id (Cloudflare's script "tag"). */
@@ -4470,20 +4497,9 @@ export const LiveWorkerProvider = () =>
             ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
             : [];
         if (!dispatchNamespace && versionId === undefined) {
-          // Same eventual-consistency window as `setWorkerSubdomain`: on a
-          // Worker's first deploy, GET /deployments can still return
-          // `WorkerNotFound` (code 10007) after `putScript` succeeded (#2999).
-          const { deployments } = yield* workers
-            .listScriptDeployments({ accountId, scriptName: name })
-            .pipe(
-              Effect.retry({
-                while: (error) => error._tag === "WorkerNotFound",
-                schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
-              }),
-            );
-          const active = deployments[0];
-          deploymentId = active?.id;
-          versionId = active?.versions.find((version) => version.percentage === 100)?.versionId;
+          // Use this upload's receipt, not an eventually consistent listing
+          // that can still describe the previous deployment after a successful PUT.
+          versionId = yield* uploadedWorkerVersionId(worker.deploymentId, name);
         }
         return {
           // The immutable script ID. The gradual-rollout branch deploys via
