@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/ai",
-  "version": "2.0.0-beta.85",
+  "version": "2.0.0-beta.87",
   "description": "What Alchemy's AI harnesses share: models, tools, skills, MCP servers and sandboxes, declared once and run on any harness.",
   "keywords": [
     "agents",
@@ -46,7 +46,8 @@
         "default": "./lib/*.js"
       },
       "./package.json": "./package.json"
-    }
+    },
+    "access": "public"
   },
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",

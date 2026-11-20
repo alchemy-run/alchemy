@@ -34,11 +34,11 @@ export interface DocsTab {
 
 /** Hub categories, in header order. */
 export const DOCS_CATEGORIES = [
+  "AI",
   "Clouds",
   "Actors",
   "Containers",
   "Sandboxes",
-  "AI",
   "Databases",
   "Auth",
   "Payments",

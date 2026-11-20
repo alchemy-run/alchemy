@@ -319,7 +319,7 @@ const lift =
     Effect.suspend(() => {
       const result = handler(parameters);
       return Effect.isEffect(result)
-        ? (result as ReturnType<ToolHandler<ToolSpec>>)
+        ? (result as unknown as ReturnType<ToolHandler<ToolSpec>>)
         : Effect.succeed(result);
     });
 

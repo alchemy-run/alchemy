@@ -353,7 +353,6 @@ export const Harness = <
         const cls = tool as unknown as {
           impl?: Effect.Effect<ToolHandler<ToolSpec>>;
         } & Context.Key<unknown, ToolHandler<ToolSpec>>;
-        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the harness's type requires each listed tool's Layer
         return Effect.map(cls.impl ?? Effect.service(cls), (handler) => ({
           tool,
           handler,
@@ -533,7 +532,7 @@ export const Harness = <
                 Effect.scoped,
                 // A defect or bad arguments: the model reads what went wrong.
                 Effect.catchCause((cause) =>
-                  Effect.succeed({ text: messageOf(Cause.squash(cause)), isError: true }),
+                  Effect.succeed({ text: messageOf(cause.pipe(Cause.squash)), isError: true }),
                 ),
               );
             }
@@ -551,7 +550,7 @@ export const Harness = <
               })),
               Effect.catchCause((cause) =>
                 Effect.succeed({
-                  text: `MCP server ${server}: ${messageOf(Cause.squash(cause))}`,
+                  text: `MCP server ${server}: ${messageOf(cause.pipe(Cause.squash))}`,
                   isError: true,
                 }),
               ),
@@ -622,6 +621,7 @@ export const Harness = <
             const text = body === undefined ? undefined : JSON.stringify(body);
             let argument: ReadonlyArray<string> = [];
             if (text !== undefined && text.length > ARGUMENT_BYTES) {
+              // oxlint-disable-next-line effecttsgo/crypto-random-uuid-in-effect -- only a unique file name
               const file = `${dir}/body-${crypto.randomUUID()}`;
               yield* files
                 .writeFile(file, text)
@@ -704,7 +704,7 @@ export const Harness = <
                 if (model === undefined) return { error: `No model ${body.model} on this harness` };
                 return yield* complete(model, body).pipe(
                   Effect.catchCause((cause) =>
-                    Effect.succeed({ error: messageOf(Cause.squash(cause)) }),
+                    Effect.succeed({ error: messageOf(cause.pipe(Cause.squash)) }),
                   ),
                 );
               }
@@ -875,6 +875,7 @@ export const Harness = <
           }
           const tools = yield* switches(chosen.tools);
           const open = yield* connection(sessionName);
+          // oxlint-disable-next-line effecttsgo/crypto-random-uuid-in-effect -- only a unique id for a prompt that gave none
           const requestId = chosen.requestId ?? crypto.randomUUID();
           let waiter = open.waiting.get(requestId);
           if (waiter === undefined) {
@@ -953,8 +954,8 @@ export const Harness = <
     });
 
     return { session } satisfies Harness;
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- models, tools and servers are read by tag, so their requirements are stated by the signature
-  }) as Effect.Effect<
+    // Models, tools and servers are read by tag, so their requirements are stated by the signature.
+  }) as unknown as Effect.Effect<
     Harness,
     never,
     Instance | Sandboxes | ModelServices<Models> | ToolRequirements<Tools[number]>

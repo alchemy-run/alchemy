@@ -257,7 +257,8 @@ export const sandboxOf = (handle: SandboxHandle): Sandbox["Service"] => {
           stdout: result.stdout ?? result.result ?? "",
           stderr: result.stderr ?? "",
         })),
-      ) as Effect.Effect<ExecResult, SandboxError>;
+        // A harness runs this where the platform's runtime context is provided.
+      ) as unknown as Effect.Effect<ExecResult, SandboxError>;
   const file = (operation: string, path: string, script: string, ...args: ReadonlyArray<string>) =>
     Effect.flatMap(run(operation, ["sh", "-c", script, path, ...args], undefined, path), (result) =>
       result.exitCode === 0

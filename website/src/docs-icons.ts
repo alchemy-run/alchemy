@@ -121,7 +121,6 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   Sessions: l("messages-square"),
   Tools: l("wrench"),
   "Extensions & skills": l("puzzle"),
-  Hosting: l("server"),
   "Security & secrets": l("lock"),
   "Accounts & access": l("key-round"),
   "Engines & access": l("key-round"),

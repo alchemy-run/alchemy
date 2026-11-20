@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/pi",
-  "version": "2.0.0-beta.85",
+  "version": "2.0.0-beta.87",
   "description": "Pi Durable agent harnesses for Alchemy: durable conversations, typed tools and models as Effect Layers.",
   "keywords": [
     "agents",
@@ -55,7 +55,8 @@
         "default": "./lib/*.js"
       },
       "./package.json": "./package.json"
-    }
+    },
+    "access": "public"
   },
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
