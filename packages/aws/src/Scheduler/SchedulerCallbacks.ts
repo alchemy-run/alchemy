@@ -4,14 +4,16 @@ import {
   type Callback,
   CallbackError,
   type CallbackFactory,
+  type CallbackRecurrence,
   Callbacks,
   type CallbackScheduleOptions,
   type CallbackStatus,
+  nextCallbackRun,
+  resolveCallbackSchedule,
 } from "alchemy/Callback";
 import type * as Output from "alchemy/Output";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
@@ -45,6 +47,8 @@ interface CallbackEnvelope {
   payload: unknown;
   scheduledAt: number;
   progress?: number;
+  /** How a recurring job repeats; absent for one run. */
+  recurrence?: CallbackRecurrence;
 }
 
 const isCallbackEnvelope = (event: any): event is CallbackEnvelope =>
@@ -169,6 +173,11 @@ export interface SchedulerCallbacksOptions<R = never> {
  *   Effect.provide(AWS.Scheduler.SchedulerCallbacks({ kmsKey: AWS.KMS.Key("CallbackKey", {}) })),
  * );
  * ```
+ *
+ * A recurring job (`every` or `cron`) is a one-time schedule that moves to
+ * its next run when a delivery starts, so a delivery Lambda gives up on still
+ * leaves the job pending. Its runs keep Scheduler's precision of about a
+ * minute, whatever the interval.
  *
  * Delivery is at least once, so handlers must be idempotent. A job runs at
  * its time or up to about a minute later. Payloads are JSON, and a job must
@@ -354,9 +363,29 @@ export const SchedulerCallbacks = <R = never>(options: SchedulerCallbacksOptions
               }),
             );
           }
+          const name = scheduleNameOf(envelope.callback, envelope.id);
+          if (envelope.recurrence !== undefined) {
+            // Move a recurring job to its next run before this one runs, so a
+            // delivery Lambda gives up on still leaves the job pending. A
+            // retried delivery finds the job moved on and only runs.
+            const current = yield* read(envelope.callback, name);
+            if (current?.token === envelope.token) {
+              const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
+              yield* put({
+                ...envelope,
+                token: randomUUID(),
+                scheduledAt: yield* nextCallbackRun(
+                  envelope.callback,
+                  envelope.recurrence,
+                  envelope.scheduledAt,
+                  now,
+                ),
+              });
+            }
+            return yield* Effect.scoped(run(envelope.payload));
+          }
           yield* Effect.scoped(run(envelope.payload));
           // Acknowledge: delete the job unless it was replaced while it ran.
-          const name = scheduleNameOf(envelope.callback, envelope.id);
           const current = yield* read(envelope.callback, name);
           if (current?.token !== envelope.token) return;
           yield* deleteSchedule({ Name: name, GroupName: yield* GroupName }).pipe(
@@ -403,24 +432,21 @@ export const SchedulerCallbacks = <R = never>(options: SchedulerCallbacksOptions
           const schedule = (id: string, scheduling: CallbackScheduleOptions<Payload>) =>
             Effect.gen(function* () {
               const now = yield* Effect.clockWith((clock) => clock.currentTimeMillis);
-              const scheduledAt =
-                scheduling.at !== undefined
-                  ? typeof scheduling.at === "number"
-                    ? scheduling.at
-                    : scheduling.at.getTime()
-                  : now + Duration.toMillis(scheduling.after);
+              const { at: scheduledAt, recurrence } = yield* resolveCallbackSchedule(
+                name,
+                scheduling as CallbackScheduleOptions<unknown>,
+                now,
+              );
               const progress = scheduling.progress;
               if (
                 !id ||
-                !Number.isFinite(scheduledAt) ||
-                scheduledAt <= 0 ||
                 !Schema.is(Schema.Json)(scheduling.payload) ||
                 (progress !== undefined && (!Number.isSafeInteger(progress) || progress < 0))
               ) {
                 return yield* new CallbackError({
                   callback: name,
                   message:
-                    "Callback jobs need a non-empty ID, a positive delivery time, a JSON payload and a nonnegative safe integer progress",
+                    "Callback jobs need a non-empty ID, a JSON payload and a nonnegative safe integer progress",
                 });
               }
               const existing =
@@ -441,6 +467,7 @@ export const SchedulerCallbacks = <R = never>(options: SchedulerCallbacksOptions
                 payload: scheduling.payload,
                 scheduledAt,
                 progress,
+                ...(recurrence === undefined ? {} : { recurrence }),
               });
             });
 

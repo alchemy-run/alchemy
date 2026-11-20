@@ -3,7 +3,7 @@ import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 export class UnsupportedAlarmSchemaVersion extends Data.TaggedError(
   "UnsupportedAlarmSchemaVersion",
@@ -26,7 +26,7 @@ export const ensureAlarmTables = (storage: cf.DurableObjectStorage) =>
           .one().version
       : 0;
     if (version === SCHEMA_VERSION) return;
-    if (version !== 0 && version !== 1) {
+    if (version !== 0 && version !== 1 && version !== 2) {
       throw new UnsupportedAlarmSchemaVersion({
         version,
         supportedVersion: SCHEMA_VERSION,
@@ -63,16 +63,22 @@ export const ensureAlarmTables = (storage: cf.DurableObjectStorage) =>
           ON CONFLICT (id) DO UPDATE SET version = excluded.version;
       `);
       }
-      // Keep run_at as the indexed effective wake deadline. Existing rows have
-      // no recoverable original deadline, so their current wake is the baseline.
-      storage.sql.exec(`
+      if (version < 2) {
+        // Keep run_at as the indexed effective wake deadline. Existing rows have
+        // no recoverable original deadline, so their current wake is the baseline.
+        storage.sql.exec(`
         ALTER TABLE alchemy_alarm_callbacks ADD COLUMN scheduled_at INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE alchemy_alarm_callbacks ADD COLUMN retry_at INTEGER;
         ALTER TABLE alchemy_alarm_callbacks ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE alchemy_alarm_callbacks ADD COLUMN parked INTEGER NOT NULL DEFAULT 0;
         ALTER TABLE alchemy_alarm_callbacks ADD COLUMN progress INTEGER NOT NULL DEFAULT -1;
         UPDATE alchemy_alarm_callbacks SET scheduled_at = run_at;
-        UPDATE alchemy_alarm_schema SET version = 2 WHERE id = 1;
+      `);
+      }
+      // A recurring job's schedule; existing jobs run once.
+      storage.sql.exec(`
+        ALTER TABLE alchemy_alarm_callbacks ADD COLUMN recurrence TEXT;
+        UPDATE alchemy_alarm_schema SET version = 3 WHERE id = 1;
       `);
     });
   });
