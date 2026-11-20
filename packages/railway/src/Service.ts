@@ -224,6 +224,20 @@ export interface ServiceProps extends PlatformProps {
    * Git watch patterns that trigger a rebuild.
    */
   watchPatterns?: string[];
+  /**
+   * Credentials Railway pulls a private {@link image} with (GHCR, Docker Hub,
+   * GitLab, …). Railway never returns stored credentials, so Alchemy records
+   * a SHA-256 fingerprint of them (`registryCredentialsHash`) and writes them
+   * only on create, on adoption, or when the fingerprint changes. Omitting the
+   * prop leaves the service's current credentials alone.
+   *
+   * For GHCR the username is the account and the password a token with
+   * `read:packages`.
+   */
+  registryCredentials?: {
+    username: string;
+    password: Redacted.Redacted<string> | string;
+  };
 }
 
 export type Service = Resource<
@@ -292,6 +306,11 @@ export type Service = Resource<
     code: {
       hash: string;
     };
+    /**
+     * SHA-256 fingerprint of the registry credentials last written, when
+     * `registryCredentials` is set. Never the credentials themselves.
+     */
+    registryCredentialsHash?: string;
   },
   ServiceBinding,
   Providers
