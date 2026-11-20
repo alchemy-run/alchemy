@@ -22,7 +22,7 @@ import type { Callbacks } from "alchemy/Callback";
 import type { HttpEffect } from "alchemy/Http";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { makeInputGate, type InputGateShape } from "alchemy/Workers/InputGate";
+import { makeInputGate } from "alchemy/Workers/InputGate";
 import { decodeResult, encodeResult, payloadCodec } from "alchemy/WorkflowEncoding";
 import type * as Cause from "effect/Cause";
 import { ClusterSchema, DeliverAt, Entity as EffectEntity } from "effect/cluster";
@@ -32,6 +32,7 @@ import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as ServerRequest from "effect/http/HttpServerRequest";
@@ -44,6 +45,7 @@ import * as Queue from "effect/Queue";
 import * as Random from "effect/Random";
 import * as Ref from "effect/Ref";
 import { Rpc } from "effect/rpc";
+import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Socket from "effect/socket/Socket";
@@ -55,18 +57,20 @@ import {
   type Attachment,
   className,
   type Host,
-  type ListOptions,
   makePlatform,
   type Namespace,
   type ObjectImpl,
   type ObjectSocket,
   ObjectState,
-  type ObjectStateShape,
   type ObjectStorage,
+  type ObjectStateShape,
   parseMultiplexedName,
   SUBSCRIPTION_HEADER,
 } from "../DurableObjects.ts";
 import type { Platform, Subscription } from "../Platform.ts";
+import { migrate, objectStorage, type Retention, sweep } from "./internal.ts";
+
+export type { Retention } from "./internal.ts";
 
 /**
  * Wake an instance at `at`: a persisted message delivered when it is due,
@@ -193,80 +197,6 @@ type InstanceBuild = Effect.Effect<
   never,
   ObjectState | RuntimeContext | Callbacks | Scope.Scope
 >;
-
-/** Where every instance keeps its storage: one row per key, in the cluster's database. */
-const TABLE = "alchemy_domain_objects";
-
-const encode = (value: unknown) => JSON.stringify(value ?? null);
-const decode = <T>(text: string) => JSON.parse(text) as T;
-
-/**
- * Domain's storage for one entity id over the cluster's Postgres. Every
- * operation goes through the instance's input gate, as on Cloudflare.
- */
-const objectStorage = (sql: SqlClient, object: string, gate: InputGateShape): ObjectStorage => {
-  const run = <A>(effect: Effect.Effect<A, unknown>) => gate.storage(Effect.orDie(effect));
-  const putOne = (key: string, value: unknown) =>
-    sql`INSERT INTO ${sql(TABLE)} (object, key, value) VALUES (${object}, ${key}, ${encode(value)})
-        ON CONFLICT (object, key) DO UPDATE SET value = excluded.value`;
-  return {
-    get: <T>(key: string) =>
-      run(
-        sql<{
-          value: string;
-        }>`SELECT value FROM ${sql(TABLE)} WHERE object = ${object} AND key = ${key}`.pipe(
-          Effect.map((rows) => (rows[0] === undefined ? undefined : decode<T>(rows[0].value))),
-        ),
-      ),
-    put: ((keyOrEntries: string | Record<string, unknown>, value?: unknown) =>
-      run(
-        typeof keyOrEntries === "string"
-          ? Effect.asVoid(putOne(keyOrEntries, value))
-          : Effect.forEach(Object.entries(keyOrEntries), ([key, entry]) => putOne(key, entry), {
-              discard: true,
-            }),
-      )) as ObjectStorage["put"],
-    delete: ((keyOrKeys: string | ReadonlyArray<string>) => {
-      const keys = typeof keyOrKeys === "string" ? [keyOrKeys] : keyOrKeys;
-      const deleted =
-        keys.length === 0
-          ? Effect.succeed(0)
-          : sql<{
-              key: string;
-            }>`DELETE FROM ${sql(TABLE)} WHERE object = ${object} AND ${sql.in("key", keys)} RETURNING key`.pipe(
-              Effect.map((rows) => rows.length),
-            );
-      return run<number | boolean>(
-        typeof keyOrKeys === "string" ? Effect.map(deleted, (n) => n > 0) : deleted,
-      );
-    }) as ObjectStorage["delete"],
-    list: <T>({ prefix, start, startAfter, end, limit, reverse }: ListOptions = {}) =>
-      run(
-        sql<{ key: string; value: string }>`SELECT key, value FROM ${sql(TABLE)}
-          WHERE object = ${object}
-          ${prefix ? sql`AND starts_with(key, ${prefix})` : sql``}
-          ${start !== undefined ? sql`AND key >= ${start}` : sql``}
-          ${startAfter !== undefined ? sql`AND key > ${startAfter}` : sql``}
-          ${end !== undefined ? sql`AND key < ${end}` : sql``}
-          ${reverse ? sql`ORDER BY key DESC` : sql`ORDER BY key`}
-          ${limit !== undefined ? sql`LIMIT ${Math.max(0, limit | 0)}` : sql``}`.pipe(
-          Effect.map((rows) => new Map(rows.map((row) => [row.key, decode<T>(row.value)]))),
-        ),
-      ),
-    // Held across the whole transaction, as Cloudflare's gate is.
-    transaction: (effect) =>
-      gate.exclusive(sql.withTransaction(effect).pipe(Effect.orDie)) as never,
-  };
-};
-
-/** Create the storage table, once per runner. */
-const migrate = (sql: SqlClient) =>
-  sql`CREATE TABLE IF NOT EXISTS ${sql(TABLE)} (
-    object TEXT COLLATE "C" NOT NULL,
-    key TEXT COLLATE "C" NOT NULL,
-    value TEXT NOT NULL,
-    PRIMARY KEY (object, key)
-  )`.pipe(Effect.orDie);
 
 /** A Domain host entity was asked for an object of a class it doesn't host. */
 export class DomainClassNotHosted extends Data.TaggedError("Cluster.DomainClassNotHosted")<{
@@ -478,6 +408,15 @@ export interface EntitiesOptions<PoolReq> {
   readonly handler?: string;
   /** The pool whose runners run the model, e.g. `ClusterDocker.SwarmPool("Default")`. */
   readonly pool: PoolLayer<PoolReq>;
+  /**
+   * How long the host keeps rows that only dedupe needs: command receipts,
+   * policy delivery marks, cancelled scheduled commands, and Effect
+   * Cluster's processed messages to the entity. Every runner sweeps them
+   * each `interval`.
+   *
+   * @default { receipts: "30 days", deliveries: "7 days", cancelled: "7 days", messages: "7 days", interval: "1 hour" }
+   */
+  readonly retention?: Retention;
 }
 
 /**
@@ -766,6 +705,19 @@ export const layerEntities = <PoolReq>(
             for (const [workflow, execute] of yield* Ref.get(registrations))
               yield* clusterEngine.register(workflow as never, execute as never);
             yield* Deferred.succeed(engine, clusterEngine);
+            // Each runner sweeps on its own; a sweep that fails runs at the next interval.
+            yield* Effect.forkScoped(
+              Effect.flatMap(sql, (client) => sweep(client, name, options.retention)).pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning(`Cluster.Entity '${name}': retention sweep failed`, cause),
+                ),
+                Effect.repeat(
+                  Schedule.spaced(
+                    Duration.fromInputUnsafe(options.retention?.interval ?? "1 hour"),
+                  ),
+                ),
+              ),
+            );
           }).pipe(Layer.effectDiscard),
         );
         const deferredEngine = WorkflowEngine.WorkflowEngine.of({
