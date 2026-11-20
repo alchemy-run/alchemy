@@ -90,15 +90,6 @@ export interface Options<
   readonly streams?: S;
   /** The queries a client may ask. Every query of the model by default. */
   readonly queries?: Q;
-  /**
-   * How long a live read pushed over a WebSocket may run before its
-   * middleware judges the caller again. Once it has passed, the next commit
-   * to the key closes the socket instead of pushing; the client reconnects at
-   * once and resumes from its cursor, so a caller still allowed misses
-   * nothing, and one the middleware now refuses gets its typed rejection.
-   * Unset, a live read is judged once, when it connects.
-   */
-  readonly reauthorizeLiveReads?: Duration.Input;
 }
 
 /** What an Api over `M` serves, from the names it lists. */
@@ -984,20 +975,23 @@ const liveRequestOf = (request: { readonly url: string }): LiveRequest | undefin
   return raw === null ? undefined : Option.getOrUndefined(decodeLiveRequest(raw));
 };
 
+/** The shortest a live read stays open on one verdict (see `Domain.validUntil`). */
+const MIN_VERDICT_MILLIS = 1_000;
+
 /**
  * Serve live reads (`watch` and `events`) as WebSockets. The read's
  * middleware runs here, in the Worker, against the upgrade request's own
  * headers (cookies, in a browser); the context it provides travels with
  * the subscription to the object that owns the key, which pushes to the
  * socket on every commit. A refused read still connects, to deliver its
- * typed rejection. With `reauthorizeAfter`, the subscription carries when its
- * middleware must run again (see `Subscription.reauthorizeAt`).
+ * typed rejection. When the middleware says how long its verdict holds
+ * (`Domain.validUntil`), the subscription carries it, and the platform closes
+ * the read then so the client reconnects through the middleware again.
  */
 const liveReads = (
   entries: ReadonlyArray<Servable>,
   internals: Model.Internals["Service"],
   middleware: Context.Context<never>,
-  reauthorizeAfter: Duration.Input | undefined,
 ) => {
   const reads = new Map<
     string,
@@ -1033,12 +1027,17 @@ const liveReads = (
     const { key, where, after } = payload.value as ReadPayload;
     yield* Effect.annotateCurrentSpan({ "domain.read": live.tag, "domain.key": String(key) });
     // Run the read's middleware, as the RPC server would, around capturing what it provides.
-    let authorized: Effect.Effect<RequestContext.Json, unknown> = RequestContext.capture;
+    type Verdict = { readonly context: RequestContext.Json; readonly validUntil?: number };
+    let authorized: Effect.Effect<Verdict, unknown> = Effect.gen(function* () {
+      const context = yield* RequestContext.capture;
+      const validUntil = yield* RequestContext.ValidUntil;
+      return validUntil === undefined ? { context } : { context, validUntil };
+    });
     for (const service of read.rpc.middlewares) {
       const run = Context.getUnsafe(middleware, service) as unknown as (
-        effect: Effect.Effect<RequestContext.Json, unknown>,
+        effect: Effect.Effect<Verdict, unknown>,
         options: unknown,
-      ) => Effect.Effect<RequestContext.Json, unknown>;
+      ) => Effect.Effect<Verdict, unknown>;
       authorized = run(authorized, {
         rpc: read.rpc,
         client: new Rpc.ServerClient(0),
@@ -1047,20 +1046,23 @@ const liveReads = (
         payload: payload.value,
       });
     }
+    const connectedAt = yield* Clock.currentTimeMillis;
     const subscription: Subscription = {
       requestId: live.id,
       mode: read.mode,
       where: where as Subscription["where"],
       context: {},
       cursor: live.cursor ?? (read.mode === "watch" ? -1 : (after ?? 0)),
-      ...(reauthorizeAfter === undefined
-        ? {}
-        : {
-            reauthorizeAt: (yield* Clock.currentTimeMillis) + Duration.toMillis(reauthorizeAfter),
-          }),
     };
     const judged = yield* authorized.pipe(
-      Effect.map((context): Subscription => ({ ...subscription, context })),
+      Effect.map((verdict): Subscription => ({
+        ...subscription,
+        context: verdict.context,
+        // At least a second: a verdict already out can't make a client reconnect in a loop.
+        ...(verdict.validUntil === undefined
+          ? {}
+          : { validUntil: Math.max(verdict.validUntil, connectedAt + MIN_VERDICT_MILLIS) }),
+      })),
       // A refusal, or a defect (already logged and redacted by the middleware), ends the read.
       Effect.catchCause((cause) =>
         Watch.refuse(
@@ -1261,7 +1263,6 @@ const build = (
   unresolved: ReadonlyArray<Unservable>,
   group: RpcGroup.RpcGroup<Rpc.Any>,
   annotations: Annotations,
-  reauthorizeLiveReads: Duration.Input | undefined,
 ): unknown => {
   const client = Effect.gen(function* () {
     // Read once, here: the consistency of every command sent without one.
@@ -1284,7 +1285,7 @@ const build = (
     );
     // One server per request: Workers forbid sharing I/O objects across requests.
     const rpc = RpcServer.toHttpEffect(group).pipe(Effect.flatten, Effect.provide(layer));
-    const live = liveReads(entries, yield* Model.Internals, middleware, reauthorizeLiveReads);
+    const live = liveReads(entries, yield* Model.Internals, middleware);
     const fetch = Effect.gen(function* () {
       const request = yield* HttpServerRequest;
       return request.headers.upgrade?.toLowerCase() === "websocket" ? yield* live : yield* rpc;
@@ -1477,7 +1478,6 @@ export const make = <
     unresolved,
     RpcGroup.make(...serves.flatMap(rpcsOf)) as unknown as RpcGroup.RpcGroup<Rpc.Any>,
     annotations,
-    options.reauthorizeLiveReads,
   ) as ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, Q>>>;
 };
 

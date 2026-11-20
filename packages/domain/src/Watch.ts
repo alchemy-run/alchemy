@@ -1,4 +1,5 @@
 import * as Clock from "effect/Clock";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import type { HttpServerError } from "effect/http/HttpServerError";
@@ -323,14 +324,25 @@ export const serveSocket = (
       closeCode = REAUTHORIZE_CLOSE_CODE;
       return true;
     });
-    const pushes = Effect.gen(function* () {
+    // When the verdict runs out, even with no change: close, so the client is judged again.
+    const { validUntil } = subscription;
+    const expires =
+      validUntil === undefined
+        ? Effect.never
+        : Effect.gen(function* () {
+            const now = yield* Clock.currentTimeMillis;
+            yield* Effect.sleep(Duration.millis(Math.max(0, validUntil - now)));
+            closeCode = REAUTHORIZE_CLOSE_CODE;
+          });
+    const pushing = Effect.gen(function* () {
       if (yield* deliver) return;
       yield* changes.pipe(
         Stream.mapEffect(() => onChange),
         Stream.takeUntil((done) => done),
         Stream.runDrain,
       );
-    }).pipe(
+    });
+    const pushes = Effect.raceFirst(pushing, expires).pipe(
       Effect.andThen(Effect.suspend(() => writer.write(new Socket.CloseEvent(closeCode, "")))),
       Effect.catchCause(() =>
         writer.write(new Socket.CloseEvent(1011, "Domain could not push to this read")),

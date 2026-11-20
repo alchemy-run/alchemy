@@ -440,6 +440,7 @@ const accept = (
     key: string,
     subscription: Subscription,
   ) => Effect.Effect<Push, never, ObjectState | RuntimeContext>,
+  expiry: Expiry,
 ) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
@@ -459,6 +460,10 @@ const accept = (
     const { key, subscription } = attachment.value;
     return yield* exclusively(
       Effect.gen(function* () {
+        // Armed before the socket is accepted: a read is never left open past its verdict.
+        if (subscription.refused === undefined && subscription.validUntil !== undefined) {
+          yield* expiry.arm(subscription.validUntil);
+        }
         const [response, socket] = yield* sockets.accept();
         if (subscription.refused !== undefined) {
           yield* socket.send(
@@ -500,6 +505,52 @@ const broadcast = (
       yield* deliverPush(socket, attachment.key, push(attachment));
     }
   });
+
+/** Closes this instance's live reads once their middleware's verdicts run out. */
+interface Expiry {
+  /** Make sure the instance wakes by `at` to close the reads due then. */
+  readonly arm: (at: number) => Effect.Effect<void, never, ObjectState | RuntimeContext>;
+}
+
+/**
+ * The instance's {@link Expiry}: one durable callback, due at the soonest
+ * `validUntil` among its sockets. It wakes a hibernated object even when its
+ * key has no commits, closes each read whose verdict has run out with
+ * {@link REAUTHORIZE_CLOSE_CODE}, and arms itself for the next. The client
+ * reconnects from its cursor, through the read's middleware.
+ */
+const makeExpiry = Effect.gen(function* () {
+  const state = yield* ObjectState;
+  const JOB = "live-reads";
+  // Set once the callback exists: its handler arms it again for the next verdict.
+  let rearm: (at: number) => Effect.Effect<void, never, RuntimeContext> = () => Effect.void;
+  const callback = yield* makeCallback("domain:verdicts", (_: unknown) =>
+    exclusively(
+      Effect.gen(function* () {
+        if (state.sockets === undefined) return;
+        const now = yield* Clock.currentTimeMillis;
+        let next = Infinity;
+        for (const socket of yield* state.sockets.all()) {
+          const until = socket.deserializeAttachment<Attachment>()?.subscription.validUntil;
+          if (until === undefined) continue;
+          if (now >= until) yield* socket.close(REAUTHORIZE_CLOSE_CODE, "reauthorize");
+          else next = Math.min(next, until);
+        }
+        if (Number.isFinite(next)) yield* rearm(next);
+      }),
+    ).pipe(Effect.orDie),
+  );
+  rearm = (at) => callback.schedule(JOB, { at, payload: {} }).pipe(Effect.orDie);
+  const expiry: Expiry = {
+    arm: (at) =>
+      Effect.gen(function* () {
+        const pending = yield* callback.getStatus(JOB);
+        if (pending !== undefined && pending.scheduledAt <= at) return;
+        yield* callback.schedule(JOB, { at, payload: {} });
+      }).pipe(Effect.orDie),
+  };
+  return expiry;
+});
 
 /** Live reads only receive; a client message or close needs no work beyond ending the socket. */
 const socketHandlers = {
@@ -1421,6 +1472,7 @@ const viewObject = (
 ) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
+    const expiry = yield* makeExpiry;
     const outbox = yield* queue<Delivery>("outbox", kit.deliver);
     const stored = state.storage
       .get<ViewSnapshot>("snapshot")
@@ -1662,13 +1714,15 @@ const viewObject = (
           }),
         ),
       // A live read of this key: accept its WebSocket, then push on every commit.
-      fetch: accept((key, subscription) =>
-        Effect.gen(function* () {
-          const snapshot = yield* read;
-          const entries =
-            subscription.mode === "events" ? yield* entriesAfter(subscription.cursor) : [];
-          return yield* kit.push(key, subscription, snapshot, entries);
-        }),
+      fetch: accept(
+        (key, subscription) =>
+          Effect.gen(function* () {
+            const snapshot = yield* read;
+            const entries =
+              subscription.mode === "events" ? yield* entriesAfter(subscription.cursor) : [];
+            return yield* kit.push(key, subscription, snapshot, entries);
+          }),
+        expiry,
       ),
       ...socketHandlers,
     };
@@ -1933,6 +1987,7 @@ const projectionObject = (
 const streamObject = (kit: StreamKit) =>
   Effect.gen(function* () {
     const state = yield* ObjectState;
+    const expiry = yield* makeExpiry;
     const readMeta = state.storage
       .get<StreamMeta>("meta")
       .pipe(Effect.map((meta) => meta ?? emptyStreamMeta));
@@ -2004,13 +2059,15 @@ const streamObject = (kit: StreamKit) =>
       after: (after: number) => reportDefects(entriesAfter(after)),
       page: (range: ListRange | undefined) => reportDefects(entriesIn(range)),
       // A live read of this key: accept its WebSocket, then push on every append.
-      fetch: accept((key, subscription) =>
-        Effect.gen(function* () {
-          const meta = yield* readMeta;
-          const entries =
-            subscription.mode === "events" ? yield* entriesAfter(subscription.cursor) : [];
-          return yield* kit.push(key, subscription, meta, entries, yield* latest(meta));
-        }),
+      fetch: accept(
+        (key, subscription) =>
+          Effect.gen(function* () {
+            const meta = yield* readMeta;
+            const entries =
+              subscription.mode === "events" ? yield* entriesAfter(subscription.cursor) : [];
+            return yield* kit.push(key, subscription, meta, entries, yield* latest(meta));
+          }),
+        expiry,
       ),
       ...socketHandlers,
     };

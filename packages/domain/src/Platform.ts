@@ -118,11 +118,11 @@ export const Subscription = Schema.Struct({
   /** `events` only: set once the `CaughtUp` frame after the read's history was sent. */
   caughtUpSent: Schema.optionalKey(Schema.Boolean),
   /**
-   * Epoch milliseconds after which the read's middleware must run again (see
-   * the Api's `reauthorizeLiveReads`): the first push after it closes the
-   * connection with {@link REAUTHORIZE_CLOSE_CODE} instead of sending.
+   * Epoch milliseconds until which the read's middleware vouched for the
+   * caller (see `Domain.validUntil`). Once it passes, the platform closes the
+   * connection with {@link REAUTHORIZE_CLOSE_CODE} instead of sending more.
    */
-  reauthorizeAt: Schema.optionalKey(Schema.Number),
+  validUntil: Schema.optionalKey(Schema.Number),
 });
 export type Subscription = typeof Subscription.Type;
 
@@ -135,7 +135,7 @@ export const REAUTHORIZE_CLOSE_CODE = 4000;
 
 /** Whether a subscription must be judged again before anything more is sent. */
 export const mustReauthorize = (subscription: Subscription, now: number): boolean =>
-  subscription.reauthorizeAt !== undefined && now >= subscription.reauthorizeAt;
+  subscription.validUntil !== undefined && now >= subscription.validUntil;
 
 /**
  * What to send a subscriber, from a kit's `push`.

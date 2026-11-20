@@ -114,3 +114,56 @@ export const restore = Effect.fn(function* (json: Json) {
   }
   return context as EffectContext.Context<never>;
 });
+
+/**
+ * Until when the middleware a request ran through vouched for its caller, in
+ * epoch milliseconds: the earliest any of them set with {@link validUntil}.
+ *
+ * @internal
+ */
+export const ValidUntil = EffectContext.Reference<number | undefined>(
+  "alchemy/Domain/RequestContext/ValidUntil",
+  { defaultValue: () => undefined },
+);
+
+/**
+ * Say how long a middleware's verdict holds, such as until the session token
+ * it checked expires. A call is judged once and finishes, so this changes
+ * nothing for commands and queries. A live read (`watch`, `events`) pushed
+ * over a WebSocket is closed when the time passes, even if its key has no
+ * new commits; the client reconnects at once from its cursor, which runs the
+ * middleware again. A caller still allowed misses nothing, and one it now
+ * refuses gets its typed error. Several middleware may set it: the earliest
+ * time wins.
+ *
+ * ### Ending a live read when its session expires
+ * **Example:** A session middleware whose token carries its expiry
+ * ```typescript
+ * import * as Domain from "@alchemy.run/domain";
+ * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
+ * import * as Option from "effect/Option";
+ *
+ * export const SessionLive = Layer.succeed(Session, (effect, { headers }) =>
+ *   Effect.flatMap(
+ *     verifySession(headers),
+ *     Option.match({
+ *       onNone: () => Effect.fail(new Unauthorized()),
+ *       onSome: ({ actor, expires }) =>
+ *         effect.pipe(
+ *           Effect.provideService(CurrentActor, actor),
+ *           Domain.validUntil(expires),
+ *         ),
+ *     }),
+ *   ),
+ * );
+ * ```
+ */
+export const validUntil =
+  (at: Date | number) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
+    const millis = typeof at === "number" ? at : at.getTime();
+    return Effect.updateService(self, ValidUntil, (current) =>
+      current === undefined ? millis : Math.min(current, millis),
+    );
+  };
