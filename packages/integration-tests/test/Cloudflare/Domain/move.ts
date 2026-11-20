@@ -109,9 +109,22 @@ export const backdatePasses = Effect.fn(function* (
 ) {
   const { accountId } = yield* yield* CloudflareEnvironment;
   const workflowName = yield* migrationWorkflow(scriptName);
-  const namespaces = yield* namespacesOf(scriptName);
+  // From the Worker's own bindings: the account's namespace listing can still show a
+  // class under the name it had before the upload renamed it.
+  const namespaces = yield* boundClasses(scriptName).pipe(
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (bound) => classes.every((className) => bound[className] !== undefined),
+      times: 30,
+    }),
+  );
+  const marked: Array<string> = [];
   for (const className of classes) {
-    const instanceId = passMarker(className, namespaces[className]!, 1);
+    const namespace = namespaces[className];
+    if (namespace === undefined)
+      return yield* Effect.die(new Error(`${scriptName} doesn't bind ${className}`));
+    const instanceId = passMarker(className, namespace, 1);
+    marked.push(instanceId);
     yield* workflows.createInstance({
       accountId,
       workflowName,
@@ -126,6 +139,17 @@ export const backdatePasses = Effect.fn(function* (
       }),
     );
   }
+  // The next deploy reads the complete instances from the listing: wait until it shows these.
+  yield* workflows.listInstances.items({ accountId, workflowName, status: "complete" }).pipe(
+    Stream.map((instance) => instance.id),
+    Stream.runCollect,
+    Effect.map((ids) => new Set(ids)),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (ids) => marked.every((id) => ids.has(id)),
+      times: 30,
+    }),
+  );
 });
 
 /**
