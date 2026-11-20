@@ -24,7 +24,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type * as Types from "effect/Types";
-import { waitUntilDeleted, projectServices } from "./GraphQL.ts";
+import { environmentPatchCommit, waitUntilDeleted, projectServices } from "./GraphQL.ts";
 import {
   collectBindingState,
   createRailwayHostedSupport,
@@ -780,11 +780,6 @@ const serviceInstanceDeploy = Query.fn((environmentId: string, serviceId: string
 // Railway keeps one service per project with an instance per environment.
 // Scoping by `environmentId` removes only that instance; Railway drops the
 // service once no instances remain. Omitting it deletes every environment.
-const environmentPatchCommit = Query.fn(
-  (input: { environmentId: string; commitMessage: string; patch: unknown }) =>
-    Railway.environmentPatchCommit(input),
-);
-
 // Railway does not fan an existing service out to other environments, so a
 // Service attaching to one in a new environment adds its instance through
 // the environment config, as Railway's own IaC does.
