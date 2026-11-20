@@ -942,6 +942,9 @@ export const InstanceProvider = () =>
           // last instance it launched, so a launch retried after a lost reply
           // returns the first instance, and a relaunch after the instance was
           // terminated sends a new token.
+          // A fresh launch already boots the current bundle and env, so the
+          // hosted-runtime reboot below is only for an instance that existed.
+          const launchedNow = instance === undefined;
           if (instance === undefined) {
             const launch = (previous: string) =>
               ec2
@@ -989,7 +992,7 @@ export const InstanceProvider = () =>
           }
 
           const instanceId = instance.InstanceId as InstanceId;
-          let restarted = false;
+          let restarted = launchedNow;
 
           // Sync security groups — observed primary-ENI groups vs desired.
           const observedSecurityGroups = (instance.SecurityGroups ?? [])
