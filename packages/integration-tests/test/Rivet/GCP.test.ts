@@ -1,4 +1,5 @@
 import * as GCP from "@alchemy.run/gcp";
+import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as IAM from "@alchemy.run/gcp/IAM";
 import * as SecretManager from "@alchemy.run/gcp/SecretManager";
 import * as Rivet from "@alchemy.run/rivet";
@@ -62,9 +63,14 @@ const rustNodes = Effect.fn(function* () {
   };
 });
 const secretOf = (
+  project: string,
   env: ReadonlyArray<{ name?: string; valueSource?: { secretKeyRef?: { secret?: string } } }>,
   name: string,
-) => env.find((entry) => entry.name === name)?.valueSource?.secretKeyRef?.secret ?? "";
+) => {
+  const secret = env.find((entry) => entry.name === name)?.valueSource?.secretKeyRef?.secret ?? "";
+  // A secret of the stack's project is referenced by its id alone.
+  return secret.startsWith("projects/") ? secret : `projects/${project}/secrets/${secret}`;
+};
 
 // The engine conformance spec, run against Rivet Durable Objects on a
 // control plane on Compute Engine and a Cloud Run worker pool, called from Cloud Run.
@@ -102,12 +108,13 @@ describe.skipIf(!!process.env.FAST)(
       "the token and the pool's secrets reach the nodes by reference, granted to the worker pool's account",
       gcp(
         Effect.gen(function* () {
+          const { project } = yield* GcpEnvironment.current;
           const { account, env } = yield* rustNodes();
           // Neither value is in the worker pool's configuration.
           for (const name of ["RIVET_TOKEN", "EXTRA_SECRET"]) {
             const entry = env.find((e) => e.name === name);
             expect(entry?.value).toBeUndefined();
-            expect(yield* secretMembers(secretOf(env, name), accessor)).toContain(
+            expect(yield* secretMembers(secretOf(project, env, name), accessor)).toContain(
               `serviceAccount:${account}`,
             );
           }
@@ -122,10 +129,11 @@ describe.skipIf(!!process.env.FAST)(
         Effect.gen(function* () {
           const out = yield* sharedStack.deploy(program(true));
           rust = out.rust as RustTarget;
+          const { project } = yield* GcpEnvironment.current;
           const { account, env } = yield* rustNodes();
           expect(account).toBe(out.account);
           for (const name of ["RIVET_TOKEN", "EXTRA_SECRET"]) {
-            expect(yield* secretMembers(secretOf(env, name), accessor)).toContain(
+            expect(yield* secretMembers(secretOf(project, env, name), accessor)).toContain(
               `serviceAccount:${out.account}`,
             );
           }

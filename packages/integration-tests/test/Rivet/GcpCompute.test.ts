@@ -119,7 +119,7 @@ describe.skipIf(!!process.env.FAST)(
           const env = services?.template?.containers?.[0]?.env ?? [];
           const token = env.find((entry) => entry.name === "RIVET_TOKEN");
           expect(token?.value).toBeUndefined();
-          expect(token?.valueSource?.secretKeyRef?.secret).toMatch(/\/secrets\//);
+          expect(token?.valueSource?.secretKeyRef?.secret).toBeTruthy();
         }),
       ),
       { timeout: 120_000 },

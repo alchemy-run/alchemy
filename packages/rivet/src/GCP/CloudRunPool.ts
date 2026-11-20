@@ -1,3 +1,4 @@
+import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as IAM from "@alchemy.run/gcp/IAM";
 import * as Run from "@alchemy.run/gcp/Run";
 import * as SecretManager from "@alchemy.run/gcp/SecretManager";
@@ -82,6 +83,16 @@ const asOutput = (value: Input<string>): Output.Output<string> =>
 const secretKeyRef = (version: string) => {
   const at = version.lastIndexOf("/versions/");
   return { secret: version.slice(0, at), version: version.slice(at + "/versions/".length) };
+};
+
+/**
+ * A version as a Cloud Run `secretKeyRef`, naming a secret of `project` by
+ * its id alone: Cloud Run caps the reference at 255 characters.
+ */
+const secretRefIn = (project: string) => (version: string) => {
+  const ref = secretKeyRef(version);
+  const own = `projects/${project}/secrets/`;
+  return ref.secret.startsWith(own) ? { ...ref, secret: ref.secret.slice(own.length) } : ref;
 };
 
 /** The grants that let a pool's worker pool read the secrets it names. @internal */
@@ -185,6 +196,7 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
     network: (cluster) => cluster.network ?? { kind: "none" as const },
     nodes: (nodes) =>
       Effect.gen(function* () {
+        const { project } = yield* GcpEnvironment.current.pipe(Effect.orDie);
         const location =
           options.location ?? (nodes.network?.kind === "gcp" ? nodes.network.region : undefined);
         const { program } = nodes;
@@ -222,7 +234,7 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
                 ).pipe(Output.map(([v]) => v));
           secretEnv.push({
             name,
-            valueSource: { secretKeyRef: ready.pipe(Output.map(secretKeyRef)) },
+            valueSource: { secretKeyRef: ready.pipe(Output.map(secretRefIn(project))) },
           });
         }
         const own = Output.all(

@@ -81,14 +81,13 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
         const token = yield* SecretManager.Secret(`${id}Token`, {
           value: nodes.environment.RIVET_TOKEN,
         });
-        const tokenRef = token.version.pipe(
-          Output.map((version) => {
-            const at = (version ?? "").lastIndexOf("/versions/");
-            return {
-              secret: (version ?? "").slice(0, at),
-              version: (version ?? "").slice(at + 10),
-            };
-          }),
+        // By id: the secret is in the pool's project, and Cloud Run caps the
+        // reference at 255 characters.
+        const tokenRef = Output.all(token.secretId, token.version).pipe(
+          Output.map(([secret, version]) => ({
+            secret,
+            version: (version ?? "").split("/versions/")[1] ?? "latest",
+          })),
         );
         const workerPool = yield* Run.WorkerPool(`${id}Nodes`, {
           location,
