@@ -355,23 +355,23 @@ The first run writes the file, next to the test. Commit it. From then on a rule 
 Not done
   ✗ Account.NeverOverdrawn says less than the rule locked in Bank.lock.json: { _tag: "Open", customerId: "", owner: "", balance: 0, frozen: "", today: { day: "", withdrawn: 0 } } passes it now, and the locked rule refuses it
   ✗ Account.NeverFrozenForLong is locked in Bank.lock.json, and is no longer a rule of Bank
-  ✗ to change a rule on purpose, run the test once with ALCHEMY_VERIFY_LOCK=update: it locks each rule as it is written, and says which
+  ✗ to change a rule on purpose, run the test once with UPDATE_VERIFY_LOCK=1: it locks each rule as it is written, and says which
 ```
 
 A new rule is added to the file. An invariant of an aggregate that changed is compared with the one kept: the solver looks for a state the rules allow now that the old rule refused. If there is none, the new rule says at least as much, and it replaces the old one in the file. Every other kind of rule is compared as text.
 
 ## Change a locked rule on purpose
 
-Sometimes the rule was wrong, and saying less is the fix. Run the test once with `ALCHEMY_VERIFY_LOCK=update`, the way a snapshot is rewritten.
+Sometimes the rule was wrong, and saying less is the fix. Run the test once with `UPDATE_VERIFY_LOCK=1`, the way a snapshot is rewritten.
 
 ```sh
-ALCHEMY_VERIFY_LOCK=update bun vitest run test/Bank.verify.test.ts
+UPDATE_VERIFY_LOCK=1 bun vitest run test/Bank.verify.test.ts
 ```
 
 Every rule is locked as it's written now. The run logs a warning for each rule it let go, and the report lists them:
 
 ```text
-Relocked with ALCHEMY_VERIFY_LOCK=update
+Relocked with UPDATE_VERIFY_LOCK=1
   ! Account.NeverOverdrawn says less than the rule locked in Bank.lock.json: { _tag: "Open", customerId: "", owner: "", balance: 0, frozen: "", today: { day: "", withdrawn: 0 } } passes it now, and the locked rule refuses it
   ! Account.NeverFrozenForLong is locked in Bank.lock.json, and is no longer a rule of Bank
 ```

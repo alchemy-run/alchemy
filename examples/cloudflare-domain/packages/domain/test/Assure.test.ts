@@ -17,10 +17,12 @@ import { Truck } from "./fixtures/Skew.aggregate.ts";
 // reached, and a rule cannot be taken out or made to say less unseen.
 
 /** Node's services, with `CI` as given: a lock file is written only outside it. */
-const services = (ci: boolean, lock = "") =>
+const services = (ci: boolean, update = false) =>
   Layer.mergeAll(
     NodeServices.layer,
-    ConfigProvider.layer(ConfigProvider.fromUnknown({ CI: String(ci), ALCHEMY_VERIFY_LOCK: lock })),
+    ConfigProvider.layer(
+      ConfigProvider.fromUnknown({ CI: String(ci), UPDATE_VERIFY_LOCK: update ? "1" : "" }),
+    ),
   );
 
 const lockIn = Effect.fn(function* (name: string) {
@@ -199,7 +201,7 @@ it.effect(
         /✗ NeverOverdrawn says less than the rule locked in verify\.lock\.json: \{ balance: \d, reserved: -?\d+ \} passes it now, and the locked rule refuses it/,
       );
       expect(error.message).toContain(
-        "to change a rule on purpose, run the test once with ALCHEMY_VERIFY_LOCK=update",
+        "to change a rule on purpose, run the test once with UPDATE_VERIFY_LOCK=1",
       );
       // The lock is as it was: a failing run does not relock.
       expect(yield* fs.readFileString(lock)).toBe(locked("(hold) => hold.balance >= 10"));
@@ -274,7 +276,7 @@ const stricter = `${JSON.stringify(
 )}\n`;
 
 it.effect(
-  "ALCHEMY_VERIFY_LOCK=update locks every rule as it is written, and says what was let go",
+  "UPDATE_VERIFY_LOCK=1 locks every rule as it is written, and says what was let go",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -290,15 +292,15 @@ it.effect(
         "ReservedIsCovered is locked in verify.lock.json, and is no longer a rule of Escrow",
       );
       expect(Verify.render(report)).toContain(
-        "Relocked with ALCHEMY_VERIFY_LOCK=update\n  ! NeverOverdrawn says less",
+        "Relocked with UPDATE_VERIFY_LOCK=1\n  ! NeverOverdrawn says less",
       );
       expect(yield* fs.readFileString(lock)).toBe(locked("(hold) => hold.balance >= 0"));
-    }).pipe(Effect.scoped, Effect.provide(services(false, "update"))),
+    }).pipe(Effect.scoped, Effect.provide(services(false, true))),
   60_000,
 );
 
 it.effect(
-  "under CI, ALCHEMY_VERIFY_LOCK=update relocks nothing",
+  "under CI, UPDATE_VERIFY_LOCK=1 relocks nothing",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -307,9 +309,9 @@ it.effect(
       const error = yield* failure(Verify.aggregate(Escrow, { lock }));
       expect(error.message).toContain("✗ NeverOverdrawn says less than the rule locked");
       expect(error.message).toContain("✗ ReservedIsCovered is locked in verify.lock.json");
-      expect(error.message).not.toContain("ALCHEMY_VERIFY_LOCK");
+      expect(error.message).not.toContain("UPDATE_VERIFY_LOCK");
       expect(yield* fs.readFileString(lock)).toBe(stricter);
-    }).pipe(Effect.scoped, Effect.provide(services(true, "update"))),
+    }).pipe(Effect.scoped, Effect.provide(services(true, true))),
   60_000,
 );
 

@@ -177,10 +177,10 @@ const locking = Effect.fn(function* (options: {
   // Asked for by whoever runs the test, as a snapshot is rewritten: never under CI.
   const update =
     !ci &&
-    (yield* Config.String("ALCHEMY_VERIFY_LOCK").pipe(
-      Config.withDefault(""),
-      Effect.orElseSucceed(() => ""),
-    )) === "update";
+    (yield* Config.Boolean("UPDATE_VERIFY_LOCK").pipe(
+      Config.withDefault(false),
+      Effect.orElseSucceed(() => false),
+    ));
   const short = path.basename(file);
   /** What falls short of the lock: why the check fails, or with `update`, what was relocked. */
   const fallen: Array<string> = [];
@@ -218,7 +218,7 @@ const locking = Effect.fn(function* (options: {
   else for (const [name, now] of added) next[name] = now;
   if (reasons.length > 0 && !ci)
     reasons.push(
-      `to change a rule on purpose, run the test once with ALCHEMY_VERIFY_LOCK=update: it locks each rule as it is written, and says which`,
+      `to change a rule on purpose, run the test once with UPDATE_VERIFY_LOCK=1: it locks each rule as it is written, and says which`,
     );
   const relocked = update ? fallen : [];
   // A run that passes prints no report: what was let go is said where it will be seen.
@@ -313,7 +313,7 @@ export interface Report {
   /** Each part of the check that was not done. */
   readonly undone: ReadonlyArray<string>;
   /**
-   * With `ALCHEMY_VERIFY_LOCK=update`: each rule the lock no longer holds the code
+   * With `UPDATE_VERIFY_LOCK=1`: each rule the lock no longer holds the code
    * to, because it was taken out or changed, and was locked again as written.
    */
   readonly relocked: ReadonlyArray<string>;
@@ -674,7 +674,7 @@ export interface AggregateOptions {
    * an invariant of an aggregate that still refuses every state it refused.
    * A new rule is added to the file, and one made to say more replaces the
    * one kept. To change a rule on purpose, run the test once with
-   * `ALCHEMY_VERIFY_LOCK=update`: every rule is locked as it is written, and the
+   * `UPDATE_VERIFY_LOCK=1`: every rule is locked as it is written, and the
    * report's `relocked` says which ones no longer say what they did.
    */
   readonly lock?: URL | string;
@@ -708,7 +708,7 @@ export interface AggregateReport {
   readonly explored: Explore.Report;
   /** Each part of the check that was not done. */
   readonly undone: ReadonlyArray<string>;
-  /** With `ALCHEMY_VERIFY_LOCK=update`: each rule that was locked again as written, as for a model. */
+  /** With `UPDATE_VERIFY_LOCK=1`: each rule that was locked again as written, as for a model. */
   readonly relocked: ReadonlyArray<string>;
 }
 
@@ -721,7 +721,7 @@ export class AggregateNotVerified extends Data.TaggedError("NotVerified")<{
 const relockedLines = (relocked: ReadonlyArray<string>): ReadonlyArray<string> =>
   relocked.length === 0
     ? []
-    : ["Relocked with ALCHEMY_VERIFY_LOCK=update", ...relocked.map((line) => `  ! ${line}`), ""];
+    : ["Relocked with UPDATE_VERIFY_LOCK=1", ...relocked.map((line) => `  ! ${line}`), ""];
 
 const renderAggregate = (report: AggregateReport): string => {
   const out: Array<string> = [
