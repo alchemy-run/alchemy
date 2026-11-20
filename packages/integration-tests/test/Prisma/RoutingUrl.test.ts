@@ -3,6 +3,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as Prisma from "@alchemy.run/prisma";
+import { App, AppProvider } from "@alchemy.run/prisma/App";
 import {
   RoutingUrl,
   type RoutingUrlHostnameChangeRefused,
@@ -12,8 +13,10 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { createUrlCheck, getUrl } from "@distilled.cloud/prisma/management";
 import { AlchemyContext } from "alchemy/AlchemyContext";
+import * as DNS from "alchemy/DNS/Adapter";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
+import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
@@ -26,6 +29,11 @@ import {
   type SwitchboardDnsVisibility,
   type SwitchboardWaitOptions,
 } from "../../../prisma/src/internal/AuthoritativeDns.ts";
+import {
+  DomainVerification,
+  DomainVerificationProvider,
+} from "../../../prisma/src/internal/DomainVerification.ts";
+import { RoutingUrlResource } from "../../../prisma/src/internal/RoutingUrlResource.ts";
 import { switchboardTarget } from "../../../prisma/src/internal/Switchboard.ts";
 import { cloneFixture } from "../Cloudflare/Utils/Fixture.ts";
 import {
@@ -132,17 +140,41 @@ interface CloudState {
   ownershipOn: "exact" | "wildcard";
   /** A Prisma refusal the next create or update answers with. */
   refusal: Response | undefined;
+  /** Read `dns` and `ownership` from the records the DNS host publishes. */
+  fromZone: boolean;
 }
+
+/** One DNS host's records, as the test DNS adapter publishes them. */
+interface Zone {
+  records: DNS.DnsRecord[];
+  /** Records the DNS host removed. */
+  removed: DNS.DnsRecord[];
+  /** How many times the DNS host was asked to publish. */
+  publishes: number;
+}
+
+const sameRecord = (a: DNS.DnsRecord) => (b: DNS.DnsRecord) =>
+  a.name === b.name && a.type === b.type && a.value === b.value;
 
 const makeUrlCloud = () => {
   const rows = new Map<string, WireRoutingUrl>();
+  const zone: Zone = { records: [], removed: [], publishes: 0 };
   const state: CloudState = {
     dns: { visibility: "absent", cname: "absent" },
     checked: [],
     ownership: undefined,
     ownershipOn: "exact",
     refusal: undefined,
+    fromZone: false,
   };
+  const ownershipOf = (domain: string) =>
+    state.fromZone
+      ? zone.records.some(
+          (record) => record.type === "TXT" && record.name === `_prisma-verification.${domain}`,
+        )
+        ? "verified"
+        : undefined
+      : state.ownership;
   let next = 0;
   const fake: FakeManagementApi = makeFakeManagementApi((request) => {
     const path = request.pathname;
@@ -175,8 +207,9 @@ const makeUrlCloud = () => {
     }
     if (path === "/v1/workspaces/ws-1/domain-ownerships") {
       const domain = new URLSearchParams(request.search).get("domain") ?? "";
+      const ownership = ownershipOf(domain);
       return page(
-        state.ownership && domain.startsWith("*.") === (state.ownershipOn === "wildcard")
+        ownership && domain.startsWith("*.") === (state.ownershipOn === "wildcard")
           ? [
               {
                 id: "do-1",
@@ -184,7 +217,7 @@ const makeUrlCloud = () => {
                 workspaceId: "ws-1",
                 domain,
                 verification: TXT,
-                status: state.ownership,
+                status: ownership,
                 expiresAt: null,
                 verificationRecordLastSeenAt: null,
                 verificationRecordPresent: null,
@@ -225,6 +258,7 @@ const makeUrlCloud = () => {
   const reset = (options: Partial<CloudState> = {}, ...initial: WireRoutingUrl[]) => {
     rows.clear();
     next = 0;
+    Object.assign(zone, { records: [], removed: [], publishes: 0 });
     for (const row of initial) rows.set(row.id, row);
     Object.assign(
       state,
@@ -234,13 +268,20 @@ const makeUrlCloud = () => {
         ownership: undefined,
         ownershipOn: "exact",
         refusal: undefined,
+        fromZone: false,
       },
       options,
     );
     fake.captured.length = 0;
   };
   const routes = () => routesOf(fake.captured);
-  return { fake, rows, state, reset, routes };
+  const dnsSeen = (expected: ExpectedSwitchboardDns): SwitchboardDnsVisibility =>
+    zone.records.some(
+      sameRecord({ name: expected.name, type: "CNAME", value: expected.switchboard }),
+    )
+      ? { visibility: "seen", cname: "seen" }
+      : { visibility: "absent", cname: "absent" };
+  return { fake, rows, state, zone, dnsSeen, reset, routes };
 };
 
 const json = (value: unknown) =>
@@ -252,18 +293,63 @@ type UrlCloud = ReturnType<typeof makeUrlCloud>;
 
 class TestPrismaProviders extends Provider.ProviderCollection<TestPrismaProviders>()("Prisma") {}
 
+interface DnsRecords extends Resource<
+  "Test.DnsRecords",
+  { records: DNS.DnsRecord[] },
+  { records: DNS.DnsRecord[] }
+> {}
+const DnsRecords = Resource<DnsRecords>("Test.DnsRecords");
+
+const TEST_DNS: DNS.DnsConfig = { type: "Test.DNS" };
+
+/** A DNS host whose records live in the cloud's `zone`. */
+const testDns = (zone: Zone) =>
+  Layer.mergeAll(
+    Provider.succeed(DnsRecords, {
+      reconcile: ({ news, output }) =>
+        Effect.sync(() => {
+          zone.publishes++;
+          const stale = (output?.records ?? []).filter(
+            (record) => !news.records.some(sameRecord(record)),
+          );
+          zone.removed.push(...stale);
+          zone.records = [
+            ...zone.records.filter((record) => !stale.some(sameRecord(record))),
+            ...news.records.filter((record) => !zone.records.some(sameRecord(record))),
+          ];
+          return { records: news.records };
+        }),
+      delete: ({ output }) =>
+        Effect.sync(() => {
+          zone.removed.push(...output.records);
+          zone.records = zone.records.filter((record) => !output.records.some(sameRecord(record)));
+        }),
+    }),
+    DNS.adapterLayer(TEST_DNS.type, {
+      alias: () => Effect.die("unexpected alias"),
+      aliasSet: () => Effect.die("unexpected aliasSet"),
+      records: (id, { records }) => DnsRecords(id, { records }),
+    }),
+  );
+
 const testFor = (cloud: UrlCloud) =>
   Test.make({
-    providers: Layer.effect(TestPrismaProviders, Provider.collection([RoutingUrl])).pipe(
-      Layer.provideMerge(RoutingUrlProvider()),
+    providers: Layer.effect(
+      TestPrismaProviders,
+      Provider.collection([RoutingUrlResource, App, DomainVerification]),
+    ).pipe(
+      Layer.provideMerge(
+        Layer.mergeAll(RoutingUrlProvider(), AppProvider(), DomainVerificationProvider()),
+      ),
       Layer.provide(
         Layer.succeed(SwitchboardDnsCheck, (expected, options) =>
           Effect.sync(() => {
             cloud.state.checked.push([expected, options]);
-            return cloud.state.dns;
+            return cloud.state.fromZone ? cloud.dnsSeen(expected) : cloud.state.dns;
           }),
         ),
       ),
+      Layer.merge(testDns(cloud.zone)),
       Layer.provide(
         Layer.succeed(AlchemyContext, { dotAlchemy: ".alchemy-test", dev: false, adopt: false }),
       ),
@@ -272,6 +358,14 @@ const testFor = (cloud: UrlCloud) =>
   });
 
 const urlStack = (hostname = HOSTNAME) => RoutingUrl("Url", { app: "svc-1", hostname });
+
+const dnsStack = (hostname = HOSTNAME) =>
+  RoutingUrl("Url", { app: "svc-1", hostname, dns: TEST_DNS });
+
+const recordsFor = (hostname: string): DNS.DnsRecord[] => [
+  { name: `_prisma-verification.${hostname}`, type: "TXT", value: TXT.value },
+  { name: hostname, type: "CNAME", value: "switchboard.us-east-1.prisma.build" },
+];
 
 const failureOf = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
@@ -311,6 +405,8 @@ testFor(lifecycle).test.provider(
       expect(url.setupUrl).toContain(url.routingUrlId);
       const create = lifecycle.fake.captured.find((request) => request.method === "POST");
       expect(create?.bodyJson).toEqual({ hostname: HOSTNAME, logicalId: "Url" });
+      expect(lifecycle.zone.publishes).toBe(0);
+      expect(lifecycle.routes().some((route) => route.includes("domain-ownerships"))).toBe(false);
 
       lifecycle.fake.captured.length = 0;
       yield* stack.deploy(urlStack());
@@ -321,6 +417,70 @@ testFor(lifecycle).test.provider(
       expect(lifecycle.routes()).toContain(`DELETE /v1/urls/${url.routingUrlId}`);
       expect(lifecycle.routes().some((route) => route.includes("domain-ownerships"))).toBe(false);
       expect(lifecycle.rows.size).toBe(0);
+    }),
+  { tags },
+);
+
+const withDns = makeUrlCloud();
+testFor(withDns).test.provider(
+  "with dns, publishes the TXT and CNAME, keeps them once the row is active, and destroy removes them",
+  (stack) =>
+    Effect.gen(function* () {
+      withDns.reset();
+      yield* stack.destroy();
+
+      const url = yield* stack.deploy(dnsStack());
+
+      expect(withDns.zone.records).toEqual(recordsFor(HOSTNAME));
+      expect(url.logicalId).toBe("Url");
+      expect(url.status).toBe("pending");
+      const create = withDns.fake.captured.find((request) => request.method === "POST");
+      expect(create?.bodyJson).toEqual({ hostname: HOSTNAME, logicalId: "Url" });
+
+      withDns.rows.set(url.routingUrlId, routingUrl(url.routingUrlId, { status: "active" }));
+      withDns.fake.captured.length = 0;
+      yield* stack.deploy(dnsStack());
+
+      expect(withDns.zone.records).toEqual(recordsFor(HOSTNAME));
+      expect(withDns.zone.removed).toEqual([]);
+      expect(withDns.zone.publishes).toBe(1);
+      expect(PATCHES(withDns)).toEqual([]);
+
+      withDns.fake.captured.length = 0;
+      yield* stack.destroy();
+      expect(withDns.routes()).toContain(`DELETE /v1/urls/${url.routingUrlId}`);
+      expect(withDns.routes().some((route) => route.includes("domain-ownerships"))).toBe(false);
+      expect(withDns.zone.records).toEqual([]);
+      expect(withDns.rows.size).toBe(0);
+    }),
+  { tags },
+);
+
+const dnsChange = makeUrlCloud();
+testFor(dnsChange).test.provider(
+  "with dns, publishes the new hostname's records before the check on an active row's hostname change",
+  (stack) =>
+    Effect.gen(function* () {
+      dnsChange.reset({ fromZone: true }, routingUrl("url-1", { status: "active" }));
+      yield* stack.destroy();
+      const serving = yield* stack.deploy(dnsStack());
+      expect(serving.status).toBe("active");
+      expect(serving.records).toEqual([]);
+      expect(dnsChange.zone.records).toEqual(recordsFor(HOSTNAME));
+
+      dnsChange.fake.captured.length = 0;
+      const url = yield* stack.deploy(dnsStack("new.example.com"));
+
+      expect(url.hostname).toBe("new.example.com");
+      expect(PATCHES(dnsChange)).toEqual(["PATCH /v1/urls/url-1"]);
+      expect(dnsChange.state.checked.map(([expected]) => expected.name)).toEqual([
+        "new.example.com",
+      ]);
+      expect(dnsChange.zone.records).toEqual(recordsFor("new.example.com"));
+      expect(dnsChange.zone.removed).toEqual(recordsFor(HOSTNAME));
+
+      yield* stack.destroy();
+      expect(dnsChange.zone.records).toEqual([]);
     }),
   { tags },
 );

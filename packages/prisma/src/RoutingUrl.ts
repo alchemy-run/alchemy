@@ -11,16 +11,23 @@ import {
   getWorkspaceDomainOwnershipsVerification,
   updateUrl,
 } from "@distilled.cloud/prisma/management";
+import * as DNS from "alchemy/DNS/Adapter";
+import type { InputProps } from "alchemy/Input";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
+import * as Namespace from "alchemy/Namespace";
+import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
-import { Resource } from "alchemy/Resource";
+import type { Resource, ResourceLike } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import type { App } from "./App.ts";
+import * as Predicate from "effect/Predicate";
+import { App } from "./App.ts";
 import type { Compute } from "./Compute.ts";
 import { SwitchboardDnsCheck } from "./internal/AuthoritativeDns.ts";
 import { attrOrString, devId, devProvider } from "./internal/DevStub.ts";
+import { DomainVerification } from "./internal/DomainVerification.ts";
 import { concreteIdOf, isPrismaDevId } from "./internal/Refs.ts";
+import { RoutingUrlResource } from "./internal/RoutingUrlResource.ts";
 import { switchboardTarget } from "./internal/Switchboard.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -111,11 +118,18 @@ export interface RoutingUrlProps {
    * @default the resource's fully qualified name
    */
   logicalId?: string;
+  /**
+   * DNS host that publishes the hostname's `TXT` and `CNAME` records, e.g.
+   * `Cloudflare.DNS.Adapter()` (see
+   * [DNS Adapters](/infrastructure-as-code/dns-adapters)). Omitted: publish
+   * `records` yourself.
+   */
+  dns?: DNS.DnsConfig;
 }
 
 export interface RoutingUrl extends Resource<
   "Prisma.RoutingUrl",
-  RoutingUrlProps,
+  Omit<RoutingUrlProps, "dns">,
   {
     /** Prisma RoutingUrl ID. */
     routingUrlId: string;
@@ -180,6 +194,12 @@ export interface RoutingUrl extends Resource<
  * it takes over the domain ownership Prisma created for the RoutingUrl and
  * deletes it on destroy.
  *
+ * With `dns`, the deploy publishes the `TXT` and the `CNAME` through that DNS
+ * host before it saves the RoutingUrl, and destroy removes them. The deploy
+ * does not wait for the hostname to become `active`. A zone apex such as
+ * `example.com` needs a DNS host that flattens a `CNAME` at the apex; at any
+ * other host, omit `dns` and publish an ALIAS or ANAME yourself.
+ *
  * ### Serving a Hostname
  * **Example:** Serve an app on a hostname
  * ```typescript
@@ -190,10 +210,68 @@ export interface RoutingUrl extends Resource<
  * // url.status: "pending"; url.records: the TXT and CNAME to publish
  * ```
  *
+ * **Example:** Publish the records with a DNS host
+ * ```typescript
+ * const url = yield* Prisma.RoutingUrl("api", {
+ *   app: api,
+ *   hostname: "api.example.com",
+ *   dns: Cloudflare.DNS.Adapter(),
+ * });
+ * ```
+ *
  * @resource
  * @product Compute
  */
-export const RoutingUrl = Resource<RoutingUrl>("Prisma.RoutingUrl");
+export const RoutingUrl = (id: string, props: InputProps<RoutingUrlProps, "dns">) =>
+  Effect.gen(function* () {
+    const { dns, ...urlProps } = props;
+    if (dns === undefined) return yield* RoutingUrlResource(id, urlProps);
+    const published = yield* publishRecords(props.app, props.hostname, dns).pipe(
+      Namespace.push(id),
+    );
+    return yield* RoutingUrlResource(id, {
+      ...urlProps,
+      hostname: Output.map(
+        Output.all(Output.of(published.records as ResourceLike), published.hostname),
+        ([, hostname]) => hostname,
+      ),
+    });
+  });
+
+/**
+ * The hostname's `TXT` and `CNAME`, derived from the workspace's verification
+ * value and the app's endpoint so they are the same on every deploy.
+ */
+const publishRecords = (
+  app: InputProps<RoutingUrlProps>["app"],
+  hostname: InputProps<RoutingUrlProps>["hostname"],
+  dnsConfig: DNS.DnsConfig,
+) =>
+  Effect.gen(function* () {
+    const dns = yield* DNS.resolve(dnsConfig);
+    const service = Predicate.hasProperty(app, "Type")
+      ? (app as App | Compute)
+      : App.lookup({ appId: app as InputProps<RoutingUrlProps>["hostname"] });
+    const verification = yield* DomainVerification("Verification", {
+      project: { projectId: service.projectId },
+      domain: hostname,
+    });
+    const records = yield* dns.records("Records", {
+      records: Output.map(
+        Output.all(
+          verification.recordName,
+          verification.recordValue,
+          verification.domain,
+          service.appEndpointDomain,
+        ),
+        ([txtName, txtValue, name, endpoint]): DNS.DnsRecord[] => [
+          { name: txtName, type: "TXT", value: txtValue },
+          { name, type: "CNAME", value: switchboardTarget(endpoint) },
+        ],
+      ),
+    });
+    return { records, hostname: verification.domain };
+  });
 
 const attrsFrom = (url: ApiRoutingUrl): RoutingUrl["Attributes"] => ({
   routingUrlId: url.id,
@@ -300,7 +378,7 @@ const wildcardOf = (hostname: string) => {
 
 const ProviderLive = () =>
   Provider.effect(
-    RoutingUrl,
+    RoutingUrlResource,
     Effect.gen(function* () {
       const checkSwitchboardDns = yield* SwitchboardDnsCheck;
 
@@ -418,7 +496,7 @@ const ProviderLive = () =>
   );
 
 const ProviderLocal = () =>
-  devProvider(RoutingUrl, ["routingUrlId", "branchId"], ({ id, news }) => ({
+  devProvider(RoutingUrlResource, ["routingUrlId", "branchId"], ({ id, news }) => ({
     routingUrlId: devId("routing-url", id),
     branchId: "dev:branch:local",
     serviceId: attrOrString(news.app, "appId"),
@@ -442,7 +520,7 @@ const ProviderLocal = () =>
   }));
 
 export const RoutingUrlProvider = () =>
-  ProviderLayer.dual(RoutingUrl, {
+  ProviderLayer.dual(RoutingUrlResource, {
     local: () => ProviderLocal(),
     live: () => ProviderLive(),
   });
