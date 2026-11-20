@@ -26,6 +26,7 @@
 import * as LambdaWeb from "@distilled.cloud/aws/lambda-web";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import * as TempRoot from "alchemy/Bundle/TempRoot";
+import { registerRpcErrorClasses } from "alchemy/Local/RpcSerialization";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -34,9 +35,27 @@ import * as Stream from "effect/Stream";
 import { Assets, AssetsLive } from "../Assets.ts";
 import { flociProvidersUrl, makeDevWatchProvider } from "../Local/DevWatchProvider.ts";
 import { makeFunctionBundler, type FunctionBundleResult } from "./FunctionBundle.ts";
-import { WebFunction, WebFunctionProvider, type WebFunctionProps } from "./WebFunction.ts";
+import {
+  WebFunction,
+  WebFunctionProvider,
+  WebFunctionVpcRequiresHomeRegion,
+  type WebFunctionProps,
+} from "./WebFunction.ts";
 import { toWebFunctionZipProps, webFunctionBundleOptions } from "./WebFunctionBundle.ts";
-import { WebFunctionFailed } from "./WebFunctionEndpointSync.ts";
+import {
+  WebFunctionFailed,
+  WebFunctionInvalidConfig,
+  WebFunctionNotReady,
+} from "./WebFunctionEndpointSync.ts";
+
+// This provider runs in the RPC sidecar; register its typed failures so
+// callers receive instances of the real classes.
+registerRpcErrorClasses(
+  WebFunctionFailed,
+  WebFunctionInvalidConfig,
+  WebFunctionNotReady,
+  WebFunctionVpcRequiresHomeRegion,
+);
 
 export const FlociWebFunctionProvider = () =>
   makeDevWatchProvider<WebFunction, WebFunctionProps, WebFunction["Attributes"]>(
@@ -51,6 +70,7 @@ export const FlociWebFunctionProvider = () =>
         functionName: attrs.functionName,
         main: news.main,
         bundle: news.bundle,
+        isExternal: news.isExternal,
         uploadSourceMap: news.uploadSourceMap,
         build: news.build,
       }),
