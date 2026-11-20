@@ -23,12 +23,12 @@ import { Sandbox } from "./Sandbox.ts";
 ```
 
 ```diff lang="typescript"
-          const reply = yield* session.prompt(job.text, { requestId: job.deliveryId });
--          yield* createComment({ issue_number: job.issue, body: reply.text });
-+          yield* createComment({
-+            issue_number: job.issue,
-+            body: `${reply.text}\n\n${MARKER}`,
-+          });
+const reply = yield* session.prompt(job.text, { requestId: job.deliveryId });
+-yield* createComment({ issue_number: job.issue, body: reply.text });
++yield* createComment({
++  issue_number: job.issue,
++  body: `${reply.text}\n\n${MARKER}`,
++});
 ```
 
 ## Consume comments
@@ -42,31 +42,31 @@ import { owner, repository } from "./Repo.ts";
 ```
 
 ```diff lang="typescript"
-    yield* GitHub.consumeRepositoryEvents(
--      { owner, repository, events: ["issues"] },
-+      { owner, repository, events: ["issues", "issue_comment"] },
-      Effect.fn(function* (event) {
--        const { action, issue } = event.payload;
--        if (action === "opened") {
--          yield* issues
--            .getByName(String(issue.number))
--            .ask(issue.number, `Issue #${issue.number}: ${issue.title}\n\n${issue.body ?? ""}`, event.id);
--        }
-+        const { number, title } = event.payload.issue;
-+        const issue = issues.getByName(String(number));
-+        if (event.name === "issues") {
-+          const { action, issue: opened } = event.payload;
-+          if (action === "opened") {
-+            yield* issue.ask(number, `Issue #${number}: ${title}\n\n${opened.body ?? ""}`, event.id);
-+          }
-+          return;
-+        }
-+        const { action, comment } = event.payload;
-+        if (action === "created" && !comment.body.includes(MARKER)) {
-+          yield* issue.ask(number, comment.body, event.id);
-+        }
-      }, Effect.orDie),
-    );
+yield* GitHub.consumeRepositoryEvents(
+-  { owner, repository, events: ["issues"] },
++  { owner, repository, events: ["issues", "issue_comment"] },
+  Effect.fn(function* (event) {
+-    const { action, issue } = event.payload;
+-    if (action === "opened") {
+-      yield* issues
+-        .getByName(String(issue.number))
+-        .ask(issue.number, `Issue #${issue.number}: ${issue.title}\n\n${issue.body ?? ""}`, event.id);
+-    }
++    const { number, title } = event.payload.issue;
++    const issue = issues.getByName(String(number));
++    if (event.name === "issues") {
++      const { action, issue: opened } = event.payload;
++      if (action === "opened") {
++        yield* issue.ask(number, `Issue #${number}: ${title}\n\n${opened.body ?? ""}`, event.id);
++      }
++      return;
++    }
++    const { action, comment } = event.payload;
++    if (action === "created" && !comment.body.includes(MARKER)) {
++      yield* issue.ask(number, comment.body, event.id);
++    }
+  }, Effect.orDie),
+);
 ```
 
 `event.name` says which event arrived, and narrows `event.payload` to its type. The session's transcript is on the sandbox's disk, so OpenCode still has the issue, the files it read and its first answer.
@@ -144,20 +144,20 @@ const HarnessLive = Layer.mergeAll(
 ```
 
 ```diff lang="typescript"
-    const harness = yield* OpenCode.Harness({
-      models: [Fast],
--      tools: [AI.CodingTools],
-+      tools: [AI.CodingTools, SearchIssues],
-      cwd: "/home/user/repo",
-    });
+const harness = yield* OpenCode.Harness({
+  models: [Fast],
+-  tools: [AI.CodingTools],
++  tools: [AI.CodingTools, SearchIssues],
+  cwd: "/home/user/repo",
+});
 ```
 
 ```diff lang="typescript"
-      const session = harness.session("issue", {
--        tools: [AI.Bash, AI.Read, AI.Grep],
-+        tools: [AI.Bash, AI.Read, AI.Grep, SearchIssues],
-        instructions,
-      });
+const session = harness.session("issue", {
+-  tools: [AI.Bash, AI.Read, AI.Grep],
++  tools: [AI.Bash, AI.Read, AI.Grep, SearchIssues],
+  instructions,
+});
 ```
 
 OpenCode sees the tool as `alchemy_search_issues`. When it calls it, the call waits in the sandbox while the handler runs in the Durable Object, and only the result goes back.
@@ -167,23 +167,23 @@ OpenCode sees the tool as `alchemy_search_issues`. When it calls it, the call wa
 Add a method that removes the session's sandbox:
 
 ```diff lang="typescript"
-                : [],
-            ),
-          );
-        }),
-+        closed: () => session.removeSandbox,
-      };
+          : [],
+      ),
+    );
+  }),
++  closed: () => session.removeSandbox,
+};
 ```
 
 And call it when the issue closes:
 
 ```diff lang="typescript"
-          if (action === "opened") {
-            yield* issue.ask(number, `Issue #${number}: ${title}\n\n${opened.body ?? ""}`, event.id);
-          }
-+          if (action === "closed") yield* issue.closed();
-          return;
-        }
+  if (action === "opened") {
+    yield* issue.ask(number, `Issue #${number}: ${title}\n\n${opened.body ?? ""}`, event.id);
+  }
++  if (action === "closed") yield* issue.closed();
+  return;
+}
 ```
 
 OpenCode's session is in that sandbox, so removing it ends the session. An issue that is reopened and replied to starts a new one.

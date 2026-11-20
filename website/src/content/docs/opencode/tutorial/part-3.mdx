@@ -35,11 +35,11 @@ const HarnessLive = Layer.mergeAll(
 ```
 
 ```diff lang="typescript"
-      cwd: "/home/user/repo",
-    });
-+    const createComment = yield* GitHub.CreateIssueComment(yield* Repo);
+  cwd: "/home/user/repo",
+});
++const createComment = yield* GitHub.CreateIssueComment(yield* Repo);
 
-    return Effect.gen(function* () {
+return Effect.gen(function* () {
 ```
 
 The token stays in the Durable Object. OpenCode, in the sandbox, never sees it. Comments are posted for the account you signed in to GitHub with, so they appear as yours.
@@ -55,20 +55,20 @@ import * as Effect from "effect/Effect";
 ```
 
 ```diff lang="typescript"
-      const session = harness.session("issue", {
-        tools: [AI.Bash, AI.Read, AI.Grep],
-        instructions,
-      });
+const session = harness.session("issue", {
+  tools: [AI.Bash, AI.Read, AI.Grep],
+  instructions,
+});
 
-+      const answer = yield* Alchemy.makeCallback(
-+        "answer",
-+        Effect.fn(function* (job: { issue: number; text: string; deliveryId: string }) {
-+          const reply = yield* session.prompt(job.text, { requestId: job.deliveryId });
-+          yield* createComment({ issue_number: job.issue, body: reply.text });
-+        }, Effect.orDie),
-+      );
++const answer = yield* Alchemy.makeCallback(
++  "answer",
++  Effect.fn(function* (job: { issue: number; text: string; deliveryId: string }) {
++    const reply = yield* session.prompt(job.text, { requestId: job.deliveryId });
++    yield* createComment({ issue_number: job.issue, body: reply.text });
++  }, Effect.orDie),
++);
 +
-      return {
+return {
 ```
 
 A callback that fails is delivered again. `requestId` makes that safe: a second prompt with the same id waits for the first and gets its answer.
@@ -91,18 +91,18 @@ Callbacks need somewhere to be stored. `Cloudflare.DurableObjectCallbacks` keeps
 Replace `ask` with a method that stores the job and returns:
 
 ```diff lang="typescript"
-      return {
--        ask: Effect.fn(function* (text: string) {
--          const reply = yield* session.prompt(text);
--          return reply.text;
--        }),
-+        ask: Effect.fn(function* (issue: number, text: string, deliveryId: string) {
-+          yield* answer.schedule(deliveryId, {
-+            after: 0,
-+            payload: { issue, text, deliveryId },
-+          });
-+        }),
-      };
+return {
+-  ask: Effect.fn(function* (text: string) {
+-    const reply = yield* session.prompt(text);
+-    return reply.text;
+-  }),
++  ask: Effect.fn(function* (issue: number, text: string, deliveryId: string) {
++    yield* answer.schedule(deliveryId, {
++      after: 0,
++      payload: { issue, text, deliveryId },
++    });
++  }),
+};
 ```
 
 `after: 0` runs it as soon as the alarm can fire. The job's id is the delivery's id, so scheduling the same delivery twice leaves one job.
@@ -168,32 +168,32 @@ export default class Bot extends Cloudflare.Worker<Bot>()(
 `fetch` no longer prompts. Make it show the tool calls of an issue's session instead. Add a method to the Durable Object:
 
 ```diff lang="typescript"
-            payload: { issue, text, deliveryId },
-          });
-        }),
-+        toolCalls: Effect.fn(function* () {
-+          const messages = yield* session.messages;
-+          return messages.flatMap((message) =>
-+            message.parts.flatMap((part) =>
-+              part.type === "tool"
-+                ? [{ tool: part.tool, status: part.state?.status, output: part.state?.output }]
-+                : [],
-+            ),
-+          );
-+        }),
-      };
+      payload: { issue, text, deliveryId },
+    });
+  }),
++  toolCalls: Effect.fn(function* () {
++    const messages = yield* session.messages;
++    return messages.flatMap((message) =>
++      message.parts.flatMap((part) =>
++        part.type === "tool"
++          ? [{ tool: part.tool, status: part.state?.status, output: part.state?.output }]
++          : [],
++      ),
++    );
++  }),
+};
 ```
 
 And return it from the Worker:
 
 ```diff lang="typescript"
-        if (area !== "issues" || number === undefined) {
-          return HttpServerResponse.text("not found", { status: 404 });
-        }
--        const answer = yield* issues.getByName(number).ask(yield* request.text);
--        return HttpServerResponse.text(answer);
-+        return yield* HttpServerResponse.json(yield* issues.getByName(number).toolCalls());
-      }).pipe(Effect.orDie),
+  if (area !== "issues" || number === undefined) {
+    return HttpServerResponse.text("not found", { status: 404 });
+  }
+-  const answer = yield* issues.getByName(number).ask(yield* request.text);
+-  return HttpServerResponse.text(answer);
++  return yield* HttpServerResponse.json(yield* issues.getByName(number).toolCalls());
+}).pipe(Effect.orDie),
 ```
 
 ## Deploy and open an issue

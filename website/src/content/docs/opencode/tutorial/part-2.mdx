@@ -65,12 +65,12 @@ The snapshot's command uses the repository's clone URL, so the deploy creates th
 `cwd` is the directory sessions work in. Point it at the clone:
 
 ```diff lang="typescript"
--    const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
-+    const harness = yield* OpenCode.Harness({
-+      models: [Fast],
-+      tools: [AI.CodingTools],
-+      cwd: "/home/user/repo",
-+    });
+-const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
++const harness = yield* OpenCode.Harness({
++  models: [Fast],
++  tools: [AI.CodingTools],
++  cwd: "/home/user/repo",
++});
 ```
 
 OpenCode now starts in the repository, so relative paths and `git` work as they would in a checkout on your machine.
@@ -87,11 +87,11 @@ export default class Issue extends Cloudflare.DurableObject<Issue>()(
 ```
 
 ```diff lang="typescript"
-      const session = harness.session("issue", {
-        tools: [AI.Bash, AI.Read, AI.Grep],
--        instructions: "You answer questions about the files in your working directory.",
-+        instructions,
-      });
+const session = harness.session("issue", {
+  tools: [AI.Bash, AI.Read, AI.Grep],
+-  instructions: "You answer questions about the files in your working directory.",
++  instructions,
+});
 ```
 
 ## Add the GitHub provider

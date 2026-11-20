@@ -70,18 +70,18 @@ Comments are posted with a token for the account you signed in to GitHub with, s
 `opened` writes the number the tool reads:
 
 ```diff lang="typescript"
-  Effect.gen(function* () {
-    const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools] });
-+    const state = yield* Cloudflare.DurableObjectState;
+Effect.gen(function* () {
+  const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools] });
++  const state = yield* Cloudflare.DurableObjectState;
 
-    return Effect.gen(function* () {
-      return {
-        opened: Effect.fn(function* (
-          issue: { readonly number: number; readonly title: string; readonly body: string },
-          deliveryId: string,
-        ) {
-+          yield* state.storage.put("issue", issue.number);
-          const conversation = yield* harness.createConversation({
+  return Effect.gen(function* () {
+    return {
+      opened: Effect.fn(function* (
+        issue: { readonly number: number; readonly title: string; readonly body: string },
+        deliveryId: string,
+      ) {
++        yield* state.storage.put("issue", issue.number);
+        const conversation = yield* harness.createConversation({
 ```
 
 ## Give the agent the tool
@@ -102,17 +102,17 @@ const HarnessLive = Layer.mergeAll(
 ```
 
 ```diff lang="typescript"
--    const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools] });
-+    const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools, Comment] });
+-const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools] });
++const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools, Comment] });
 ```
 
 ```diff lang="typescript"
-          const conversation = yield* harness.createConversation({
-            name: "issue",
--            tools: [AI.Bash, AI.Read, AI.Grep],
-+            tools: [AI.Bash, AI.Read, AI.Grep, Comment],
-            instructions,
-          });
+const conversation = yield* harness.createConversation({
+  name: "issue",
+-  tools: [AI.Bash, AI.Read, AI.Grep],
++  tools: [AI.Bash, AI.Read, AI.Grep, Comment],
+  instructions,
+});
 ```
 
 Leaving `CommentLive` out of `HarnessLive` is a compile error on the Durable Object.
@@ -181,13 +181,13 @@ The handler returns as soon as the input is submitted, so GitHub gets its answer
 GitHub starts conversations now, so `fetch` only shows transcripts:
 
 ```diff lang="typescript"
-        const issue = issues.getByName(number);
--        if (request.method === "POST") {
--          const { title, body } = (yield* request.json) as { title: string; body: string };
--          yield* issue.opened({ number: Number(number), title, body }, crypto.randomUUID());
--          return HttpServerResponse.text("started", { status: 202 });
--        }
-        return yield* HttpServerResponse.json(yield* issue.transcript());
+const issue = issues.getByName(number);
+-if (request.method === "POST") {
+-  const { title, body } = (yield* request.json) as { title: string; body: string };
+-  yield* issue.opened({ number: Number(number), title, body }, crypto.randomUUID());
+-  return HttpServerResponse.text("started", { status: 202 });
+-}
+return yield* HttpServerResponse.json(yield* issue.transcript());
 ```
 
 ## Deploy and open an issue

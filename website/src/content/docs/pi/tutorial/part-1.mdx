@@ -115,37 +115,37 @@ export default class Issue extends Cloudflare.DurableObject<Issue>()(
 Add a method that returns what the conversation has done, as plain text for each message.
 
 ```diff lang="typescript"
-        opened: Effect.fn(function* (
-          issue: { readonly number: number; readonly title: string; readonly body: string },
-          deliveryId: string,
-        ) {
-          const conversation = yield* harness.createConversation({ name: "issue", instructions });
-          yield* conversation.submit({
-            type: "input",
-            content: `Issue #${issue.number}: ${issue.title}\n\n${issue.body}`,
-            requestId: deliveryId,
-          });
-        }),
-+        transcript: Effect.fn(function* () {
-+          const conversation = yield* harness.conversationByName("issue");
-+          const { messages } = yield* conversation.context;
-+          return messages.map((message) => ({
-+            role: message.role,
-+            text:
-+              typeof message.content === "string"
-+                ? message.content
-+                : message.content
-+                    .map((part) =>
-+                      part.type === "text"
-+                        ? part.text
-+                        : part.type === "toolCall"
-+                          ? `${part.name}(${JSON.stringify(part.arguments)})`
-+                          : "",
-+                    )
-+                    .join(""),
-+          }));
-+        }),
-      };
+  opened: Effect.fn(function* (
+    issue: { readonly number: number; readonly title: string; readonly body: string },
+    deliveryId: string,
+  ) {
+    const conversation = yield* harness.createConversation({ name: "issue", instructions });
+    yield* conversation.submit({
+      type: "input",
+      content: `Issue #${issue.number}: ${issue.title}\n\n${issue.body}`,
+      requestId: deliveryId,
+    });
+  }),
++  transcript: Effect.fn(function* () {
++    const conversation = yield* harness.conversationByName("issue");
++    const { messages } = yield* conversation.context;
++    return messages.map((message) => ({
++      role: message.role,
++      text:
++        typeof message.content === "string"
++          ? message.content
++          : message.content
++              .map((part) =>
++                part.type === "text"
++                  ? part.text
++                  : part.type === "toolCall"
++                    ? `${part.name}(${JSON.stringify(part.arguments)})`
++                    : "",
++              )
++              .join(""),
++    }));
++  }),
+};
 ```
 
 ## Reach it from a Worker

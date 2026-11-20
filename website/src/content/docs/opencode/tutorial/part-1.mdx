@@ -137,24 +137,24 @@ export default class Issue extends Cloudflare.DurableObject<Issue>()(
 Add a method that prompts the object's session and returns the answer's text:
 
 ```diff lang="typescript"
-  Effect.gen(function* () {
-    const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
+Effect.gen(function* () {
+  const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
 
-    return Effect.gen(function* () {
--      return {};
-+      const session = harness.session("issue", {
-+        tools: [AI.Bash, AI.Read, AI.Grep],
-+        instructions: "You answer questions about the files in your working directory.",
-+      });
+  return Effect.gen(function* () {
+-    return {};
++    const session = harness.session("issue", {
++      tools: [AI.Bash, AI.Read, AI.Grep],
++      instructions: "You answer questions about the files in your working directory.",
++    });
 +
-+      return {
-+        ask: Effect.fn(function* (text: string) {
-+          const reply = yield* session.prompt(text);
-+          return reply.text;
-+        }),
-+      };
-    });
-  }).pipe(Effect.provide(HarnessLive)),
++    return {
++      ask: Effect.fn(function* (text: string) {
++        const reply = yield* session.prompt(text);
++        return reply.text;
++      }),
++    };
+  });
+}).pipe(Effect.provide(HarnessLive)),
 ```
 
 `harness.session("issue", defaults)` is this object's one session. Its prompts get three of the coding tools, the ones that read. The first `prompt` opens the sandbox, installs OpenCode there and starts it.

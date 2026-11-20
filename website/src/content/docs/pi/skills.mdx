@@ -1,6 +1,6 @@
 ---
 title: Skills
-description: Give Pi conversations skills: the model sees each skill's description and loads its instructions and files with load_skill when the task calls for it.
+description: "Give Pi conversations skills: the model sees each skill's description and loads its instructions and files with load_skill when the task calls for it."
 ---
 
 A Pi harness takes [`AI.Skill`](/ai/skills) declarations beside its extensions. Pi advertises each selected skill in the system prompt, with its name and description, and gives the model a `load_skill` tool. Calling it returns the skill's instructions and writes its files into the conversation's sandbox.

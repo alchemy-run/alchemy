@@ -14,20 +14,20 @@ The bot answers an issue once. A person who replies should reach the same conver
 A reply is another input to the issue's conversation. `whenBusy: "steer"` adds it to a run that is still going, so the agent sees it before it answers:
 
 ```diff lang="typescript"
-          yield* conversation.submit({
-            type: "input",
-            content: `Issue #${issue.number}: ${issue.title}\n\n${issue.body}`,
-            requestId: deliveryId,
-          });
-        }),
-+        commented: Effect.fn(function* (text: string, deliveryId: string) {
-+          yield* harness.submit("issue", {
-+            type: "input",
-+            content: text,
-+            requestId: deliveryId,
-+            whenBusy: "steer",
-+          });
-+        }),
+  yield* conversation.submit({
+    type: "input",
+    content: `Issue #${issue.number}: ${issue.title}\n\n${issue.body}`,
+    requestId: deliveryId,
+  });
+}),
++commented: Effect.fn(function* (text: string, deliveryId: string) {
++  yield* harness.submit("issue", {
++    type: "input",
++    content: text,
++    requestId: deliveryId,
++    whenBusy: "steer",
++  });
++}),
 ```
 
 The conversation still has the issue, the files the agent read and its first answer. The sandbox is the same one too, resumed if Boat had stopped it.
@@ -45,15 +45,15 @@ export class Comment extends AI.Tool<Comment>()("comment", {
 ```
 
 ```diff lang="typescript"
-    return Effect.fn(function* ({ body }) {
-      const issue = yield* state.storage.get<number>("issue").pipe(Effect.orDie);
--      const comment = yield* createComment({ issue_number: issue!, body }).pipe(Effect.orDie);
-+      const comment = yield* createComment({
-+        issue_number: issue!,
-+        body: `${body}\n\n${MARKER}`,
-+      }).pipe(Effect.orDie);
-      return { url: comment.html_url };
-    });
+return Effect.fn(function* ({ body }) {
+  const issue = yield* state.storage.get<number>("issue").pipe(Effect.orDie);
+-  const comment = yield* createComment({ issue_number: issue!, body }).pipe(Effect.orDie);
++  const comment = yield* createComment({
++    issue_number: issue!,
++    body: `${body}\n\n${MARKER}`,
++  }).pipe(Effect.orDie);
+  return { url: comment.html_url };
+});
 ```
 
 ## Consume comments
@@ -67,33 +67,33 @@ import { owner, repository } from "./Repo.ts";
 ```
 
 ```diff lang="typescript"
-    yield* GitHub.consumeRepositoryEvents(
--      { owner, repository, events: ["issues"] },
-+      { owner, repository, events: ["issues", "issue_comment"] },
-      Effect.fn(function* (event) {
--        const { action, issue } = event.payload;
--        if (action === "opened") {
--          yield* issues
--            .getByName(String(issue.number))
--            .opened({ number: issue.number, title: issue.title, body: issue.body ?? "" }, event.id);
--        }
-+        const issue = issues.getByName(String(event.payload.issue.number));
-+        if (event.name === "issues") {
-+          const { action, issue: opened } = event.payload;
-+          if (action === "opened") {
-+            yield* issue.opened(
-+              { number: opened.number, title: opened.title, body: opened.body ?? "" },
-+              event.id,
-+            );
-+          }
-+          return;
-+        }
-+        const { action, comment } = event.payload;
-+        if (action === "created" && !comment.body.includes(MARKER)) {
-+          yield* issue.commented(comment.body, event.id);
-+        }
-      }, Effect.orDie),
-    );
+yield* GitHub.consumeRepositoryEvents(
+-  { owner, repository, events: ["issues"] },
++  { owner, repository, events: ["issues", "issue_comment"] },
+  Effect.fn(function* (event) {
+-    const { action, issue } = event.payload;
+-    if (action === "opened") {
+-      yield* issues
+-        .getByName(String(issue.number))
+-        .opened({ number: issue.number, title: issue.title, body: issue.body ?? "" }, event.id);
+-    }
++    const issue = issues.getByName(String(event.payload.issue.number));
++    if (event.name === "issues") {
++      const { action, issue: opened } = event.payload;
++      if (action === "opened") {
++        yield* issue.opened(
++          { number: opened.number, title: opened.title, body: opened.body ?? "" },
++          event.id,
++        );
++      }
++      return;
++    }
++    const { action, comment } = event.payload;
++    if (action === "created" && !comment.body.includes(MARKER)) {
++      yield* issue.commented(comment.body, event.id);
++    }
+  }, Effect.orDie),
+);
 ```
 
 ## Remove the sandbox when the issue closes
@@ -101,24 +101,24 @@ import { owner, repository } from "./Repo.ts";
 A closed issue's sandbox is no longer needed. Add a method that removes it:
 
 ```diff lang="typescript"
-            whenBusy: "steer",
-          });
-        }),
-+        closed: () => harness.removeSandbox("issue"),
+    whenBusy: "steer",
+  });
+}),
++closed: () => harness.removeSandbox("issue"),
 ```
 
 And call it when the issue closes:
 
 ```diff lang="typescript"
-          if (action === "opened") {
-            yield* issue.opened(
-              { number: opened.number, title: opened.title, body: opened.body ?? "" },
-              event.id,
-            );
-          }
-+          if (action === "closed") yield* issue.closed();
-          return;
-        }
+  if (action === "opened") {
+    yield* issue.opened(
+      { number: opened.number, title: opened.title, body: opened.body ?? "" },
+      event.id,
+    );
+  }
++  if (action === "closed") yield* issue.closed();
+  return;
+}
 ```
 
 The conversation stays in the Durable Object. An issue that is reopened and replied to gets a new sandbox from the snapshot, and the agent still remembers the conversation.
