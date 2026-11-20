@@ -11,6 +11,14 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type * as Tracer from "effect/Tracer";
+import {
+  isRpcRequest,
+  methodOfRpcRequestMethod,
+  rpcParentOf,
+  rpcRequestMethod,
+  RpcUnsupportedVersion,
+  SUPPORTED_RPC_VERSIONS,
+} from "../../Rpc.ts";
 import type { DurableObjectExport } from "../DurableObject.ts";
 import { makeDurableObjectInstance, type DurableObjectInstance } from "../DurableObjectBridge.ts";
 import type { Pin, WorkerBuild } from "../Worker.ts";
@@ -85,12 +93,42 @@ export const makeDurableObjectBridge =
           gate: (run) => state.blockConcurrencyWhile(run),
         });
         void this.#core.instance.catch(() => {});
-        if (dispatch === "static") return this;
+        // The protocol's envelope methods: `~alchemy/rpc/<method>` carries
+        // the method's arguments and the call's metadata, so the caller's
+        // trace context never mixes into the arguments.
+        const request = (method: string) => (envelope: unknown) => {
+          if (!isRpcRequest(envelope) || envelope.method !== method) {
+            return Promise.reject(
+              new Error(`"${rpcRequestMethod(method)}" takes one RpcRequest for "${method}"`),
+            );
+          }
+          if (!SUPPORTED_RPC_VERSIONS.includes(envelope.v)) {
+            return Promise.reject(
+              new RpcUnsupportedVersion({ version: envelope.v, supported: SUPPORTED_RPC_VERSIONS }),
+            );
+          }
+          const parent = Option.getOrUndefined(rpcParentOf(envelope.meta));
+          return this.#core.dispatch(method, parent)(...envelope.args);
+        };
+        if (dispatch === "static") {
+          // Alongside the methods the instance materializes once built.
+          void this.#core.instance.then(
+            (built) => {
+              for (const name of Object.keys(built.instance)) {
+                Reflect.set(this, rpcRequestMethod(name), request(name));
+              }
+            },
+            () => {},
+          );
+          return this;
+        }
 
         return new Proxy(this, {
           get: (target, prop) => {
             const bind = (member: any) =>
               typeof member === "function" ? member.bind(target) : member;
+            const requested = methodOfRpcRequestMethod(prop);
+            if (requested !== undefined) return request(requested);
             if (typeof prop !== "string" || prop in target) return bind((target as any)[prop]);
             if (adapter.rpcArgs === undefined) return this.#core.dispatch(prop);
             return (...callArgs: unknown[]) => {

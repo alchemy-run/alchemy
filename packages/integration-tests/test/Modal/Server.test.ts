@@ -5,12 +5,24 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as app from "@distilled.cloud/modal/app";
 import * as functions from "@distilled.cloud/modal/functions";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
+import * as Schedule from "effect/Schedule";
+import {
+  doWork,
+  OtelCollector,
+  waitForRpcLink,
+  waitForWorkSpan,
+  withCollectorUrl,
+} from "../Utils/Telemetry.ts";
+import TracedRpcCaller from "./fixtures/traced-rpc-caller.ts";
+import TracedRpcFunction from "./fixtures/traced-rpc-function.ts";
+import TracedRpcServer from "./fixtures/traced-rpc-server.ts";
 import TracedServer from "./fixtures/traced-server.ts";
+import { hostIdentity } from "./hostIdentity.ts";
 
 const { test } = Test.make({
-  providers: Layer.mergeAll(Modal.providers(), Cloudflare.providers()),
+  providers: Layer.mergeAll(Modal.providers(), Cloudflare.providers(), hostIdentity),
 });
 
 const main = new URL("./fixtures/lifecycle-program.ts", import.meta.url).pathname;
@@ -82,6 +94,69 @@ test.provider(
     tags: [
       "provider:modal",
       "provider:modal:server",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 900_000,
+  },
+);
+
+/** GET `url` until it answers 200: a fresh Server or Function cold-starts its container. */
+const getText = Effect.fn(function* (url: string) {
+  const client = yield* HttpClient.HttpClient;
+  return yield* client.get(url).pipe(
+    Effect.flatMap((response) =>
+      response.status === 200
+        ? response.text
+        : Effect.flatMap(response.text, (body) =>
+            Effect.fail(new Error(`${url} answered ${response.status}: ${body}`)),
+          ),
+    ),
+    Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 80 }),
+  );
+});
+
+test.provider(
+  "a Server's and a Function's RPC methods join the caller's trace",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const collector = yield* stack.deploy(OtelCollector());
+      const caller = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            yield* TracedRpcServer;
+            yield* TracedRpcFunction;
+            return yield* TracedRpcCaller;
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      // Over HTTP to a Server, and through Modal's relay to a Function.
+      // A tag per attempt, so spans from an earlier attempt can't match.
+      const attempt = Date.now().toString(36);
+      for (const [path, tag] of [
+        ["server", `modal-rpc-server-${attempt}`],
+        ["function", `modal-rpc-function-${attempt}`],
+      ] as const) {
+        expect(yield* getText(`${caller.url}/${path}?tag=${tag}`)).toBe(`traced ${tag}`);
+        expect(yield* waitForRpcLink(collector.url!, tag)).toEqual({
+          found: true,
+          sameTrace: true,
+          belowCaller: true,
+        });
+      }
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: [
+      "provider:modal",
+      "provider:modal:server",
+      "provider:modal:function",
       "provider:cloudflare",
       "provider:cloudflare:worker",
       "live",

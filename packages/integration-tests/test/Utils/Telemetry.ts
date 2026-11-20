@@ -105,3 +105,115 @@ export const waitForWorkSpan = Effect.fn(function* (collectorUrl: string, tag: s
     }),
   );
 });
+
+// ---------------------------------------------------------------------------
+// Runtime-to-runtime RPC: does a callee's span join its caller's trace?
+// ---------------------------------------------------------------------------
+
+/** The RPC surface a traced callee serves: `traced(tag)` makes `rpc-callee:<tag>`. */
+export const tracedRpc = {
+  traced: (tag: string) =>
+    Effect.succeed(`traced ${tag}`).pipe(Effect.withSpan(`rpc-callee:${tag}`)),
+};
+
+/** Call a traced callee inside the caller's own span, `rpc-caller:<tag>`. */
+export const callTraced = <E, R>(
+  callee: { readonly traced: (tag: string) => Effect.Effect<string, E, R> },
+  tag: string,
+) => callee.traced(tag).pipe(Effect.withSpan(`rpc-caller:${tag}`));
+
+/** `GET /rpc-traced?tag=<tag>` on a caller runtime: one traced call to its callee. */
+export const tracedCallerFetch = <E, R>(callee: {
+  readonly traced: (tag: string) => Effect.Effect<string, E, R>;
+}) =>
+  Effect.gen(function* () {
+    const request = yield* HttpServerRequest;
+    const url = new URL(request.url, "http://caller");
+    if (url.pathname === "/rpc-traced") {
+      const tag = url.searchParams.get("tag") ?? "none";
+      return HttpServerResponse.text(yield* callTraced(callee, tag));
+    }
+    return HttpServerResponse.text("traced caller ok");
+  });
+
+interface CollectedSpan {
+  readonly name: string;
+  readonly traceId: string;
+  readonly spanId: string;
+  readonly parentSpanId?: string;
+}
+
+const collectedSpans = (body: unknown): ReadonlyArray<CollectedSpan> =>
+  (body as { items: { signal: string; payload: any }[] }).items
+    .filter((item) => item.signal === "traces")
+    .flatMap((item) => item.payload.resourceSpans ?? [])
+    .flatMap((resource: any) => resource.scopeSpans ?? [])
+    .flatMap((scope: any) => (scope.spans ?? []) as CollectedSpan[]);
+
+/** Whether `span`'s ancestors, followed through `all`, reach `ancestor`. */
+const descendsFrom = (
+  all: ReadonlyArray<CollectedSpan>,
+  span: CollectedSpan,
+  ancestor: CollectedSpan,
+) => {
+  const byId = new Map(all.map((s) => [s.spanId, s] as const));
+  let current: CollectedSpan | undefined = span;
+  for (let hops = 0; current !== undefined && hops < 16; hops++) {
+    if (current.parentSpanId === ancestor.spanId) return true;
+    current = current.parentSpanId === undefined ? undefined : byId.get(current.parentSpanId);
+  }
+  return false;
+};
+
+/**
+ * Poll the collector until it holds both `rpc-caller:<tag>` and
+ * `rpc-callee:<tag>`, then report whether the callee's span is in the caller's
+ * trace and below the caller's span (a transport may add spans between them,
+ * such as an HTTP client span).
+ */
+export const waitForRpcLink = Effect.fn(function* (collectorUrl: string, tag: string) {
+  const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+  const read = client.get(`${collectorUrl.replace(/\/$/, "")}/collected`).pipe(
+    Effect.flatMap((response) => response.json),
+    Effect.map(collectedSpans),
+    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+  );
+  // A caller that retried (a cold callee answered 503, IAM still
+  // propagating answered 403) has one span per attempt; the callee's span
+  // belongs to the attempt that reached it, and that caller span ends — and
+  // exports — after the callee's. So read until the link appears, not just
+  // until both names do.
+  const linkOf = (spans: ReadonlyArray<CollectedSpan>) => {
+    const callers = spans.filter((s) => s.name === `rpc-caller:${tag}`);
+    const callee = spans.find((s) => s.name === `rpc-callee:${tag}`);
+    return {
+      spans,
+      callers,
+      callee,
+      linked: {
+        found: callers.length > 0 && callee !== undefined,
+        sameTrace: callee !== undefined && callers.some((c) => c.traceId === callee.traceId),
+        belowCaller: callee !== undefined && callers.some((c) => descendsFrom(spans, callee, c)),
+      },
+    };
+  };
+  const { spans, callers, callee, linked } = yield* read.pipe(
+    Effect.map(linkOf),
+    Effect.repeat({
+      schedule: Schedule.spaced("3 seconds"),
+      until: (result) => result.linked.belowCaller,
+      times: 30,
+    }),
+  );
+  if (!linked.belowCaller) {
+    // Shown when the assertion fails: the spans compared and the callee's parent.
+    yield* Effect.logWarning(
+      `rpc spans not linked: ${JSON.stringify({
+        callers,
+        callee,
+        parent: spans.find((s) => s.spanId === callee?.parentSpanId),
+      })}`,
+    );
+  }
+  return linked;
+});

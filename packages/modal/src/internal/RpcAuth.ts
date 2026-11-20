@@ -26,6 +26,13 @@ export const RPC_KEY_HEADER = "x-alchemy-rpc-key";
 /** Keyword argument a Function's RPC call carries its key in (the entrypoint forwards it as {@link RPC_KEY_HEADER}). */
 export const RPC_KEY_KWARG = "__alchemy_rpc_key__";
 
+/**
+ * Keyword argument a Function's RPC call carries its protocol metadata in
+ * (`alchemy/Rpc.RpcMeta`: the caller's `traceparent`); the entrypoint forwards
+ * each entry as an `x-alchemy-meta-<key>` header, as an HTTP caller sends it.
+ */
+export const RPC_META_KWARG = "__alchemy_rpc_meta__";
+
 /** Env var on the caller holding its key for the target `targetId`. */
 export const rpcKeyEnv = (targetId: string) => sanitizeKey(`ALCHEMY_MODAL_RPC_KEY_${targetId}`);
 

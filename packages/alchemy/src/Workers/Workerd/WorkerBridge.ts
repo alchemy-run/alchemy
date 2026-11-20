@@ -21,6 +21,15 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Option from "effect/Option";
+import {
+  isRpcRequest,
+  methodOfRpcRequestMethod,
+  rpcRequestMethod,
+  rpcParentOf,
+  RpcUnsupportedVersion,
+  SUPPORTED_RPC_VERSIONS,
+} from "../../Rpc.ts";
 import {
   getWorkerExport,
   handleRpcExit,
@@ -97,8 +106,43 @@ export const makeWorkerBridge = <Runtime extends WorkerRuntimeContextLike>(
       public readonly env: any,
     ) {
       super(ctx, env);
+      // The protocol's envelope methods: `~alchemy/rpc/<method>` carries the
+      // method's arguments and the call's metadata, so the caller's trace
+      // context never mixes into the arguments.
+      const request = (method: string) => (envelope: unknown) => {
+        if (!isRpcRequest(envelope) || envelope.method !== method) {
+          return Promise.reject(
+            new Error(`"${rpcRequestMethod(method)}" takes one RpcRequest for "${method}"`),
+          );
+        }
+        if (!SUPPORTED_RPC_VERSIONS.includes(envelope.v)) {
+          return Promise.reject(
+            new RpcUnsupportedVersion({ version: envelope.v, supported: SUPPORTED_RPC_VERSIONS }),
+          );
+        }
+        // The caller's span parents the method outright: any span the
+        // event already has is this callee's own, not one derived from it.
+        const parent = rpcParentOf(envelope.meta);
+        return this.event(
+          (built) =>
+            [
+              Option.match(parent, {
+                onNone: () => dispatchRpcMethod(built.shape(), method, envelope.args),
+                onSome: (span) =>
+                  Effect.withParentSpan(
+                    dispatchRpcMethod(built.shape(), method, envelope.args),
+                    span,
+                  ),
+              }),
+              Context.empty(),
+            ] as const,
+          handleRpcExit,
+        );
+      };
       return new Proxy(this, {
         get: (target, prop) => {
+          const requested = methodOfRpcRequestMethod(prop);
+          if (requested !== undefined) return request(requested);
           if (typeof prop !== "string" || prop in target) return (target as any)[prop];
           return (...args: unknown[]) =>
             target.event(
