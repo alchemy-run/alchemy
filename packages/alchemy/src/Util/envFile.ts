@@ -1,12 +1,7 @@
-import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
 import { envString } from "../RuntimeContext.ts";
 
-/** A Docker `--env-file` holds one line per variable, so it can't carry a newline. */
-export class MultilineEnvValue extends Data.TaggedError("MultilineEnvValue")<{
-  readonly key: string;
-  readonly message: string;
-}> {}
+/** The variable {@link containerEnvFile} lists the env keys in. */
+const ENV_KEYS = "ALCHEMY_ENV_KEYS";
 
 const sorted = (env: Record<string, unknown>) =>
   Object.entries(env)
@@ -16,6 +11,8 @@ const sorted = (env: Record<string, unknown>) =>
     })
     .sort(([a], [b]) => a.localeCompare(b));
 
+const line = (key: string, text: string) => `${key}="${text.replaceAll(/["\\`$]/g, "\\$&")}"`;
+
 /**
  * A systemd `EnvironmentFile=`, sorted so its hash is stable. Each value is
  * double-quoted: systemd keeps everything inside, newlines included, and
@@ -24,25 +21,29 @@ const sorted = (env: Record<string, unknown>) =>
  */
 export const systemdEnvFile = (env: Record<string, unknown>): string =>
   sorted(env)
-    .map(([key, text]) => `${key}="${text.replaceAll(/["\\`$]/g, "\\$&")}"`)
+    .map(([key, text]) => line(key, text))
     .join("\n");
 
 /**
- * A `docker run --env-file`: one literal `NAME=value` per line, sorted so its
- * hash is stable. Docker reads the rest of the line verbatim, so a value with
- * a newline can't be written and fails the deploy instead of arriving changed.
+ * {@link systemdEnvFile} for a unit that runs a container: it also lists the
+ * keys, so {@link dockerEnvArgs} can pass each one through with `-e NAME`.
+ * Docker's own `--env-file` can't hold a newline; a value systemd loads into
+ * the `docker` CLI's environment can.
  */
-export const dockerEnvFile = (
-  env: Record<string, unknown>,
-): Effect.Effect<string, MultilineEnvValue> => {
+export const containerEnvFile = (env: Record<string, unknown>): string => {
   const entries = sorted(env);
-  const multiline = entries.find(([, text]) => text.includes("\n"));
-  return multiline
-    ? Effect.fail(
-        new MultilineEnvValue({
-          key: multiline[0],
-          message: `env ${multiline[0]} contains a newline, which a Docker env file can't hold. Encode it (e.g. base64) or run the program without an image.`,
-        }),
-      )
-    : Effect.succeed(entries.map(([key, text]) => `${key}=${text}`).join("\n"));
+  return [
+    ...entries.map(([key, text]) => line(key, text)),
+    line(ENV_KEYS, entries.map(([key]) => key).join(" ")),
+  ].join("\n");
 };
+
+/**
+ * Shell for a systemd `ExecStart=/bin/sh -c '…'` that exports the
+ * {@link containerEnvFile} at `path` and puts `-e NAME` for each of its keys
+ * into `"$@"`, to pass to `docker run`. The file's double-quoted values use
+ * `sh`'s own escapes, so sourcing it reads them back unchanged. `$$` keeps
+ * systemd from expanding the variables itself.
+ */
+export const dockerEnvArgs = (path: string) =>
+  `set -a; . ${path}; set +a; for k in $$${ENV_KEYS}; do set -- "$$@" -e "$$k"; done;`;

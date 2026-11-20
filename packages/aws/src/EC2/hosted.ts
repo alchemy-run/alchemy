@@ -15,7 +15,7 @@ import type { ScopedPlanStatusSession } from "alchemy/Report";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import { createInternalTags, createTagsList, hasTags } from "alchemy/Tags";
-import { dockerEnvFile, systemdEnvFile } from "alchemy/Util/envFile";
+import { containerEnvFile, dockerEnvArgs, systemdEnvFile } from "alchemy/Util/envFile";
 import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";
 import * as Data from "effect/Data";
@@ -489,7 +489,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 ExecStartPre=/usr/local/bin/${unitName}-setup.sh
-ExecStart=/bin/sh -c 'exec docker run --rm --name ${unitName} --network host --env-file ${appDir}/env "$(cat ${appDir}/image)"'
+ExecStart=/bin/sh -c '${dockerEnvArgs(`${appDir}/env`)} exec docker run --rm --name ${unitName} --network host "$$@" "$$(cat ${appDir}/image)"'
 ExecStop=/usr/bin/docker stop ${unitName}
 Restart=always
 RestartSec=5
@@ -705,7 +705,7 @@ systemctl enable --now ${unitName}.service
       Key: bundleKey,
       CopySource: `${yield* assets.bucketName}/${uploadedAssetKey}`,
     });
-    const envFile = image ? yield* dockerEnvFile(env) : systemdEnvFile(env);
+    const envFile = image ? containerEnvFile(env) : systemdEnvFile(env);
     yield* s3.putObject({
       Bucket: yield* assets.bucketName,
       Key: envKey,

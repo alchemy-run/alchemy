@@ -5,7 +5,7 @@ import * as servers from "@distilled.cloud/hetzner/servers";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import { envValuesWithout, expectedEnv, getJson, readEnvValues } from "../EnvValues.ts";
+import { envValues, expectedEnv, getJson, readEnvValues } from "../EnvValues.ts";
 import EnvService, {
   ENV_CONTAINER_PORT,
   EnvBox,
@@ -36,10 +36,6 @@ const fetchEnv = (url: string) =>
     Effect.map((body) => readEnvValues(body as Record<string, string | undefined>)),
   );
 
-// A Docker env file can't hold a newline (the deploy fails on one), so the
-// container skips it.
-const containerEnv = envValuesWithout("ENV_MULTILINE");
-
 // Both modes on one Server: the systemd `EnvironmentFile` program and a
 // `context` image run with `docker run --env-file`. The deploy runs inside the
 // test so the Server's primary IPs are held only under the permit.
@@ -57,7 +53,7 @@ test.provider(
             server,
             context: envContainerContext,
             port: ENV_CONTAINER_PORT,
-            env: containerEnv.values,
+            env: envValues,
           });
           return {
             serverId: server.serverId,
@@ -75,7 +71,7 @@ test.provider(
 
       expect({ program, container }).toEqual({
         program: expectedEnv,
-        container: containerEnv.expected,
+        container: expectedEnv,
       });
     }).pipe(logLevel),
   {

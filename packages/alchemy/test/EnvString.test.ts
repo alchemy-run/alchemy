@@ -1,8 +1,7 @@
 import { describe, expect, it } from "@alchemy.run/test";
-import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { envString, envStrings, packEnvValue } from "@/RuntimeContext.ts";
-import { dockerEnvFile, systemdEnvFile } from "@/Util/envFile.ts";
+import { containerEnvFile, systemdEnvFile } from "@/Util/envFile.ts";
 
 describe("envString", { tags: ["unit"] }, () => {
   it("keeps strings verbatim, the empty string and JSON-looking ones included", () => {
@@ -44,20 +43,10 @@ describe("systemdEnvFile", { tags: ["unit"] }, () => {
   });
 });
 
-describe("dockerEnvFile", { tags: ["unit"] }, () => {
-  it.effect("writes NAME=value lines with values unwrapped", () =>
-    Effect.gen(function* () {
-      expect(yield* dockerEnvFile({ B: "it's", A: Redacted.make("s"), C: { k: 1 } })).toBe(
-        ["A=s", "B=it's", 'C={"k":1}'].join("\n"),
-      );
-    }),
-  );
-
-  it.effect("fails on a value with a newline instead of changing it", () =>
-    Effect.gen(function* () {
-      const error = yield* dockerEnvFile({ PEM: "a\nb" }).pipe(Effect.flip);
-      expect(error._tag).toBe("MultilineEnvValue");
-      expect(error.key).toBe("PEM");
-    }),
-  );
+describe("containerEnvFile", { tags: ["unit"] }, () => {
+  it("adds the key list dockerEnvArgs passes to docker run", () => {
+    expect(containerEnvFile({ B: "b", A: "a\nb" })).toBe(
+      ['A="a\nb"', 'B="b"', 'ALCHEMY_ENV_KEYS="A B"'].join("\n"),
+    );
+  });
 });

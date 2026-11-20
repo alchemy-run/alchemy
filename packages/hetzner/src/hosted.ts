@@ -10,7 +10,7 @@ import {
 import { findCwdForBundle, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
-import { dockerEnvFile, systemdEnvFile } from "alchemy/Util/envFile";
+import { containerEnvFile, dockerEnvArgs, systemdEnvFile } from "alchemy/Util/envFile";
 import {
   contextRootOf,
   extraFileDestination,
@@ -587,7 +587,7 @@ Requires=docker.service
 [Service]
 Type=simple
 ExecStartPre=-/usr/bin/docker rm -f ${unitName}
-ExecStart=/bin/sh -c 'exec docker run --rm --name ${unitName} --network host --env-file ${appDir}/env "$(cat ${appDir}/image)"'
+ExecStart=/bin/sh -c '${dockerEnvArgs(`${appDir}/env`)} exec docker run --rm --name ${unitName} --network host "$$@" "$$(cat ${appDir}/image)"'
 ExecStop=/usr/bin/docker stop ${unitName}
 Restart=always
 RestartSec=5
@@ -628,10 +628,7 @@ WantedBy=multi-user.target
       ].join("\n"),
     );
     yield* input.ssh.scp(input.archive, `${appDir}/image.tar`);
-    yield* input.ssh.scp(
-      new TextEncoder().encode(yield* dockerEnvFile(input.env)),
-      `${appDir}/env`,
-    );
+    yield* input.ssh.scp(new TextEncoder().encode(containerEnvFile(input.env)), `${appDir}/env`);
     yield* input.ssh.scp(
       new TextEncoder().encode(renderImageUnit(input.unitName, appDir)),
       `/etc/systemd/system/${input.unitName}.service`,

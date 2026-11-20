@@ -55,7 +55,7 @@ export const echoEnv = Effect.sync(() =>
 
 /**
  * {@link envValues} without `keys`, for a host whose platform can't carry
- * them (a Docker env file can't hold a newline), and the matching
+ * them (AWS Batch drops an empty value), and the matching
  * {@link expectedEnv} with those keys unset.
  */
 export const envValuesWithout = (...keys: EnvValueKey[]) => ({

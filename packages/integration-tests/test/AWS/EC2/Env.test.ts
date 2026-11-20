@@ -4,7 +4,7 @@ import * as Alchemy from "alchemy";
 import * as State from "alchemy/State";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
-import { envValuesWithout, expectedEnv, getJson, readEnvValues } from "../../EnvValues.ts";
+import { expectedEnv, getJson, readEnvValues } from "../../EnvValues.ts";
 import EnvInstance, { envContainerContext, envInstanceProps } from "./fixtures/env-instance.ts";
 import * as Test from "./VpcTest.ts";
 
@@ -15,9 +15,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Both modes in one stack: the systemd `EnvironmentFile` program and a
-// `context` image run with `docker run --env-file`. A Docker env file can't
-// hold a newline (the deploy fails on one), so the container skips it.
-const containerEnv = envValuesWithout("ENV_MULTILINE");
+// `context` image run with `docker run`.
 
 const Stack = Alchemy.Stack(
   "AlchemyEc2EnvStack",
@@ -27,7 +25,6 @@ const Stack = Alchemy.Stack(
     const container = yield* AWS.EC2.Instance("Ec2EnvContainer", {
       ...(yield* envInstanceProps),
       context: envContainerContext,
-      env: containerEnv.values,
     });
     return { programUrl: program.url, containerUrl: container.url };
   }),
@@ -49,7 +46,7 @@ test.skipIf(!!process.env.FAST)(
     expect({
       program: yield* fetchEnv(programUrl!),
       container: yield* fetchEnv(containerUrl!),
-    }).toEqual({ program: expectedEnv, container: containerEnv.expected });
+    }).toEqual({ program: expectedEnv, container: expectedEnv });
   }).pipe(logLevel),
   { tags: ["provider:aws", "provider:aws:ec2", "live"], timeout: 900_000 },
 );
