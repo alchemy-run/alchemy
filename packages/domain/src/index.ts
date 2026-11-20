@@ -92,6 +92,8 @@ export declare namespace Aggregate {
   export type ScheduleOptions = AggregateModule.ScheduleOptions;
   /** Options for `client.import`: the import's command id and the version it expects. */
   export type ImportOptions = AggregateModule.ImportOptions;
+  /** One event for `client.import`: the event, or `{ event, at }` to keep its original commit time. */
+  export type Imported<Ev> = AggregateModule.Imported<Ev>;
   /** The instance type of a class: `InstanceOf<typeof NotOwner>` is `NotOwner`. */
   export type InstanceOf<C> = AggregateModule.InstanceOf<C>;
   /** Options for `MyAggregate.predict`. */
@@ -118,6 +120,9 @@ export type NotScheduled = AggregateModule.NotScheduled;
 /** An import found the instance at another version than it expected. */
 export const UnexpectedVersion = AggregateModule.UnexpectedVersion;
 export type UnexpectedVersion = AggregateModule.UnexpectedVersion;
+/** An import's commit times went back, or past the platform's clock. */
+export const ImportOutOfOrder = AggregateModule.ImportOutOfOrder;
+export type ImportOutOfOrder = AggregateModule.ImportOutOfOrder;
 
 export declare namespace Decision {
   /** Any Decision class. */
@@ -320,6 +325,9 @@ export { DefinitionError } from "./Kernel.ts";
 
 /** A service middleware provides to a request, carried into the domain. See {@link RequestContextModule.make}. */
 export const RequestContext = RequestContextModule.make;
+
+/** When a middleware's verdict expires; a live read is judged again then. See {@link RequestContextModule.setExpiry}. */
+export const setExpiry = RequestContextModule.setExpiry;
 
 export type { Filter, OrderBy } from "./Filter.ts";
 export { InMemory } from "./InMemory.ts";
