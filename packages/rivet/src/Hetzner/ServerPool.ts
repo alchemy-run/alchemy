@@ -66,7 +66,7 @@ export const ServerPool = (id: string, options: ServerPoolOptions = {}) =>
         ? { context: nodes.program.context, dockerfile: nodes.program.dockerfile }
         : {
             main: (yield* bundleNodes("hetzner", id, nodes.program)) as unknown as string,
-            build: { install: { rivetkit: RIVETKIT_VERSION } },
+            build: { install: { rivetkit: options.rivetkitVersion ?? RIVETKIT_VERSION } },
           };
       const location = options.location ?? "nbg1";
       const firewall = yield* Hetzner.Firewall(`${id}Firewall`, {
