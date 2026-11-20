@@ -1,0 +1,110 @@
+---
+title: Inference
+description: Call models by name with DigitalOcean Serverless Inference from any runtime (chat, embeddings, images, speech, video and batches), or serve an open-weight model on GPUs reserved for you with Dedicated Inference.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+DigitalOcean runs models two ways. **Serverless Inference** calls a model by name on shared GPUs, with an OpenAI-compatible API, billed per token. **Dedicated Inference** serves an open-weight model from Hugging Face on GPUs reserved for you, at its own endpoint, billed by the hour whether or not you call it.
+
+<Tree
+  nodes={[
+    {
+      id: "team", label: "acme", type: "team", icon: "brand:digitalocean", colGap: 8,
+      areas: ["api serverless", ". llm"],
+      phoneAreas: ["api", "serverless", "llm"],
+    },
+    { id: "api", label: "Api", type: "App · your app", parent: "team", tone: "accent", icon: "server" },
+    {
+      id: "serverless", label: "Serverless Inference", type: "inference.do-ai.run", parent: "team", icon: "sparkles",
+      specs: [["models", "mistral-3-14B · qwen3-embedding-0.6b · …"]],
+    },
+    {
+      id: "llm", label: "Llm", type: "Dedicated Inference · tor1", parent: "team", icon: "cpu",
+      specs: [["model", "Mistral-7B-Instruct-v0.3"], ["GPU", "1 × H100"]],
+    },
+  ]}
+  links={[
+    { from: "api", to: "serverless", label: "per token" },
+    { from: "api", to: "llm", label: "own endpoint" },
+  ]}
+  caption="Serverless Inference is one shared endpoint for every catalog model. A Dedicated Inference endpoint serves one model on GPUs only you use."
+/>
+
+## Call a model by name
+
+Serverless Inference authenticates with a **model access key**, which you create in the control panel under **GenAI Platform → Serverless Inference**; DigitalOcean has no API to create one. Pass it to the binding:
+
+```typescript title="src/api.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const key = yield* Config.Redacted("DO_MODEL_KEY");
+    const chat = yield* DigitalOcean.Inference.CreateChatCompletion({ key });
+    return {
+      fetch: Effect.gen(function* () {
+        const out = yield* chat({
+          model: "mistral-3-14B",
+          messages: [{ role: "user", content: "Say hello" }],
+        });
+        return HttpServerResponse.text(out.choices[0]?.message?.content ?? "");
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(DigitalOcean.Inference.CreateChatCompletionHttp)),
+) {}
+```
+
+The key reaches the App as a secret.
+
+## Other kinds of model
+
+Each kind of call has its own binding, all taking the same `{ key }`:
+
+- `CreateEmbedding` turns text into vectors, for search in a [vector database](/digitalocean/data/vector-databases).
+- `CreateResponse` and `CreateMessage` speak the OpenAI Responses and Anthropic Messages formats.
+- `CreateImage`, `CreateSpeech` and `CreateVideo` generate media; `GetVideo` and `GetVideoContent` fetch a finished video.
+- `ListModels` lists the catalog.
+
+## Run many requests as a batch
+
+A batch runs a file of requests at a lower price, finishing within a day:
+
+```typescript
+const upload = yield* DigitalOcean.Inference.CreateBatchFile({ key });
+const createBatch = yield* DigitalOcean.Inference.CreateBatch({ key });
+const getBatch = yield* DigitalOcean.Inference.GetBatch({ key });
+```
+
+`GetBatchResults` reads the answers once `getBatch` reports the batch completed; `CancelBatch` stops one.
+
+## Serve your own model
+
+```typescript
+const vpcId = "<your region's default VPC id>";
+const llm = yield* DigitalOcean.Inference.DedicatedInference("Llm", {
+  region: "tor1",
+  vpcId,
+  publicEndpoint: true,
+  models: [
+    {
+      model: "mistralai/Mistral-7B-Instruct-v0.3",
+      accelerators: [{ gpu: "gpu-h100x1-80gb" }],
+    },
+  ],
+});
+```
+
+Deploy waits while the GPUs start and the weights load, ten to thirty minutes. `llm.publicEndpoint` serves `/v1/chat/completions`, and `llm.token` authorizes calls to it. Without `publicEndpoint`, it answers only inside its VPC.
+
+`CustomModel` imports a model from Hugging Face or a Spaces bucket to serve the same way.
+
+## Limits
+
+- Dedicated Inference is offered in a few regions (`tor1`, `ric1`, `atl1`, `nyc2`), and a GPU plan can be out of capacity there. Deploy then fails with "The selected GPU Plan … is currently unavailable in this region".
+- A dedicated endpoint bills by the hour for its GPUs from create to destroy, whether or not it serves requests.

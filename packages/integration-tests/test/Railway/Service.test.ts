@@ -15,9 +15,11 @@ import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
 import TracedApi from "./fixtures/traced-api.ts";
+import { railwayApi } from "./limit.ts";
 import { suitePartition } from "./suiteProject.ts";
 
 const { test } = Test.make({
+  limit: railwayApi,
   providers: Layer.mergeAll(Railway.providers(), Cloudflare.providers()),
 });
 
@@ -47,6 +49,7 @@ const readServiceInstance = Query.fn((environmentId: string, serviceId: string) 
     ),
     healthcheckPath: instance.healthcheckPath,
     preDeployCommand: instance.preDeployCommand,
+    startCommand: instance.startCommand,
     numReplicas: instance.numReplicas,
     dockerfilePath: instance.dockerfilePath,
   };
@@ -131,6 +134,7 @@ test.provider(
             port: 80,
             healthcheckPath: "/",
             preDeploy: { command: "echo predeploy" },
+            startCommand: "nginx -g 'daemon off;'",
           });
           return { project, environment, api };
         }),
@@ -168,6 +172,7 @@ test.provider(
             instance.preDeployCommand.length === 1 &&
             instance.preDeployCommand[0] === "echo predeploy"),
       ).toEqual(true);
+      expect(instance.startCommand).toEqual("nginx -g 'daemon off;'");
       // Railway omits numReplicas until you scale; default is one replica.
       expect(instance.numReplicas === null || instance.numReplicas === 1).toEqual(true);
       expect(created.api.healthcheckPath).toEqual("/");
@@ -215,6 +220,7 @@ test.provider(
             name: nextName,
             healthcheckPath: "/",
             preDeploy: { command: null },
+            startCommand: null,
           });
           return { project, environment, api };
         }),
@@ -235,6 +241,10 @@ test.provider(
           (Array.isArray(updatedInstance.preDeployCommand) &&
             updatedInstance.preDeployCommand.length === 0),
       ).toEqual(true);
+      // Railway ignores a `null` start command; the provider sends `""` to clear it.
+      expect(updatedInstance.startCommand == null || updatedInstance.startCommand === "").toEqual(
+        true,
+      );
 
       const fetchedUpdate = yield* readService(updated.api.serviceId);
       expect(fetchedUpdate.id).toEqual(updated.api.serviceId);

@@ -2,7 +2,7 @@ import * as Stripe from "@alchemy.run/stripe";
 import { isMissingStripeResource } from "@alchemy.run/stripe/missing";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
-import { GetPrice, CreateProduct, UpdateProduct } from "@distilled.cloud/stripe/stripe";
+import { GetPrice, GetProduct, CreateProduct, UpdateProduct } from "@distilled.cloud/stripe/stripe";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
@@ -218,6 +218,331 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:stripe", "provider:stripe:price", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "create a tiered price with tax behavior and replace it when tiers change",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const product = yield* CreateProduct({
+        name: "Alchemy Tiered Price Product",
+      });
+
+      const created = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("TieredPrice", {
+            product: product.id,
+            currency: "usd",
+            recurring: { interval: "month" },
+            tiersMode: "graduated",
+            tiers: [
+              { upTo: 5, unitAmount: 1500 },
+              { upTo: "inf", unitAmount: 1200, flatAmount: 500 },
+            ],
+            taxBehavior: "exclusive",
+          });
+        }),
+      );
+
+      expect(created.unitAmount).toBeUndefined();
+      expect(created.tiersMode).toEqual("graduated");
+      expect(created.tiers).toEqual([
+        { upTo: 5, unitAmount: 1500 },
+        { upTo: "inf", unitAmount: 1200, flatAmount: 500 },
+      ]);
+      expect(created.taxBehavior).toEqual("exclusive");
+
+      const fetched = yield* GetPrice({ price: created.id, expand: ["tiers"] });
+      expect(fetched.billing_scheme).toEqual("tiered");
+      expect(fetched.tiers_mode).toEqual("graduated");
+      expect(fetched.tiers?.map((tier) => tier.up_to)).toEqual([5, null]);
+      expect(fetched.tax_behavior).toEqual("exclusive");
+
+      const unchanged = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("TieredPrice", {
+            product: product.id,
+            currency: "usd",
+            recurring: { interval: "month" },
+            tiersMode: "graduated",
+            tiers: [
+              { upTo: 5, unitAmount: 1500 },
+              { upTo: "inf", unitAmount: 1200, flatAmount: 500 },
+            ],
+            taxBehavior: "exclusive",
+          });
+        }),
+      );
+      expect(unchanged.id).toEqual(created.id);
+
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("TieredPrice", {
+            product: product.id,
+            currency: "usd",
+            recurring: { interval: "month" },
+            tiersMode: "volume",
+            tiers: [
+              { upTo: 10, unitAmount: 1400 },
+              { upTo: "inf", unitAmount: 1000 },
+            ],
+            taxBehavior: "exclusive",
+          });
+        }),
+      );
+
+      expect(replaced.id).not.toEqual(created.id);
+      expect(replaced.tiersMode).toEqual("volume");
+      expect(replaced.tiers).toEqual([
+        { upTo: 10, unitAmount: 1400 },
+        { upTo: "inf", unitAmount: 1000 },
+      ]);
+
+      const oldFetched = yield* GetPrice({ price: created.id });
+      expect(oldFetched.active).toEqual(false);
+
+      yield* stack.destroy();
+
+      const deactivated = yield* waitUntilDeactivated(replaced.id);
+      expect(deactivated).toEqual("inactive");
+
+      yield* archiveProduct(product.id);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:price", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "set an unspecified tax behavior in place and replace a set one",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const product = yield* CreateProduct({
+        name: "Alchemy Tax Behavior Price Product",
+      });
+
+      const deployPrice = (taxBehavior?: Stripe.PriceTaxBehavior) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Stripe.Price("TaxBehaviorPrice", {
+              product: product.id,
+              currency: "usd",
+              unitAmount: 900,
+              ...(taxBehavior !== undefined ? { taxBehavior } : {}),
+            });
+          }),
+        );
+
+      const created = yield* deployPrice();
+      expect(created.taxBehavior).toEqual("unspecified");
+
+      const exclusive = yield* deployPrice("exclusive");
+      expect(exclusive.id).toEqual(created.id);
+      expect(exclusive.taxBehavior).toEqual("exclusive");
+      expect((yield* GetPrice({ price: created.id })).tax_behavior).toEqual("exclusive");
+
+      const inclusive = yield* deployPrice("inclusive");
+      expect(inclusive.id).not.toEqual(created.id);
+      expect(inclusive.taxBehavior).toEqual("inclusive");
+      expect((yield* GetPrice({ price: created.id })).active).toEqual(false);
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilDeactivated(inclusive.id)).toEqual("inactive");
+
+      yield* archiveProduct(product.id);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:price", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "add currency options in place and replace when one changes or goes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const product = yield* CreateProduct({
+        name: "Alchemy Currency Options Product",
+      });
+
+      const deployPrice = (currencyOptions: Record<string, Stripe.PriceCurrencyOption>) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Stripe.Price("CurrencyOptionsPrice", {
+              product: product.id,
+              currency: "usd",
+              unitAmount: 1000,
+              currencyOptions,
+            });
+          }),
+        );
+
+      const created = yield* deployPrice({ eur: { unitAmount: 900 } });
+      expect(created.currencyOptions).toEqual({ eur: { unitAmount: 900 } });
+
+      const added = yield* deployPrice({
+        eur: { unitAmount: 900 },
+        gbp: { unitAmount: 800 },
+      });
+      expect(added.id).toEqual(created.id);
+      expect(added.currencyOptions).toEqual({
+        eur: { unitAmount: 900 },
+        gbp: { unitAmount: 800 },
+      });
+
+      const fetched = yield* GetPrice({ price: created.id, expand: ["currency_options"] });
+      expect(fetched.currency_options?.eur?.unit_amount).toEqual(900);
+      expect(fetched.currency_options?.gbp?.unit_amount).toEqual(800);
+
+      const removed = yield* deployPrice({ eur: { unitAmount: 900 } });
+      expect(removed.id).not.toEqual(created.id);
+      expect(removed.currencyOptions).toEqual({ eur: { unitAmount: 900 } });
+      expect((yield* GetPrice({ price: created.id })).active).toEqual(false);
+
+      const changed = yield* deployPrice({ eur: { unitAmount: 950 } });
+      expect(changed.id).not.toEqual(removed.id);
+      expect(changed.currencyOptions).toEqual({ eur: { unitAmount: 950 } });
+      expect((yield* GetPrice({ price: removed.id })).active).toEqual(false);
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilDeactivated(changed.id)).toEqual("inactive");
+
+      yield* archiveProduct(product.id);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:price", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "create a pay-what-you-want price and a per-pack price",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const product = yield* CreateProduct({
+        name: "Alchemy Custom Amount Product",
+      });
+
+      const { custom, pack } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const custom = yield* Stripe.Price("CustomAmountPrice", {
+            product: product.id,
+            currency: "usd",
+            customUnitAmount: { minimum: 500, maximum: 5000, preset: 1500 },
+          });
+          const pack = yield* Stripe.Price("PackPrice", {
+            product: product.id,
+            currency: "usd",
+            unitAmount: 2000,
+            transformQuantity: { divideBy: 10, round: "up" },
+          });
+          return { custom, pack };
+        }),
+      );
+
+      expect(custom.unitAmount).toBeUndefined();
+      expect(custom.customUnitAmount).toEqual({ minimum: 500, maximum: 5000, preset: 1500 });
+      expect(pack.transformQuantity).toEqual({ divideBy: 10, round: "up" });
+
+      const fetchedCustom = yield* GetPrice({ price: custom.id });
+      expect(fetchedCustom.custom_unit_amount?.preset).toEqual(1500);
+      const fetchedPack = yield* GetPrice({ price: pack.id });
+      expect(fetchedPack.transform_quantity).toEqual({ divide_by: 10, round: "up" });
+
+      const replaced = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Stripe.Price("CustomAmountPrice", {
+            product: product.id,
+            currency: "usd",
+            customUnitAmount: { minimum: 1000 },
+          });
+        }),
+      );
+      expect(replaced.id).not.toEqual(custom.id);
+      expect(replaced.customUnitAmount).toEqual({ minimum: 1000 });
+
+      yield* stack.destroy();
+
+      expect(yield* waitUntilDeactivated(replaced.id)).toEqual("inactive");
+      expect(yield* waitUntilDeactivated(pack.id)).toEqual("inactive");
+
+      yield* archiveProduct(product.id);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:price", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
+  "make a price its product's default and hand the default to a replacement",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const deploy = (input: { unitAmount: number; defaultForProduct?: boolean }) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            const product = yield* Stripe.Product("DefaultPriceProduct", {
+              name: "Alchemy Default Price Product",
+            });
+            const price = yield* Stripe.Price("DefaultPrice", {
+              product,
+              currency: "usd",
+              unitAmount: input.unitAmount,
+              ...(input.defaultForProduct !== undefined
+                ? { defaultForProduct: input.defaultForProduct }
+                : {}),
+            });
+            return { product, price };
+          }),
+        );
+      const defaultPriceOf = (product: string) =>
+        GetProduct({ id: product }).pipe(
+          Effect.map((p) =>
+            p.default_price == null
+              ? undefined
+              : typeof p.default_price === "string"
+                ? p.default_price
+                : p.default_price.id,
+          ),
+        );
+
+      const first = yield* deploy({ unitAmount: 1000, defaultForProduct: true });
+      expect(first.price.defaultForProduct).toEqual(true);
+      expect(yield* defaultPriceOf(first.product.id)).toEqual(first.price.id);
+
+      const replaced = yield* deploy({ unitAmount: 1200, defaultForProduct: true });
+      expect(replaced.price.id).not.toEqual(first.price.id);
+      expect(yield* defaultPriceOf(first.product.id)).toEqual(replaced.price.id);
+      expect((yield* GetPrice({ price: first.price.id })).active).toEqual(false);
+
+      const released = yield* deploy({ unitAmount: 1200 });
+      expect(released.price.id).toEqual(replaced.price.id);
+      expect(released.price.defaultForProduct).toEqual(false);
+      expect(yield* defaultPriceOf(first.product.id)).toBeUndefined();
+
+      yield* deploy({ unitAmount: 1200, defaultForProduct: true });
+      yield* stack.destroy();
+
+      expect(yield* waitUntilDeactivated(replaced.price.id)).toEqual("inactive");
+      expect((yield* GetProduct({ id: first.product.id })).active).toEqual(false);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:stripe", "provider:stripe:price", "provider:stripe:product", "live"],
     timeout: 120_000,
   },
 );

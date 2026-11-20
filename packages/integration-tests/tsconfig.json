@@ -90,6 +90,7 @@
   },
   "references": [
     { "path": "../alchemy/tsconfig.json" },
+    { "path": "../1password/tsconfig.json" },
     { "path": "../sql/tsconfig.json" },
     { "path": "../redis/tsconfig.json" },
     { "path": "../docker/tsconfig.json" },
@@ -116,6 +117,7 @@
     { "path": "../neon/tsconfig.json" },
     { "path": "../prisma/tsconfig.json" },
     { "path": "../hetzner/tsconfig.json" },
+    { "path": "../digitalocean/tsconfig.json" },
     { "path": "../railway/tsconfig.json" },
     { "path": "../fly/tsconfig.json" },
     { "path": "../github/tsconfig.json" },

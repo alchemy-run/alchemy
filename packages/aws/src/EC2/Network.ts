@@ -343,6 +343,21 @@ export const Network = (id: string, props: NetworkProps) =>
         }
       }
 
+      // A private subnet has its routes only once its route-table association
+      // exists, and reaches the internet only once the NAT route does. Keep
+      // those dependencies in the IDs handed to downstream resources: what
+      // runs in a private subnet is created after its way out, and deleted
+      // before it. An instance or task that loses the NAT route mid-teardown
+      // can no longer reach the AWS APIs it needs to shut down cleanly.
+      const privateRouteTableIds = Output.all(...privateRoutes.map((route) => route.routeTableId));
+      const privateSubnetIds = privateSubnets.map((subnet, index) =>
+        Output.all(
+          subnet.subnetId,
+          privateRouteAssociations[index].associationId,
+          privateRouteTableIds,
+        ).pipe(Output.map(([subnetId]) => subnetId)),
+      );
+
       return {
         availabilityZones,
         vpc,
@@ -360,7 +375,7 @@ export const Network = (id: string, props: NetworkProps) =>
         gatewayEndpoints,
         vpcId: vpc.vpcId,
         publicSubnetIds,
-        privateSubnetIds: privateSubnets.map((subnet) => subnet.subnetId),
+        privateSubnetIds,
       } satisfies NetworkResources;
     }).pipe(Effect.orDie),
   );

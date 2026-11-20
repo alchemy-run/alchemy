@@ -185,6 +185,19 @@ export interface SandboxesClient {
  * });
  * ```
  *
+ * ### A cloud identity, not a key
+ * **Example:** Assume an AWS role with the token Modal signs
+ * ```typescript
+ * const sandbox = yield* sandboxes.create({
+ *   image: "amazon/aws-cli",
+ *   includeOidcIdentityToken: true,
+ * });
+ * // MODAL_IDENTITY_TOKEN is an OIDC token from https://oidc.modal.com
+ * const role = yield* sandbox.exec(
+ *   `aws sts assume-role-with-web-identity --role-arn ${roleArn} --role-session-name sandbox --web-identity-token "$MODAL_IDENTITY_TOKEN"`,
+ * );
+ * ```
+ *
  * ### Persistent sandboxes
  * **Example:** A box per user that keeps its files between sessions
  * ```typescript

@@ -7,21 +7,23 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { TEST_ORG } from "./fixtures/org.ts";
+import { PERSONAL, TEST_ORG } from "./fixtures/org.ts";
 
-const { test, deploy, destroy } = Test.make({ providers: Boat.providers() });
+// The testing account's plan is the organization's, so the cases that start
+// a sandbox run there, and the personal ones stop at the environment.
+const { test, deploy, destroy } = Test.make({ providers: Boat.providers({ org: PERSONAL }) });
 const team = Test.make({ providers: Boat.providers({ org: TEST_ORG }) });
 
 const tags = ["provider:boat", "provider:boat:environment", "live"];
 
-// Out-of-band reads resolve credentials as the stack does, with no org.
+// `/environments` routes take the org as a query, and ignore the stack's.
 const observe = (environmentId: string, org?: string) =>
   boat.listEnvironments(org ? { org } : {}).pipe(
     Effect.map((r) => r.environments.find((environment) => environment.id === environmentId)),
     Effect.provide(Layer.mergeAll(Boat.BoatAuth, Boat.fromAuthProvider(), FetchHttpClient.layer)),
   );
 
-test.provider(
+team.test.provider(
   "create an environment, update its variables and flags in place, and start a sandbox on it",
   (stack) =>
     Effect.gen(function* () {
@@ -32,7 +34,6 @@ test.provider(
           const Agents = Boat.Environment("Agents", {
             env: { MODE: "agent", TOKEN: Redacted.make(props.token), QUOTED: 'a b "c"' },
             secretFiles: [{ path: "~/.alchemy-test", contents: Redacted.make("file-secret") }],
-            passGithub: false,
             safeForThirdParties: props.safe,
           });
           const box = yield* Boat.Sandbox("OnAgents", {
@@ -44,9 +45,16 @@ test.provider(
         });
 
       const { environment, box } = yield* stack.deploy(program({ token: "t1", safe: false }));
-      const created = yield* observe(environment.environmentId);
+      const created = yield* observe(environment.environmentId, TEST_ORG);
       expect(created?.name).toBe(environment.name);
+      // Its own variables and files reach its sandboxes; nothing of the
+      // account's does until a flag or a credential profile asks for it.
+      expect(created?.passSecrets).toBe(true);
       expect(created?.passGithub).toBe(false);
+      expect(created?.passSandboxCredentials).toBe(false);
+      expect(created?.passAgentsCredentials).toBe(false);
+      expect(created?.proxyAiCredentials).toBe(false);
+      expect(created?.credentialProfileId).toBeNull();
       expect(created?.secretFiles.map((file) => file.path)).toEqual([".alchemy-test"]);
       expect(box.environment).toBe(environment.name);
       const vars = yield* boat.executeSandboxCommand({
@@ -67,12 +75,12 @@ test.provider(
       expect(updated.environment.latestVersionNumber).toBeGreaterThan(
         environment.latestVersionNumber,
       );
-      const observed = yield* observe(environment.environmentId);
+      const observed = yield* observe(environment.environmentId, TEST_ORG);
       expect(observed?.safeForThirdParties).toBe(true);
       expect(observed?.envContents).toContain("TOKEN=t2");
 
       yield* stack.destroy();
-      expect(yield* observe(environment.environmentId)).toBeUndefined();
+      expect(yield* observe(environment.environmentId, TEST_ORG)).toBeUndefined();
     }),
   { tags, timeout: 180_000 },
 );
@@ -117,7 +125,48 @@ team.test.provider(
   { tags, timeout: 180_000 },
 );
 
-/** One stack, deployed first without an org and then with one. */
+team.test.provider(
+  "look up the base environment and start a sandbox on it, without managing it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const standing = (yield* boat
+        .listEnvironments({ org: TEST_ORG })
+        .pipe(
+          Effect.provide(
+            Layer.mergeAll(Boat.BoatAuth, Boat.fromAuthProvider(), FetchHttpClient.layer),
+          ),
+        )).environments.find((environment) => environment.name === "base");
+      expect(standing).toBeDefined();
+
+      const program = Effect.gen(function* () {
+        const Base = Boat.Environment.lookup({ name: "base" });
+        const box = yield* Boat.Sandbox("OnBase", {
+          type: "small",
+          autoStop: "10 minutes",
+          environment: Base,
+        });
+        return { environmentId: Base.environmentId, box };
+      });
+
+      const { environmentId, box } = yield* stack.deploy(program);
+      expect(environmentId).toBe(standing?.id);
+      expect(box.environment).toBe("base");
+
+      const plan = yield* stack.plan(program);
+      expect(plan.resources.OnBase.action).toBe("noop");
+
+      // Destroying the stack leaves the environment it only referenced.
+      yield* stack.destroy();
+      const after = yield* observe(environmentId, TEST_ORG);
+      expect(after?.name).toBe("base");
+      expect(after?.latestVersionNumber).toBe(standing?.latestVersionNumber);
+    }),
+  { tags, timeout: 180_000 },
+);
+
+/** One stack, deployed first as yours and then with an org. */
 const moving = Effect.gen(function* () {
   const environment = yield* Boat.Environment("Moving", { env: { MODE: "moving" } });
   return {
@@ -128,7 +177,7 @@ const moving = Effect.gen(function* () {
 });
 const PersonalStack = Alchemy.Stack(
   "BoatEnvironmentOrgMove",
-  { providers: Boat.providers(), state: Alchemy.localState() },
+  { providers: Boat.providers({ org: PERSONAL }), state: Alchemy.localState() },
   moving,
 );
 const TeamStack = Alchemy.Stack(

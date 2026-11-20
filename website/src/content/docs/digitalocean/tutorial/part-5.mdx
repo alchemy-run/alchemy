@@ -1,0 +1,50 @@
+---
+title: "Part 5: Ship to Production"
+description: Deploy a second copy of the Stack as a stage, give production its own team and profile, deploy from CI, and tear down what you no longer need.
+sidebar:
+  order: 5
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+So far every deploy went to your own stage. A **stage** is a separate copy of the whole Stack: its own App, bucket and database.
+
+## Deploy a second stage
+
+<PackageManagers run="alchemy deploy --stage staging" />
+
+Each stage gets its own resources, with the stage in their generated names. `alchemy deploy` without `--stage` keeps deploying to yours.
+
+## Give production its own team
+
+A stage decides what you deploy; the profile's token decides which team it goes to. Create a team for production in the control panel, a token for it, and a profile that holds that token:
+
+<PackageManagers script={`{run} alchemy profile create prod
+{run} alchemy profile edit --profile prod --add DigitalOcean`} />
+
+## Deploy production
+
+<PackageManagers run="alchemy deploy --stage prod --profile prod" />
+
+Production now has its own team: its own members, its own Container Registry and its own bill.
+
+## Share state
+
+`Alchemy.localState()` keeps Alchemy's record on your machine, so nobody else can deploy the Stack. Before a teammate or CI deploys, move it to a shared store, like `Cloudflare.state()` or `AWS.state()`. See [State Store](/state-store).
+
+## Deploy from CI
+
+With `CI=true`, Alchemy skips profiles and reads the token from the `DIGITALOCEAN_TOKEN` environment variable. Store the production team's token as a CI secret, expose it under that name, and run `alchemy deploy --stage prod`. See [CI](/environments/ci).
+
+## Tear down
+
+<PackageManagers run="alchemy destroy --stage staging" />
+
+`destroy` deletes everything the stage created: the App, its image repository, the bucket and the database cluster. Run it for each stage you're done with, and for your own when you finish this tutorial.
+
+## Where to go next
+
+- [App Platform](/digitalocean/compute/app-platform): instance sizes, scaling, alerts and more on Apps.
+- [Spaces](/digitalocean/data/spaces): every bucket binding, CDN endpoints and keys.
+- [Managed Databases](/digitalocean/data/managed-databases): users, pools, replicas and trusted sources.
+- [Choosing a runtime](/digitalocean/compute/choosing-a-runtime): when to use Functions, Droplets or Kubernetes instead.

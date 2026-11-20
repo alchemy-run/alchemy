@@ -66,10 +66,10 @@ jobs:
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
           git switch -C "$BRANCH"
           git add "$CATALOG"
-          git commit -m "chore(cloudflare): sync API token permission groups"
+          git commit -m "fix(cloudflare): sync API token permission groups"
           git push --force origin "$BRANCH"
           if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
             gh pr create --base main --head "$BRANCH" \
-              --title "chore(cloudflare): sync API token permission groups" \
+              --title "fix(cloudflare): sync API token permission groups" \
               --body "Regenerated \`$CATALOG\` from \`GET /accounts/{account_id}/tokens/permission_groups\` with \`pnpm -C packages/cloudflare sync:permission-groups\`."
           fi

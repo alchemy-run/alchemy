@@ -4,13 +4,11 @@ import * as Schema from "effect/Schema";
 export class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 export class Withdrawn extends Domain.Event("Withdrawn", { amount: Schema.Number }) {}
 export class Deposit extends Domain.Command("Deposit", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Deposited],
 }) {}
 export class Withdraw extends Domain.Command("Withdraw", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Withdrawn],
 }) {}
 export class Account extends Domain.Aggregate("Account", {
@@ -18,6 +16,7 @@ export class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit, Withdraw],
+  keyOf: (command) => command.id,
   decide: {
     Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })],
     Withdraw: (_, cmd) => [new Withdrawn({ amount: cmd.amount })],

@@ -5,6 +5,7 @@ import { expect, describe } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Provider from "alchemy/Provider";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -15,6 +16,7 @@ import * as Schedule from "effect/Schedule";
 import { testName } from "../names.ts";
 import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
 import Api from "./fixtures/api.ts";
+import BoundSecretsApi from "./fixtures/bound-secrets.ts";
 import ChecksApi, { ChecksSite } from "./fixtures/checks-api.ts";
 import { ECHO_BODY, Echo } from "./fixtures/echo.ts";
 import { fetchFrom, fetchOnce, nginx } from "./fixtures/flycast.ts";
@@ -118,8 +120,9 @@ describe.concurrent("Service", () => {
             name: deployed.api.baseName ?? deployed.api.name,
           }),
           deployed.api,
-          // The bundled program's hash is this stack's record, not Fly's.
-          { ignore: ["code"] },
+          // The bundled program's hash and the App secrets the Service
+          // wrote are this stack's record, not Fly's.
+          { ignore: ["code", "secrets", "secretsVersion"] },
         );
 
         expect(deployed.api.machineId).toEqual(expect.any(String));
@@ -1030,5 +1033,132 @@ describe.concurrent("Service", () => {
       tags: [...ownedTags, "provider:cloudflare", "provider:cloudflare:worker"],
       timeout: 300_000,
     },
+  );
+
+  test.provider(
+    "bound Config values are App secrets, not Machine env",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+
+        const ambient = yield* ConfigProvider.ConfigProvider;
+        const deploy = (config: Record<string, string>) =>
+          stack
+            .deploy(
+              Effect.gen(function* () {
+                return yield* BoundSecretsApi;
+              }),
+            )
+            .pipe(
+              Effect.provideService(
+                ConfigProvider.ConfigProvider,
+                ConfigProvider.orElse(ConfigProvider.fromUnknown(config), ambient),
+              ),
+            );
+        const client = yield* HttpClient.HttpClient;
+        const readSecret = (url: string | undefined, expected: string) =>
+          client.get(`${url}/secret`).pipe(
+            Effect.flatMap((response) => response.json),
+            Effect.map((body) => (body as { secret: string }).secret),
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (secret) => secret === expected,
+              times: 15,
+            }),
+          );
+        const secretsOf = (appName: string) =>
+          machines
+            .listSecrets({ app_name: appName, show_secrets: false })
+            .pipe(Effect.map((listed) => (listed.secrets ?? []).map((secret) => secret.name)));
+        const updatedAtOf = (appName: string, name: string) =>
+          machines
+            .listSecrets({ app_name: appName, show_secrets: false })
+            .pipe(
+              Effect.map(
+                (listed) =>
+                  (listed.secrets ?? []).find((secret) => secret.name === name)?.updated_at,
+              ),
+            );
+        const machineOf = (appName: string, machineId: string) =>
+          machines.getMachine({ app_name: appName, machine_id: machineId });
+
+        // A bound value lands in the App vault under a name scoped to the
+        // Service; the Machine maps it back to the env var the program reads.
+        const first = yield* deploy({ BOUND_SECRETS_MODE: "on", BOUND_SECRET: "value-one" });
+        const appName = first.appName;
+        expect(Object.keys(first.secrets ?? {}).sort()).toEqual([
+          "BOUND_SECRET",
+          "BOUND_SECRETS_MODE",
+        ]);
+        const scoped = first.secrets!.BOUND_SECRET!.name;
+        expect(scoped).toMatch(/^ALCHEMY_[0-9A-F]{8}_BOUND_SECRET$/);
+        expect(first.secretsVersion).toEqual(expect.any(Number));
+        const vault = yield* secretsOf(appName);
+        expect(vault).toEqual(
+          expect.arrayContaining([scoped, first.secrets!.BOUND_SECRETS_MODE!.name]),
+        );
+        expect(vault).not.toContain("BOUND_SECRET");
+        const created = yield* machineOf(appName, first.machineId);
+        expect(created.config?.env?.BOUND_SECRET).toBeUndefined();
+        expect(created.config?.env?.BOUND_SECRETS_MODE).toBeUndefined();
+        expect(created.config?.env?.PLAIN_VALUE).toEqual("plain");
+        expect(created.config?.processes?.[0]?.secrets).toEqual(
+          expect.arrayContaining([{ env_var: "BOUND_SECRET", name: scoped }]),
+        );
+        expect(yield* readSecret(first.url, "value-one")).toEqual("value-one");
+
+        // An unchanged value writes nothing and leaves the Machine running.
+        const same = yield* deploy({ BOUND_SECRETS_MODE: "on", BOUND_SECRET: "value-one" });
+        expect(same.secretsVersion).toEqual(first.secretsVersion);
+        expect(same.machineIds).toEqual(first.machineIds);
+        expect((yield* machineOf(appName, same.machineId)).instance_id).toEqual(
+          created.instance_id,
+        );
+
+        // A changed value raises the secrets version and rolls the Machine;
+        // its unchanged neighbour is matched by digest and not rewritten.
+        const modeName = first.secrets!.BOUND_SECRETS_MODE!.name;
+        const modeUpdatedAt = yield* updatedAtOf(appName, modeName);
+        const changed = yield* deploy({ BOUND_SECRETS_MODE: "on", BOUND_SECRET: "value-two" });
+        expect(changed.secretsVersion).toBeGreaterThan(first.secretsVersion!);
+        expect(yield* updatedAtOf(appName, modeName)).toEqual(modeUpdatedAt);
+        expect(yield* readSecret(changed.url, "value-two")).toEqual("value-two");
+
+        // A secret the Service did not write survives; an unbound one is deleted.
+        yield* machines.updateSecrets({ app_name: appName, values: { FOREIGN_SECRET: "keep" } });
+        const removed = yield* deploy({ BOUND_SECRETS_MODE: "off" });
+        expect(Object.keys(removed.secrets ?? {})).toEqual(["BOUND_SECRETS_MODE"]);
+        const remaining = yield* secretsOf(appName);
+        expect(remaining).not.toContain(scoped);
+        expect(remaining).toContain("FOREIGN_SECRET");
+        expect(yield* readSecret(removed.url, "unset")).toEqual("unset");
+
+        // The Machine still sees the App's other secrets under their own names.
+        expect((yield* machineOf(appName, removed.machineId)).config?.processes?.[0]).toEqual(
+          expect.objectContaining({
+            ignore_app_secrets: true,
+            secrets: expect.arrayContaining([
+              expect.objectContaining({ env_var: "FOREIGN_SECRET" }),
+            ]),
+          }),
+        );
+
+        // An App secret with a bound env var's name stays in the App, and
+        // the Machine sees the bound value.
+        yield* machines.updateSecrets({
+          app_name: appName,
+          values: { BOUND_SECRET: "someone-else" },
+        });
+        const shadowed = yield* deploy({
+          BOUND_SECRETS_MODE: "on",
+          BOUND_SECRET: "value-three",
+        });
+        expect(yield* readSecret(shadowed.url, "value-three")).toEqual("value-three");
+        expect(yield* secretsOf(appName)).toContain("BOUND_SECRET");
+
+        yield* stack.destroy();
+        expect(yield* appGone(appName)).toBe(true);
+      }).pipe(logLevel),
+    { tags: ownedTags, timeout: 300_000 },
   );
 });

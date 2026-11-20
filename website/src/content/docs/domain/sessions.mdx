@@ -95,7 +95,7 @@ The Worker that serves the Api provides `SessionLive`. A client that isn't a bro
 
 ## Guard commands and views
 
-List the middleware on each command and view that needs it. Middleware runs in order, and what it provides is what `decide` and `validate` may read.
+List the middleware on each command and view that needs it. Middleware runs in list order: the first entry runs first, and what it provides reaches the entries after it and what `decide` and `validate` may read.
 
 ```typescript
 // packages/domain/src/Account/SetNickname.command.ts
@@ -108,9 +108,8 @@ import { NotOwner } from "./NotOwner.rejection.ts";
 export class NicknameSet extends Domain.Event("NicknameSet", { nickname: Schema.String }) {}
 
 export class SetNickname extends Domain.Command("SetNickname", {
-  target: AccountId,
   middleware: [Session],
-  input: { nickname: Schema.String },
+  input: { accountId: AccountId, nickname: Schema.String },
   events: [NicknameSet],
   rejects: [NotOwner],
 }) {}

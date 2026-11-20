@@ -3,6 +3,7 @@ import * as AwsEndpoint from "@distilled.cloud/aws/Endpoint";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { isEffectOf } from "alchemy/Util/effect";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -46,9 +47,8 @@ const readValue = (value: unknown): Effect.Effect<string | undefined> =>
   Effect.gen(function* () {
     const direct = asPlain(value);
     if (direct !== undefined) return direct;
-    if (Effect.isEffect(value)) {
-      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- resource attribute Effects resolve without requirements
-      return asPlain(yield* value as Effect.Effect<unknown>);
+    if (isEffectOf(value)) {
+      return asPlain(yield* value);
     }
     return undefined;
   });

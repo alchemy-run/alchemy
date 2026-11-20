@@ -40,20 +40,37 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 const call = (path: string, init?: { method?: "PUT"; body?: string }) =>
   Effect.gen(function* () {
     const { url } = yield* stack;
-    const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+    const client = yield* HttpClient.HttpClient;
     const request =
       init?.method === "PUT"
         ? HttpClientRequest.put(`${url}${path}`).pipe(HttpClientRequest.bodyText(init.body ?? ""))
         : HttpClientRequest.get(`${url}${path}`);
-    return yield* client
-      .execute(request)
-      .pipe(Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 8 }));
+    return yield* client.execute(request).pipe(
+      // Keep the Worker's error text (its Cause) in the failure.
+      Effect.flatMap((res) =>
+        res.status >= 200 && res.status < 300
+          ? Effect.succeed(res)
+          : Effect.flatMap(res.text, (text) =>
+              Effect.fail(new RouteFailed({ path, status: res.status, text })),
+            ),
+      ),
+      Effect.retry({ schedule: Schedule.exponential("500 millis"), times: 8 }),
+    );
   });
 
 const json = <A>(path: string) =>
   call(path).pipe(Effect.flatMap((r) => r.json as Effect.Effect<A, any>));
 const text = (path: string) => call(path).pipe(Effect.flatMap((r) => r.text));
 
+class RouteFailed extends Data.TaggedError("RouteFailed")<{
+  readonly path: string;
+  readonly status: number;
+  readonly text: string;
+}> {
+  override get message() {
+    return `${this.path} answered ${this.status}: ${this.text}`;
+  }
+}
 class MountRouteFailed extends Data.TaggedError("MountRouteFailed")<{ readonly text: string }> {}
 class ProxyNotReady extends Data.TaggedError("ProxyNotReady")<{ readonly status: number }> {}
 
@@ -455,7 +472,10 @@ describe("MountDisk", () => {
             res.status === 200 ? Effect.succeed(text) : Effect.fail(new MountRouteFailed({ text })),
           ),
         ),
-        Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 18 }),
+        // A cold start can hold a request open; give up on it and ask again
+        // rather than wait out the whole test.
+        Effect.timeout("30 seconds"),
+        Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 7 }),
         Effect.catchTag("MountRouteFailed", (e) => Effect.succeed(e.text)),
       );
       expect(body).toBe("through fuse");

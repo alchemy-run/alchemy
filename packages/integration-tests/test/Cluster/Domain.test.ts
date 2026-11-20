@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { conformance, waitForReady } from "../Domain/conformance/conformance.ts";
+import { latency } from "../Domain/conformance/latency.ts";
 import { DOMAIN_FRONT_PORT } from "./fixtures/domain/cluster.ts";
 import { crash } from "./fixtures/domain/crash.ts";
 import DomainFront from "./fixtures/domain/front.ts";
@@ -44,6 +45,12 @@ describe.skipIf(!!process.env.FAST)(
     afterAll.skipIf(!!process.env.NO_DESTROY)(stack.destroy(), { timeout: 300_000 });
 
     conformance({ test, url: Effect.succeed(url), kind: "local" });
+    latency({
+      kind: "local",
+      test,
+      label: "Effect Cluster (local Docker)",
+      url: Effect.succeed(url),
+    });
 
     // Last: each case kills a runner.
     crash({ test, url, stack });

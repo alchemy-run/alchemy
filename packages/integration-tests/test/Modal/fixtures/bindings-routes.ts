@@ -175,6 +175,101 @@ export const bindingRoutes = Effect.gen(function* () {
           }).pipe(Effect.scoped, Effect.ensuring(Effect.ignore(sandbox.terminate())));
           return yield* HttpServerResponse.json(out);
         }
+        case "/egress": {
+          // A secret Modal adds to matching HTTPS requests outside the
+          // sandbox: the request carries it, the sandbox never holds it.
+          const name = `egress-${key}`;
+          const first = "s3cr3t-value";
+          const second = "r0tated-value";
+          const policy = (secretId: string, header: string): Modal.OutboundPolicy => ({
+            routes: [
+              {
+                https: {
+                  domains: ["postman-echo.com"],
+                  headerReplacements: [
+                    { secret: { secretId }, headers: { "X-Alchemy-Secret": header } },
+                  ],
+                },
+              },
+              { any: {} },
+            ],
+          });
+          const token = yield* secrets.put(name, { API_KEY: first, NEXT_KEY: second });
+          const sandbox = yield* appSandboxes.create({
+            image: "buildpack-deps:bookworm-curl",
+            timeout: "5 minutes",
+            outboundPolicy: policy(token.secretId, "Bearer $API_KEY"),
+          });
+          const out = yield* Effect.gen(function* () {
+            const echoed = yield* sandbox.exec("curl -sS https://postman-echo.com/headers");
+            const env = yield* sandbox.exec("env; cat /proc/1/environ");
+            // The policy changes on the running sandbox.
+            yield* sandbox.setOutboundPolicy(policy(token.secretId, "Bearer $NEXT_KEY"));
+            const rotated = yield* sandbox.exec("curl -sS https://postman-echo.com/headers");
+            return {
+              injected: echoed.stdout.includes(`Bearer ${first}`),
+              rotated: rotated.stdout.includes(`Bearer ${second}`),
+              leaked: env.stdout.includes(first) || env.stdout.includes(second),
+              stderr: echoed.stderr + rotated.stderr,
+            };
+          }).pipe(
+            Effect.ensuring(Effect.ignore(sandbox.terminate())),
+            Effect.ensuring(Effect.ignore(secrets.delete(name))),
+          );
+          return yield* HttpServerResponse.json(out);
+        }
+        case "/network": {
+          // An allow-list limits where a sandbox can connect, and changes
+          // while it runs.
+          const sandbox = yield* appSandboxes.create({
+            image: "buildpack-deps:bookworm-curl",
+            timeout: "5 minutes",
+            allowedDomains: ["postman-echo.com"],
+          });
+          const reach = (host: string) =>
+            sandbox
+              .exec(`curl -sS -m 10 -o /dev/null https://${host}/`)
+              .pipe(Effect.map((run) => run.exitCode === 0));
+          const out = yield* Effect.gen(function* () {
+            const allowed = yield* reach("postman-echo.com");
+            const unlisted = yield* reach("example.com");
+            yield* sandbox.setNetworkAccess({ blockNetwork: true });
+            const blocked = yield* reach("postman-echo.com");
+            yield* sandbox.setNetworkAccess({});
+            const reopened = yield* reach("example.com");
+            return { allowed, unlisted, blocked, reopened };
+          }).pipe(Effect.ensuring(Effect.ignore(sandbox.terminate())));
+          return yield* HttpServerResponse.json(out);
+        }
+        case "/identity": {
+          // Modal signs an identity token naming the sandbox; a cloud that
+          // trusts Modal's issuer exchanges it for short-lived credentials.
+          const sandbox = yield* appSandboxes.create({
+            image: "debian:bookworm-slim",
+            timeout: "5 minutes",
+            includeOidcIdentityToken: true,
+          });
+          const out = yield* Effect.gen(function* () {
+            // Exec'd commands may not inherit the main process's env.
+            const run = yield* sandbox.exec(
+              "printenv MODAL_IDENTITY_TOKEN || cat /proc/[0-9]*/environ 2>/dev/null | tr '\\0' '\\n' | sed -n 's/^MODAL_IDENTITY_TOKEN=//p' | head -n 1",
+            );
+            const [, payload] = run.stdout.trim().split(".");
+            const claims = payload
+              ? (JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<
+                  string,
+                  unknown
+                >)
+              : {};
+            return {
+              issuer: claims.iss,
+              subject: claims.sub,
+              sandboxId: sandbox.sandboxId,
+              claims: Object.keys(claims),
+            };
+          }).pipe(Effect.ensuring(Effect.ignore(sandbox.terminate())));
+          return yield* HttpServerResponse.json(out);
+        }
         case "/sandbox-named": {
           const name = `named-${key}`;
           const created = yield* appSandboxes.create({

@@ -39,6 +39,7 @@ function providersSidebarEntry() {
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
       { label: "Railway", link: "/railway" },
+      { label: "DigitalOcean", link: "/digitalocean" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
@@ -452,6 +453,7 @@ export default defineConfig({
                 },
                 { label: "Doppler", link: "/environments/doppler" },
                 { label: "Infisical", link: "/environments/infisical" },
+                { label: "1Password", link: "/environments/1password" },
                 {
                   label: "Local development",
                   link: "/environments/local-development",
@@ -829,6 +831,7 @@ export default defineConfig({
                 { label: "Lambda Web Functions", link: "/aws/compute/web-functions" },
                 { label: "Effect workflows", link: "/aws/compute/effect-workflows" },
                 { label: "ECS", link: "/aws/compute/ecs" },
+                { label: "ECS Sandboxes", link: "/aws/compute/ecs-sandboxes" },
                 { label: "EKS", link: "/aws/compute/eks" },
                 { label: "EC2", link: "/aws/compute/ec2" },
                 { label: "HyperPod", link: "/aws/compute/hyperpod" },
@@ -1332,6 +1335,99 @@ export default defineConfig({
           ],
         },
         {
+          label: "DigitalOcean",
+          items: [
+            { label: "Overview", link: "/digitalocean" },
+            { label: "What is DigitalOcean?", link: "/digitalocean/what-is-digitalocean" },
+            { label: "Setup", link: "/digitalocean/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "digitalocean/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                {
+                  label: "Teams, projects and tokens",
+                  link: "/digitalocean/teams-projects-and-tokens",
+                },
+                { label: "Secrets", link: "/digitalocean/security/secrets" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Choosing a runtime", link: "/digitalocean/compute/choosing-a-runtime" },
+                { label: "App Platform", link: "/digitalocean/compute/app-platform" },
+                { label: "Functions", link: "/digitalocean/compute/functions" },
+                { label: "Droplets", link: "/digitalocean/compute/droplets" },
+                { label: "Kubernetes", link: "/digitalocean/compute/kubernetes" },
+                { label: "Sandboxes", link: "/digitalocean/compute/sandboxes" },
+              ],
+            },
+            {
+              label: "Storage & databases",
+              items: [
+                { label: "Spaces", link: "/digitalocean/data/spaces" },
+                { label: "Managed Databases", link: "/digitalocean/data/managed-databases" },
+                { label: "Volumes and NFS", link: "/digitalocean/data/volumes-nfs" },
+                { label: "Vector Databases", link: "/digitalocean/data/vector-databases" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "VPCs and NAT", link: "/digitalocean/networking/vpcs" },
+                { label: "Firewalls", link: "/digitalocean/networking/firewalls" },
+                {
+                  label: "Load balancers and certificates",
+                  link: "/digitalocean/networking/load-balancers",
+                },
+                { label: "Reserved IPs", link: "/digitalocean/networking/reserved-ips" },
+                { label: "DNS", link: "/digitalocean/networking/dns" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [
+                {
+                  label: "Monitoring and Insights",
+                  link: "/digitalocean/observability/monitoring",
+                },
+              ],
+            },
+            {
+              label: "AI",
+              items: [
+                { label: "GenAI agents", link: "/digitalocean/ai/genai-agents" },
+                { label: "Inference", link: "/digitalocean/ai/inference" },
+                { label: "Agent harness", link: "/digitalocean/ai/agent-harness" },
+                { label: "Action Gateway", link: "/digitalocean/ai/action-gateway" },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: sortFrontendItems([
+                { label: "Overview", link: "/digitalocean/frontend/websites" },
+                { label: "Astro", link: "/digitalocean/frontend/astro" },
+                { label: "Foldkit", link: "/digitalocean/frontend/foldkit" },
+                { label: "Next.js", link: "/digitalocean/frontend/nextjs" },
+                { label: "Nuxt", link: "/digitalocean/frontend/nuxt" },
+                { label: "Octane", link: "/digitalocean/frontend/octane" },
+                { label: "React Router", link: "/digitalocean/frontend/react-router" },
+                { label: "SolidStart", link: "/digitalocean/frontend/solidstart" },
+                { label: "SvelteKit", link: "/digitalocean/frontend/sveltekit" },
+                { label: "TanStack Start", link: "/digitalocean/frontend/tanstack-start" },
+                { label: "Vinext", link: "/digitalocean/frontend/vinext" },
+                { label: "Vite", link: "/digitalocean/frontend/vite" },
+                { label: "Vocs", link: "/digitalocean/frontend/vocs" },
+                { label: "Waku", link: "/digitalocean/frontend/waku" },
+              ]),
+            },
+            providerResourcesEntry("DigitalOcean"),
+          ],
+        },
+        {
           label: "PlanetScale",
           items: [
             { label: "Overview", link: "/planetscale" },
@@ -1597,6 +1693,7 @@ export default defineConfig({
                 { label: "Account & API keys", link: "/boat/account-and-keys" },
                 { label: "Credentials & bindings", link: "/boat/security/credentials" },
                 { label: "Environments & secrets", link: "/boat/security/environments" },
+                { label: "Credential profiles", link: "/boat/security/credential-profiles" },
               ],
             },
             {
@@ -1797,8 +1894,16 @@ export default defineConfig({
                   link: "/stripe/guides/connect",
                 },
                 {
+                  label: "Price your product",
+                  link: "/stripe/guides/pricing",
+                },
+                {
                   label: "React to Stripe events",
                   link: "/stripe/guides/webhooks",
+                },
+                {
+                  label: "Collect tax and pay out",
+                  link: "/stripe/guides/tax-and-payouts",
                 },
               ],
             },
@@ -1870,6 +1975,7 @@ export default defineConfig({
                 { label: "Command", link: "/domain/command" },
                 { label: "Event", link: "/domain/event" },
                 { label: "Aggregate", link: "/domain/aggregate" },
+                { label: "Decision", link: "/domain/decision" },
                 { label: "View", link: "/domain/view" },
                 { label: "Projection", link: "/domain/projection" },
                 { label: "Stream", link: "/domain/stream" },
@@ -1895,6 +2001,8 @@ export default defineConfig({
               items: [
                 { label: "Story", link: "/domain/story" },
                 { label: "Testing a model", link: "/domain/testing-models" },
+                { label: "Verifying a model", link: "/domain/verifying-models" },
+                { label: "What the prover reads", link: "/domain/verifiable-code" },
                 { label: "Testing an Api", link: "/domain/testing-apis" },
               ],
             },
@@ -2077,12 +2185,41 @@ export default defineConfig({
             { label: "What is Docker?", link: "/docker/what-is-docker" },
             { label: "Setup", link: "/docker/setup" },
             {
-              label: "Guides",
+              label: "Engines & access",
               items: [
-                { label: "Run local services", link: "/docker/local-services" },
-                { label: "Build & push images", link: "/docker/build-and-push" },
-                { label: "Docker Swarm", link: "/docker/swarm" },
+                { label: "Engines & contexts", link: "/docker/engines-and-contexts" },
+                { label: "Registries & credentials", link: "/docker/registries" },
               ],
+            },
+            {
+              label: "Images",
+              items: [
+                { label: "Build images", link: "/docker/build-images" },
+                { label: "Build caches", link: "/docker/build-caches" },
+                { label: "Pull & mirror images", link: "/docker/remote-images" },
+                { label: "Images on cloud runtimes", link: "/docker/cloud-runtimes" },
+              ],
+            },
+            {
+              label: "Containers",
+              items: [
+                { label: "Containers", link: "/docker/containers" },
+                { label: "Networks", link: "/docker/networks" },
+                { label: "Volumes", link: "/docker/volumes" },
+                { label: "Limits & security", link: "/docker/limits-and-security" },
+              ],
+            },
+            {
+              label: "Swarm",
+              items: [
+                { label: "Swarms", link: "/docker/swarm" },
+                { label: "Services", link: "/docker/services" },
+                { label: "Effectful services", link: "/docker/effectful-services" },
+              ],
+            },
+            {
+              label: "Guides",
+              items: [{ label: "Local Postgres", link: "/docker/local-services" }],
             },
             providerResourcesEntry("Docker"),
           ],
