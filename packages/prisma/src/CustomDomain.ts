@@ -5,6 +5,7 @@ import {
   deleteDomain,
   getDomain,
   getServiceDomains,
+  getServiceUrls,
   getServices,
 } from "@distilled.cloud/prisma/management";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -139,11 +140,11 @@ export interface CustomDomain extends Resource<
  * verify DNS and TLS, cut traffic over, and then remove the old resource.
  *
  * Prisma records a custom domain as a RoutingUrl, and has done so for every
- * custom domain since its backfill ran on 2026-11-17. Once it has, to replace
- * a CustomDomain with a `Prisma.RoutingUrl` for the same hostname, keep the
- * CustomDomain with `RemovalPolicy.retain()`, or remove it in an earlier
- * deploy. The RoutingUrl takes over the row the CustomDomain made, and the
- * CustomDomain's delete would remove that row.
+ * custom domain since its backfill ran on 2026-11-17. To move a hostname to
+ * `Prisma.RoutingUrl`, replace the CustomDomain with a RoutingUrl for the
+ * same app and hostname in one deploy: the RoutingUrl takes over the row
+ * Prisma recorded, and the CustomDomain's delete then leaves the hostname
+ * serving.
  *
  * ### Creating a Custom Domain
  * **Example:** Attach a hostname to an app
@@ -168,6 +169,9 @@ export interface CustomDomain extends Resource<
  *   ownership,
  * });
  * ```
+ *
+ * @deprecated Prisma removes the custom domain routes about 2026-12-21. Use
+ * `Prisma.RoutingUrl`.
  *
  * @resource
  * @product Compute
@@ -392,6 +396,14 @@ const ProviderLive = () =>
               message: `Prisma custom domain '${customDomainId}' no longer matches app '${output.appId}' and hostname '${output.hostname}'. Refusing to delete a mismatched domain.`,
             });
           }
+          const urls = yield* getServiceUrls({ serviceId: output.appId }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.succeed([])),
+          );
+          const takenOver = urls.some(
+            (url) => url.logicalId !== null && sameHostname(url.hostname, output.hostname),
+          );
+          if (takenOver) return;
           yield* deleteDomain({ domainId: customDomainId }).pipe(
             Effect.catchTag("NotFound", () => Effect.void),
           );

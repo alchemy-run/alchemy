@@ -203,9 +203,7 @@ const site = yield* Prisma.Website.Foldkit("Web", {
 });
 ```
 
-This creates `Prisma.CustomDomain`. Configure the returned DNS records yourself
-and verify status before cutover. See
-[Custom domains](/prisma/frontend/websites#custom-domains).
+`domain` saves the hostname as a `Prisma.RoutingUrl` and makes `site.url` the HTTPS hostname. The deploy does not wait for DNS: `site.domain.status` is `pending` until the records in `site.domain.records` are published, or pass `dns` to publish them. See [Custom domains](/prisma/frontend/websites#custom-domains).
 
 ## Where next
 

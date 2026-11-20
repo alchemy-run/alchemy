@@ -23,6 +23,7 @@ import { Resource, type ResourceLike } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import type { App } from "./App.ts";
 import type { Compute } from "./Compute.ts";
 import { AuthoritativeRecordCheck, SwitchboardDnsCheck } from "./internal/AuthoritativeDns.ts";
@@ -201,11 +202,10 @@ export interface RoutingUrl extends Resource<
  * new hostname stays `pending` behind `heldBy`.
  *
  * Prisma records a custom domain as a RoutingUrl, and has done so for every
- * custom domain since its backfill ran on 2026-11-17. Once it has, to replace
- * a `Prisma.CustomDomain` with a `Prisma.RoutingUrl` for the same hostname,
- * keep the CustomDomain with `RemovalPolicy.retain()`, or remove it in an
- * earlier deploy. The RoutingUrl takes over the row the CustomDomain made, and
- * the CustomDomain's delete would remove that row.
+ * custom domain since its backfill ran on 2026-11-17. A RoutingUrl declared
+ * for the same app and hostname as a `Prisma.CustomDomain` takes over the row
+ * Prisma recorded, so the CustomDomain can be removed in the same deploy: its
+ * delete leaves a row a RoutingUrl has taken over in place.
  *
  * Don't also declare a `Prisma.DomainOwnership` for the same exact hostname:
  * it takes over the domain ownership Prisma created for the RoutingUrl and
@@ -278,8 +278,9 @@ export type RoutingUrlInput = InputProps<Omit<RoutingUrlProps, "dns">> &
 
 /** `alchemy dev` publishes no DNS, unless the RoutingUrl is `Alchemy.remote()`. */
 const publishesDns = Effect.gen(function* () {
-  const context = yield* AlchemyContext;
-  return !context.dev || (yield* ProviderModePolicy) === true;
+  const context = yield* Effect.serviceOption(AlchemyContext);
+  const dev = Option.isSome(context) && context.value.dev;
+  return !dev || (yield* ProviderModePolicy) === true;
 });
 
 const RoutingUrlRow = Resource<RoutingUrl>("Prisma.RoutingUrl");

@@ -1,41 +1,244 @@
 import { resolve4, resolveNs, Resolver } from "node:dns/promises";
-/**
- * `domain.dns` on Prisma websites, deployed for real: a StaticSite whose
- * custom hostname is published through `Cloudflare.DNS.Adapter()`. Asserts
- * Cloudflare holds exactly the records `Prisma.CustomDomain.dnsRecords`
- * reports, Prisma activates the domain and serves HTTPS on it, and destroy
- * removes both the records and the Prisma domain.
- *
- * Prisma checks the workspace's ownership of the hostname, then its CNAME,
- * on registration, so the composite proves ownership and publishes the CNAME
- * first.
- */
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as Prisma from "@alchemy.run/prisma";
+import type { Compute } from "@alchemy.run/prisma/Compute";
+import { CustomDomain } from "@alchemy.run/prisma/CustomDomain";
+import { websiteDomain, type WebsiteDomain } from "@alchemy.run/prisma/Website/FrameworkSite";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import {
-  getDomain,
+  createUrlCheck,
   getDomainOwnership,
+  getDomain,
   getProject,
   getService,
-  getWorkspaceDomainOwnerships,
+  getUrl,
 } from "@distilled.cloud/prisma/management";
+import * as DNS from "alchemy/DNS/Adapter";
+import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
+import type { ResourceLike } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientError from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
-import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as pathe from "pathe";
+import { switchboardTarget } from "../../../../prisma/src/internal/Switchboard.ts";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
-import { failureOf } from "../fixtures/Live.ts";
+import {
+  AppRef,
+  makeUrlCloud,
+  recordsFor,
+  routingUrl,
+  TEST_DNS,
+  testFor,
+  type UrlCloud,
+} from "../fixtures/RoutingUrlCloud.ts";
+
+const SITE_HOST = "app.example.com";
+const unitTags = [
+  "unit",
+  "provider:prisma",
+  "provider:prisma:website",
+  "provider:prisma:routingurl",
+];
+
+/** The site's custom hostname, wired as `Prisma.Website` does. */
+const siteDomain = (domain: WebsiteDomain) =>
+  Effect.gen(function* () {
+    const app = yield* AppRef("App", {});
+    return yield* websiteDomain(domain, app as unknown as Compute).pipe(Namespace.push("Site"));
+  });
+
+/** What the released Alchemy declared for a site's custom hostname. */
+const releasedSiteDomain = (domain: WebsiteDomain) =>
+  Effect.gen(function* () {
+    const app = yield* AppRef("App", {});
+    return yield* Effect.gen(function* () {
+      const name = typeof domain === "string" ? domain : domain.name;
+      const routing =
+        typeof domain === "object" && domain.dns
+          ? yield* (yield* DNS.resolve(domain.dns)).alias("DomainAlias", {
+              name,
+              target: { hostname: Output.map(app.appEndpointDomain, switchboardTarget) },
+            })
+          : undefined;
+      return yield* CustomDomain("Domain", {
+        app: app.appId,
+        hostname:
+          routing === undefined ? name : Output.map(Output.of(routing as ResourceLike), () => name),
+      });
+    }).pipe(Namespace.push("Site"));
+  });
+
+const domainsRoutes = (cloud: UrlCloud) =>
+  cloud.routes().filter((route) => / \/v1\/(services\/[^/]+\/)?domains/.test(route));
+const ownershipWrites = (cloud: UrlCloud) =>
+  cloud.routes().filter((route) => route.includes("domain-ownerships") && !route.startsWith("GET"));
+const byName = (records: ReadonlyArray<DNS.DnsRecord>) =>
+  [...records].sort((a, b) => `${a.name}${a.type}`.localeCompare(`${b.name}${b.type}`));
+
+const withDns = makeUrlCloud();
+testFor(withDns).test.provider(
+  "a site with domain and dns saves a RoutingUrl and publishes its TXT and CNAME",
+  (stack) =>
+    Effect.gen(function* () {
+      withDns.reset();
+      yield* stack.destroy();
+
+      const url = yield* stack.deploy(siteDomain({ name: SITE_HOST, dns: TEST_DNS }));
+
+      expect(url.status).toBe("pending");
+      expect(url.logicalId).toBe("Site/Url");
+      expect(byName(withDns.zone.records)).toEqual(byName(recordsFor(SITE_HOST)));
+      expect(domainsRoutes(withDns)).toEqual([]);
+      expect(ownershipWrites(withDns)).toEqual([]);
+
+      yield* stack.destroy();
+      expect(withDns.zone.records).toEqual([]);
+      expect(withDns.rows.size).toBe(0);
+    }),
+  { tags: unitTags },
+);
+
+const plain = makeUrlCloud();
+testFor(plain).test.provider(
+  "a site with a plain domain saves a pending RoutingUrl and publishes nothing",
+  (stack) =>
+    Effect.gen(function* () {
+      plain.reset();
+      yield* stack.destroy();
+
+      const url = yield* stack.deploy(siteDomain(SITE_HOST));
+
+      expect(url.status).toBe("pending");
+      expect(url.records.map((record) => record.type)).toEqual(["TXT", "CNAME"]);
+      expect(plain.zone.publishes).toBe(0);
+      expect(plain.zone.records).toEqual([]);
+      expect(domainsRoutes(plain)).toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  { tags: unitTags },
+);
+
+const upgrade = makeUrlCloud();
+testFor(upgrade).test.provider(
+  "a site deployed by the released Alchemy keeps one row and its records through the upgrade",
+  (stack) =>
+    Effect.gen(function* () {
+      upgrade.reset();
+      yield* stack.destroy();
+      const domain = { name: SITE_HOST, dns: TEST_DNS };
+      yield* stack.deploy(releasedSiteDomain(domain));
+      const [recorded] = Array.from(upgrade.rows.values());
+      const [customDomain] = Array.from(upgrade.domains.keys());
+      expect(recorded?.logicalId).toBe(null);
+      expect(upgrade.zone.records).toEqual([recordsFor(SITE_HOST)[1]]);
+
+      upgrade.fake.captured.length = 0;
+      const url = yield* stack.deploy(siteDomain(domain));
+
+      expect(url.routingUrlId).toBe(recorded?.id);
+      expect(Array.from(upgrade.rows.keys())).toEqual([recorded?.id]);
+      expect(upgrade.rows.get(recorded!.id)?.logicalId).toBe("Site/Url");
+      expect(upgrade.domains.has(customDomain!)).toBe(true);
+      expect(upgrade.routes().filter((route) => route.startsWith("DELETE"))).toEqual([]);
+      expect(byName(upgrade.zone.records)).toEqual(byName(recordsFor(SITE_HOST)));
+      expect(upgrade.zone.removed).toEqual([]);
+
+      yield* stack.destroy();
+      expect(upgrade.zone.records).toEqual([]);
+    }),
+  { tags: unitTags },
+);
+
+const plainUpgrade = makeUrlCloud();
+testFor(plainUpgrade).test.provider(
+  "a site with a plain domain keeps its one row through the upgrade",
+  (stack) =>
+    Effect.gen(function* () {
+      plainUpgrade.reset();
+      yield* stack.destroy();
+      yield* stack.deploy(releasedSiteDomain(SITE_HOST));
+      const [recorded] = Array.from(plainUpgrade.rows.values());
+
+      plainUpgrade.fake.captured.length = 0;
+      const url = yield* stack.deploy(siteDomain(SITE_HOST));
+
+      expect(url.routingUrlId).toBe(recorded?.id);
+      expect(Array.from(plainUpgrade.rows.keys())).toEqual([recorded?.id]);
+      expect(plainUpgrade.domains.size).toBe(1);
+      expect(plainUpgrade.routes().filter((route) => route.startsWith("DELETE"))).toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  { tags: unitTags },
+);
+
+const siteChange = makeUrlCloud();
+testFor(siteChange).test.provider(
+  "a refused hostname change with dns leaves the serving hostname's records published",
+  (stack) =>
+    Effect.gen(function* () {
+      siteChange.reset({ fromZone: true });
+      yield* stack.destroy();
+      const url = yield* stack.deploy(siteDomain({ name: SITE_HOST, dns: TEST_DNS }));
+      siteChange.rows.set(
+        url.routingUrlId,
+        routingUrl(url.routingUrlId, {
+          status: "active",
+          logicalId: "Site/Url",
+          hostname: SITE_HOST,
+        }),
+      );
+
+      siteChange.state.txt = "absent";
+      siteChange.fake.captured.length = 0;
+      const refused = yield* stack
+        .deploy(siteDomain({ name: "new.example.com", dns: TEST_DNS }))
+        .pipe(Effect.flip);
+
+      expect(String(refused)).toContain("RoutingUrlHostnameChangeRefused");
+      expect(siteChange.routes().some((route) => route.startsWith("PATCH"))).toBe(false);
+      expect(siteChange.zone.records).toEqual(expect.arrayContaining(recordsFor(SITE_HOST)));
+      expect(siteChange.zone.removed).toEqual([]);
+
+      siteChange.state.txt = undefined;
+      const moved = yield* stack.deploy(siteDomain({ name: "new.example.com", dns: TEST_DNS }));
+      expect(moved.hostname).toBe("new.example.com");
+      expect(byName(siteChange.zone.records)).toEqual(byName(recordsFor("new.example.com")));
+
+      yield* stack.destroy();
+      expect(siteChange.zone.records).toEqual([]);
+    }),
+  { tags: unitTags },
+);
+
+const notTakenOver = makeUrlCloud();
+testFor(notTakenOver).test.provider(
+  "a CustomDomain whose row no RoutingUrl took over is still deleted",
+  (stack) =>
+    Effect.gen(function* () {
+      notTakenOver.reset();
+      yield* stack.destroy();
+      yield* stack.deploy(releasedSiteDomain(SITE_HOST));
+      const [customDomain] = Array.from(notTakenOver.domains.keys());
+
+      yield* stack.destroy();
+
+      expect(notTakenOver.routes()).toContain(`DELETE /v1/domains/${customDomain}`);
+      expect(notTakenOver.domains.size).toBe(0);
+      expect(notTakenOver.rows.size).toBe(0);
+    }),
+  { tags: unitTags },
+);
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Prisma.providers(), Cloudflare.providers()),
@@ -56,12 +259,6 @@ class CnameNotPublished extends Data.TaggedError("CnameNotPublished")<{
   readonly name: string;
 }> {}
 
-class DomainNotActive extends Data.TaggedError("DomainNotActive")<{
-  readonly status: string;
-  readonly foundryStatus: string;
-  readonly failureReason: string | null;
-}> {}
-
 class SiteNotServing extends Data.TaggedError("SiteNotServing")<{
   readonly status: number;
 }> {}
@@ -77,23 +274,16 @@ const resolveZoneId = Effect.gen(function* () {
   return zone.id;
 });
 
-/** Every Cloudflare record at or below the hostname. */
-const recordsUnder = (zoneId: string) =>
-  dns.listRecords.items({ zoneId, name: { endswith: HOSTNAME } }).pipe(
+/** Every Cloudflare record at or below `hostname`. */
+const recordsUnder = (zoneId: string, hostname: string) =>
+  dns.listRecords.items({ zoneId, name: { endswith: hostname } }).pipe(
     Stream.runCollect,
     Effect.map((chunk) =>
       Array.from(chunk).filter(
         (record) =>
-          trimDot(record.name) === HOSTNAME || trimDot(record.name).endsWith(`.${HOSTNAME}`),
+          trimDot(record.name) === hostname || trimDot(record.name).endsWith(`.${hostname}`),
       ),
     ),
-  );
-
-const byKey = <T extends { name: string; type: string; value: string }>(
-  records: ReadonlyArray<T>,
-) =>
-  [...records].sort((a, b) =>
-    `${a.name}|${a.type}|${a.value}`.localeCompare(`${b.name}|${b.type}|${b.value}`),
   );
 
 /** Wait until every authoritative nameserver of the zone answers each CNAME. */
@@ -122,21 +312,21 @@ const waitForAuthoritativeCnames = (records: ReadonlyArray<{ name: string; value
     );
   });
 
-/** Prisma's recorded ownerships of exactly `domain` in the project's workspace. */
-const ownershipsOf = (projectId: string, domain: string) =>
-  Effect.gen(function* () {
-    const project = yield* getProject({ id: projectId });
-    const page = yield* getWorkspaceDomainOwnerships({
-      workspaceId: project.data.workspace.id,
-      domain,
-    });
-    return page.data.filter((ownership) => ownership.domain === domain);
-  });
+/** Asks Prisma to check the RoutingUrl until it is `active`, at most 5 minutes. */
+const checkUntilActive = (id: string) =>
+  createUrlCheck({ id }).pipe(
+    Effect.map(({ data }) => data),
+    Effect.repeat({
+      schedule: Schedule.spaced("10 seconds"),
+      until: (data) => data.status === "active",
+      times: 30,
+    }),
+  );
 
-/** The ownership rejection among a failed deploy's errors. */
-const ownershipRequiredIn = (errors: ReadonlyArray<unknown>) =>
-  errors.find((error): error is Prisma.PrismaDomainOwnershipRequired =>
-    Predicate.isTagged(error, "PrismaDomainOwnershipRequired"),
+const routingUrlGone = (id: string) =>
+  getUrl({ id }).pipe(
+    Effect.as("found" as const),
+    Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
   );
 
 /** The app's regional switchboard, the CNAME target Prisma verifies. */
@@ -144,7 +334,7 @@ const switchboardOf = (appEndpointDomain: string | undefined) =>
   `switchboard${(appEndpointDomain ?? "").slice((appEndpointDomain ?? "").indexOf("."))}`;
 
 test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
-  "Cloudflare DNS publishes Prisma's records; the hostname activates and serves HTTPS",
+  "Cloudflare DNS publishes a site's TXT and CNAME; the hostname activates and serves HTTPS",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -155,8 +345,6 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
         entries: ["src", "build.sh"],
       });
 
-      // One deploy: the adapter publishes the routing CNAME and the
-      // workspace's ownership TXT before Prisma registers the hostname.
       const site = yield* stack.deploy(
         Prisma.Website.StaticSite("Site", {
           cwd,
@@ -170,100 +358,33 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       const domain = site.domain!;
       const projectId = typeof site.project === "string" ? site.project : site.project!.projectId;
       expect(domain.hostname).toBe(HOSTNAME);
-      expect(domain.appId).toBe(site.compute!.appId);
-      // The routing CNAME to the app's regional switchboard, published
-      // before Prisma registered (and verified) the hostname.
-      expect(
-        domain.dnsRecords.some(
-          (record) =>
-            record.type === "CNAME" &&
-            trimDot(record.name) === HOSTNAME &&
-            /^switchboard\.[a-z0-9-]+\.prisma\.build$/.test(trimDot(record.value)),
-        ),
-      ).toBe(true);
+      expect(domain.serviceId).toBe(site.compute!.appId);
 
-      // ...and the ownership TXT Prisma requires, DNS-only like the rest.
-      const all = yield* recordsUnder(zoneId);
-      const ownership = all.filter(
-        (record) => trimDot(record.name) === `_prisma-verification.${HOSTNAME}`,
-      );
-      expect(ownership.map((record) => record.type)).toEqual(["TXT"]);
-      expect(ownership[0]?.content?.replaceAll('"', "")).toMatch(
-        /^prisma-verification=[0-9a-f]{64}$/,
-      );
-
-      // Cloudflare holds exactly the records the CustomDomain reports, DNS-only.
-      const records = all.filter((record) => !ownership.includes(record));
+      const switchboard = switchboardOf(site.compute!.appEndpointDomain);
+      const all = yield* recordsUnder(zoneId, HOSTNAME);
       expect(
-        byKey(
-          records.map((record) => ({
+        all
+          .map((record) => ({
             name: trimDot(record.name),
             type: record.type,
-            value: trimDot(record.content ?? ""),
-          })),
-        ),
-      ).toEqual(
-        byKey(
-          domain.dnsRecords.map((record) => ({
-            name: trimDot(record.name),
-            type: record.type,
-            value: trimDot(record.value),
-          })),
-        ),
-      );
+            value:
+              record.type === "TXT"
+                ? (record.content ?? "").replaceAll('"', "")
+                : trimDot(record.content ?? ""),
+          }))
+          .sort((a, b) => a.type.localeCompare(b.type)),
+      ).toEqual([
+        { name: HOSTNAME, type: "CNAME", value: switchboard },
+        {
+          name: `_prisma-verification.${HOSTNAME}`,
+          type: "TXT",
+          value: expect.stringMatching(/^prisma-verification=[0-9a-f]{64}$/),
+        },
+      ]);
       expect(all.every((record) => record.proxied !== true)).toBe(true);
 
-      // ...and those are the records Prisma's live API reports.
-      const registered = yield* getDomain({ domainId: domain.customDomainId });
-      expect(registered.data.hostname).toBe(HOSTNAME);
-      expect(
-        byKey(
-          registered.data.dnsRecords.map((record) => ({
-            name: trimDot(record.name),
-            type: record.type,
-            value: trimDot(record.value),
-          })),
-        ),
-      ).toEqual(
-        byKey(
-          domain.dnsRecords.map((record) => ({
-            name: trimDot(record.name),
-            type: record.type,
-            value: trimDot(record.value),
-          })),
-        ),
-      );
-
-      // The workspace proved it owns exactly this hostname.
-      const owned = yield* ownershipsOf(projectId, HOSTNAME);
-      expect(owned.map((ownership) => ownership.verification.name)).toEqual([
-        `_prisma-verification.${HOSTNAME}`,
-      ]);
-
-      yield* waitForAuthoritativeCnames(domain.dnsRecords);
-
-      const active = yield* getDomain({
-        domainId: domain.customDomainId,
-      }).pipe(
-        Effect.flatMap(({ data }) =>
-          data.status === "active"
-            ? Effect.succeed(data)
-            : Effect.fail(
-                new DomainNotActive({
-                  status: data.status,
-                  foundryStatus: data.foundryStatus,
-                  failureReason: data.failureReason,
-                }),
-              ),
-        ),
-        Effect.tapError((error) => Effect.logInfo("Prisma domain pending", error)),
-        Effect.retry({
-          while: (error) => error._tag === "DomainNotActive",
-          schedule: Schedule.spaced("10 seconds"),
-          times: 30,
-        }),
-      );
-      expect(active.status).toBe("active");
+      yield* waitForAuthoritativeCnames([{ name: HOSTNAME, value: switchboard }]);
+      expect((yield* checkUntilActive(domain.routingUrlId)).status).toBe("active");
 
       const client = yield* HttpClient.HttpClient;
       const body = yield* client.get(`https://${HOSTNAME}/`).pipe(
@@ -272,29 +393,14 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
             res.status === 200 ? res.text : Effect.fail(new SiteNotServing({ status: res.status })),
         ),
         Effect.timeout("10 seconds"),
-        Effect.tapError((error) =>
-          Effect.logInfo(
-            `https://${HOSTNAME} not serving yet: ${error._tag === "SiteNotServing" ? `HTTP ${error.status}` : error.message}`,
-          ),
-        ),
         Effect.retry({ schedule: Schedule.spaced("10 seconds"), times: 30 }),
       );
       expect(body).toContain(MARKER);
 
-      // Read before destroy deletes the project the lookup goes through.
-      const workspaceId = (yield* getProject({ id: projectId })).data.workspace.id;
       yield* stack.destroy();
 
-      expect(yield* recordsUnder(zoneId)).toEqual([]);
-      expect((yield* getWorkspaceDomainOwnerships({ workspaceId, domain: HOSTNAME })).data).toEqual(
-        [],
-      );
-      expect(
-        yield* getDomain({ domainId: domain.customDomainId }).pipe(
-          Effect.as("found" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-        ),
-      ).toBe("gone");
+      expect(yield* recordsUnder(zoneId, HOSTNAME)).toEqual([]);
+      expect(yield* routingUrlGone(domain.routingUrlId)).toBe("gone");
       expect(
         yield* getProject({ id: projectId }).pipe(
           Effect.as("found" as const),
@@ -305,7 +411,7 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
   {
     tags: [
       "provider:prisma",
-      "provider:prisma:customdomain",
+      "provider:prisma:routingurl",
       "provider:prisma:website",
       "provider:cloudflare",
       "provider:cloudflare:dns",
@@ -316,7 +422,7 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
 );
 
 test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
-  "attaches a custom domain to an App on a non-default Branch",
+  "a site with a plain domain on a non-default Branch deploys pending and serves once its records are published",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -336,10 +442,7 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       // The Branch exists before the site resolves it by git name.
       yield* stack.deploy(branchStack);
 
-      // DNS outside the composite (`domain` is a plain hostname): publish
-      // the routing CNAME yourself and, once Prisma asks, the ownership TXT
-      // its error names.
-      const siteStack = (verification?: { readonly name: string; readonly value: string }) =>
+      const siteStack = (records: ReadonlyArray<{ type: string; name: string; value: string }>) =>
         Effect.gen(function* () {
           const { project, branch } = yield* branchStack;
           const site = yield* Prisma.Website.StaticSite("Site", {
@@ -351,69 +454,46 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
             branchGitName: "preview",
             domain: hostname,
           });
-          yield* Cloudflare.DNS.Record("DomainAlias", {
-            zoneId,
-            name: hostname,
-            type: "CNAME",
-            content: Output.map(site.compute!.appEndpointDomain, switchboardOf),
-            proxied: false,
-          });
-          if (verification) {
-            yield* Cloudflare.DNS.Record("DomainOwnership", {
+          for (const record of records) {
+            yield* Cloudflare.DNS.Record(`Domain${record.type}`, {
               zoneId,
-              name: verification.name,
-              type: "TXT",
-              content: verification.value,
+              name: record.name,
+              type: record.type === "TXT" ? "TXT" : "CNAME",
+              content: record.value,
+              ...(record.type === "TXT" ? {} : { proxied: false }),
             });
           }
           return { project, branch, site };
         });
 
-      // Without the TXT record Prisma refuses the hostname, and the typed
-      // error names the record to publish.
-      const refused = yield* failureOf(stack.deploy(siteStack()));
-      const ownership = ownershipRequiredIn(refused.errors);
-      expect(ownership?.hostname).toBe(hostname);
-      expect(ownership?.recordName).toBe(`_prisma-verification.${hostname}`);
-      expect(ownership?.recordValue).toMatch(/^prisma-verification=[0-9a-f]{64}$/);
+      // DNS is not ready: the deploy still succeeds and names the records.
+      const pending = yield* stack.deploy(siteStack([]));
+      const domain = pending.site.domain!;
+      expect(domain.status).toBe("pending");
+      expect(domain.records.map((record) => record.type).sort()).toEqual(["CNAME", "TXT"]);
+      expect(pending.branch.isDefault).toBe(false);
+      const app = yield* getService({ serviceId: pending.site.compute!.appId });
+      expect(app.data.branchId).toBe(pending.branch.branchId);
 
-      const { project, branch, site } = yield* stack.deploy(
-        siteStack({ name: ownership!.recordName, value: ownership!.recordValue }),
-      );
-      const domain = site.domain!;
-      expect(branch.isDefault).toBe(false);
-      expect(domain.appId).toBe(site.compute!.appId);
-      expect(domain.hostname).toBe(hostname);
-
-      const app = yield* getService({ serviceId: site.compute!.appId });
-      expect(app.data.branchId).toBe(branch.branchId);
-      const registered = yield* getDomain({ domainId: domain.customDomainId });
-      expect(registered.data.appId).toBe(site.compute!.appId);
-      expect(trimDot(registered.data.hostname)).toBe(hostname);
+      yield* stack.deploy(siteStack(domain.records));
+      yield* waitForAuthoritativeCnames(domain.records.filter((record) => record.type === "CNAME"));
+      expect((yield* checkUntilActive(domain.routingUrlId)).status).toBe("active");
 
       yield* stack.destroy();
 
+      expect(yield* routingUrlGone(domain.routingUrlId)).toBe("gone");
       expect(
-        yield* getDomain({ domainId: domain.customDomainId }).pipe(
+        yield* getProject({ id: pending.project.projectId }).pipe(
           Effect.as("found" as const),
           Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
         ),
       ).toBe("gone");
-      expect(
-        yield* getProject({ id: project.projectId }).pipe(
-          Effect.as("found" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
-        ),
-      ).toBe("gone");
-      const leftover = yield* Effect.forEach([hostname, ownership!.recordName], (name) =>
-        dns.listRecords.items({ zoneId, name: { exact: name } }).pipe(Stream.runCollect),
-      );
-      expect(leftover.flatMap((records) => Array.from(records))).toEqual([]);
+      expect(yield* recordsUnder(zoneId, hostname)).toEqual([]);
     }),
   {
     tags: [
       "provider:prisma",
-      "provider:prisma:customdomain",
+      "provider:prisma:routingurl",
       "provider:prisma:branch",
       "provider:prisma:website",
       "provider:cloudflare",

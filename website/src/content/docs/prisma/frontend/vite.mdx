@@ -142,10 +142,7 @@ export const Website = Prisma.Website.Vite("Website", {
 });
 ```
 
-This creates `Prisma.CustomDomain` and makes `site.url` the HTTPS hostname.
-Configure the
-returned DNS records yourself and verify provisioning status before
-cutover; see [Custom domains](/prisma/frontend/websites#custom-domains).
+`domain` saves the hostname as a `Prisma.RoutingUrl` and makes `site.url` the HTTPS hostname. The deploy does not wait for DNS: `site.domain.status` is `pending` until the records in `site.domain.records` are published, or pass `dns` to publish them. See [Custom domains](/prisma/frontend/websites#custom-domains).
 
 ## Where next
 

@@ -9,11 +9,10 @@ import { Server, type ServerDevProps } from "alchemy/Website/Server";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { Compute, type ComputeProps } from "../Compute.ts";
-import { CustomDomain } from "../CustomDomain.ts";
-import { DomainOwnership } from "../DomainOwnership.ts";
 import { switchboardTarget } from "../internal/Switchboard.ts";
 import { Project } from "../Project.ts";
 import type { Providers } from "../Providers.ts";
+import { RoutingUrl } from "../RoutingUrl.ts";
 import type { PrismaRegionId } from "../Types.ts";
 import { WebsiteArtifact } from "./Artifact.ts";
 
@@ -50,11 +49,10 @@ export type WebsiteDomain =
       name: string;
       /**
        * DNS host that publishes the hostname's `CNAME` to the app's regional
-       * switchboard (`switchboard.{region}.prisma.build`) and the workspace's
-       * `_prisma-verification` ownership `TXT` record before the domain is
-       * registered — Prisma checks both on registration (see
+       * switchboard and the workspace's ownership `TXT` record, as
+       * `Prisma.RoutingUrl`'s `dns` does (see
        * [DNS Adapters](/infrastructure-as-code/dns-adapters)), e.g.
-       * `Cloudflare.DNS.Adapter()`. Omitted: publish them yourself first.
+       * `Cloudflare.DNS.Adapter()`. Omitted: publish `domain.records` yourself.
        */
       dns?: DNS.DnsConfig;
     };
@@ -78,14 +76,11 @@ export interface FrameworkSiteProps {
   /** Native framework development server options, including external-server mode. */
   dev?: ServerDevProps;
   /**
-   * Custom hostname attached using `Prisma.CustomDomain`.
-   *
-   * A string (or `{ name }`) leaves DNS to you: Prisma verifies the
-   * hostname's `CNAME` to `switchboard.{region}.prisma.build` when the
-   * domain is registered, so publish it first (`domain.dnsRecords` lists
-   * it). Set `dns` (e.g.
-   * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`) to
-   * publish it through the DNS host before registration. See
+   * Custom hostname, saved as a `Prisma.RoutingUrl`. The deploy does not wait
+   * for it to serve: `domain.status` is `pending` and `domain.records` lists
+   * the `TXT` and `CNAME` to publish until Prisma finds them. Set `dns` (e.g.
+   * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`) to publish
+   * them through the DNS host. See
    * [DNS Adapters](/infrastructure-as-code/dns-adapters).
    */
   domain?: WebsiteDomain;
@@ -109,8 +104,8 @@ export interface Website {
   compute: Compute | undefined;
   /** Project resource or existing project reference. Undefined during native development. */
   project: WebsiteProjectReference | undefined;
-  /** Custom-domain resource, including DNS records and certificate status. Undefined without domain or during native development. */
-  domain: CustomDomain | undefined;
+  /** The custom hostname's RoutingUrl, with its `status` and the `records` still to publish. Undefined without domain or during native development. */
+  domain: RoutingUrl | undefined;
 }
 
 /** Internal framework-to-Node-target wiring. */
@@ -171,45 +166,38 @@ export const deployWebsite = Effect.fn(function* (
       NODE_ENV: "production",
     },
   });
-  const domainName = websiteDomainName(props.domain);
-  // Prisma checks the workspace's ownership of the hostname, then its CNAME,
-  // when the domain is registered: both must exist first, so the
-  // CustomDomain's hostname depends on them.
-  const dnsConfig = domainName && typeof props.domain === "object" ? props.domain.dns : undefined;
-  const ready =
-    dnsConfig && domainName
-      ? [
-          yield* (yield* DNS.resolve(dnsConfig)).alias("DomainAlias", {
-            name: domainName,
-            target: {
-              hostname: Output.map(compute.appEndpointDomain, switchboardTarget),
-            },
-          }),
-          yield* DomainOwnership("DomainOwnership", {
-            project,
-            domain: domainName,
-            dns: dnsConfig,
-          }),
-        ]
-      : undefined;
-  const domain = domainName
-    ? yield* CustomDomain("Domain", {
-        app: compute,
-        hostname:
-          ready === undefined
-            ? domainName
-            : Output.map(
-                Output.all(...ready.map((resource) => Output.of(resource as ResourceLike))),
-                () => domainName,
-              ),
-      })
-    : undefined;
+  const domain =
+    props.domain === undefined ? undefined : yield* websiteDomain(props.domain, compute);
   return {
     url: domain ? Output.map(domain.hostname, (hostname) => `https://${hostname}`) : compute.url,
     compute,
     project,
     domain,
   };
+});
+
+/** The site's custom hostname: a RoutingUrl, its records published through `domain.dns`. */
+export const websiteDomain = Effect.fn(function* (domain: WebsiteDomain, compute: Compute) {
+  const hostname = websiteDomainName(domain)!;
+  const dns = typeof domain === "object" ? domain.dns : undefined;
+  if (dns === undefined) {
+    return yield* RoutingUrl("Url", { app: compute, hostname }).pipe(Effect.orDie);
+  }
+  const url = yield* RoutingUrl("Url", { app: compute, hostname, dns }).pipe(Effect.orDie);
+  // Keeps the CNAME record a site from an earlier version published, so the
+  // upgrade updates it in place instead of deleting it after the RoutingUrl's
+  // records are published. It changes only once the RoutingUrl is saved.
+  const { proxied: _proxied, ...options } = dns.options ?? {};
+  yield* (yield* DNS.resolve({ ...dns, options })).alias("DomainAlias", {
+    name: hostname,
+    target: {
+      hostname: Output.map(
+        Output.all(Output.of(url as ResourceLike), compute.appEndpointDomain),
+        ([, endpoint]) => switchboardTarget(endpoint),
+      ),
+    },
+  });
+  return url;
 });
 
 /** Compose a real framework build/dev server with a traced Prisma artifact. */
