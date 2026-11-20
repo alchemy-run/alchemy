@@ -259,19 +259,17 @@ export const sandboxOf = (handle: SandboxHandle): Sandbox["Service"] => {
         })),
       ) as Effect.Effect<ExecResult, SandboxError>;
   const file = (operation: string, path: string, script: string, ...args: ReadonlyArray<string>) =>
-    Effect.flatMap(
-      run(operation, ["sh", "-c", script, path, ...args], undefined, path),
-      (result) =>
-        result.exitCode === 0
-          ? Effect.succeed(result.stdout)
-          : Effect.fail(
-              new SandboxError({
-                operation,
-                code: "unknown",
-                message: result.stderr.trim() || `exited ${result.exitCode}`,
-                path,
-              }),
-            ),
+    Effect.flatMap(run(operation, ["sh", "-c", script, path, ...args], undefined, path), (result) =>
+      result.exitCode === 0
+        ? Effect.succeed(result.stdout)
+        : Effect.fail(
+            new SandboxError({
+              operation,
+              code: "unknown",
+              message: result.stderr.trim() || `exited ${result.exitCode}`,
+              path,
+            }),
+          ),
     );
   const readFile = (operation: string, path: string) =>
     Effect.map(file(operation, path, `base64 <"$0" | tr -d '\\n'`), (text) =>
