@@ -1,0 +1,126 @@
+---
+title: What is Convex?
+description: The concepts behind Convex — teams, projects, deployments, tables, queries, mutations and actions, and self-hosting — and how @alchemy.run/convex models each of them.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Convex is a backend platform: a document database and the TypeScript functions that read and write it, running next to the data. Everything belongs to a **team**. A team holds **projects**, and a project holds **deployments**. Each deployment is one database with its own functions, and clients call those functions, never the database.
+
+Take one small app: a message board. Your profile signs in to a team with a team access token. The team has a project, `my-app`, with a production deployment and one preview per pull request. A browser subscribes to the `messages:list` query in production, and a Worker calls the same query over HTTP. The query reads the `messages` table in its own deployment.
+
+<Tree
+  nodes={[
+    { id: "team", label: "acme", type: "team", icon: "brand:convex", areas: ["project"] },
+    { id: "project", label: "my-app", type: "project", parent: "team", icon: "folder", areas: ["prod preview"], colGap: 1 },
+    { id: "prod", label: "prod", type: "deployment", parent: "project", dashed: true, icon: "server", areas: ["list", "messages"] },
+    { id: "list", label: "messages:list", type: "query", parent: "prod", tone: "accent", icon: "square-function" },
+    { id: "messages", label: "messages", type: "table", parent: "prod", icon: "database" },
+    { id: "preview", label: "pr-42", type: "preview deployment", parent: "project", dashed: true, icon: "server", areas: ["plist", "pmessages"] },
+    { id: "plist", label: "messages:list", type: "query", parent: "preview", icon: "square-function" },
+    { id: "pmessages", label: "messages", type: "table", parent: "preview", icon: "database" },
+    { id: "browser", label: "Browser", type: "your client", icon: "monitor" },
+  ]}
+  areas={["browser team"]}
+  colGap={5.5}
+  links={[
+    { from: "browser", to: "list", label: "subscribes" },
+    { from: "list", to: "messages", label: "reads" },
+    { from: "plist", to: "pmessages", label: "reads" },
+  ]}
+  caption="A team holds projects, and a project holds deployments. Each deployment has its own tables and functions: the preview pr-42 runs the same code as prod on separate data. Clients call functions, never the tables. A Worker calls the same query over HTTP."
+/>
+
+## Teams: what holds everything
+
+A **team** is the Convex account. It holds every project, its members, its plan and its bill. A **team access token** acts on the team, and that token is what Alchemy signs in with.
+
+<PackageManagers run="alchemy profile edit --add Convex" />
+
+See [Teams and tokens](/convex/teams-and-tokens).
+
+## Projects
+
+A **project** is one app. It holds that app's deployments and the default environment variables new deployments start with:
+
+```typescript
+const project = yield* Convex.Project("App");
+```
+
+See [Projects](/convex/deployments/projects).
+
+## Deployments: one database and its functions
+
+A **deployment** is one running backend: a database, the functions pushed to it, file storage and a scheduler. It is one of three types. **Prod** holds your real data. **Dev** is a developer's own copy. **Preview** is short-lived, made for a branch or pull request, and Convex removes it after a while.
+
+Each deployment lives in one **region**, such as `aws-us-east-1` or `aws-eu-west-1`, and has two addresses. Clients call functions at its `.convex.cloud` URL, and HTTP actions answer at its `.convex.site` URL.
+
+```typescript
+const deployment = yield* Convex.Deployment("Backend", { project, type: "preview" });
+```
+
+See [Deployments](/convex/deployments/deployments).
+
+## Tables: a document database
+
+A deployment's data is **documents** in **tables**. A document is a JSON-like object with an `_id` and a `_creationTime` that Convex adds. A **schema** says what each table holds, and Convex checks every write against it. An **index** lists the fields a query can look documents up by quickly.
+
+```typescript
+export const Messages = Convex.Table(
+  "messages",
+  Schema.Struct({ channel: Schema.String, body: Schema.String }),
+  (table) => table.index("by_channel", ["channel"]),
+);
+```
+
+See [Tables](/convex/functions/tables).
+
+## Queries, mutations and actions
+
+Code reaches the database only through **functions**, and there are three kinds. A **query** reads. It is reactive: a client subscribed to it gets a new result whenever the data it read changes. A **mutation** reads and writes in one transaction. If it fails, nothing it wrote is kept, and if it conflicts with another mutation, Convex runs it again. An **action** can call the outside world, like an API or a queue on another cloud, and calls queries and mutations to touch the database.
+
+A mutation can't call out, so it **schedules** an action instead. The schedule commits with the mutation's writes.
+
+```typescript
+export class ListMessages extends Convex.Query<ListMessages>()("messages:list", {
+  args: Schema.Struct({ channel: Schema.String }),
+  returns: Schema.Array(Messages.Document),
+}) {}
+```
+
+A function is **public** or **internal**. Anyone with the deployment's URL can call a public one. Only other functions can call an internal one.
+
+See [Queries, mutations and actions](/convex/functions/queries-mutations-actions).
+
+## Pushing code
+
+Your functions live in a `convex/` folder. Convex's CLI bundles the folder and **pushes** it to a deployment, along with its schema. Convex checks the existing documents against a new schema before accepting it.
+
+```typescript
+yield* Convex.Functions("Functions", { deployment, rootDir: "." });
+```
+
+See [Push functions](/convex/functions/functions).
+
+## Clients and identity
+
+A browser connects to a deployment over a WebSocket, through Convex's client libraries, and subscribes to queries. A server calls functions over HTTP. Neither needs a key to call a public function.
+
+A client signed in with an identity provider, such as Clerk, Auth0 or any OIDC issuer, sends its JWT. The deployment checks it against the providers it trusts, and a function reads the caller's **identity** from it. Convex has no row-level permissions: each function decides what its caller may do.
+
+See [Calling functions](/convex/functions/calling-functions).
+
+## Convex Cloud and self-hosting
+
+**Convex Cloud** runs deployments for you. The Convex backend is also open source, and you can run it yourself. A **self-hosted backend** is one deployment, with its own database: SQLite on its disk, Postgres or MySQL. Alchemy runs self-hosted backends on AWS.
+
+See [Self-hosted backend](/convex/self-hosted/backend).
+
+## How @alchemy.run/convex models these concepts
+
+`Convex.Project`, `Convex.Deployment` and the resources beside them (`DeployKey`, `CustomDomain`, `CanonicalUrl`, `UsageLimit`, `LogStream`, `DefaultEnvironmentVariables`) create the team's projects and deployments. `Convex.Functions` pushes your `convex/` folder and sets a deployment's variables. `Convex.Table`, `Convex.Query`, `Convex.Mutation` and `Convex.Action` declare your data and functions with Effect Schema, and `Convex.serve` registers their Layers with Convex. `Convex.RunQuery` and its siblings call functions from a Worker or Lambda. `@alchemy.run/convex/aws` runs self-hosted backends. Your [profile](/environments/profiles) holds the team access token.
+
+Some of Convex has no resource. Personal tokens, team members, invites, custom roles and the team audit log are managed in the Convex dashboard. Local deployments aren't used: in `alchemy dev`, Convex resources are real. Convex's components, crons and HTTP actions are part of your `convex/` folder, so they ship with the push.
+
+**Next:** follow [Setup](/convex/setup), then the [tutorial](/convex/tutorial/part-1).

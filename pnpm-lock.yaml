@@ -9670,6 +9670,9 @@ importers:
       alchemy:
         specifier: workspace:*
         version: link:../alchemy
+      convex:
+        specifier: 1.49.0
+        version: 1.49.0(react@19.3.1)
       effect:
         specifier: 4.1.4
         version: 4.1.4

@@ -5,13 +5,13 @@ sidebar:
   order: 3
 ---
 
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
 Test the real thing: deploy the Stack, call the Worker, and destroy everything.
 
 ## Install the test harness
 
-```sh
-bun add -d @alchemy.run/test
-```
+<PackageManagers dev="@alchemy.run/test" />
 
 ## Write the test
 
@@ -58,9 +58,7 @@ test(
 
 ## Run it
 
-```sh
-bun test
-```
+<PackageManagers script={`bun test`} />
 
 Set `NO_DESTROY=1` to keep the deployment while you work on the test.
 

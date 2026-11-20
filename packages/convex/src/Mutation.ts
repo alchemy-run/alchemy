@@ -1,68 +1,37 @@
-import * as functions from "@distilled.cloud/convex/functions";
-import * as Binding from "alchemy/Binding";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { type ConvexFunctionError, onHost, unwrap } from "./BindingHttp.ts";
-import type { Deployment } from "./Deployment.ts";
-import { createOnce } from "./internal/retry.ts";
-
-export type MutationError = ConvexFunctionError | functions.MutationError;
-
-/** Run a mutation by path, such as `messages:add`. */
-export type MutationClient = <A = unknown>(
-  path: string,
-  args?: Record<string, unknown>,
-) => Effect.Effect<A, MutationError, RuntimeContext>;
+import { declare } from "./internal/declare.ts";
 
 /**
- * Run a public Convex mutation from a Worker, Lambda or other host.
+ * Declare a Convex mutation. A mutation reads and writes the database in one
+ * transaction: a failure rolls every write back, and so does a conflict,
+ * after which Convex runs it again. Side effects go through {@link schedule},
+ * which commits with the writes.
  *
- * It needs no credentials and grants nothing: the host gets the deployment's
- * URL. A function that throws fails with `ConvexFunctionError`. Values use
- * Convex's JSON format, so `Int64` and `Bytes` arrive as tagged objects.
- *
- * ### Calling a Function
- * **Example:** Run a mutation in a Worker
+ * ### Declaring a Function
+ * **Example:** A mutation with a typed failure
  * ```typescript
- * Effect.gen(function* () {
- *   const run = yield* Convex.Mutation(Backend);
- *   return {
- *     fetch: Effect.gen(function* () {
- *       const result = yield* run("messages:add", { body: "hello" });
- *       return yield* HttpServerResponse.json(result);
- *     }),
- *   };
- * }).pipe(Effect.provide(Convex.MutationHttp));
+ * export class EmptyBody extends Schema.TaggedError<EmptyBody>()("EmptyBody", {}) {}
+ *
+ * export class AddMessage extends Convex.Mutation<AddMessage>()("messages:add", {
+ *   args: Schema.Struct({ channel: Schema.String, body: Schema.String }),
+ *   returns: Convex.Id("messages"),
+ *   error: EmptyBody,
+ * }) {}
  * ```
  *
- * @binding
+ * ### Implementing It
+ * **Example:** Insert, then schedule a follow-up
+ * ```typescript
+ * export const AddMessageLive = Layer.succeed(AddMessage,
+ *   Effect.fn(function* ({ channel, body }) {
+ *     if (body === "") return yield* new EmptyBody();
+ *     const id = yield* Messages.insert({ channel, body });
+ *     yield* Convex.schedule(Notify, { id });
+ *     return id;
+ *   }),
+ * );
+ * ```
+ *
+ * @primitive
  * @product Functions
  */
-export interface Mutation extends Binding.Service<
-  Mutation,
-  "Convex.Mutation",
-  (deployment: Deployment) => Effect.Effect<MutationClient>
-> {}
-
-export const Mutation = Binding.Service<Mutation>("Convex.Mutation");
-
-/** Implementation over Convex's public HTTP API, usable from any host. */
-export const MutationHttp = Layer.effect(
-  Mutation,
-  Effect.succeed(
-    Effect.fn(function* (deployment: Deployment) {
-      const on = onHost(yield* deployment.url);
-      const client: MutationClient = <A = unknown>(
-        path: string,
-        args: Record<string, unknown> = {},
-      ) =>
-        // Not idempotent: a retry after a lost response would run it twice.
-        createOnce(functions.mutation({ path, args, format: "json" })).pipe(
-          Effect.flatMap((response) => unwrap<A>(path, response)),
-          on,
-        );
-      return client;
-    }),
-  ),
-);
+export const Mutation = declare("mutation");
