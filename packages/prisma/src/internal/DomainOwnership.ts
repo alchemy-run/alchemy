@@ -78,8 +78,6 @@ export const resolveWorkspaceId = (project: ProjectReference) =>
     return response.data.workspace.id;
   });
 
-/** Hostnames compare without case or a trailing dot. */
-
 /**
  * A create whose response was lost and is retried answers 200 for the row
  * it made, which reads as someone else's. Retry only throttled requests,

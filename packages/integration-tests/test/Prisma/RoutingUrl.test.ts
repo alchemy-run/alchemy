@@ -16,6 +16,7 @@ import {
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { createUrlCheck, getUrl } from "@distilled.cloud/prisma/management";
+import { adopt } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as DNS from "alchemy/DNS/Adapter";
 import * as Output from "alchemy/Output";
@@ -425,7 +426,7 @@ testFor(inDev, { dev: true }).test.provider(
 
 const byLogicalId = makeUrlCloud();
 testFor(byLogicalId).test.provider(
-  "updates a row found by logicalId in place",
+  "updates a row on its own service found by logicalId in place",
   (stack) =>
     Effect.gen(function* () {
       byLogicalId.reset({}, routingUrl("url-existing", { hostname: "old.example.com" }));
@@ -438,6 +439,40 @@ testFor(byLogicalId).test.provider(
       expect(byLogicalId.routes()).toEqual(expect.arrayContaining(["PATCH /v1/urls/url-existing"]));
       expect(byLogicalId.routes().some((route) => route.startsWith("POST"))).toBe(false);
 
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const otherStage = makeUrlCloud();
+testFor(otherStage).test.provider(
+  "refuses, without --adopt, a row another stage on the Branch made with the same logicalId",
+  (stack) =>
+    Effect.gen(function* () {
+      // What another stage of this stack leaves on the shared Branch: its own
+      // App and hostname, under the same resource path.
+      otherStage.reset(
+        {},
+        routingUrl("url-other-stage", {
+          serviceId: "svc-other-stage",
+          hostname: "other-stage.example.com",
+        }),
+      );
+      yield* stack.destroy();
+
+      const failure = yield* failureOf(stack.deploy(urlStack()));
+
+      expect(failure).toContain("OwnedBySomeoneElse");
+      expect(PATCHES(otherStage)).toEqual([]);
+      expect(otherStage.rows.get("url-other-stage")?.hostname).toBe("other-stage.example.com");
+      expect(otherStage.rows.get("url-other-stage")?.serviceId).toBe("svc-other-stage");
+
+      // With --adopt the row is taken over on purpose.
+      const adopted = yield* stack.deploy(urlStack().pipe(adopt(true)));
+      expect(adopted.routingUrlId).toBe("url-other-stage");
+      expect(adopted.serviceId).toBe("svc-1");
+
+      otherStage.reset();
       yield* stack.destroy();
     }),
   { tags },

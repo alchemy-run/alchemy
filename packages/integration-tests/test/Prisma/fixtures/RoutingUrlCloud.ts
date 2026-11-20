@@ -265,7 +265,12 @@ export const makeUrlCloud = () => {
       return data(created, { status: 201 });
     }
     if (path === "/v1/projects/proj-1/branches/br-1/urls") {
-      return json(Array.from(rows.values()));
+      const logicalId = new URLSearchParams(request.search).get("logicalId");
+      return json(
+        Array.from(rows.values()).filter(
+          (row) => logicalId === null || row.logicalId === logicalId,
+        ),
+      );
     }
     if (path === "/v1/projects/proj-1") {
       return data(wireProject({ id: "proj-1", workspaceId: "ws-1" }));

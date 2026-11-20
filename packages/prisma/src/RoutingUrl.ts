@@ -18,6 +18,7 @@ import {
   getWorkspaceDomainOwnershipsVerification,
   updateUrl,
 } from "@distilled.cloud/prisma/management";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as DNS from "alchemy/DNS/Adapter";
 import type { Input } from "alchemy/Input";
@@ -145,8 +146,9 @@ export interface RoutingUrlProps {
    */
   hostname: Input<string>;
   /**
-   * Identity of the RoutingUrl on its Branch. A RoutingUrl found on the
-   * Branch with this `logicalId` is this resource's.
+   * Identity of the RoutingUrl on its Branch. Without state, a row on this
+   * app with this `logicalId` is this resource's; one on another app needs
+   * `--adopt`, since another stage or stack on the Branch can use the same.
    * @default the resource's fully qualified name: `Site/Url` for
    * `Prisma.RoutingUrl("Url", …)` inside a `Prisma.Website` named `Site`
    */
@@ -355,10 +357,12 @@ const serviceOf = (serviceId: string) =>
 
 type Service = Effect.Success<ReturnType<typeof serviceOf>>;
 
-const branchUrls = (service: Service) =>
-  getProjectBranchUrls({ projectId: service.projectId, branchId: service.branchId }).pipe(
-    Effect.map((response) => response.data),
-  );
+const branchUrls = (service: Service, logicalId?: string) =>
+  getProjectBranchUrls({
+    projectId: service.projectId,
+    branchId: service.branchId,
+    ...(logicalId === undefined ? {} : { logicalId }),
+  }).pipe(Effect.map((response) => response.data));
 
 const getRoutingUrl = (id: string) =>
   getUrl({ id }).pipe(
@@ -367,9 +371,11 @@ const getRoutingUrl = (id: string) =>
   );
 
 /**
- * The row with `logicalId`, else a row with no `logicalId` for the same
- * service and hostname, whoever made it: Prisma's backfill, the Console or a
- * custom domain.
+ * The row this RoutingUrl may take without `--adopt`: on its own service,
+ * with its `logicalId`, or with no `logicalId` and its hostname (a row
+ * Prisma's backfill, the Console or a custom domain made). A `logicalId` alone
+ * proves nothing, because another stage or stack on the Branch can declare
+ * the same one.
  */
 const ownRow = (
   urls: ReadonlyArray<ApiRoutingUrl>,
@@ -377,7 +383,7 @@ const ownRow = (
   hostname: string,
   logicalId: string,
 ) =>
-  urls.find((url) => url.logicalId === logicalId) ??
+  urls.find((url) => url.serviceId === serviceId && url.logicalId === logicalId) ??
   urls.find(
     (url) =>
       !hasLogicalId(url) &&
@@ -518,13 +524,16 @@ const ProviderLive = () =>
             Effect.catchTag("RoutingUrlServiceNotOnABranch", () => Effect.undefined),
           );
           if (service === undefined) return undefined;
+          const logicalId = olds.logicalId ?? fqn;
           const found = ownRow(
             yield* branchUrls(service),
             serviceId,
             normalizeHostname(olds.hostname),
-            olds.logicalId ?? fqn,
+            logicalId,
           );
-          return found ? attrsFrom(found) : undefined;
+          if (found) return attrsFrom(found);
+          const [claimed] = yield* branchUrls(service, logicalId);
+          return claimed ? Unowned(attrsFrom(claimed)) : undefined;
         }),
         reconcile: Effect.fn(function* ({ fqn, news, output }) {
           const serviceId = yield* resolveServiceId(news.app);
