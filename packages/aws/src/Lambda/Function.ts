@@ -18,7 +18,7 @@ import type { LogLine, LogsInput } from "alchemy/Provider";
 import * as Provider from "alchemy/Provider";
 import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
-import { packEnvValue, RuntimeContext, unpackEnvValue } from "alchemy/RuntimeContext";
+import { packEnvValue, RuntimeContext, unpackEnvValue, envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "alchemy/Tags";
 import { buildEventTelemetry } from "alchemy/Telemetry";
@@ -3360,10 +3360,10 @@ export const FunctionProvider = () =>
             news,
             roleArn,
             code: prepared.deployment,
-            env: {
+            env: envStrings({
               ...env,
               ...news.env,
-            },
+            }),
             functionName,
             // On update an omitted VpcConfig means "leave as-is"; detach
             // explicitly so a VPC attached out-of-band is removed.

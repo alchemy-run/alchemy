@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Option from "effect/Option";
 import path from "pathe";
+import { echoEnv, envValues } from "../../../EnvValues.ts";
 import { jsonStrings, type JsonStringKey } from "../../../JsonStrings.ts";
 
 const main = path.resolve(import.meta.dirname, "env-handler.ts");
@@ -18,13 +19,14 @@ const readJsonStrings = <A>(map: (config: Config.Config<string>) => Config.Confi
  * Lambda whose `env` holds strings `JSON.parse` would reinterpret. It echoes
  * them read through `Config` during Init and at request time, and straight
  * from `process.env`, so the test can assert each one arrives unchanged.
+ * `values` echoes every {@link envValues} case (non-strings and `Redacted`).
  */
 export class EnvStringsFunction extends Lambda.Function<EnvStringsFunction>()(
   "EnvStringsFunction",
 ) {}
 
 export const EnvStringsFunctionLive = EnvStringsFunction.make(
-  { main, functionUrl: true, env: { ...jsonStrings } },
+  { main, functionUrl: true, env: { ...jsonStrings, ...envValues } },
   Effect.gen(function* () {
     // Optional so plan passes: these are bound from `env`, not from the
     // deploy-time ConfigProvider.
@@ -54,6 +56,7 @@ export const EnvStringsFunctionLive = EnvStringsFunction.make(
           ),
           runtime,
           env,
+          values: yield* echoEnv,
         });
       }).pipe(Effect.orDie),
     };
