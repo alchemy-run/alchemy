@@ -162,6 +162,68 @@ describe(
     );
 
     test.provider(
+      "rolls a rebuilt image with the same tag onto the service",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* ensureDockerSwarm;
+          const docker = yield* Docker.Docker;
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-rebuilt-" });
+          yield* fs.writeFileString(
+            path.join(dir, "Dockerfile"),
+            'FROM busybox:1.37\nARG MARK\nRUN echo "$MARK" > /mark\nCMD ["sleep", "3600"]\n',
+          );
+          const program = (mark: string) =>
+            Effect.gen(function* () {
+              // Both builds are tagged `latest`: only the image id changes.
+              const image = yield* Docker.Image("rebuilt-image", {
+                build: { context: dir, args: { MARK: mark } },
+              });
+              const service = yield* Docker.Service("rebuilt-service", {
+                name: "alchemy-test-service-rebuilt",
+                image,
+              });
+              return { image, service };
+            });
+
+          /** The image id of the service's running task. */
+          const runningImage = (serviceId: string) =>
+            docker
+              .run([
+                "ps",
+                "--filter",
+                `label=com.docker.swarm.service.id=${serviceId}`,
+                "--format",
+                "{{.ID}}",
+              ])
+              .pipe(
+                Effect.flatMap((output) =>
+                  docker.run([
+                    "inspect",
+                    "--format",
+                    "{{.Image}}",
+                    ...output.stdout.trim().split("\n"),
+                  ]),
+                ),
+                Effect.map((output) => output.stdout.trim().split("\n")),
+              );
+
+          const first = yield* stack.deploy(program("one"));
+          expect(yield* runningImage(first.service.id)).toEqual([first.image.imageId]);
+
+          const second = yield* stack.deploy(program("two"));
+          expect(second.image.imageRef).toBe(first.image.imageRef);
+          expect(second.image.imageId).not.toBe(first.image.imageId);
+          expect(second.service.id).toBe(first.service.id);
+          expect(yield* runningImage(second.service.id)).toEqual([second.image.imageId]);
+
+          yield* stack.destroy();
+        }),
+      { timeout: 240_000 },
+    );
+
+    test.provider(
       "rolls back and fails the deploy when updated tasks are unhealthy",
       (stack) =>
         Effect.gen(function* () {
