@@ -21,7 +21,7 @@ export class TransferApproved extends Domain.Event("TransferApproved", {
 
 /** A support agent approves a large transfer before its approval window closes. */
 export class ApproveTransfer extends Domain.Command("ApproveTransfer", {
-  target: TransferId,
+  input: { transferId: TransferId },
   middleware: [Session],
   events: [TransferApproved],
   rejects: [NotAwaitingApproval, NotPermitted],

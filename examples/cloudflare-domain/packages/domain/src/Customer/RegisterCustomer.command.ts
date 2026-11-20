@@ -4,27 +4,30 @@ import { Session } from "../Session.middleware.ts";
 import { CustomerId } from "./Customer.id.ts";
 import { Username } from "./Username.ts";
 
-/** The customer is registered, or a registration is already in progress. */
+/** The customer is already registered. */
 export class AlreadyRegistered extends Domain.Rejection("AlreadyRegistered") {}
 
 /** A customer may only register themselves. */
 export class NotTheCustomer extends Domain.Rejection("NotTheCustomer") {}
 
-/** Registration waits for `UsernameReservation` to claim the username. */
-export class RegistrationRequested extends Domain.Event("RegistrationRequested", {
+/** Someone else holds this username. */
+export class UsernameTaken extends Domain.Rejection("UsernameTaken") {}
+
+export class CustomerRegistered extends Domain.Event("CustomerRegistered", {
   name: Schema.String,
   username: Username,
 }) {}
 
+export class UsernameClaimed extends Domain.Event("UsernameClaimed", { customerId: CustomerId }) {}
+
 /**
- * Sign up as a customer under a unique username. The customer is registered
- * once the username is claimed; `MainAccountProvisioning` then opens their
- * main account.
+ * Sign up as a customer under a unique username. It involves the customer
+ * and the username, so `Registration` decides it across both;
+ * `MainAccountProvisioning` then opens the customer's main account.
  */
 export class RegisterCustomer extends Domain.Command("RegisterCustomer", {
-  target: CustomerId,
   middleware: [Session],
-  input: { name: Schema.String, username: Username },
-  events: [RegistrationRequested],
-  rejects: [AlreadyRegistered, NotTheCustomer],
+  input: { customerId: CustomerId, name: Schema.String, username: Username },
+  events: [CustomerRegistered, UsernameClaimed],
+  rejects: [AlreadyRegistered, NotTheCustomer, UsernameTaken],
 }) {}

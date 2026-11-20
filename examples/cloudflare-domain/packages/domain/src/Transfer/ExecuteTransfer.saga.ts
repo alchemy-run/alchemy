@@ -24,10 +24,10 @@ import { TransferId } from "./Transfer.id.ts";
 export class DestinationClosed extends Domain.Rejection("DestinationClosed") {}
 
 /**
- * What the Transfer decided about a large transfer: an agent approved it, or
+ * How a large transfer's wait for approval ended: an agent approved it, or
  * its approval window closed first.
  */
-export const Decision = DurableDeferred.make("decision", {
+export const Approval = DurableDeferred.make("approval", {
   success: Schema.Literals(["approved", "expired"]),
 });
 
@@ -82,25 +82,31 @@ export const ExecuteTransferLive = ExecuteTransfer.toLayer(
           ? Effect.void
           : Activity.make({
               name: "record-failure",
-              execute: transfers.send(key, new FailTransfer({ reason: reasonOf(exit.cause) })),
+              execute: transfers.send(
+                new FailTransfer({ transferId: key, reason: reasonOf(exit.cause) }),
+              ),
             }).pipe(Effect.orDie),
       );
 
       if (needsApproval) {
         // The Transfer decides between approval and expiry; nothing to do if it expired.
-        if ((yield* DurableDeferred.await(Decision)) === "expired") return;
+        if ((yield* DurableDeferred.await(Approval)) === "expired") return;
       }
 
       // Debit first: if the credit fails, the money is refunded, so it's never created.
       yield* Activity.make({
         name: "debit",
         error: Schema.Union([NotOpen, NotOwner, Frozen, InsufficientFunds]),
-        execute: accounts.send(from, new DebitTransfer({ transferId: key, amount, requestedBy })),
+        execute: accounts.send(
+          new DebitTransfer({ accountId: from, transferId: key, amount, requestedBy }),
+        ),
       }).pipe(
         ExecuteTransfer.withCompensation(() =>
           Activity.make({
             name: "refund",
-            execute: accounts.send(from, new RefundTransfer({ transferId: key, amount })),
+            execute: accounts.send(
+              new RefundTransfer({ accountId: from, transferId: key, amount }),
+            ),
           }),
         ),
       );
@@ -109,13 +115,13 @@ export const ExecuteTransferLive = ExecuteTransfer.toLayer(
         name: "credit",
         error: DestinationClosed,
         execute: accounts
-          .send(to, new CreditTransfer({ transferId: key, amount }))
+          .send(new CreditTransfer({ accountId: to, transferId: key, amount }))
           .pipe(Effect.catchTag("NotOpen", () => Effect.fail(new DestinationClosed()))),
       });
 
       yield* Activity.make({
         name: "complete",
-        execute: transfers.send(key, new CompleteTransfer()),
+        execute: transfers.send(new CompleteTransfer({ transferId: key })),
       });
     });
   }),

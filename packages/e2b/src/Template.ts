@@ -19,8 +19,8 @@ import {
   type HostRuntimeContext,
   type ServerHost,
 } from "alchemy/Runtime/Process";
+import { envStrings } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { E2BUnexpectedResponse } from "./Errors.ts";
@@ -460,21 +460,9 @@ const planOf = Effect.fn(function* (
   return { spec, plan: yield* planTemplateBuild(spec, lowered) };
 });
 
-/** `env` for a template without a program: plain values only. */
+/** `env` for a template without a program. */
 const plainEnv = (env: Readonly<Record<string, unknown>> | undefined) =>
-  Effect.succeed(
-    env === undefined
-      ? undefined
-      : Object.fromEntries(
-          Object.entries(env).flatMap(([key, value]) =>
-            Redacted.isRedacted(value)
-              ? [[key, String(Redacted.value(value))]]
-              : typeof value === "string" || typeof value === "number" || typeof value === "boolean"
-                ? [[key, String(value)]]
-                : [],
-          ),
-        ),
-  );
+  Effect.succeed(env === undefined ? undefined : envStrings(env));
 
 export const TemplateProvider = () =>
   Provider.effect(
