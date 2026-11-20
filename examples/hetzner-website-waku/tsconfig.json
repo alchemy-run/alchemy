@@ -13,5 +13,8 @@
     "strict": true
   },
   "include": ["alchemy.run.ts", "src", "test"],
-  "references": [{ "path": "../../packages/alchemy" }]
+  "references": [
+    { "path": "../../packages/alchemy" },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
+  ]
 }

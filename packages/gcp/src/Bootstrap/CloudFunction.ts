@@ -15,9 +15,8 @@
  */
 import { NodeServices } from "@effect/platform-node";
 import { HttpServer, safeHttpEffect } from "alchemy/Http";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { entrypointLayer, resolveProgram, stackFromEnv } from "alchemy/Runtime/Bootstrap";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
@@ -134,12 +133,7 @@ export const makeHandler = (entrypoint: unknown) => {
           Layer.provideMerge(fromMetadataServer()),
           Layer.provideMerge(captureServer(dispatch)),
           Layer.provideMerge(platform),
-          Layer.provideMerge(
-            Layer.succeed(
-              ConfigProvider.ConfigProvider,
-              reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
-            ),
-          ),
+          Layer.provideMerge(RuntimeConfigProviderLive),
         ),
       ),
       Effect.scoped,

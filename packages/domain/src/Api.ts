@@ -32,11 +32,12 @@ import type { Annotations } from "./Annotations.ts";
 import * as Command from "./Command.ts";
 import { DefinitionError, NotInModel, UnroutedCommand } from "./DefinitionError.ts";
 import { type Filter, matches } from "./Filter.ts";
+import { internalError, redactCause } from "./internal.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import * as Model from "./Model.ts";
 import { captureContext, type StreamStore, type Subscription, type ViewStore } from "./Platform.ts";
-import type * as Query from "./Query.ts";
+import * as Query from "./Query.ts";
 import type * as Read from "./Read.ts";
 import { nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
@@ -124,8 +125,12 @@ export interface ViewClient<V extends View.Any> {
   readonly get: (
     key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
-      /** Wait until the view has applied this write (a command's `stream` and `version`). */
-      readonly atLeast?: { readonly stream: string; readonly version: number };
+      /**
+       * Wait until the view has applied these writes (commands' receipts).
+       * Left out, the read waits for the commands this client sent; `[]`
+       * waits for nothing.
+       */
+      readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.StateOf<V>>;
     },
   ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]> | View.ConsistencyTimeout>;
@@ -155,8 +160,12 @@ export interface ViewClient<V extends View.Any> {
   readonly list: (
     key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
-      /** Wait until the view has applied this write (a command's `stream` and `version`). */
-      readonly atLeast?: { readonly stream: string; readonly version: number };
+      /**
+       * Wait until the view has applied these writes (commands' receipts).
+       * Left out, the read waits for the commands this client sent; `[]`
+       * waits for nothing.
+       */
+      readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.EventOf<V>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
@@ -174,8 +183,12 @@ export interface ViewClient<V extends View.Any> {
   readonly snapshot: (
     key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
-      /** Wait until the view has applied this write (a command's `stream` and `version`). */
-      readonly atLeast?: { readonly stream: string; readonly version: number };
+      /**
+       * Wait until the view has applied these writes (commands' receipts).
+       * Left out, the read waits for the commands this client sent; `[]`
+       * waits for nothing.
+       */
+      readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.StateOf<V>>;
     },
   ) => Effect.Effect<
@@ -190,8 +203,12 @@ export interface StreamClient<S extends DomainStream.Any> {
   readonly peek: (
     key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
-      /** Wait until the stream's writer has handled this write (a command's `stream` and `version`). */
-      readonly atLeast?: { readonly stream: string; readonly version: number };
+      /**
+       * Wait until the stream's writers have handled these writes (commands'
+       * receipts). Left out, the read waits for the commands this client
+       * sent; `[]` waits for nothing.
+       */
+      readonly atLeast?: Query.AtLeastInput;
     },
   ) => Effect.Effect<
     DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>> | null,
@@ -226,6 +243,12 @@ export interface StreamClient<S extends DomainStream.Any> {
   readonly list: (
     key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
+      /**
+       * Wait until the stream's writers have handled these writes (commands'
+       * receipts). Left out, the read waits for the commands this client
+       * sent; `[]` waits for nothing.
+       */
+      readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<DomainStream.EventOf<S>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
@@ -233,7 +256,7 @@ export interface StreamClient<S extends DomainStream.Any> {
     },
   ) => Effect.Effect<
     View.Page<DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>>>,
-    ReadError<S["definition"]>
+    ReadError<S["definition"]> | View.ConsistencyTimeout
   >;
 }
 
@@ -247,14 +270,23 @@ export interface Recorded<E, Id> {
 export interface CommandOptions extends CallOptions {
   /** A resend with the same id returns the first receipt instead of deciding again. */
   readonly commandId?: string;
+  /**
+   * When the command answers. `"eventual"` answers as soon as the events are
+   * committed. `"strong"` answers once every view its events reach has
+   * applied them: any read of a view after the answer includes the command.
+   * If a view takes longer than 10 seconds the call fails with
+   * `ConsistencyTimeout`, though the command is committed.
+   * @default the client's `Domain.DefaultConsistency`, which is `"eventual"`
+   */
+  readonly consistency?: Command.Consistency;
 }
 
-/** The input and options after a command's target. The input may be left out when it has no required field. */
+/** A command's input and options. The input may be left out when it has no required field. */
 type CommandArgs<Input> = {} extends Input
   ? [input?: Input, options?: CommandOptions]
   : [input: Input, options?: CommandOptions];
 
-/** The typed client of a command exposed in an Api: `bank.WithdrawMoney(target, input, options)`. */
+/** The typed client of a command exposed in an Api: `bank.WithdrawMoney(input, options)`. */
 export type CommandClient<C extends Command.Any> =
   C["rpc"] extends Rpc.Rpc<
     infer _Tag,
@@ -264,9 +296,8 @@ export type CommandClient<C extends Command.Any> =
     infer Middleware,
     infer _Requires
   >
-    ? Payload["Type"] extends { readonly target: infer Target; readonly input: infer Input }
+    ? Payload["Type"] extends { readonly input: infer Input }
       ? (
-          target: Target,
           ...args: CommandArgs<Input>
         ) => Effect.Effect<
           Success["Type"],
@@ -296,6 +327,8 @@ export interface QueryOptions extends CallOptions {
   /**
    * Wait until the query's projections have handled this write (a
    * command's receipt), or each of these writes, one receipt per command.
+   * Left out, the query waits for the commands this client sent; `[]` waits
+   * for nothing.
    */
   readonly atLeast?: Query.AtLeastInput;
   /** The cursor of the previous page, for a paged query. */
@@ -475,36 +508,79 @@ const rpcsOf = (entry: Servable): ReadonlyArray<Rpc.Any> =>
 // ---------------------------------------------------------------- handlers
 
 /**
- * Only an entry's declared errors are public. Anything else (an
- * infrastructure error, an undeclared rejection) becomes a defect, so it
- * never leaks as a typed error the client cannot decode.
+ * Only an entry's declared errors are public. Anything else (a defect, an
+ * infrastructure error, an undeclared rejection) is logged here, with its
+ * full cause, and reaches the client as one generic defect.
  */
 const declaredOnly = (rpc: Rpc.Any) => {
   const props = rpc as Rpc.AnyWithProps;
   const isDeclared = Schema.is(props.errorSchema);
   const success = props.successSchema as Schema.Top & { readonly error?: Schema.Top };
   const isDeclaredInStream = success.error ? Schema.is(success.error) : isDeclared;
+  const redactEffect = redactCause(isDeclared, props._tag);
+  const redactStream = redactCause(isDeclaredInStream, props._tag);
   return {
-    effect: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      Effect.catchIf(
-        effect,
-        (e) => !isDeclared(e),
-        (e) => Effect.die(e),
-      ),
+    effect: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.catchCause(effect, redactEffect),
     stream: <A, E, R>(stream: Stream.Stream<A, E, R>) =>
-      Stream.catchIf(
-        stream,
-        (e) => !isDeclaredInStream(e),
-        (e) => Stream.die(e),
-      ),
+      Stream.catchCause(stream, (cause) => cause.pipe(redactStream, Stream.fromEffect)),
   };
 };
 
-/** The wire payload of a command: its target, an optional command id, and its input. */
+/** Whether an error is one a call may fail with: its own, its stream's, or its middleware's. */
+const declaredByCall = new WeakMap<Rpc.AnyWithProps, (error: unknown) => boolean>();
+const declaredBy = (rpc: Rpc.AnyWithProps) => {
+  const cached = declaredByCall.get(rpc);
+  if (cached) return cached;
+  const success = rpc.successSchema as Schema.Top & { readonly error?: Schema.Top };
+  const errors = [
+    rpc.errorSchema,
+    ...(success.error ? [success.error] : []),
+    ...[...rpc.middlewares].map((middleware) => middleware.error as Schema.Top),
+  ];
+  const declared = Schema.is(Schema.Union(errors));
+  declaredByCall.set(rpc, declared);
+  return declared;
+};
+
+type MiddlewareFn = (
+  effect: Effect.Effect<unknown, unknown>,
+  options: { readonly rpc: Rpc.AnyWithProps },
+) => Effect.Effect<unknown, unknown>;
+
+/**
+ * The group's middleware services in `context`, each wrapped so that what it
+ * fails or dies with reaches the client only as a declared error or one
+ * generic defect: a middleware's defect (an auth adapter's) is logged, never
+ * sent. Middleware runs outside each handler's own redaction.
+ */
+const redactMiddleware = (
+  group: RpcGroup.RpcGroup<Rpc.Any>,
+  context: Context.Context<never>,
+): Context.Context<never> => {
+  const services = new Set<Context.Key<any, any>>();
+  for (const rpc of group.requests.values()) {
+    for (const middleware of (rpc as Rpc.AnyWithProps).middlewares) services.add(middleware);
+  }
+  let redacted = Context.empty();
+  for (const key of services) {
+    const service = Context.getOption(context, key);
+    if (Option.isNone(service)) continue;
+    const run = service.value as MiddlewareFn;
+    const wrapped: MiddlewareFn = (effect, options) =>
+      Effect.catchCause(
+        run(effect, options),
+        redactCause(declaredBy(options.rpc), options.rpc._tag),
+      );
+    redacted = Context.add(redacted, key, wrapped);
+  }
+  return redacted;
+};
+
+/** The wire payload of a command: an optional command id, and its input. */
 interface CommandPayload {
-  readonly target: string;
   readonly commandId?: string;
   readonly input: object;
+  readonly consistency?: Command.Consistency;
 }
 
 /** The wire payload of a query: its input, and the page and write to read at least. */
@@ -515,7 +591,7 @@ interface QueryPayload extends Query.RunOptions {
 interface ReadPayload {
   readonly key: string;
   readonly where?: unknown;
-  readonly atLeast?: { readonly stream: string; readonly version: number };
+  readonly atLeast?: Query.AtLeastInput;
   readonly after?: number;
   readonly order?: "asc" | "desc";
   readonly take?: number;
@@ -523,33 +599,96 @@ interface ReadPayload {
 
 const caughtUpAt = (seq: number): Read.CaughtUp => ({ _tag: "CaughtUp", cursor: seq });
 
+/** How a read judges a key's state, and what of an event it filters on. */
+interface Judge<A> {
+  /** `validate` on a state of the key. */
+  readonly judge: (state: unknown) => Effect.Effect<void, unknown>;
+  /** The key's state once `event` applied, as `validate` sees it. */
+  readonly stateOf: (event: A) => unknown;
+  /** Whether the read's `where` keeps `event`. */
+  readonly keeps: (event: A) => boolean;
+}
+
 /**
  * A key's events from `start`, with a `CaughtUp` frame after its history: the
- * events up to `end`, the key's `seq` when the read began. `keep` judges and
- * filters each event after the end is found, so a filtered-out last event
- * still ends the history.
+ * events up to `end`, the key's `seq` when the read began, whose state is
+ * `endState`. Every event the filter keeps is judged before it is sent, and
+ * the `CaughtUp` frame is judged like an event: against the state the
+ * history ends at. So a caller `validate` refuses is refused the same way
+ * whether the key has history or none (#3060).
  */
 const withCaughtUp = <A>(
   start: number,
   end: number,
+  endState: unknown,
   events: Stream.Stream<A, unknown>,
   seqOf: (event: A) => number,
-  keep: (event: A) => Effect.Effect<ReadonlyArray<unknown>, unknown>,
+  { judge, stateOf, keeps }: Judge<A>,
 ): Stream.Stream<unknown, unknown> => {
   let sent = start >= end;
   const rest = events.pipe(
-    Stream.mapEffect((event) =>
-      keep(event).pipe(
-        Effect.map((out) => {
-          if (sent || seqOf(event) < end) return out;
+    Stream.mapEffect(
+      Effect.fn(function* (event: A) {
+        const kept = keeps(event);
+        const ends = !sent && seqOf(event) >= end;
+        // A kept event is judged before it is sent; one that ends the history is judged for the marker.
+        if (kept || ends) yield* judge(stateOf(event));
+        const out: Array<unknown> = kept ? [event] : [];
+        if (ends) {
           sent = true;
-          return [...out, caughtUpAt(seqOf(event))];
-        }),
-      ),
+          out.push(caughtUpAt(seqOf(event)));
+        }
+        return out;
+      }),
     ),
     Stream.flatMap((out) => Stream.fromIterable(out)),
   );
-  return start >= end ? Stream.concat(Stream.succeed(caughtUpAt(start)), rest) : rest;
+  return start >= end
+    ? Stream.concat(Stream.fromEffect(Effect.as(judge(endState), caughtUpAt(start))), rest)
+    : rest;
+};
+
+/**
+ * Read a key for a caller, judged before anything the caller asked for
+ * runs: `validate` judges the key's current state, then, if the read waits
+ * for `atLeast`, the state after the wait (only if it moved). A caller
+ * `validate` refuses is refused at once, so how long a wait takes tells it
+ * nothing about the key (#2906).
+ */
+const judgedRead = Effect.fn(function* <A>(
+  read: Effect.Effect<A, unknown>,
+  judge: (value: A) => Effect.Effect<void, unknown>,
+  versionOf: (value: A) => number,
+  wait: Effect.Effect<void, unknown> | undefined,
+) {
+  const current = yield* read;
+  yield* judge(current);
+  if (wait === undefined) return current;
+  yield* wait;
+  const waited = yield* read;
+  if (versionOf(waited) !== versionOf(current)) yield* judge(waited);
+  return waited;
+});
+
+/**
+ * The wait a read's `atLeast` asks for: until the view has applied each of
+ * those commands' events on `key`, or the stream's writers have handled
+ * them. A command whose events never reach the key costs one read of its
+ * events and no wait, so a client can send every receipt it holds with
+ * every read.
+ */
+const waitFor = (
+  caughtUp: Query.CaughtUp | undefined,
+  atLeast: Query.AtLeastInput | undefined,
+  key?: string,
+): Effect.Effect<void, unknown> | undefined => {
+  const receipts = Query.receiptsOf(atLeast);
+  return caughtUp === undefined || receipts.length === 0
+    ? undefined
+    : Effect.forEach(receipts, (receipt) => caughtUp(receipt, { key }), {
+        concurrency: "unbounded",
+        discard: true,
+      });
 };
 
 type Handler = (input: never) => unknown;
@@ -588,14 +727,20 @@ const handlersOf = (
         const declared = declaredOnly(entry.rpc);
         // Runs inside the command's middleware, so the context it provides
         // (the session's actor) travels with the command to its aggregate.
-        handlers[entry.tag] = ({ target, commandId, input }: CommandPayload) =>
+        handlers[entry.tag] = ({ commandId, input, consistency }: CommandPayload) =>
           declared.effect(
             // oxlint-disable-next-line effecttsgo/new-schema-class -- `make` on a generic command class loses its instance type
-            aggregate.send(target, new entry(input), { commandId }).pipe(
+            aggregate.send(new entry(input), { commandId }).pipe(
+              // The events are committed. When asked to, answer once the views
+              // have them, so a read after the answer includes the command.
+              Effect.tap((receipt) =>
+                consistency === "strong" ? internals.applied(receipt) : Effect.void,
+              ),
               Effect.map((receipt) => ({
                 reply: receipt.reply,
                 stream: receipt.stream,
                 version: receipt.version,
+                commits: receipt.commits,
               })),
             ),
           );
@@ -619,6 +764,7 @@ const handlersOf = (
       const name = nameOf(entry);
       const rpcs = readRpcs(entry);
       const validate = internals.validators.get(name);
+      const caughtUp = internals.caughtUp.get(name);
       const check = (mode: Read.Mode, key: unknown) => (state: unknown) =>
         validate ? validate({ mode, key }, state) : Effect.void;
       const effect =
@@ -637,11 +783,11 @@ const handlersOf = (
         const latest = (id: string) =>
           host.peek(refOf(id)).pipe(Effect.orDie, Effect.map(Option.getOrNull));
         handlers[`${name}.peek`] = effect(rpcs.get, ({ key: id, atLeast }) =>
-          host.peek(refOf(id), { atLeast }).pipe(
-            Effect.flatMap((found) => {
-              const entry = Option.getOrNull(found);
-              return check("get", refOf(id))(entry).pipe(Effect.as(entry));
-            }),
+          judgedRead(
+            host.peek(refOf(id)).pipe(Effect.map(Option.getOrNull)),
+            check("get", refOf(id)),
+            (entry) => entry?.envelope.seq ?? 0,
+            waitFor(caughtUp, atLeast),
           ),
         );
         handlers[`${name}.watch`] = stream(rpcs.watch, ({ key: id }) =>
@@ -663,30 +809,38 @@ const handlersOf = (
                 withCaughtUp(
                   start,
                   last?.envelope.seq ?? 0,
+                  last,
                   host.events(refOf(id), { after: start }),
                   (entry) => entry.envelope.seq,
-                  // Each entry is judged as the key's latest entry at that point.
-                  (entry) =>
-                    matches(where as Filter<unknown> | undefined, entry.event)
-                      ? check("events", refOf(id))(entry).pipe(Effect.as([entry]))
-                      : Effect.succeed([]),
+                  {
+                    judge: check("events", refOf(id)),
+                    // Each entry is judged as the key's latest entry at that point.
+                    stateOf: (entry) => entry,
+                    keeps: (entry) => matches(where as Filter<unknown> | undefined, entry.event),
+                  },
                 ),
               ),
             ),
           );
         });
-        handlers[`${name}.list`] = effect(rpcs.list!, ({ key: id, where, order, take, after }) =>
-          latest(id).pipe(
-            Effect.flatMap((entry) => check("list", refOf(id))(entry)),
-            Effect.andThen(
-              host.list(refOf(id), {
-                where: where as Filter<unknown> | undefined,
-                order,
-                take,
-                after,
-              }),
+        handlers[`${name}.list`] = effect(
+          rpcs.list!,
+          ({ key: id, atLeast, where, order, take, after }) =>
+            judgedRead(
+              latest(id),
+              check("list", refOf(id)),
+              (entry) => entry?.envelope.seq ?? 0,
+              waitFor(caughtUp, atLeast),
+            ).pipe(
+              Effect.andThen(
+                host.list(refOf(id), {
+                  where: where as Filter<unknown> | undefined,
+                  order,
+                  take,
+                  after,
+                }),
+              ),
             ),
-          ),
         );
         continue;
       }
@@ -697,13 +851,26 @@ const handlersOf = (
         const refOf = (id: string) => Key.refOf(key, id);
         const visible = (state: unknown, where: unknown) =>
           state !== null && matches(where as Filter<unknown> | undefined, state) ? state : null;
+        // The key's state with its cursor, judged before the read waits for `atLeast`.
+        const judgedSnapshot = (
+          id: string,
+          mode: Read.Mode,
+          atLeast: Query.AtLeastInput | undefined,
+        ) =>
+          judgedRead(
+            host.snapshot(refOf(id)),
+            (snapshot) => check(mode, refOf(id))(snapshot.state),
+            (snapshot) => snapshot.cursor,
+            waitFor(caughtUp, atLeast, id),
+          );
         handlers[`${name}.get`] = effect(rpcs.get, ({ key: id, atLeast, where }) =>
-          host.get(refOf(id), { atLeast }).pipe(
-            Effect.flatMap((found) => {
-              const state = Option.getOrNull(found);
-              return check("get", refOf(id))(state).pipe(Effect.as(visible(state, where)));
-            }),
-          ),
+          (Query.receiptsOf(atLeast).length === 0
+            ? host.get(refOf(id)).pipe(
+                Effect.map(Option.getOrNull),
+                Effect.tap((state) => check("get", refOf(id))(state)),
+              )
+            : Effect.map(judgedSnapshot(id, "get", atLeast), (snapshot) => snapshot.state)
+          ).pipe(Effect.map((state) => visible(state, where))),
         );
         const viewStore = internals.views.get(name)!;
         // From the stored snapshots, so each state comes with the seq it is valid at.
@@ -717,7 +884,9 @@ const handlersOf = (
               return check(
                 "watch",
                 refOf(id),
-              )(state).pipe(Effect.as({ state: visible(state, where), cursor: snapshot.seq }));
+              )(state).pipe(
+                Effect.map(() => ({ state: visible(state, where), cursor: snapshot.seq })),
+              );
             }),
           ),
         );
@@ -729,34 +898,30 @@ const handlersOf = (
                 withCaughtUp(
                   start,
                   snapshot.seq,
+                  snapshot.state === null
+                    ? null
+                    : internals.kernel.decodeViewState(entry, snapshot.state),
                   host.events(refOf(id), { after: start }),
-                  (entry) => entry.envelope.seq,
-                  (entry) =>
-                    matches(where as Filter<unknown> | undefined, entry.event)
-                      ? check("events", refOf(id))(entry.state).pipe(Effect.as([entry]))
-                      : Effect.succeed([]),
+                  (event) => event.envelope.seq,
+                  {
+                    judge: check("events", refOf(id)),
+                    stateOf: (event) => event.state,
+                    keeps: (event) => matches(where as Filter<unknown> | undefined, event.event),
+                  },
                 ),
               ),
             ),
           );
         });
         handlers[`${name}.snapshot`] = effect(rpcs.snapshot!, ({ key: id, atLeast, where }) =>
-          host
-            .snapshot(refOf(id), { atLeast })
-            .pipe(
-              Effect.flatMap(({ state, cursor }) =>
-                check(
-                  "get",
-                  refOf(id),
-                )(state).pipe(Effect.as({ state: visible(state, where), cursor })),
-              ),
-            ),
+          judgedSnapshot(id, "get", atLeast).pipe(
+            Effect.map(({ state, cursor }) => ({ state: visible(state, where), cursor })),
+          ),
         );
         handlers[`${name}.list`] = effect(
           rpcs.list!,
           ({ key: id, atLeast, where, order, take, after }) =>
-            host.get(refOf(id), { atLeast }).pipe(
-              Effect.flatMap((found) => found.pipe(Option.getOrNull, check("list", refOf(id)))),
+            judgedSnapshot(id, "list", atLeast).pipe(
               Effect.andThen(
                 host.list(refOf(id), {
                   where: where as Filter<unknown> | undefined,
@@ -873,8 +1038,15 @@ const liveReads = (
     };
     const judged = yield* authorized.pipe(
       Effect.map((context): Subscription => ({ ...subscription, context })),
-      Effect.catch((error) =>
-        Watch.refuse(read.rpc, error).pipe(
+      // A refusal, or a defect (already logged and redacted by the middleware), ends the read.
+      Effect.catchCause((cause) =>
+        Watch.refuse(
+          read.rpc,
+          Option.match(Cause.findErrorOption(cause), {
+            onSome: (error) => Exit.fail(error),
+            onNone: () => Exit.die(internalError()),
+          }),
+        ).pipe(
           Effect.orDie,
           Effect.map((refused): Subscription => ({ ...subscription, refused })),
         ),
@@ -909,16 +1081,19 @@ const liveReads = (
 type Flat = Record<string, (payload: unknown, options?: CallOptions) => unknown>;
 
 /** Shape the flat Effect RPC client into commands and queries, plus view and stream namespaces. */
-const nest = (entries: ReadonlyArray<Servable>, flat: Flat): unknown => {
+const nest = (
+  entries: ReadonlyArray<Servable>,
+  flat: Flat,
+  defaultConsistency: Command.Consistency,
+): unknown => {
   const client: Record<string, unknown> = {};
   for (const entry of entries) {
     if (entry.kind === "Command") {
       const send = flat[entry.tag]!;
       client[entry.tag] = (
-        target: unknown,
         input: object = {},
-        { commandId, ...options }: CommandOptions = {},
-      ) => send({ target, commandId, input }, options);
+        { commandId, consistency = defaultConsistency, ...options }: CommandOptions = {},
+      ) => send({ commandId, input, consistency }, options);
       continue;
     }
     if (entry.kind === "Query") {
@@ -1025,11 +1200,13 @@ const makeProtocolInProcess = (
       });
       const handlers = yield* handlersOf(model, entries, unresolved);
       // The middleware services in the caller's scope run for every request.
+      const middleware = redactMiddleware(group, yield* captureContext());
       yield* RpcServer.make(group).pipe(
         Effect.provide(
           Layer.mergeAll(
             Layer.succeed(RpcServer.Protocol, server),
             group.toLayer(handlers as never) as Layer.Layer<never>,
+            Layer.succeedContext(middleware),
           ),
         ),
         Effect.forkScoped,
@@ -1062,9 +1239,11 @@ const build = (
   group: RpcGroup.RpcGroup<Rpc.Any>,
   annotations: Annotations,
 ): unknown => {
-  const client = RpcClient.make(group).pipe(
-    Effect.map((flat) => nest(entries, flat as unknown as Flat)),
-  );
+  const client = Effect.gen(function* () {
+    // Read once, here: the consistency of every command sent without one.
+    const consistency = yield* Command.DefaultConsistency;
+    return nest(entries, (yield* RpcClient.make(group)) as unknown as Flat, consistency);
+  });
   const Client = Context.Service<ClientKey<string>, unknown>()(`alchemy/Domain/Api/${name}/Client`);
   const commands = entries.filter((entry): entry is Command.Any => entry.kind === "Command");
   const rejectionClasses = [...new Set(commands.flatMap((command) => command.rejects))];
@@ -1073,7 +1252,7 @@ const build = (
   const serve = Effect.gen(function* () {
     const handlers = yield* handlersOf(model, entries, unresolved);
     // The middleware services (declared in the Api's requirements), for every request.
-    const middleware = yield* captureContext();
+    const middleware = redactMiddleware(group, yield* captureContext());
     const layer = Layer.mergeAll(
       group.toLayer(handlers as never),
       RpcSerialization.layerNdjson,
@@ -1179,11 +1358,25 @@ const build = (
  * **Example:** A typed client
  * ```typescript
  * const bank = yield* CustomerApi.client;
- * const { reply } = yield* bank.DepositMoney(accountId, { amount: 1_000 });
+ * const { reply } = yield* bank.DepositMoney({ accountId, amount: 1_000 });
  * const summary = yield* bank.AccountSummary.get(accountId);
  * yield* bank.AccountSummary.watch(accountId).pipe(
  *   Stream.runForEach(({ state }) => Effect.log(state?.balance)),
  * );
+ * ```
+ *
+ * ### Reading your own writes
+ * A client remembers the commands it sent. Its `get`, `list`, `snapshot`,
+ * `peek` and queries carry their receipts and wait until the view, stream or
+ * projection has applied them. `atLeast` names other writes to wait for, and
+ * `[]` waits for none.
+ *
+ * **Example:** A read right after a command
+ * ```typescript
+ * const bank = yield* CustomerApi.client;
+ * yield* bank.DepositMoney({ accountId, amount: 1_000 });
+ * const summary = yield* bank.AccountSummary.get(accountId); // includes the deposit
+ * const now = yield* bank.AccountSummary.get(accountId, { atLeast: [] });
  * ```
  *
  * ### Calling it in process
@@ -1197,7 +1390,7 @@ const build = (
  *   Effect.provideService(effect, CurrentActor, system("payments-webhook")),
  * );
  * const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));
- * yield* bank.DepositMoney(accountId, { amount: 1_000 });
+ * yield* bank.DepositMoney({ accountId, amount: 1_000 });
  * ```
  *
  * ### Annotating Apis

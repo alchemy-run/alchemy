@@ -44,7 +44,7 @@ it.effect("an overdraft is rejected with the evidence", () =>
   story(
     Story.given(account, opened, new MoneyDeposited({ amount: 50, balanceAfter: 50 })),
     asSam,
-    Story.when(account, new WithdrawMoney({ amount: 80 })),
+    Story.when(new WithdrawMoney({ accountId: account.id, amount: 80 })),
     Story.rejected(new InsufficientFunds({ balance: 50, requested: 80 })),
   ),
 );
@@ -63,7 +63,7 @@ It also lets a story start from any point in an account's life, including ones t
 When the command succeeds, `then` checks the events it recorded, and `replied` checks what the caller got back:
 
 ```typescript title="packages/domain/test/withdrawals.test.ts"
-Story.when(account, new WithdrawMoney({ amount: 30 })),
+Story.when(new WithdrawMoney({ accountId: account.id, amount: 30 })),
 Story.then(account, new MoneyWithdrawn({ amount: 30, balanceAfter: 70 })),
 Story.replied({ balance: 70 }),
 ```
@@ -87,7 +87,7 @@ Story.emitted(Statement, account, [
 A command rarely ends at its aggregate. A large withdrawal pushes the day's total past the fraud threshold, the fraud policy asks the scoring service, and a high score freezes the account. A story follows all of it, in order:
 
 ```typescript title="packages/domain/test/fraud.test.ts"
-Story.when(account, new WithdrawMoney({ amount: 60_000 })),
+Story.when(new WithdrawMoney({ accountId: account.id, amount: 60_000 })),
 Story.then(account, new MoneyWithdrawn({ amount: 60_000, balanceAfter: 30_000 })),
 Story.call(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
 Story.succeed(FraudCheck.score, { risk: 0.95 }),
@@ -160,6 +160,8 @@ const story = Story.make(Bank, {
 });
 ```
 
+A command a [decision](/domain/decision) implements is sent through the decision: `Story.when(new RegisterCustomer({ customerId: Registration.id, ... }))`. What it records is asserted per instance, with `then`.
+
 Everything runs in memory, so a story that spans several aggregates, a policy and a saga still runs in milliseconds. There's no database to reset and nothing to mock: the history is the setup, and the events are the assertions.
 
 ## A passing story accounts for everything
@@ -176,4 +178,4 @@ For each command, write a story for the outcome where it succeeds, one for each 
 
 ## Where to go next
 
-You've now met every building block in the manual. To put them to work together, build the bank in the [tutorial](/domain/tutorial/part-1). For every check a story offers, answering several external calls, and asserting real ones, see [Testing a model](/domain/testing-models). To test what clients see through an Api, including middleware, see [Testing an Api](/domain/testing-apis).
+You've now met every building block in the manual. To put them to work together, build the bank in the [tutorial](/domain/tutorial/part-1). For every check a story offers, answering several external calls, and asserting real ones, see [Testing a model](/domain/testing-models). A story checks one example; to check a rule against every sequence of commands, see [Verifying a model](/domain/verifying-models). To test what clients see through an Api, including middleware, see [Testing an Api](/domain/testing-apis).

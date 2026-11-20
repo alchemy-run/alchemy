@@ -1,4 +1,5 @@
 import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -6,6 +7,46 @@ import * as SchemaAST from "effect/SchemaAST";
 import { DefinitionError, UndeclaredDecision } from "./DefinitionError.ts";
 
 export { DefinitionError } from "./DefinitionError.ts";
+
+/** The defects {@link internalError} made: already logged, sent as they are. */
+const internalErrors = new WeakSet<object>();
+
+/**
+ * The one defect a client receives in place of any other: a defect's text
+ * can hold stacks, file paths and nested errors (an adapter's SQL error).
+ *
+ * @internal
+ */
+export const internalError = (): Error => {
+  const error = new Error("Internal server error");
+  internalErrors.add(error);
+  return error;
+};
+
+/**
+ * Keep what of a cause a client may see: interrupts, and the failures
+ * `declared` keeps. Anything else (a defect, an undeclared failure) is
+ * logged here with its whole cause, and becomes {@link internalError}.
+ *
+ * @internal
+ */
+export const redactCause =
+  (declared: (error: unknown) => boolean, rpc: string) =>
+  <E>(cause: Cause.Cause<E>): Effect.Effect<never, E> =>
+    cause.reasons.every(
+      (reason) =>
+        Cause.isInterruptReason(reason) ||
+        (Cause.isFailReason(reason) && declared(reason.error)) ||
+        (Cause.isDieReason(reason) &&
+          typeof reason.defect === "object" &&
+          reason.defect !== null &&
+          internalErrors.has(reason.defect)),
+    )
+      ? Effect.failCause(cause)
+      : Effect.logError("Domain: a request failed with an undeclared error", cause).pipe(
+          Effect.annotateLogs({ "domain.rpc": rpc }),
+          Effect.andThen(Effect.die(internalError())),
+        );
 
 /**
  * The schema of a command's or a query's `input`. With no fields it is an
@@ -204,4 +245,27 @@ export const evolveView = (
       }) ?? null;
   }
   return current;
+};
+
+/**
+ * Call a command's client with a decoded wire payload.
+ *
+ * @internal
+ */
+export const sendPayload = (
+  send: unknown,
+  payload: unknown,
+  options: object,
+): Effect.Effect<unknown, unknown> => {
+  const { input, commandId, consistency } = payload as {
+    readonly input: unknown;
+    readonly commandId?: string;
+    readonly consistency?: string;
+  };
+  const call = send as (input: unknown, options: object) => Effect.Effect<unknown, unknown>;
+  return call(input, {
+    ...options,
+    ...(commandId === undefined ? {} : { commandId }),
+    ...(consistency === undefined ? {} : { consistency }),
+  });
 };
