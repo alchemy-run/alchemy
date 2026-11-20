@@ -606,6 +606,7 @@ const SECTIONS: Section[] = [
         "convex/deployments/canonical-urls",
         "convex/deployments/usage-limits",
         "convex/functions/functions",
+        "convex/functions/effect-functions",
         "convex/functions/environment-variables",
         "convex/functions/connect",
         "convex/functions/calling-functions",
