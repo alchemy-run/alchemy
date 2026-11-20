@@ -50,11 +50,16 @@ import {
   findServiceDomainById,
   type ServiceDomainRecord,
 } from "./ServiceDomain.ts";
+import { syncServiceImageUpdates, validateImageUpdates } from "./ServiceImageUpdates.ts";
 import { readServiceRegion, syncServiceRegion } from "./ServiceRegion.ts";
 import { withEnvironmentConfigLock } from "./transient.ts";
 import { uploadDeployTarball } from "./Up.ts";
 import { attachVolumeToService, listServiceVolumes } from "./Volume.ts";
 
+export {
+  ServiceImageUpdatesInvalid,
+  ServiceImageUpdatesNotApplied,
+} from "./ServiceImageUpdates.ts";
 export { ServiceRegionNotApplied } from "./ServiceRegion.ts";
 
 const serviceFields = <E>(service: Query<RailwayService, E>) => ({
@@ -1055,6 +1060,18 @@ export const ServiceProvider = () =>
           }
           const name = yield* resolveName(id, props.name, output?.name);
           const source = yield* resolveRailwayServiceSource(props);
+          // Image update policy belongs to `source.image`. `main`, `context`
+          // and `repo` services have no image source to update, so fail
+          // before any cloud call instead of writing a policy Railway ignores.
+          if (props.imageUpdates !== undefined) {
+            if (source.mode !== "image") {
+              return yield* new ServiceSourceInvalid({
+                message:
+                  "Railway.Service `imageUpdates` applies only to a service that runs a public image (`image` without `main`, `context` or `repo`).",
+              });
+            }
+            yield* validateImageUpdates(props.imageUpdates);
+          }
           const hostedMain = source.mode === "main" ? source.main : undefined;
           const localContext: RailwayLocalContextSource | undefined =
             source.mode === "context" ? source : undefined;
@@ -1284,6 +1301,15 @@ export const ServiceProvider = () =>
             serviceId: current.id,
             enabled: props.autoUpdates,
           });
+
+          if (props.imageUpdates !== undefined) {
+            yield* syncServiceImageUpdates({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              desired: props.imageUpdates,
+            });
+          }
 
           const envChanged = yield* syncEnv({
             projectId,
