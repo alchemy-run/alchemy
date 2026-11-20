@@ -235,24 +235,16 @@ const withDceDefault = (outputOptions?: rolldown.OutputOptions): rolldown.Output
 const PACKAGE_STORES = ["/node_modules/.pnpm/", "/node_modules/.bun/"];
 
 /**
- * A source's path in a source map as rolldown writes it, from the map's own
- * directory, with the two parts that depend on the machine replaced:
+ * Makes a source map path the same on every machine, so the bundle hash
+ * (which covers the map) doesn't change between CI jobs.
  *
- * - a dependency in a package manager's store is named as if the store sat in
- *   the bundle `cwd`. A store outside the project (a CI cache, a global
- *   store) otherwise puts its own location into the map;
- * - a module that is not a file (a plugin's `builtin:…` id) keeps its own
- *   name. Rolldown resolves such an id like a path, against the directory the
- *   process was started in, so only a path right below that directory that
- *   names no file counts: a colon in a real directory's name leaves the path
- *   alone.
+ * - A dependency in a pnpm/bun store is written as if the store were inside
+ *   `cwd`, wherever the store really is.
+ * - A plugin's virtual module (`builtin:…`) keeps just its id. Rolldown puts
+ *   the process directory in front of it; a path that exists on disk is a
+ *   real file and is left alone.
  *
- * Every other source keeps rolldown's path, so whatever reads the map from
- * where it sits still finds a project file. A store dependency's new path is
- * a name only; unless `sourcemapExcludeSources` is set, the map's
- * `sourcesContent` still carries its source. The bundle hash covers the map:
- * without this the same sources built in another CI job hashed differently
- * and every bundle was deployed again.
+ * Every other path is kept as rolldown wrote it.
  */
 const stableSourcePath =
   (cwd: string) =>
