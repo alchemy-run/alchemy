@@ -454,6 +454,8 @@ test.provider(
           return { worker: yield* UpgradeSharedNextWorker };
         }),
       );
+      expect(yield* call(url, "/Billing/state/a-1")).toEqual({ owner: "sam" });
+      expect(yield* call(url, "/Billing/owners/a-1")).toEqual({ owner: "sam" });
       // Every class but the saga's is gone; the saga's may wait one more deploy, until a
       // pass that moved all of its objects is far enough from an earlier one.
       expect(Object.keys(yield* doBindings(scriptName))).toEqual(

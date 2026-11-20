@@ -707,7 +707,9 @@ const migrateModel = Effect.fn(function* ({
       });
   }
   const total = pages.reduce((sum, page) => sum + page.ids.length, 0);
-  yield* phase(`listed ${total} objects of ${live.length} classes`);
+  yield* phase(
+    `listed ${total} objects of ${live.length} classes (${live.map(({ className }) => `${className}: ${counts.get(className)}`).join(", ")})`,
+  );
 
   /** Start instances, a hundred per call; one started before is found started. */
   const create = (instances: ReadonlyArray<{ readonly id: string; readonly params: object }>) =>

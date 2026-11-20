@@ -5659,11 +5659,16 @@ export const LiveWorkerProvider = () =>
               existingSettings,
             );
 
+          /** The classes the script has, as its settings read before any upload. */
+          const had = hostedClasses(existingSettings?.bindings, [], name);
           /** Upload the Worker without the Durable Object classes in `dropped`. */
           const upload = (dropped: ReadonlySet<string>, settings: typeof existingSettings) =>
             Effect.gen(function* () {
-              // The build planned with every class: build again without the dropped ones.
-              if (dropped.size > 0) {
+              // The build planned with every class: build again without the ones this upload
+              // deletes, which Cloudflare refuses while the code still exports them. A class
+              // the Worker never had stays in the build as an export nothing binds, so a
+              // Worker with nothing left to retire builds once.
+              if ([...dropped].some((className) => had.has(className))) {
                 const artifacts = yield* Effect.serviceOption(Artifacts);
                 if (Option.isSome(artifacts)) yield* artifacts.value.delete("build");
               }
@@ -5682,12 +5687,12 @@ export const LiveWorkerProvider = () =>
           // Right after the upload that deleted them, the settings can still answer for
           // the version before it: this Worker's last deploy left none of them, so read
           // again until they are gone, a few times.
-          const had = output?.durableObjectNamespaces;
+          const kept = output?.durableObjectNamespaces;
           const stale = (settings: typeof existingSettings) =>
-            had !== undefined &&
+            kept !== undefined &&
             retiring.some(
               ({ className }) =>
-                !(className in had) && hostedClasses(settings?.bindings, [], name).has(className),
+                !(className in kept) && hostedClasses(settings?.bindings, [], name).has(className),
             );
           const observed = stale(existingSettings)
             ? yield* getScriptSettings(accountId, name, dispatchNamespace).pipe(
