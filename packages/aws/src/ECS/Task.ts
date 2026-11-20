@@ -3,7 +3,7 @@ import * as ecr from "@distilled.cloud/aws/ecr";
 import * as ecs from "@distilled.cloud/aws/ecs";
 import * as iam from "@distilled.cloud/aws/iam";
 import { Region } from "@distilled.cloud/aws/Region";
-import { isResolved } from "alchemy/Diff";
+import { isResolved, stripEffects } from "alchemy/Diff";
 import {
   checkMountSupport,
   collectMountCapabilities,
@@ -1405,7 +1405,16 @@ export const TaskProvider = () =>
           "logGroupArn",
           "taskFamily",
         ],
-        diff: Effect.fn(function* ({ id, olds, news: declared, output, newBindings }) {
+        diff: Effect.fn(function* ({ id, olds, news: desired, output, newBindings }) {
+          // Effect-native runtime exports remain unevaluated during planning.
+          // Their identity is represented by the image hash, so they must not
+          // prevent source changes from reaching the hash comparison below.
+          const declared =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? (Object.assign({}, desired, {
+                  exports: stripEffects(desired.exports),
+                }) as typeof desired)
+              : desired;
           if (!isResolved(declared)) return;
           const news = isResolved(newBindings)
             ? withMountInstall(declared, yield* taskMountCapabilities(id, declared, newBindings))
