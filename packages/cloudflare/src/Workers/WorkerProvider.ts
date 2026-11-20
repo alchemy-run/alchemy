@@ -3351,6 +3351,11 @@ export const LiveWorkerProvider = () =>
         output: Worker["Attributes"] | undefined,
         session: ScopedPlanStatusSession,
         existingSettings?: workers.GetScriptScriptAndVersionSettingResponse,
+        /**
+         * Classes of this script an earlier upload deleted: the account's namespace
+         * listing can still show them for a while, and they must not be kept as exports.
+         */
+        gone?: ReadonlySet<string>,
       ) {
         news = newsWithBoundEnv(news, bindings).news;
         const { accountId } = yield* yield* CloudflareEnvironment;
@@ -3680,13 +3685,14 @@ export const LiveWorkerProvider = () =>
               binding.scriptName === undefined ||
               binding.scriptName === name),
         );
-        const observedNamespaces =
+        const observedNamespaces = (
           deletedClassCandidates.length > 0 ||
           mayTransferIn ||
           currentDoBindings.length > 0 ||
           hostedDurableObjectsBefore
             ? yield* listDurableObjectNamespaces(accountId, dispatchNamespace)
-            : [];
+            : []
+        ).filter((ns) => !(ns.script === name && gone?.has(ns.class)));
         const hosts = (
           namespaces: readonly { script: string; class: string }[],
           scriptName: string,
@@ -5681,6 +5687,12 @@ export const LiveWorkerProvider = () =>
                 output,
                 session,
                 settings,
+                // Dropped, and not on the script: deleted before, or never created.
+                new Set(
+                  [...dropped].filter(
+                    (className) => !hostedClasses(settings?.bindings, [], name).has(className),
+                  ),
+                ),
               );
             });
           // Retiring classes: their objects move out between two uploads (see `DurableObjectRetirement`).
