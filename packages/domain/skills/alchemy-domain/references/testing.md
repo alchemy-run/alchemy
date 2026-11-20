@@ -145,10 +145,12 @@ More: [Saga: Test it](https://alchemy.run/domain/saga#test-it).
 
 ### The declaration
 
-`Domain.verify(Model)` returns every definition problem that would fail the model's Layer build (missing `keyOf`, view `state` without `initial`, a policy or projection `on` an event no source emits, a stream with two writers, duplicate names, a schema with no JSON form such as `Schema.instanceOf(Foo)`, an `initial` that doesn't survive JSON). Keep one test that expects it to be empty:
+Building the model's Layer dies with a `Domain.DefinitionError` for every definition problem (missing `keyOf`, view `state` without `initial`, a policy or projection `on` an event no source emits, a stream with two writers, duplicate names, a schema with no JSON form such as `Schema.instanceOf(Foo)`, an `initial` that doesn't survive JSON). Every story builds it, so stories catch them; a model without stories keeps one test that builds it:
 
 ```ts
-it("the model is well defined", () => expect(Domain.verify(Bank)).toEqual([]));
+it.effect("the model is well defined", () =>
+  Layer.build(Bank.layer(BankHandlers)).pipe(Effect.provide(InMemory)),
+);
 ```
 
 More: [Domain Model: Check the declaration](https://alchemy.run/domain/model#check-the-declaration).
