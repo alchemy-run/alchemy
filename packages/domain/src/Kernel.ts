@@ -1038,6 +1038,7 @@ const build = (
       history: boolean,
       correlationId: string = commandId,
       trace?: Telemetry.TraceJson,
+      at?: ReadonlyArray<number | null>,
     ) {
       const stream = `${aggregate.aggregateName}/${id}`;
       const events: Array<StoredEvent> = [];
@@ -1059,7 +1060,7 @@ const build = (
           id,
           stream,
           seq: version + index + 1,
-          at: now,
+          at: typeof at?.[index] === "number" ? DateTime.makeUnsafe(at[index]) : now,
           commandId,
           correlationId,
         };
@@ -1180,6 +1181,9 @@ const build = (
           DateTime.makeUnsafe(input.now),
           input.commandId,
           true,
+          undefined,
+          undefined,
+          input.at,
         );
         return {
           state: codecs.state.encode(result.next),

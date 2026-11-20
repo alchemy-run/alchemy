@@ -992,6 +992,7 @@ const aggregateObject = (
           events,
           commandId: meta.commandId,
           now: yield* Clock.currentTimeMillis,
+          ...(meta.at === undefined ? {} : { at: meta.at }),
         });
         const receipt = {
           stream: `${kit.name}/${id}`,

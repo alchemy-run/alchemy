@@ -199,6 +199,11 @@ export type ImportResult =
 export interface ImportMeta {
   readonly commandId: string;
   readonly expectedVersion: number;
+  /**
+   * Each event's original commit time, in epoch milliseconds, by position;
+   * `null` (or no list) for the platform's current time.
+   */
+  readonly at?: ReadonlyArray<number | null>;
 }
 
 /**
@@ -241,6 +246,8 @@ export interface SeedInput {
   readonly events: ReadonlyArray<Json>;
   readonly commandId: string;
   readonly now: number;
+  /** Each event's commit time by position, overriding `now` where it isn't `null`. */
+  readonly at?: ReadonlyArray<number | null>;
 }
 
 /**

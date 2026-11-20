@@ -92,6 +92,8 @@ export declare namespace Aggregate {
   export type ScheduleOptions = AggregateModule.ScheduleOptions;
   /** Options for `client.import`: the import's command id and the version it expects. */
   export type ImportOptions = AggregateModule.ImportOptions;
+  /** One event for `client.import`: the event, or `{ event, at }` to keep its original commit time. */
+  export type Imported<Ev> = AggregateModule.Imported<Ev>;
   /** The instance type of a class: `InstanceOf<typeof NotOwner>` is `NotOwner`. */
   export type InstanceOf<C> = AggregateModule.InstanceOf<C>;
   /** Options for `MyAggregate.predict`. */

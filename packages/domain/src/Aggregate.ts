@@ -281,6 +281,13 @@ export class UnexpectedVersion extends Data.TaggedError("UnexpectedVersion")<{
 }> {}
 
 /**
+ * One event for {@link Client.import}: the event alone, stamped with the
+ * platform's current time, or the event with the time it was originally
+ * committed, which its envelope's `at` keeps.
+ */
+export type Imported<Ev> = Ev | { readonly event: Ev; readonly at: DateTime.Utc };
+
+/**
  * Options for {@link Client.import}.
  */
 export interface ImportOptions {
@@ -427,8 +434,9 @@ export interface Client<Def extends AnyDefinition> {
    * another system, without running `decide`. `evolve` folds them into the
    * state; views and projections apply them like any other events, while
    * policies and sagas never react to them. All of them are committed at
-   * once, stamped with the platform's current time and `commandId`. Wait for
-   * a projection with `Projection.caughtUp(receipt)`.
+   * once under `commandId`. Each is stamped with the platform's current
+   * time, or with its original commit time when passed as `{ event, at }`.
+   * Wait for a projection with `Projection.caughtUp(receipt)`.
    *
    * Fails with `UnexpectedVersion` when the instance is not at
    * `expectedVersion` (`0` by default, so an instance with events refuses
@@ -437,7 +445,7 @@ export interface Client<Def extends AnyDefinition> {
    */
   readonly import: (
     target: Target<Def>,
-    events: ReadonlyArray<InstanceOf<Def["events"][number]>>,
+    events: ReadonlyArray<Imported<InstanceOf<Def["events"][number]>>>,
     options: ImportOptions,
   ) => Effect.Effect<Receipt<InstanceOf<Def["events"][number]>, void>, UnexpectedVersion>;
   /**
@@ -473,7 +481,7 @@ export interface ClientImpl {
   ) => Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled>;
   readonly import: (
     target: unknown,
-    events: ReadonlyArray<{ readonly _tag: string }>,
+    events: ReadonlyArray<Imported<{ readonly _tag: string }>>,
     options: ImportOptions,
   ) => Effect.Effect<Receipt, UnexpectedVersion>;
   readonly get: (target: unknown) => Effect.Effect<unknown>;

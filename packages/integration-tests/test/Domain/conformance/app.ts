@@ -12,11 +12,17 @@
  * - `/hidden/:id?version=n` waits, server-side, until the view no client may read has folded `n` commits
  * - `/record/:id?by=n` sends `Increment`, waits for `TotalWriter.caughtUp`, then lists what it recorded
  * - `/place/:id`, `/release/:id`, `/hold/:id` place, release and read a hold
+ * - `/import/:id?n=&id=commandId&expected=&at=ms&on=echo` imports `n` events adding 1 into
+ *   the counter (or the echo), the i-th committed at `ms + i` when `at` is given;
+ *   `{ version }` or `{ rejected: tag, version }`
+ * - `/times/:id` reads when the counter's first and latest events were committed
  * - `/api` serves {@link ConformanceApi}: calls over HTTP, live reads over WebSockets
  * - `/bench/:id?shape=&n=&consistency=&fresh=&lag=` times `n` commands sent one after
  *   another through {@link LatencyApi}, from inside the front: see `latency.ts`
  */
+import type { UnexpectedVersion } from "@alchemy.run/domain";
 import * as Model from "@alchemy.run/domain/Model";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -25,14 +31,17 @@ import { One, OneView } from "./latency-model.ts";
 import {
   ConformanceApi,
   Counter,
+  CounterTimes,
   CounterTotal,
   Echo,
   Give,
   Giving,
   HiddenTotal,
   Hold,
+  Incremented,
   Increment,
   LatencyApi,
+  Mirrored,
   PlaceHold,
   Recorded,
   ReleaseHold,
@@ -44,6 +53,7 @@ export const app = Effect.gen(function* () {
   const counters = yield* Counter;
   const echoes = yield* Echo;
   const totals = yield* CounterTotal;
+  const times = yield* CounterTimes;
   const holds = yield* Hold;
   const giving = yield* Giving;
   const hidden = yield* HiddenTotal;
@@ -146,6 +156,42 @@ export const app = Effect.gen(function* () {
               })),
               Effect.catchTag("Short", (rejection) => Effect.succeed({ rejected: rejection._tag })),
             ),
+        );
+      }
+      case "import": {
+        const n = Number(url.searchParams.get("n") ?? "1");
+        const at = url.searchParams.get("at");
+        const options = {
+          commandId: url.searchParams.get("id") ?? `import:${id}`,
+          expectedVersion: Number(url.searchParams.get("expected") ?? "0"),
+        };
+        const stamped = <E>(event: E, i: number) =>
+          at === null ? event : { event, at: DateTime.makeUnsafe(Number(at) + i) };
+        const imported: Effect.Effect<{ readonly version: number }, UnexpectedVersion> =
+          url.searchParams.get("on") === "echo"
+            ? echoes.import(
+                Echo.ref(id),
+                Array.from({ length: n }, (_, i) => stamped(new Mirrored({ by: 1 }), i)),
+                options,
+              )
+            : counters.import(
+                Counter.ref(id),
+                Array.from({ length: n }, (_, i) => stamped(new Incremented({ by: 1 }), i)),
+                options,
+              );
+        return yield* HttpServerResponse.json(
+          yield* imported.pipe(
+            Effect.map((receipt) => ({ version: receipt.version })),
+            Effect.catchTag("UnexpectedVersion", (refused) =>
+              Effect.succeed({ rejected: refused._tag, version: refused.version }),
+            ),
+          ),
+        );
+      }
+      case "times": {
+        const read = yield* times.get(Counter.ref(id)).pipe(Effect.orDie);
+        return yield* HttpServerResponse.json(
+          Option.getOrElse(read, () => ({ first: 0, last: 0 })),
         );
       }
       case "counter":

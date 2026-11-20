@@ -8,6 +8,7 @@
  * engine and its durable timers, and commits atomically across instances.
  */
 import * as Domain from "@alchemy.run/domain";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -111,6 +112,20 @@ export class CounterTotal extends Domain.View("CounterTotal", {
     }),
     Taken: (view, event) => ({ ...view, total: view.total - event.by }),
     Received: (view, event) => ({ ...view, total: view.total + event.by }),
+  },
+}) {}
+
+/** When a counter's first and latest events were committed, in epoch milliseconds. */
+export class CounterTimes extends Domain.View("CounterTimes", {
+  from: [Counter],
+  key: Counter,
+  state: Schema.Struct({ first: Schema.Number, last: Schema.Number }),
+  initial: { first: 0, last: 0 },
+  evolve: {
+    Incremented: (view, _, { at }) => ({
+      first: view.first === 0 ? DateTime.toEpochMillis(at) : view.first,
+      last: DateTime.toEpochMillis(at),
+    }),
   },
 }) {}
 
@@ -282,7 +297,7 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
 export class Conformance extends Domain.Model("Conformance", {
   aggregates: [Counter, Echo, Hold, ...latencyAggregates],
   decisions: [Giving],
-  views: [CounterTotal, HiddenTotal, ...latencyViews],
+  views: [CounterTotal, CounterTimes, HiddenTotal, ...latencyViews],
   projections: [TotalWriter],
   streams: [Recorded],
   policies: [StartMirror, HoldDeadline],

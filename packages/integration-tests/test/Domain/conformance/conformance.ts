@@ -405,6 +405,50 @@ export const conformance = ({ test, url, kind, within = 30_000 }: ConformanceOpt
   );
 
   test(
+    "an import appends history once, which views and projections apply and policies ignore",
+    Effect.gen(function* () {
+      const id = fresh("import");
+      // History from another system, committed at its own times.
+      const at = Date.parse("2020-01-01T00:00:00Z");
+      type Imported = { version: number; rejected?: string };
+      expect(yield* call<Imported>(`/import/${id}?n=3&id=a&at=${at}`)).toEqual({ version: 3 });
+      // A retried import commits nothing and answers its first receipt.
+      expect(yield* call<Imported>(`/import/${id}?n=3&id=a&at=${at}`)).toEqual({ version: 3 });
+      // Another import into an instance with events is refused.
+      expect(yield* call<Imported>(`/import/${id}?n=3&id=b`)).toEqual({
+        rejected: "UnexpectedVersion",
+        version: 3,
+      });
+      // The next batch continues from the last.
+      expect(yield* call<Imported>(`/import/${id}?n=2&id=c&expected=3&at=${at + 3}`)).toEqual({
+        version: 5,
+      });
+      expect(yield* call(`/counter/${id}`)).toEqual({ total: 5 });
+      const times = yield* eventually<{ first: number; last: number }>(
+        `/times/${id}`,
+        (view) => view.last === at + 4,
+      );
+      expect(times).toEqual({ first: at, last: at + 4 });
+      // A live command after it: the projection has every imported total, then the new one.
+      expect(yield* call(`/record/${id}?by=7`)).toEqual([1, 2, 3, 4, 5, 12]);
+      // The policy reacts to the live command alone: the saga mirrors 7, not an imported 1.
+      const echo = yield* eventually<{ total: number }>(`/echo/${id}`, (e) => e.total > 0);
+      expect(echo).toEqual({ total: 7 });
+    }),
+    options,
+  );
+
+  test(
+    "an import commits more events at once than one storage write takes",
+    Effect.gen(function* () {
+      const id = fresh("bulk");
+      expect(yield* call(`/import/${id}?on=echo&n=200`)).toEqual({ version: 200 });
+      expect(yield* call(`/echo/${id}`)).toEqual({ total: 200 });
+    }),
+    options,
+  );
+
+  test(
     "a scheduled command runs when it is due",
     Effect.gen(function* () {
       const id = fresh("expire");
