@@ -387,7 +387,10 @@ export interface TerminalOptions {
   readonly captureConsole?: boolean;
 }
 
-export type NonInteractiveOptions = Pick<TerminalOptions, "stdout" | "colors" | "unicode"> & {
+export type NonInteractiveOptions = Pick<
+  TerminalOptions,
+  "stdout" | "stderr" | "colors" | "unicode"
+> & {
   /**
    * `--log-format json`: messages become log records (so the console's JSON
    * sink prints them in the run log's envelope) and views print nothing, so
@@ -411,6 +414,7 @@ const nonInteractiveFailure = (operation: string) =>
 
 export const makeNonInteractive = (options: NonInteractiveOptions = {}): Interaction["Service"] => {
   const stdout = options.stdout ?? process.stdout;
+  const stderr = options.stderr ?? process.stderr;
   const colors = options.colors ?? colorsEnabled(stdout);
   const unicode = options.unicode ?? unicodeEnabled();
   const glyphs = glyphsFor(unicode);
@@ -423,9 +427,9 @@ export const makeNonInteractive = (options: NonInteractiveOptions = {}): Interac
     alternateScreen: false,
   };
 
-  // Detect the color level for `stdout` unless the caller decided.
+  // Detect the color level for the status stream unless the caller decided.
   const style = terminalStyle(
-    options.colors === undefined ? { stream: stdout } : { colors: options.colors },
+    options.colors === undefined ? { stream: stderr } : { colors: options.colors },
   );
   const colorize = (hex: string, value: string) => style.hex(hex)(value);
   const muted = style.dim;
@@ -444,7 +448,7 @@ export const makeNonInteractive = (options: NonInteractiveOptions = {}): Interac
       ? Effect.logWithLevel(jsonLevel[variant])(text).pipe(
           Effect.annotateLogs(detail === undefined ? {} : { detail }),
         )
-      : Effect.sync(() => void stdout.write(`${statusText(variant, text, detail)}\n`));
+      : Effect.sync(() => void stderr.write(`${statusText(variant, text, detail)}\n`));
   };
 
   // Views are React layouts: load the static formatter only when one is
@@ -570,6 +574,7 @@ export const layer = (options: TerminalOptions = {}) =>
         ? layerSigil(options)
         : layerNonInteractive({
             stdout: options.stdout,
+            stderr: options.stderr,
             // Only an explicit choice: the service detects the color level
             // itself, which a resolved boolean would flatten to truecolor.
             colors: options.colors,

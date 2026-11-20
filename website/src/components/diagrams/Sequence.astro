@@ -1,0 +1,192 @@
+---
+/**
+ * `<Sequence />` — what happens, in what order, between whom. Participants
+ * across the top, time running down, one arrow per message. Use it for a
+ * protocol: a message received, hidden, then deleted or redelivered; a
+ * certificate ordered, challenged and issued; a request passing through layers.
+ *
+ *   <Sequence
+ *     actors={[
+ *       { id: "api", label: "Api", type: "producer" },
+ *       { id: "queue", label: "Jobs", type: "SQS Queue" },
+ *     ]}
+ *     steps={[
+ *       { from: "api", to: "queue", label: "SendMessage" },
+ *       { note: "hidden for 30s", over: "queue" },
+ *       { divider: "if the Worker crashes" },
+ *       { from: "queue", to: "queue", label: "visible again" },
+ *     ]}
+ *   />
+ *
+ * A step is a message (`from`, `to`, `label`, `dashed` for a reply or an event
+ * delivered later), a `note` over one or two actors, or a `divider` across all.
+ */
+import "./diagram.css";
+
+interface Actor {
+  id: string;
+  label: string;
+  type?: string;
+  tone?: "default" | "accent";
+}
+type Step =
+  | { from: string; to: string; label?: string; dashed?: boolean; tone?: "warn" }
+  | { note: string; over: string | [string, string] }
+  | { divider: string };
+interface Props {
+  actors: Actor[];
+  steps: Step[];
+  caption?: string;
+}
+
+const { actors, steps, caption } = Astro.props as Props;
+// Marker ids are per figure: a page can hold several, and a hidden layout's markers don't render.
+const uid = Math.random().toString(36).slice(2, 8);
+
+// Wrap text into lines of at most `max` characters, on spaces.
+const wrap = (text: string, max: number): string[] => {
+  const lines: string[] = [];
+  for (const word of text.split(" ")) {
+    const last = lines.at(-1);
+    if (last !== undefined && (last + " " + word).length <= max) lines[lines.length - 1] = last + " " + word;
+    else lines.push(word);
+  }
+  return lines;
+};
+
+// Two layouts: wide (desktop) and narrow (phones, squeezed to the column with
+// wrapped type lines and notes), so text keeps its size. CSS shows one.
+const layout = (narrow: boolean) => {
+  const n = actors.length;
+  const FIT = 318;
+  const WIDE_BOX = Math.max(132, ...actors.map((a) => Math.max(a.label.length * 8, (a.type ?? "").length * 6.6) + 20));
+  const BOX_W = narrow ? Math.min(WIDE_BOX, Math.max(...actors.map((a) => a.label.length * 8 + 14)), (FIT - (n - 1) * 8) / n) : WIDE_BOX;
+  const typeLines = actors.map((a) => (a.type ? (narrow ? wrap(a.type, Math.max(6, Math.floor((BOX_W - 8) / 6.6))) : [a.type]) : []));
+  const labelLines = actors.map((a) => (narrow ? wrap(a.label, Math.max(4, Math.floor((BOX_W - 6) / 8))) : [a.label]));
+  const maxLines = Math.max(0, ...typeLines.map((l) => l.length));
+  const maxLabel = Math.max(...labelLines.map((l) => l.length));
+  const BOX_H = 30 + (maxLabel - 1) * 15 + maxLines * 13;
+  const COL = narrow ? (n > 1 ? (FIT - BOX_W) / (n - 1) : 0) : BOX_W + 36;
+  const ROW = 40;
+  const PAD = narrow ? 2 : 16;
+  const col = new Map(actors.map((a, i) => [a.id, PAD + BOX_W / 2 + i * COL]));
+  const W = PAD * 2 + BOX_W + (n - 1) * COL;
+  let y = PAD + BOX_H + 26;
+  const drawn = steps.map((s) => {
+    const top = y;
+    if ("divider" in s) {
+      y += ROW;
+      return { kind: "divider" as const, y: top + 8, text: s.divider };
+    }
+    if ("note" in s) {
+      const ids = Array.isArray(s.over) ? s.over : [s.over, s.over];
+      const xs = ids.map((id) => col.get(id)!);
+      const mid = (Math.min(...xs) + Math.max(...xs)) / 2;
+      const lines = narrow ? wrap(s.note, Math.floor((FIT - 16) / 6.6)) : [s.note];
+      const half = Math.min(narrow ? FIT / 2 : Infinity, Math.max((Math.max(...xs) - Math.min(...xs)) / 2 + 58, (Math.max(...lines.map((l) => l.length)) * 6.6) / 2 + 12));
+      const x0 = narrow ? Math.max(PAD, Math.min(mid - half, W - PAD - 2 * half)) : mid - half;
+      y += ROW - 4 + (lines.length - 1) * 14;
+      return { kind: "note" as const, x: x0, w: 2 * half, y: top - 12, lines };
+    }
+    const x1 = col.get(s.from)!;
+    const x2 = col.get(s.to)!;
+    if (x1 === x2) {
+      y += ROW + 8;
+      const left = narrow && x1 + 42 + (s.label?.length ?? 0) * 6.6 > W;
+      return { kind: "self" as const, x: x1, y: top, left, ...s };
+    }
+    y += ROW;
+    const w = (s.label?.length ?? 0) * 6.6;
+    const lx = narrow ? Math.max(PAD + w / 2, Math.min((x1 + x2) / 2, W - PAD - w / 2)) : (x1 + x2) / 2;
+    return { kind: "msg" as const, x1, x2, lx, y: top, ...s };
+  });
+  const H = y + 4;
+  // Notes and loop labels can reach past the outer lifelines; widen the view to fit them.
+  const extents = drawn.flatMap((d) =>
+    d.kind === "note" ? [d.x, d.x + d.w] : d.kind === "self" ? (d.left ? [d.x - 42 - (d.label?.length ?? 0) * 6.6 - 8] : [d.x + 42 + (d.label?.length ?? 0) * 6.6 + 8]) : [],
+  );
+  const VX = Math.min(0, ...extents.map((x) => x - 4));
+  const VW = Math.max(W, ...extents.map((x) => x + 4)) - VX;
+  return { narrow, BOX_W, BOX_H, PAD, col, typeLines, labelLines, maxLabel, drawn, H, VX, VW };
+};
+const layouts = [layout(false), layout(true)];
+---
+
+<figure class="alc-fig not-content" data-nosnippet>
+  <div class="alc-fig__panel">
+  {layouts.map(({ narrow, BOX_W, BOX_H, PAD, col, typeLines, labelLines, maxLabel, drawn, H, VX, VW }) => (
+  <svg class:list={["alc-fig__svg", narrow ? "alc-fig__svg--narrow" : "alc-fig__svg--wide"]} viewBox={`${VX} 0 ${VW} ${H}`} style={`max-width: ${Math.round(VW * 1.15)}px`} role="img" aria-label={caption ?? "Sequence"}>
+    <defs>
+      <marker id={`alc-seq-arrow${narrow ? "-n" : ""}-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-accent)" />
+      </marker>
+      <marker id={`alc-seq-arrow-warn${narrow ? "-n" : ""}-${uid}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--alc-warn)" />
+      </marker>
+    </defs>
+    {
+      actors.map((a, i) => {
+        const x = col.get(a.id)!;
+        const lines = typeLines[i]!;
+        return (
+          <g>
+            <line x1={x} y1={PAD + BOX_H} x2={x} y2={H - 4} class="alc-fig__line alc-fig__line--muted alc-fig__line--dashed" />
+            <rect x={x - BOX_W / 2} y={PAD} width={BOX_W} height={BOX_H} rx="8" class:list={["alc-fig__box", a.tone === "accent" && "alc-fig__box--accent"]} />
+            {labelLines[i]!.map((line, j) => (
+              <text x={x} y={PAD + (lines.length ? 20 : BOX_H / 2 + 5 - (labelLines[i]!.length - 1) * 7.5) + j * 15} text-anchor="middle" class="alc-fig__label">{line}</text>
+            ))}
+            {lines.map((line, j) => (
+              <text x={x} y={PAD + 35 + (maxLabel - 1) * 15 + j * 13} text-anchor="middle" class="alc-fig__type">{line}</text>
+            ))}
+          </g>
+        );
+      })
+    }
+    {
+      drawn.map((d) => {
+        if (d.kind === "divider")
+          return (
+            <g>
+              <line x1={VX + PAD} y1={d.y} x2={VX + VW - PAD} y2={d.y} class="alc-fig__line alc-fig__line--muted alc-fig__line--dashed" />
+              <rect x={PAD} y={d.y - 9} width={d.text.length * 6.7 + 12} height="18" rx="4" class="alc-fig__label-bg" />
+              <text x={PAD + 6} y={d.y + 4} class="alc-fig__strong">{d.text}</text>
+            </g>
+          );
+        if (d.kind === "note")
+          return (
+            <g>
+              <rect x={d.x} y={d.y} width={d.w} height={10 + d.lines.length * 14} rx="5" class="alc-fig__box alc-fig__box--muted" style="fill: var(--alc-bg-elev-1)" />
+              {d.lines.map((line, j) => (
+                <text x={d.x + d.w / 2} y={d.y + 16 + j * 14} text-anchor="middle" class="alc-fig__small">{line}</text>
+              ))}
+            </g>
+          );
+        const warn = d.tone === "warn";
+        const cls = ["alc-fig__line", d.dashed && "alc-fig__line--dashed", warn && "alc-fig__line--warn"];
+        const marker = `url(#alc-seq-arrow${warn ? "-warn" : ""}${narrow ? "-n" : ""}-${uid})`;
+        if (d.kind === "self")
+          return (
+            <g>
+              <path d={d.left ? `M ${d.x} ${d.y} h -34 v 22 h 28` : `M ${d.x} ${d.y} h 34 v 22 h -28`} class:list={cls} marker-end={marker} />
+              {d.label && <text x={d.left ? d.x - 42 : d.x + 42} y={d.y + 15} text-anchor={d.left ? "end" : "start"} class="alc-fig__small">{d.label}</text>}
+            </g>
+          );
+        const dir = d.x2 > d.x1 ? 1 : -1;
+        return (
+          <g>
+            <line x1={d.x1} y1={d.y} x2={d.x2 - dir * 6} y2={d.y} class:list={cls} marker-end={marker} />
+            {d.label && (
+              <>
+                <rect x={d.lx - d.label.length * 3.3 - 4} y={d.y - 19} width={d.label.length * 6.6 + 8} height="15" rx="3" class="alc-fig__label-bg" />
+                <text x={d.lx} y={d.y - 7} text-anchor="middle" class="alc-fig__small">{d.label}</text>
+              </>
+            )}
+          </g>
+        );
+      })
+    }
+  </svg>
+  ))}
+  </div>
+  {caption && <figcaption class="alc-fig__caption">{caption}</figcaption>}
+</figure>

@@ -66,8 +66,20 @@ export interface CodeInterpreter extends Resource<
      * Current status of the code interpreter (e.g. `READY`).
      */
     status: string;
-  }
+  },
+  never,
+  undefined,
+  CodeInterpreterLookup
 > {}
+
+/**
+ * Props for {@link CodeInterpreter.lookup}: find a code interpreter this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CodeInterpreterLookup {
+  /** The id of the existing code interpreter. */
+  codeInterpreterId: string;
+}
 
 /**
  * A custom Amazon Bedrock AgentCore Code Interpreter — an isolated sandbox
@@ -114,6 +126,16 @@ export interface CodeInterpreter extends Resource<
  *     return HttpServerResponse.json({ output: Array.from(output) });
  *   }),
  * };
+ * ```
+ *
+ * ### Looking up an existing code interpreter
+ * `CodeInterpreter.lookup` references a code interpreter Alchemy doesn't manage (created in the
+ * console or by another stack), found by `codeInterpreterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing code interpreter
+ * ```typescript
+ * const existing = AWS.BedrockAgentCore.CodeInterpreter.lookup({ codeInterpreterId: "..." });
  * ```
  *
  * @resource
@@ -175,6 +197,13 @@ export const CodeInterpreterProvider = () =>
             );
             return hydrated.filter((c) => c !== undefined).map(toAttributes);
           }),
+
+        lookup: Effect.fn(function* ({ codeInterpreterId }) {
+          const ci = yield* getLiveOrUndefined(codeInterpreterId);
+          if (ci === undefined) return undefined;
+          const attrs = toAttributes(ci);
+          return attrs;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const ci = output?.codeInterpreterId

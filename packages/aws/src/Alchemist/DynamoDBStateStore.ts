@@ -12,13 +12,23 @@ import {
   createStateTableName,
   dynamoDBState,
   provisionStateTable,
+  stateTableCustomerKey,
   stateTableExists,
 } from "../StateStore/DynamoDBState.ts";
+import {
+  createStateKeyAlias,
+  ensureStateKey,
+  keepStateKey,
+  stateKeyArn,
+} from "../StateStore/Key.ts";
 import { provisionStateBucket, stateBucketExists, stateEnvironment } from "../StateStore/State.ts";
 
 /**
- * Ensure a state table and its overflow bucket (by default the account's in
- * this region), with the settings first use would give them.
+ * Ensure a state table, its overflow bucket and its KMS key (by default the
+ * account's in this region), with the settings first use would give them.
+ * An existing table and bucket are moved to SSE-KMS under the key. A table
+ * already under a customer-managed key of its own keeps that key, as it does
+ * on first use, and gets no other.
  */
 const bootstrapStateTable = Effect.fn("AWS.state.bootstrap")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
@@ -26,10 +36,19 @@ const bootstrapStateTable = Effect.fn("AWS.state.bootstrap")(function* (name?: s
   const tableName = createStateTableName(name);
   const bucketName = createOverflowBucketName(accountId, region, name);
   const existed = yield* stateTableExists(tableName);
-  yield* provisionStateTable(tableName);
+  const alias = createStateKeyAlias(name);
+  const [customerKey, ownKey] = yield* Effect.all(
+    [stateTableCustomerKey(tableName), stateKeyArn(alias)],
+    { concurrency: 2 },
+  );
+  const keyArn =
+    customerKey !== undefined && customerKey !== ownKey
+      ? customerKey
+      : yield* ensureStateKey(alias);
+  yield* provisionStateTable(tableName, keyArn);
   // Provisioned ahead too, so a record that overflows mid-deploy in CI
   // does not need to create it.
-  yield* provisionStateBucket(bucketName, region);
+  yield* provisionStateBucket(bucketName, region, keyArn);
   return { accountId, region, tableName, existed };
 });
 
@@ -37,7 +56,8 @@ const bootstrapStateTable = Effect.fn("AWS.state.bootstrap")(function* (name?: s
  * Delete a state table, lifting its deletion protection, and empty and
  * delete its overflow bucket, every object version included. The S3 store it
  * replaced is kept: `--backend aws-s3` tears that down. A missing table or
- * bucket is not an error.
+ * bucket is not an error. The store's KMS key is kept: see
+ * {@link keepStateKey}.
  */
 const teardownStateTable = Effect.fn("AWS.state.teardownTable")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
@@ -92,18 +112,25 @@ const teardownStateTable = Effect.fn("AWS.state.teardownTable")(function* (name?
     );
     deleted.push(bucketName);
   }
+  yield* keepStateKey(createStateKeyAlias(name));
   return { deleted };
 });
 
 /** The AWS environment of the profile core runs the operation under. */
 const environment = stateEnvironment();
 
+/** The DynamoDB state store's options. */
+export interface DynamoDBStateStoreOptions {
+  /** A store other than the default, by name. */
+  readonly name?: string;
+}
+
 /**
  * The DynamoDB state store's lifecycle, for `Alchemist.State` and
  * `alchemy state`. The store also creates its table on first use, so
  * bootstrapping is only needed to provision it ahead of time.
  */
-export const lifecycle: StateStoreLifecycle = {
+export const lifecycle: StateStoreLifecycle<DynamoDBStateStoreOptions> = {
   bootstrap: ({ name }) =>
     bootstrapStateTable(name).pipe(
       Effect.map(({ tableName, accountId, region, existed }) => ({
@@ -117,7 +144,7 @@ export const lifecycle: StateStoreLifecycle = {
 };
 
 /** The state store AWS contributes, as `--backend aws`. */
-export const stateStore: StateStoreImpl = {
-  layer: (options) => dynamoDBState(options),
+export const stateStore: StateStoreImpl<DynamoDBStateStoreOptions> = {
+  layer: (options) => dynamoDBState({ name: options?.name }),
   lifecycle,
 };

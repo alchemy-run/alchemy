@@ -191,4 +191,27 @@ describe("Domain ExternalSystem", { tags: ["unit", "local"] }, () => {
       });
     }),
   );
+
+  it.effect(
+    "refuses an operation named annotations, which the class keeps its annotations in",
+    () =>
+      Effect.gen(function* () {
+        class Clash extends Domain.ExternalSystem(
+          "Clash",
+          {
+            // @ts-expect-error annotations is the class's own static
+            annotations: {},
+          },
+          { description: "Clashes." },
+        ) {}
+        expect(Clash.annotations).toEqual({ description: "Clashes." });
+        const exit = yield* Effect.exit(
+          Layer.build(Clash.toLayer(Effect.succeed({} as never))).pipe(Effect.scoped),
+        );
+        expect(defectOf(exit)).toMatchObject({
+          _tag: "DefinitionError",
+          reason: { _tag: "ReservedOperation", system: "Clash", operation: "annotations" },
+        });
+      }),
+  );
 });

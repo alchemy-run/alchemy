@@ -1,6 +1,7 @@
 import { assert, describe, expect, it, layer } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Command from "effect/cli/Command";
+import * as Flag from "effect/cli/Flag";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -427,6 +428,21 @@ describe("Alchemist.State lifecycle", { tags: ["unit", "local"] }, () =>
       }),
     );
 
+    it.effect("rejects an option the backend doesn't declare", () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          Alchemist.State.bootstrap({
+            type: "provider",
+            backend: "aws",
+            domain: "state.example.com",
+          }),
+        );
+        expect(contributionErrorMessage(error)).toBe(
+          "Unknown option 'domain' for state backend 'aws'. Available: name.",
+        );
+      }),
+    );
+
     it.effect("rejects an operation the backend doesn't have", () =>
       Effect.gen(function* () {
         const error = yield* Effect.flip(
@@ -485,5 +501,36 @@ describe("Contributions contract", { tags: ["unit", "local"] }, () => {
       ),
     });
     expect(provider.name).toBe("needs-private-client");
+  });
+
+  it("checks a state store's flags against the options it takes", () => {
+    const load = Effect.succeed(
+      {} as Contributions.StateStoreImpl<{ readonly name?: string; readonly limit?: string }>,
+    );
+    const provider = Contributions.make({
+      name: "checked-store",
+      stateStores: {
+        ok: { description: "Takes --name", flags: { name: Flag.String("name") }, load },
+        undeclared: {
+          description: "A flag for an option the store doesn't take",
+          // @ts-expect-error the store's options have no `region`.
+          flags: { region: Flag.String("region") },
+          load,
+        },
+        reserved: {
+          description: "A flag under a key the options are spread next to",
+          // @ts-expect-error `limit` is `logs`' own input.
+          flags: { limit: Flag.String("limit") },
+          load,
+        },
+        mistyped: {
+          description: "A flag whose value the store doesn't accept",
+          flags: { name: Flag.Int("name") },
+          // @ts-expect-error the store takes `name` as a string.
+          load,
+        },
+      },
+    });
+    expect(Object.keys(provider.stateStores)).toEqual(["ok", "undeclared", "reserved", "mistyped"]);
   });
 });

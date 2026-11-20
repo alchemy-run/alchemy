@@ -51,8 +51,7 @@ import * as Option from "effect/Option";
 const BankClient = DomainFoldkit.make(CustomerApi);
 
 const send = BankClient.DepositMoney({
-  target: model.accountId,
-  input: { amount: 1_000 },
+  input: { accountId: model.accountId, amount: 1_000 },
   commandId: allocation.commandId,
 });
 const command = Command.mapMessage(send, (result) => Message.ReceivedBankResult({ result }));
@@ -61,6 +60,27 @@ const command = Command.mapMessage(send, (result) => Message.ReceivedBankResult(
 Allocate ids with `DomainFoldkit.next(model.commandIds)` and store the returned state with `modifyFields`. Declare `ReceivedBankResult` with `{ result: BankClient.Message }`. Match the result through `BankClient.Message.match`: `SucceededDepositMoney` carries the reply and receipt; `FailedDepositMoney` carries `Rejected`, `Denied`, or `Unknown`. Preserve Rejection and middleware error fields. Retry `Unknown` with the original id because the write may have committed. Command defects also produce `Unknown`.
 
 More: [Integrate with Foldkit: Derive the Commands](https://alchemy.run/domain/foldkit#derive-the-commands), [Send a command from update](https://alchemy.run/domain/foldkit#send-a-command-from-update).
+
+## Ask a query
+
+A query has no live read: `DomainFoldkit.make` gives each Api query a Command, not a Subscription.
+
+```ts
+const { commandId: requestId, commandIds } = DomainFoldkit.next(model.commandIds);
+const read = Command.mapMessage(
+  BankClient.AccountLedger({
+    input: { account: model.accountId },
+    requestId,
+    take: 5,
+    ...(after === undefined ? {} : { after }),
+  }),
+  (result) => Message.ReceivedBankResult({ result }),
+);
+```
+
+Args are `{ input, requestId, atLeast?, after?, take? }`. `SucceededAccountLedger` carries `{ requestId, result }`; a paged `result` is `{ entries, cursor }`, and `cursor` is `null` on the last page. `FailedAccountLedger` carries `Rejected`, `Denied`, `TimedOut` (only for a query with `waitsFor`: its projections did not reach `atLeast`), or `Unknown`. Keep the in-flight `requestId` in the Model and drop a reply with another id. Ask `TimedOut` and `Unknown` again with a new id: a query changes nothing. Pass a command's `receipt` as `atLeast` to read your own write. `CommandHeaders.get` receives the query name.
+
+More: [Integrate with Foldkit: Ask a query](https://alchemy.run/domain/foldkit#ask-a-query), [Query](https://alchemy.run/domain/query).
 
 ## Follow a View's state
 
@@ -128,7 +148,7 @@ More: [Observability: Trace the browser](https://alchemy.run/domain/observabilit
 - **Optimistic UI.** Send each command with a `commandId` the app chooses, and show it as pending. The view event carrying that `commandId` confirms it, and a typed rejection marks it rejected. Show the server's balance plus every unacknowledged line, so nothing is ever rolled back.
 - **Offline intents.** Record what the user asked for, never facts the server owns. Queue unreachable sends in order and persist them to `localStorage`. Deliver them when back online, deduplicated by `commandId`. A conflict is just a typed rejection.
 
-- **Predicted outcome.** `MyAggregate.predict(state, command, { id, now, context })` runs the aggregate's own `decide` and `evolve`: `Accepted` (events, envelopes, next state), `Rejected` (the same rejection the server returns), or `Unpredictable` (only the server can tell: `decide` suspended, died, or broke its declaration). `MyView.evolve(state, { name, event, source, envelope })` folds a predicted event like the server's view. `context` is required, by type, for whatever the command's middleware provides: build it from a client-side Layer of the same services (`yield* Layer.build(ClientSession)`). Still confirm from the stream.
+- **Predicted outcome.** `MyAggregate.predict(state, command, { now, context })` runs the aggregate's own `decide` and `evolve`: `Accepted` (events, envelopes, next state), `Rejected` (the same rejection the server returns), or `Unpredictable` (only the server can tell: `decide` suspended, died, or broke its declaration). `MyView.evolve(state, { name, event, source, envelope })` folds a predicted event like the server's view. `context` is required, by type, for whatever the command's middleware provides: build it from a client-side Layer of the same services (`yield* Layer.build(ClientSession)`). Still confirm from the stream.
 
 A local mirror of server aggregates, or local-authority sync, isn't supported. It needs a sync engine or CRDTs.
 

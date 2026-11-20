@@ -6,6 +6,7 @@ import * as kafka from "@distilled.cloud/gcp/managedkafka_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withKafkaClusterSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -78,6 +79,14 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { cluster, acl };
         }),
+      );
+      yield* expectFound(
+        GCP.ManagedKafka.ClustersAcl.lookup({
+          aclId: created.acl.aclId,
+          location: created.acl.location,
+          cluster: created.acl.cluster,
+        }),
+        created.acl,
       );
 
       expect(created.acl.name).toContain("/acls/");

@@ -12,6 +12,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import { retryConcurrentModification, syncAppSyncTags, tagRecord } from "./common.ts";
 
@@ -210,8 +211,23 @@ export interface GraphqlApi extends Resource<
     authenticationType: AuthenticationType;
   },
   never,
-  Providers
+  Providers,
+  GraphqlApiLookup
 > {}
+
+/**
+ * Props for {@link GraphqlApi.lookup}: find a GraphQL API this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type GraphqlApiLookup =
+  | {
+      /** The id of the existing API. */
+      apiId: string;
+    }
+  | {
+      /** The API's name; fails when several APIs share it. */
+      name: string;
+    };
 
 /**
  * An AWS AppSync GraphQL API.
@@ -283,6 +299,17 @@ export interface GraphqlApi extends Resource<
  * });
  * // in APPSYNC_JS resolver code:
  * //   export function response(ctx) { return ctx.env.STAGE; }
+ * ```
+ *
+ * ### Looking up an existing GraphQL API
+ * `GraphqlApi.lookup` references a GraphQL API Alchemy doesn't manage (created in the
+ * console or by another stack), found by `apiId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a data source to an existing API
+ * ```typescript
+ * const api = AWS.AppSync.GraphqlApi.lookup({ name: "orders" });
+ * const apiId = api.apiId;
  * ```
  *
  * @resource
@@ -558,6 +585,21 @@ export const GraphqlApiProvider = () =>
               .filter((api) => api.apiId != null)
               .map(toAttributes);
           }),
+
+        lookup: Effect.fn(function* (props) {
+          const api =
+            "apiId" in props
+              ? yield* getApiSafe(props.apiId)
+              : yield* single(
+                  "AWS.AppSync.GraphqlApi",
+                  props.name,
+                  Array.from(yield* appsync.listGraphqlApis.pages({}).pipe(Stream.runCollect))
+                    .flatMap((page) => page.graphqlApis ?? [])
+                    .filter((api) => api.name === props.name),
+                  (api) => api.apiId,
+                );
+          return api?.apiId == null ? undefined : toAttributes(api);
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const api =

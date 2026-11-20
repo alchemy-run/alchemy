@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -154,8 +155,34 @@ export type EndpointPolicy = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  EndpointPolicyLookup
 >;
+
+/**
+ * Props for {@link EndpointPolicy.lookup}: find an endpoint policy this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface EndpointPolicyLookup {
+  /**
+   * EndpointPolicy id (the `{endpointPolicy}` segment of
+   * `projects/{project}
+   * /locations/{location}/endpointPolicies/{endpointPolicy}`). Must be 1-63
+   * characters and not start with a number.
+   */
+  endpointPolicyId: string;
+  /**
+   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Services EndpointPolicy — applies TLS and authorization
@@ -194,6 +221,19 @@ export type EndpointPolicy = Resource<
  *       metadataLabels: [{ labelName: "app", labelValue: "web" }],
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing endpoint policy
+ * `EndpointPolicy.lookup` references an endpoint policy Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * endpoint policy.
+ *
+ * **Example:** Reference an existing endpoint policy
+ * ```typescript
+ * const endpointPolicy = GCP.NetworkServices.EndpointPolicy.lookup({
+ *   endpointPolicyId: "my-endpoint-policy",
  * });
  * ```
  *
@@ -286,6 +326,15 @@ export const EndpointPolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ endpointPolicyId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, endpointPolicyId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

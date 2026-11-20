@@ -66,8 +66,18 @@ export interface Database extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DatabaseLookup
 > {}
+
+/**
+ * Props for {@link Database.lookup}: find a database this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DatabaseLookup {
+  /** The database name of the existing database. */
+  databaseName: string;
+}
 
 /**
  * An Amazon Timestream for LiveAnalytics database — the top-level container for
@@ -96,6 +106,16 @@ export interface Database extends Resource<
  *   kmsKeyId: "alias/my-timestream-key",
  *   tags: { Environment: "production" },
  * });
+ * ```
+ *
+ * ### Looking up an existing database
+ * `Database.lookup` references a database Alchemy doesn't manage (created in the
+ * console or by another stack), found by `databaseName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing database
+ * ```typescript
+ * const existing = AWS.Timestream.Database.lookup({ databaseName: "my-database" });
  * ```
  *
  * @resource
@@ -166,6 +186,11 @@ export const DatabaseProvider = () =>
             });
             return hydrated.filter((attrs): attrs is Database["Attributes"] => attrs !== undefined);
           }),
+        lookup: Effect.fn(function* ({ databaseName }) {
+          const state = yield* readDatabase(databaseName);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const databaseName = output?.databaseName ?? (yield* createDatabaseName(id, olds ?? {}));
           const state = yield* readDatabase(databaseName);

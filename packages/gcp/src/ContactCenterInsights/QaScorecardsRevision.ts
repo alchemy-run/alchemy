@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   hasOwnershipMarker,
@@ -57,8 +58,31 @@ export type QaScorecardsRevision = Resource<
     createTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  QaScorecardsRevisionLookup
 >;
+
+/**
+ * Props for {@link QaScorecardsRevision.lookup}: find a qa scorecards
+ * revision this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface QaScorecardsRevisionLookup {
+  /**
+   * Revision id (the `{revision}` segment). Must match `^[a-z0-9-]{4,64}$`.
+   */
+  qaScorecardRevisionId: string;
+  /**
+   * Parent QaScorecard resource name
+   * (`projects/{project}/locations/{location}/qaScorecards/{qa_scorecard}`).
+   */
+  parent: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A revision of a Contact Center AI Insights QA scorecard. Changing a
@@ -79,6 +103,20 @@ export type QaScorecardsRevision = Resource<
  *   "V1",
  *   { parent: card.name },
  * );
+ * ```
+ *
+ * ### Looking up an existing qa scorecards revision
+ * `QaScorecardsRevision.lookup` references a qa scorecards revision Alchemy
+ * doesn't manage (created in the console or by another stack). It is read
+ * during plan/deploy, never created, updated or deleted, and binds like a
+ * declared qa scorecards revision.
+ *
+ * **Example:** Reference an existing qa scorecards revision
+ * ```typescript
+ * const qaScorecardsRevision = GCP.ContactCenterInsights.QaScorecardsRevision.lookup({
+ *   qaScorecardRevisionId: "my-qa-scorecard-revision",
+ *   parent: "my-parent",
+ * });
  * ```
  *
  * @resource
@@ -176,6 +214,14 @@ export const QaScorecardsRevisionProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ qaScorecardRevisionId, parent }) {
+      const env = yield* GcpEnvironment.current;
+      const name = parent !== undefined ? resourceName(parent, qaScorecardRevisionId) : "";
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

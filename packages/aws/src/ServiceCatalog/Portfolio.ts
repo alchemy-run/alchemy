@@ -50,8 +50,23 @@ export interface Portfolio extends Resource<
     portfolioName: string;
   },
   never,
-  Providers
+  Providers,
+  PortfolioLookup
 > {}
+
+/**
+ * Props for {@link Portfolio.lookup}: find a portfolio this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type PortfolioLookup =
+  | {
+      /** The id of the existing portfolio. */
+      portfolioId: string;
+    }
+  | {
+      /** The display name of the existing portfolio. */
+      displayName: string;
+    };
 
 /**
  * An AWS Service Catalog portfolio — a container that organizes products
@@ -93,6 +108,17 @@ export interface Portfolio extends Resource<
  *   portfolioId: portfolio.portfolioId,
  *   productId: product.productId,
  * });
+ * ```
+ *
+ * ### Looking up an existing portfolio
+ * `Portfolio.lookup` references a portfolio Alchemy doesn't manage (created in the
+ * console or by another stack), found by `portfolioId` or `displayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Add a product to an existing portfolio
+ * ```typescript
+ * const platform = AWS.ServiceCatalog.Portfolio.lookup({ displayName: "Platform" });
+ * const portfolioId = platform.portfolioId;
  * ```
  *
  * @resource
@@ -146,6 +172,20 @@ export const PortfolioProvider = () =>
                 })),
             ),
           ),
+        lookup: Effect.fn(function* (props) {
+          const portfolioId =
+            "portfolioId" in props
+              ? props.portfolioId
+              : (yield* findByDisplayName(props.displayName))?.Id;
+          if (portfolioId === undefined) return undefined;
+          const detail = (yield* observe(portfolioId))?.PortfolioDetail;
+          if (!detail?.Id) return undefined;
+          return {
+            portfolioId: detail.Id,
+            portfolioArn: detail.ARN!,
+            portfolioName: detail.DisplayName!,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           let portfolioId = output?.portfolioId;
           if (portfolioId === undefined) {

@@ -58,7 +58,7 @@ export const makeWriteR2HttpClient = (
       options?: PutOptions,
     ) =>
       scope.pipe(
-        Effect.flatMap(({ accountId, bucketName, cfR2Jurisdiction }) =>
+        Effect.flatMap(({ accountId, bucketName, jurisdiction }) =>
           toBody(value).pipe(
             Effect.flatMap(({ body, contentLength }) => {
               const meta = readHttpMetadata(options);
@@ -67,7 +67,7 @@ export const makeWriteR2HttpClient = (
                   accountId,
                   bucketName,
                   objectName: key,
-                  cfR2Jurisdiction,
+                  jurisdiction,
                   body,
                   contentType: meta?.contentType,
                   contentEncoding: meta?.contentEncoding,
@@ -102,13 +102,13 @@ export const makeWriteR2HttpClient = (
       )) as any,
     delete: (keys: string | string[]) =>
       scope.pipe(
-        Effect.flatMap(({ accountId, bucketName, cfR2Jurisdiction }) =>
+        Effect.flatMap(({ accountId, bucketName, jurisdiction }) =>
           Array.isArray(keys)
             ? authorize(
                 r2.deleteObjects({
                   accountId,
                   bucketName,
-                  cfR2Jurisdiction,
+                  jurisdiction,
                   body: keys,
                 }),
               ).pipe(Effect.asVoid, Effect.mapError(toR2Error))
@@ -117,7 +117,7 @@ export const makeWriteR2HttpClient = (
                   accountId,
                   bucketName,
                   objectName: keys,
-                  cfR2Jurisdiction,
+                  jurisdiction,
                 }),
               ).pipe(
                 Effect.asVoid,

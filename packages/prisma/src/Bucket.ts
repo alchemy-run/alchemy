@@ -84,8 +84,18 @@ export interface Bucket extends Resource<
     logicalId: string | null;
   },
   never,
-  Providers
+  Providers,
+  BucketLookup
 > {}
+
+/**
+ * Props for {@link Bucket.lookup}: find a bucket this stack
+ * doesn't manage by its id.
+ */
+export interface BucketLookup {
+  /** Prisma bucket id. */
+  bucketId: string;
+}
 
 /**
  * A Prisma Object Store bucket inside a Prisma project.
@@ -114,6 +124,17 @@ export interface Bucket extends Resource<
  * });
  * ```
  *
+ * ### Looking up an existing bucket
+ * `Bucket.lookup` references a bucket Alchemy doesn't manage (created in
+ * the Prisma Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ *
+ * **Example:** Mint a key for an existing bucket
+ * ```typescript
+ * const assets = Prisma.Bucket.lookup({ bucketId: "bkt_cmabc123def456ghi789jkl0" });
+ * const key = yield* Prisma.BucketAccessKey("AssetsKey", { bucket: assets });
+ * ```
+ *
  * @resource
  * @product Bucket
  */
@@ -131,16 +152,21 @@ export class BucketProjectMismatchError extends Data.TaggedError("BucketProjectM
   message: string;
 }> {}
 
+export class PrismaBucketLogicalIdTaken extends Data.TaggedError("PrismaBucketLogicalIdTaken")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 const logicalIdTaken = (
   logicalId: string,
   branchId: string | null | undefined,
   projectId: string,
   cause: unknown,
 ) =>
-  new Error(
-    `Prisma bucket logical ID '${logicalId}' is already used by another bucket on ${branchId ? `branch '${branchId}'` : "the project's default branch"} in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other bucket.`,
-    { cause },
-  );
+  new PrismaBucketLogicalIdTaken({
+    message: `Prisma bucket logical ID '${logicalId}' is already used by another bucket on ${branchId ? `branch '${branchId}'` : "the project's default branch"} in project '${projectId}'. Logical IDs are unique per branch; choose a different logicalId or remove it from the other bucket.`,
+    cause,
+  });
 
 const attrsFrom = (bucket: ObservedBucket): Bucket["Attributes"] => ({
   bucketId: bucket.id,
@@ -228,6 +254,14 @@ const ProviderLive = () =>
           }
           return undefined;
         }),
+        lookup: Effect.fn(function* ({ bucketId }) {
+          const bucket = yield* getBucket({ bucketId }).pipe(
+            Effect.map((response) => response.data),
+            Effect.catchTag("NotFound", () => Effect.undefined),
+          );
+          return bucket ? attrsFrom(bucket) : undefined;
+        }),
+
         read: Effect.fn(function* ({ fqn, output, olds }) {
           const bucketId = isPrismaDevId(output?.bucketId) ? undefined : output?.bucketId;
           if (!bucketId) {

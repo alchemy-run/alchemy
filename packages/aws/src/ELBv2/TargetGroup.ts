@@ -99,8 +99,23 @@ export interface TargetGroup extends Resource<
     healthCheck?: Partial<HealthCheckSettings>;
   },
   never,
-  Providers
+  Providers,
+  TargetGroupLookup
 > {}
+
+/**
+ * Props for {@link TargetGroup.lookup}: find a target group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type TargetGroupLookup =
+  | {
+      /** The ARN of the existing target group. */
+      targetGroupArn: string;
+    }
+  | {
+      /** The name of the existing target group. */
+      targetGroupName: string;
+    };
 
 /**
  * An ELBv2 target group. A target group routes requests to one or more
@@ -148,6 +163,18 @@ export interface TargetGroup extends Resource<
  *   healthyThresholdCount: 3,
  *   unhealthyThresholdCount: 3,
  * });
+ * ```
+ *
+ * ### Looking up an existing target group
+ * `TargetGroup.lookup` references a target group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `targetGroupArn` or
+`targetGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Register a service with an existing target group
+ * ```typescript
+ * const targets = AWS.ELBv2.TargetGroup.lookup({ targetGroupName: "web" });
+ * const targetGroupArn = targets.targetGroupArn;
  * ```
  *
  * @resource
@@ -245,6 +272,27 @@ export const TargetGroupProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const described = yield* elbv2
+            .describeTargetGroups(
+              "targetGroupArn" in props
+                ? { TargetGroupArns: [props.targetGroupArn] }
+                : { Names: [props.targetGroupName] },
+            )
+            .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.undefined));
+          const tg = described?.TargetGroups?.[0];
+          if (!tg?.TargetGroupArn) return undefined;
+          const tags = yield* readElbTags(tg.TargetGroupArn);
+          return {
+            targetGroupArn: tg.TargetGroupArn as TargetGroupArn,
+            targetGroupName: tg.TargetGroupName!,
+            port: tg.Port,
+            protocol: tg.Protocol,
+            targetType: tg.TargetType!,
+            vpcId: tg.VpcId,
+            tags,
+          };
         }),
         read: Effect.fn(function* ({ olds, output }) {
           if (!output) {

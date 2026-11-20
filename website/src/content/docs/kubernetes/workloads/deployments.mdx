@@ -2,6 +2,7 @@
 title: Deployments
 description: Run a replicated server on any Kubernetes cluster with Kubernetes.Deployment. Covers names, namespaces, Service types and URLs, replicas, resources, labels, the pod template escape hatch, and Effect servers.
 ---
+import Tree from "../../../../components/diagrams/Tree.astro";
 
 [`Kubernetes.Deployment`](/providers/kubernetes/deployment) is a
 replicated server, running a container image or an HTTP server
@@ -11,6 +12,22 @@ written in Effect. One resource applies three Kubernetes objects:
 - a **Deployment** that keeps `replicas` copies of the container
   running, and
 - a **Service** that gives them one stable address.
+
+<Tree
+  nodes={[
+    { id: "ns", label: "default", type: "namespace", areas: ["svc dep sa"], phoneAreas: ["svc sa", "dep dep"], colGap: 3.5 },
+    { id: "svc", label: "api", type: "Service", parent: "ns" },
+    { id: "dep", label: "api", type: "Deployment · replicas: 2", parent: "ns" },
+    { id: "p1", label: "api-6f9d-x2", type: "Pod", parent: "dep", tone: "accent" },
+    { id: "p2", label: "api-6f9d-k8", type: "Pod", parent: "dep", tone: "accent" },
+    { id: "sa", label: "api", type: "ServiceAccount", parent: "ns" },
+  ]}
+  links={[
+    { from: "svc", to: "dep", label: "app=api" },
+    { from: "dep", to: "sa", label: "runs as" },
+  ]}
+  caption="One Kubernetes.Deployment applies three objects. The Deployment keeps two Pods running as the ServiceAccount, and the Service sends traffic to them."
+/>
 
 ```typescript
 const web = yield* Kubernetes.Deployment("Web", {
@@ -180,6 +197,26 @@ includes probes, `volumeMounts`, `envFrom`, and a sidecar. An array
 in `podTemplate` replaces the generated one wholesale, including the
 image. When a workload needs full control of its containers, write
 it as a [Manifest](/kubernetes/objects/manifests).
+
+## Choose a container runtime
+
+`runtimeClassName` picks the RuntimeClass the pods run under, the
+cluster's name for a container runtime. Use it to run pods in a
+VM-backed runtime such as gVisor or Kata Containers when the cluster
+has one installed:
+
+```typescript
+const agent = yield* Kubernetes.Deployment("Agent", {
+  cluster,
+  image: "ghcr.io/acme/agent:1",
+  port: 8080,
+  runtimeClassName: "isolated-sandbox",
+});
+```
+
+On EKS Auto Mode, `isolated-sandbox` and `confidential-sandbox` run
+each pod in its own Nitro Sandbox, a lightweight VM, with nothing to
+install. See [EKS: Run each pod in its own VM](/aws/compute/eks#run-each-pod-in-its-own-vm).
 
 ## Effect servers
 

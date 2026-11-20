@@ -1,0 +1,49 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "ubuntu:14.04",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "LABEL",
+          "line": 2,
+          "flags": []
+        },
+        {
+          "tag": "RUN",
+          "line": 4,
+          "flags": [],
+          "command": {
+            "form": "shell",
+            "script": "apt-get update \u0026\u0026 apt-get install znc -y"
+          }
+        },
+        {
+          "tag": "ADD",
+          "line": 5,
+          "flags": [],
+          "sources": [
+            "conf"
+          ],
+          "destination": "/.znc"
+        },
+        {
+          "tag": "CMD",
+          "line": 7,
+          "flags": [],
+          "command": {
+            "form": "exec",
+            "argv": [
+              "/usr/bin/znc",
+              "-f",
+              "-r"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

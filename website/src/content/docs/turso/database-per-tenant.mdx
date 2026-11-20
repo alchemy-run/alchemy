@@ -2,6 +2,7 @@
 title: Database per tenant
 description: Give each customer their own Turso database.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
 Give each customer their own database. Their data stays separate, and removing a customer is just deleting their database.
 
@@ -19,6 +20,20 @@ Add `Turso.ManageDatabasesHttp` to the Worker. The Worker gets two tokens:
 - A database token that can run SQL on every database in `Tenants`.
 
 Your own Turso API token stays on your machine.
+
+<Tree
+  nodes={[
+    { id: "w", label: "Api", type: "Worker", specs: [["API token", "create, delete"], ["DB token", "SQL on every one"]] },
+    { id: "g", label: "Tenants", type: "group" },
+    { id: "a", label: "acme", type: "database", parent: "g", tone: "accent" },
+    { id: "b", label: "globex", type: "database", parent: "g", tone: "accent" },
+    { id: "c", label: "initech", type: "created at sign-up", parent: "g", tone: "muted" },
+  ]}
+  areas={["w g"]}
+  colGap={3}
+  links={[{ from: "w", to: "g" }]}
+  caption="Each customer gets a database of its own in the Tenants group. The Worker creates and deletes them with an API token limited to the group, and queries them with one database token."
+/>
 
 ## Create a tenant
 

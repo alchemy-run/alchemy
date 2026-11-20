@@ -2,10 +2,29 @@
 title: Firestore
 description: Create a Firestore database and read and write documents from Cloud Run with typed Read, Write, and ReadWrite bindings.
 ---
+import Records from "../../../../components/diagrams/Records.astro";
 
 Firestore is a document database with no instance to size and no
 network to attach. Declare a database, bind it to your service, and
 read and write documents as plain JavaScript objects.
+
+## Documents in collections
+
+Firestore stores **documents**: small sets of fields, each at its own path. Documents live in **collections**, and a document can hold collections of its own, so a path alternates the two: `links/aB3xY7z`, `users/ana/sessions/s1`.
+
+<Records
+  title="Links · Firestore database"
+  columns={["path", "fields"]}
+  rows={[
+    ["links/aB3xY7z", "{ url: \"https://…\", clicks: 1 }"],
+    ["links/home", "{ url: \"https://…\", clicks: 42 }"],
+    ["links/q9Lm2Pd", "{ url: \"https://…\", clicks: 0 }"],
+    ["users/ana", "{ name: \"Ana\" }"],
+    ["users/ana/sessions/s1", "{ expires: 2026-12-01 }"],
+  ]}
+  query={{ label: 'list("links")', rows: [0, 1, 2], prefix: "links/" }}
+  caption="Every document has a path. Listing a collection reads the documents directly in it, and a query filters them by their fields."
+/>
 
 ## Create a database
 

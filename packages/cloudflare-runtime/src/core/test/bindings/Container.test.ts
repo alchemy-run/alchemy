@@ -44,6 +44,11 @@ export class MyContainer${index} extends DurableObject {
 
 export default {
   async fetch(request, env) {
+    // Local tools (T3 Code, VS Code port detection) probe fresh localhost
+    // servers with \`GET /\`; only the test's own path may start the container.
+    if (new URL(request.url).pathname !== "/container") {
+      return new Response("Not Found", { status: 404 });
+    }
     const id = env.MY_CONTAINER.idFromName("singleton");
     return env.MY_CONTAINER.get(id).fetch(request);
   },
@@ -268,7 +273,7 @@ const testContainer = Effect.fn(
       ],
     });
 
-    const text = yield* worker.fetchText("/");
+    const text = yield* worker.fetchText("/container");
     expect(text).toContain(options.expected);
   },
   (self, options) =>

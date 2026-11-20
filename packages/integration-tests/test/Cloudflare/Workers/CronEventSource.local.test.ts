@@ -6,7 +6,7 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
-import CronTestWorker from "./fixtures/cron/cron-worker.ts";
+import CronTestWorker, { ProvidedServiceCron } from "./fixtures/cron/cron-worker.ts";
 
 // `dev: true` runs local providers behind the RPC sidecar proxy by default,
 // matching the process topology of the real `alchemy dev` command.
@@ -55,12 +55,14 @@ test.provider(
       const url = deployed.worker.url;
       const client = yield* HttpClient.HttpClient;
 
-      // Reset the counter DO. Doubles as a readiness probe for the first
+      // Reset both counter DOs. Doubles as a readiness probe for the first
       // request against a freshly started workerd.
       yield* Effect.gen(function* () {
-        const res = yield* client.post(`${url}/reset`);
-        if (res.status !== 200) {
-          return yield* Effect.fail(new WorkerNotReady({ status: res.status }));
+        for (const counter of ["default", "provided"]) {
+          const res = yield* client.post(`${url}/reset?counter=${counter}`);
+          if (res.status !== 200) {
+            return yield* Effect.fail(new WorkerNotReady({ status: res.status }));
+          }
         }
       }).pipe(
         Effect.retry({
@@ -72,30 +74,41 @@ test.provider(
       // Trigger the fire manually. `cron` must match the registered
       // expression exactly — the runtime bridge dispatches scheduled events
       // to listeners by expression.
-      const scheduledTime = Date.now();
-      const trigger = yield* client.post(
-        `${url}/cdn-cgi/handler/scheduled?cron=${encodeURIComponent("* * * * *")}&time=${scheduledTime}`,
-      );
-      expect(trigger.status).toBe(200);
-      expect(yield* trigger.text).toBe("ok");
+      const fire = Effect.fn(function* (cron: string, scheduledTime: number) {
+        const trigger = yield* client.post(
+          `${url}/cdn-cgi/handler/scheduled?cron=${encodeURIComponent(cron)}&time=${scheduledTime}`,
+        );
+        expect(trigger.status).toBe(200);
+        expect(yield* trigger.text).toBe("ok");
+      });
 
-      // The handler records `controller.scheduledTime` on the DO; poll the
+      // Each handler records `controller.scheduledTime` on a DO; poll the
       // worker's /times route until the fire shows up (bounded).
-      const times = yield* Effect.gen(function* () {
-        const res = yield* client.get(`${url}/times`);
-        if (res.status !== 200) return [];
-        const body = (yield* res.json) as { times?: unknown };
-        return Array.isArray(body.times) ? body.times : [];
-      }).pipe(
-        Effect.catch(() => Effect.succeed([] as unknown[])),
-        Effect.repeat({
-          schedule: Schedule.spaced("500 millis"),
-          until: (times): boolean => times.length > 0,
-          times: 10,
-        }),
-      );
+      const recordedTimes = (counter: string) =>
+        Effect.gen(function* () {
+          const res = yield* client.get(`${url}/times?counter=${counter}`);
+          if (res.status !== 200) return [];
+          const body = (yield* res.json) as { times?: unknown };
+          return Array.isArray(body.times) ? body.times : [];
+        }).pipe(
+          Effect.catch(() => Effect.succeed([] as unknown[])),
+          Effect.repeat({
+            schedule: Schedule.spaced("500 millis"),
+            until: (times): boolean => times.length > 0,
+            times: 10,
+          }),
+        );
 
-      expect(times).toContain(scheduledTime);
+      const scheduledTime = Date.now();
+      yield* fire("* * * * *", scheduledTime);
+      expect(yield* recordedTimes("default")).toContain(scheduledTime);
+
+      // A handler that needs a service the Worker's init effect provides to
+      // itself runs with it (#2941). The handler writes to the counter named
+      // by that service, so nothing lands there if the service is missing.
+      const providedTime = scheduledTime + 1;
+      yield* fire(ProvidedServiceCron, providedTime);
+      expect(yield* recordedTimes("provided")).toContain(providedTime);
 
       yield* stack.destroy();
     }).pipe(logLevel),

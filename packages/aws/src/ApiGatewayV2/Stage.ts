@@ -97,8 +97,20 @@ export interface ApiGatewayV2Stage extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ApiGatewayV2StageLookup
 > {}
+
+/**
+ * Props for {@link ApiGatewayV2Stage.lookup}: find an API gateway V2 stage this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ApiGatewayV2StageLookup {
+  /** The id of the existing API gateway V2 stage. */
+  apiId: string;
+  /** The name of the existing API gateway V2 stage. */
+  stageName: string;
+}
 
 /**
  * An API Gateway v2 Stage — the deployed, callable endpoint of an HTTP or
@@ -139,6 +151,16 @@ export interface ApiGatewayV2Stage extends Resource<
  *     ThrottlingRateLimit: 50,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing API gateway V2 stage
+ * `ApiGatewayV2Stage.lookup` references an API gateway V2 stage Alchemy doesn't manage (created in the
+ * console or by another stack), found by `apiId` and `stageName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing API gateway V2 stage
+ * ```typescript
+ * const existing = AWS.ApiGatewayV2.ApiGatewayV2Stage.lookup({ apiId: "...", stageName: "..." });
  * ```
  *
  * @resource
@@ -277,6 +299,24 @@ export const StageProvider = () =>
             );
             return perApi.flat();
           }),
+
+        lookup: Effect.fn(function* ({ apiId, stageName }) {
+          const { region, accountId } = yield* AWSEnvironment.current;
+          const stage = yield* getStageSafe(apiId, stageName);
+          if (!stage?.StageName) return undefined;
+          const info = yield* getApiInfo(apiId);
+          return snapshotFromStage(
+            apiId,
+            stage,
+            computeUrls({
+              region,
+              accountId,
+              apiId: apiId,
+              stageName: stageName,
+              ...info,
+            }),
+          );
+        }),
 
         read: Effect.fn(function* ({ output }) {
           if (!output?.apiId || !output.stageName) return undefined;

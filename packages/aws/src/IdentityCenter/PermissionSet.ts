@@ -63,8 +63,23 @@ export interface PermissionSet extends Resource<
     createdDate: Date | undefined;
   },
   never,
-  Providers
+  Providers,
+  PermissionSetLookup
 > {}
+
+/**
+ * Props for {@link PermissionSet.lookup}: find a permission set this stack
+ * doesn't manage.
+ */
+export interface PermissionSetLookup {
+  /** The name of the existing permission set. */
+  name: string;
+  /**
+   * The Identity Center instance it belongs to.
+   * @default the account's only instance
+   */
+  instanceArn?: string;
+}
 
 /**
  * An IAM Identity Center permission set.
@@ -76,6 +91,17 @@ export interface PermissionSet extends Resource<
  *   description: "Administrator access for platform engineers",
  *   sessionDuration: "8 hours",
  * });
+ * ```
+ *
+ * ### Looking up an existing permission set
+ * `PermissionSet.lookup` references a permission set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Assign an existing permission set
+ * ```typescript
+ * const admins = AWS.IdentityCenter.PermissionSet.lookup({ name: "AdministratorAccess" });
+ * const permissionSetArn = admins.permissionSetArn;
  * ```
  *
  * @resource
@@ -121,6 +147,7 @@ export const PermissionSetProvider = () =>
             return { action: "replace" } as const;
           }
         }),
+        lookup: ({ name, instanceArn }) => readPermissionSetByName({ name, instanceArn }),
         read: Effect.fn(function* ({ olds, output }) {
           if (output?.permissionSetArn && output.instanceArn) {
             return yield* readPermissionSetByArn({

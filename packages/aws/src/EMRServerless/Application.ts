@@ -117,8 +117,23 @@ export interface Application extends Resource<
     state?: string;
   },
   {},
-  Providers
+  Providers,
+  ApplicationLookup
 > {}
+
+/**
+ * Props for {@link Application.lookup}: find an application this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ApplicationLookup =
+  | {
+      /** The id of the existing application. */
+      applicationId: string;
+    }
+  | {
+      /** The name of the existing application. */
+      applicationName: string;
+    };
 
 /**
  * An Amazon EMR Serverless application — a serverless Spark or Hive
@@ -177,6 +192,16 @@ export interface Application extends Resource<
  *     securityGroupIds: [securityGroup.securityGroupId],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing application
+ * `Application.lookup` references an application Alchemy doesn't manage (created in the
+ * console or by another stack), found by `applicationId` or `applicationName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing application
+ * ```typescript
+ * const existing = AWS.EMRServerless.Application.lookup({ applicationName: "analytics" });
  * ```
  *
  * @resource
@@ -287,6 +312,14 @@ export const ApplicationProvider = () =>
               }));
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const found = yield* observe(
+            "applicationId" in props ? props.applicationId : undefined,
+            "applicationName" in props ? props.applicationName : "",
+          );
+          if (found === undefined) return undefined;
+          return toAttributes(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.applicationName ?? (yield* createName(id, olds ?? {}));
           const application = yield* observe(output?.applicationId, name);

@@ -94,8 +94,18 @@ export interface DeploymentConfig extends Resource<
     computePlatform: string;
   },
   never,
-  Providers
+  Providers,
+  DeploymentConfigLookup
 > {}
+
+/**
+ * Props for {@link DeploymentConfig.lookup}: find a deployment config this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DeploymentConfigLookup {
+  /** The name of the existing deployment config. */
+  deploymentConfigName: string;
+}
 
 /**
  * A custom AWS CodeDeploy deployment configuration — the rules for how
@@ -122,6 +132,16 @@ export interface DeploymentConfig extends Resource<
  *   computePlatform: "Server",
  *   minimumHealthyHosts: { type: "FLEET_PERCENT", value: 50 },
  * });
+ * ```
+ *
+ * ### Looking up an existing deployment config
+ * `DeploymentConfig.lookup` references a deployment config Alchemy doesn't manage (created in the
+ * console or by another stack), found by `deploymentConfigName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing deployment config
+ * ```typescript
+ * const existing = AWS.CodeDeploy.DeploymentConfig.lookup({ deploymentConfigName: "..." });
  * ```
  *
  * @resource
@@ -170,6 +190,18 @@ export const DeploymentConfigProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ deploymentConfigName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const name = deploymentConfigName;
+          const config = yield* getConfig(name);
+          if (config?.deploymentConfigId === undefined) return undefined;
+          return {
+            deploymentConfigName: config.deploymentConfigName ?? name,
+            deploymentConfigId: config.deploymentConfigId,
+            deploymentConfigArn: deploymentConfigArn(region, accountId, name),
+            computePlatform: config.computePlatform ?? "Server",
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const name = output?.deploymentConfigName ?? (yield* toName(id, olds ?? {}));

@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -152,8 +153,32 @@ export type TlsRoute = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TlsRouteLookup
 >;
+
+/**
+ * Props for {@link TlsRoute.lookup}: find a tls route this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface TlsRouteLookup {
+  /**
+   * Route id (the `{tlsRoute}` segment of
+   * `projects/{project}/locations/{location}/tlsRoutes/{tlsRoute}`).
+   */
+  tlsRouteId: string;
+  /**
+   * Location (`global`, `us-central1`, …). `US-CENTRAL1` is accepted and
+   * normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A TlsRoute routes TLS traffic based on SNI and ALPN for a Mesh,
@@ -175,6 +200,18 @@ export type TlsRoute = Resource<
  *       },
  *     },
  *   ],
+ * });
+ * ```
+ *
+ * ### Looking up an existing tls route
+ * `TlsRoute.lookup` references a tls route Alchemy doesn't manage (created
+ * in the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared tls route.
+ *
+ * **Example:** Reference an existing tls route
+ * ```typescript
+ * const tlsRoute = GCP.NetworkServices.TlsRoute.lookup({
+ *   tlsRouteId: "my-tls-route",
  * });
  * ```
  *
@@ -280,6 +317,15 @@ export const TlsRouteProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ tlsRouteId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, DEFAULT_GLOBAL);
+      const name = resourceName(env.project, location, COLLECTION, tlsRouteId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

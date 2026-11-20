@@ -55,8 +55,18 @@ export interface MetricStream extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  MetricStreamLookup
 > {}
+
+/**
+ * Props for {@link MetricStream.lookup}: find a metric stream this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface MetricStreamLookup {
+  /** The metric stream name of the existing metric stream. */
+  metricStreamName: string;
+}
 
 /**
  * A CloudWatch metric stream — continuously exports CloudWatch metrics to
@@ -90,6 +100,16 @@ export interface MetricStream extends Resource<
  * // runtime
  * const result = yield* getMetricStream();
  * const state = result.State; // "running" | "stopped"
+ * ```
+ *
+ * ### Looking up an existing metric stream
+ * `MetricStream.lookup` references a metric stream Alchemy doesn't manage (created in the
+ * console or by another stack), found by `metricStreamName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing metric stream
+ * ```typescript
+ * const existing = AWS.CloudWatch.MetricStream.lookup({ metricStreamName: "my-metric-stream" });
  * ```
  *
  * @resource
@@ -197,6 +217,11 @@ export const MetricStreamProvider = () =>
               (state): state is NonNullable<typeof state> => state !== undefined,
             );
           }),
+        lookup: Effect.fn(function* ({ metricStreamName: name }) {
+          const state = yield* readMetricStream(name);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.metricStreamName ?? (yield* createMetricStreamName(id, olds ?? {}));
           const state = yield* readMetricStream(name);

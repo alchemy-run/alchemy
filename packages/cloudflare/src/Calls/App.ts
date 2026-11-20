@@ -132,7 +132,7 @@ export const AppProvider = () =>
       const observed = yield* getApp(output.accountId, output.appId);
       return observed ? toAttributes(observed, output.accountId, output.secret) : undefined;
     }),
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const name = yield* createAppName(id, news.name);
 

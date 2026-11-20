@@ -6,6 +6,7 @@ import * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import {
   deleteAgent,
   deleteEntityType,
@@ -76,6 +77,15 @@ test.provider.skipIf(!runLifecycle)(
             entities: [{ value: "cerulean", synonyms: ["cerulean", "blue-green"] }],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Dialogflow.AgentsSessionsEntityType.lookup({
+          location: created.location,
+          sessionId: created.sessionId,
+          entityTypeId: created.entityTypeId,
+          agent: created.agent,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/entityTypes/");

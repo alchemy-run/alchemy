@@ -1,3 +1,9 @@
+import { Docker } from "@alchemy.run/docker/Docker";
+import {
+  buildImageArchive,
+  hashImageArchive,
+  loadImageArchiveScript,
+} from "@alchemy.run/docker/ImageArchive";
 import * as iam from "@distilled.cloud/aws/iam";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Bundle from "alchemy/Bundle/Bundle";
@@ -9,6 +15,7 @@ import type { ScopedPlanStatusSession } from "alchemy/Report";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
 import { createInternalTags, createTagsList, hasTags } from "alchemy/Tags";
+import { containerEnvFile, DOCKER_ENV, systemdEnvFile } from "alchemy/Util/envFile";
 import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";
 import * as Data from "effect/Data";
@@ -71,6 +78,18 @@ export interface InstanceMetadataOptions {
 }
 
 /**
+ * AWS Nitro Enclaves options for launched instances. Enabling them also lets
+ * the instance run Nitro Sandboxes, lightweight VMs isolated by the Nitro
+ * hypervisor, on instance types that support them.
+ */
+export interface InstanceEnclaveOptions {
+  /**
+   * Whether the instance can run Nitro Enclaves and Nitro Sandboxes.
+   */
+  enabled: boolean;
+}
+
+/**
  * Shared props for EC2-backed hosted runtimes (an Instance that bundles and
  * runs an application entrypoint).
  */
@@ -99,8 +118,22 @@ export interface Ec2HostedProps extends PlatformProps {
   tags?: Record<string, string>;
   /** Instance Metadata Service options applied at launch. */
   metadataOptions?: InstanceMetadataOptions;
+  /** Nitro Enclaves and Nitro Sandboxes options applied at launch. */
+  enclaveOptions?: InstanceEnclaveOptions;
   /** Path to the application entrypoint to bundle and run on the instance. */
   main?: string;
+  /**
+   * A Docker build context the instance runs as a container: built on the
+   * deploying machine for the instance's architecture, saved, and loaded
+   * into Docker on the instance. The image's own `CMD` runs. Set this or
+   * {@link main}.
+   */
+  context?: string;
+  /**
+   * The Dockerfile for {@link context}, relative to it unless absolute.
+   * @default "Dockerfile"
+   */
+  dockerfile?: string;
   /** Named export of the handler within `main`. */
   handler?: string;
   /** Port the hosted HTTP server listens on. */
@@ -130,6 +163,8 @@ export interface Ec2HostedRuntimeState {
   assetPrefix?: string;
   code?: {
     hash: string;
+    /** {@link CONTAINER_UNIT_VERSION} a container instance was launched with. */
+    unit?: number;
   };
 }
 
@@ -150,15 +185,34 @@ export type Ec2HostRuntimeContext = HostRuntimeContext;
 
 export const createEc2HostRuntimeContext = createHostRuntimeContext;
 
+/**
+ * Version of the systemd unit a container instance's user data installs.
+ * User data runs once per instance, so an instance whose stored version
+ * differs is replaced: version 2 reads its env file through systemd, which
+ * a version 1 unit (`docker run --env-file`) can't.
+ */
+export const CONTAINER_UNIT_VERSION = 2;
+
+/**
+ * The unit's setup step, run with an empty environment: `EnvironmentFile=`
+ * applies to every command, and the app's env (a `PATH`, AWS credentials)
+ * must not change how setup reaches S3 and Docker.
+ */
+const setupCommand = (unitName: string) =>
+  `/usr/bin/env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin HOME=/root /usr/local/bin/${unitName}-setup.sh`;
+
 export const createEc2HostedSupport = ({
   stackName,
   stage,
   virtualEntryPlugin,
   resourceType,
+  docker,
 }: {
   stackName: string;
   stage: string;
   fs: FileSystem.FileSystem;
+  /** Builds `context` images; resources without a `context` prop omit it. */
+  docker?: Docker["Service"];
   virtualEntryPlugin: (content: (importPath: string) => string) => rolldown.Plugin;
   resourceType: string;
 }) => {
@@ -192,6 +246,35 @@ export const createEc2HostedSupport = ({
       maxLength: 64,
       lowercase: true,
     }).pipe(Effect.map((name) => name.replaceAll(/[^a-z0-9-]/g, "-")));
+
+  /** Graviton (and A1) instance families run arm64; every other runs amd64. */
+  const platformOf = (instanceType: string) =>
+    /^(a1|[a-z]+\d+g[a-z]*)\./.test(instanceType) ? "linux/arm64" : "linux/amd64";
+
+  const archiveSource = (props: Ec2HostedProps) => ({
+    context: props.context!,
+    dockerfile: props.dockerfile,
+    platform: platformOf(props.instanceType),
+  });
+
+  /**
+   * The content hash of what the instance runs: the bundled `main`, or the
+   * build inputs of the `context` image.
+   */
+  /** Run an image-archive step with the Docker CLI this resource was given. */
+  const withDocker = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    docker === undefined
+      ? Effect.die(
+          new EC2HostedInvalidProps({ message: `${resourceType} does not run a 'context' image` }),
+        )
+      : effect.pipe(Effect.provideService(Docker, docker));
+
+  const programHash = Effect.fn(function* (id: string, props: Ec2HostedProps) {
+    if (props.context !== undefined) {
+      return yield* withDocker(hashImageArchive(archiveSource(props)));
+    }
+    return (yield* bundleProgram(id, props)).hash;
+  });
 
   const normalizeSecurityGroups = (groups?: readonly string[]) =>
     [...(groups ?? [])].sort((a, b) => a.localeCompare(b));
@@ -272,30 +355,22 @@ await bootstrap(entrypoint);
     return { archive, hash: bundleOutput.hash };
   });
 
-  const quoteEnvValue = (value: any) => {
-    const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
-    return `'${text.replaceAll(/'/g, `'""'`).replaceAll(/\n/g, "\\n")}'`;
-  };
-
-  const renderEnvFile = (env: Record<string, any>) =>
-    Object.entries(env)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => `${key}=${quoteEnvValue(value)}`)
-      .join("\n");
-
   const renderHostedUserData = Effect.fn(function* ({
     unitName,
     bundleKey,
     envKey,
     region,
+    image,
   }: {
     unitName: string;
     bundleKey: string;
     envKey: string;
     region: string;
+    image: boolean;
   }) {
     const appDir = `/opt/${unitName}`;
     const bucket = yield* Assets.BucketName;
+    if (image) return renderImageUserData({ unitName, appDir, bucket, bundleKey, envKey, region });
     // User-data runs once via cloud-init's `scripts-user` (once-per-instance),
     // and is skipped on any subsequent boot — so it must NOT carry the work
     // that can fail transiently (bun install over the network, S3 sync). It
@@ -352,7 +427,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=${appDir}
-ExecStartPre=/usr/local/bin/${unitName}-setup.sh
+ExecStartPre=${setupCommand(unitName)}
 EnvironmentFile=-${appDir}/env
 # --no-install: the uploaded bundle is self-contained; bun must never fall
 # into its auto-install path (which hangs startup on network package
@@ -369,6 +444,81 @@ systemctl daemon-reload
 systemctl enable --now ${unitName}.service
 `;
   });
+
+  /**
+   * User data for a `context` image: the setup installs Docker, loads the
+   * image archive from S3, and the unit runs it on the host network.
+   */
+  const renderImageUserData = ({
+    unitName,
+    appDir,
+    bucket,
+    bundleKey,
+    envKey,
+    region,
+  }: {
+    unitName: string;
+    appDir: string;
+    bucket: string;
+    bundleKey: string;
+    envKey: string;
+    region: string;
+  }) => `#!/bin/bash
+set -uo pipefail
+
+mkdir -p "${appDir}"
+
+cat >/usr/local/bin/${unitName}-setup.sh <<'SETUP_EOF'
+#!/bin/bash
+set -uo pipefail
+export HOME=/root
+
+# Docker — install if missing, and start it.
+command -v docker >/dev/null 2>&1 || {
+  (command -v dnf >/dev/null 2>&1 && dnf install -y docker) \
+    || (command -v yum >/dev/null 2>&1 && yum install -y docker) \
+    || (command -v apt-get >/dev/null 2>&1 && apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io) || true
+}
+systemctl enable --now docker
+
+# AWS CLI — preinstalled on Amazon Linux 2023; install v2 otherwise.
+command -v aws >/dev/null 2>&1 || {
+  command -v unzip >/dev/null 2>&1 || (apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y unzip) || true
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \
+    && (cd /tmp && unzip -q -o awscliv2.zip && ./aws/install) || true
+}
+
+# Sync the image + env from S3, and load the image (must succeed for the service to start).
+set -e
+aws s3 cp "s3://${bucket}/${bundleKey}" "${appDir}/image.tar" --region "${region}"
+aws s3 cp "s3://${bucket}/${envKey}" "${appDir}/env" --region "${region}"
+${loadImageArchiveScript(`${appDir}/image.tar`)}
+docker rm -f ${unitName} >/dev/null 2>&1 || true
+SETUP_EOF
+chmod +x /usr/local/bin/${unitName}-setup.sh
+
+cat >/etc/systemd/system/${unitName}.service <<'UNIT_EOF'
+[Unit]
+Description=Alchemy EC2 instance container ${unitName}
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=${setupCommand(unitName)}
+EnvironmentFile=-${appDir}/env
+ExecStart=/usr/bin/docker run --rm --name ${unitName} --network host $${DOCKER_ENV} alchemy-${unitName}:latest
+ExecStop=/usr/bin/docker stop ${unitName}
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+UNIT_EOF
+
+systemctl daemon-reload
+systemctl enable --now ${unitName}.service
+`;
 
   const mergeUserData = (hosted: string, userData?: string) => {
     if (!userData) {
@@ -556,12 +706,12 @@ systemctl enable --now ${unitName}.service
     bundleKey,
     envKey,
     archive,
-    env,
+    envFile,
   }: {
     bundleKey: string;
     envKey: string;
     archive: Uint8Array<ArrayBufferLike>;
-    env: Record<string, any>;
+    envFile: string;
   }) {
     const assets = yield* Assets;
     const contentHash = yield* sha256(archive);
@@ -574,7 +724,7 @@ systemctl enable --now ${unitName}.service
     yield* s3.putObject({
       Bucket: yield* assets.bucketName,
       Key: envKey,
-      Body: renderEnvFile(env),
+      Body: envFile,
       ContentType: "text/plain; charset=utf-8",
     });
   });
@@ -590,7 +740,7 @@ systemctl enable --now ${unitName}.service
     bindings: ResourceBinding<Ec2HostedBinding>[];
     output?: Ec2HostedRuntimeState;
   }) {
-    if (!news.main) {
+    if (!news.main && !news.context) {
       return {
         userData: news.userData,
         roleName: output?.roleName,
@@ -614,7 +764,8 @@ systemctl enable --now ${unitName}.service
     const { region } = yield* AWSEnvironment.current;
     const runtimeUnitName = output?.runtimeUnitName ?? (yield* createRuntimeUnitName(id));
     const assetPrefix = output?.assetPrefix ?? `ec2/${runtimeUnitName}`;
-    const bundleKey = `${assetPrefix}/bundle.zip`;
+    const image = news.context !== undefined;
+    const bundleKey = `${assetPrefix}/${image ? "image.tar" : "bundle.zip"}`;
     const envKey = `${assetPrefix}/env`;
     const policyName = output?.policyName ?? (yield* createPolicyName(id));
 
@@ -674,13 +825,26 @@ systemctl enable --now ${unitName}.service
       ...(news.port !== undefined ? { PORT: news.port } : {}),
       ...news.env,
     };
+    // Before anything is built or published: a key systemd can't hold fails here.
+    const envFile = yield* image ? containerEnvFile(env) : systemdEnvFile(env);
 
-    const { archive, hash } = yield* bundleProgram(id, news);
+    const { archive, hash } = image
+      ? yield* Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-ec2-image-" });
+          const source = archiveSource(news);
+          const archive = yield* buildImageArchive(source, {
+            tag: `alchemy-${runtimeUnitName}:latest`,
+            output: `${dir}/image.tar`,
+          });
+          return { archive, hash: yield* hashImageArchive(source) };
+        }).pipe(Effect.scoped, withDocker)
+      : yield* bundleProgram(id, news);
     yield* uploadHostedArtifacts({
       bundleKey,
       envKey,
       archive,
-      env,
+      envFile,
     });
 
     const hostedUserData = yield* renderHostedUserData({
@@ -688,6 +852,7 @@ systemctl enable --now ${unitName}.service
       bundleKey,
       envKey,
       region,
+      image,
     });
 
     return {
@@ -702,6 +867,7 @@ systemctl enable --now ${unitName}.service
       assetPrefix,
       code: {
         hash,
+        ...(image ? { unit: CONTAINER_UNIT_VERSION } : {}),
       },
     } satisfies Ec2HostedRuntimeState;
   });
@@ -827,6 +993,7 @@ systemctl enable --now ${unitName}.service
       | "availabilityZone"
       | "tags"
       | "metadataOptions"
+      | "enclaveOptions"
     >,
     runtime: Pick<Ec2HostedRuntimeState, "userData" | "instanceProfileName">,
   ) => {
@@ -870,6 +1037,7 @@ systemctl enable --now ${unitName}.service
             InstanceMetadataTags: news.metadataOptions.instanceMetadataTags,
           }
         : undefined,
+      EnclaveOptions: news.enclaveOptions ? { Enabled: news.enclaveOptions.enabled } : undefined,
       TagSpecifications:
         Object.keys(instanceTags).length > 0
           ? [
@@ -886,6 +1054,7 @@ systemctl enable --now ${unitName}.service
     normalizeSecurityGroups,
     buildLaunchTemplateData,
     bundleProgram,
+    programHash,
     resolveHostedRuntime,
     cleanupHostedRuntime,
   };

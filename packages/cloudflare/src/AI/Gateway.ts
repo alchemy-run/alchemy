@@ -264,7 +264,16 @@ export type GatewayProps = {
    * Whether Zero Data Retention is enabled.
    */
   zdr?: boolean;
+  /**
+   * How Workers AI inference routed through this gateway is billed.
+   * `"postpaid"` (Standard billing) bills the account directly through
+   * Workers AI; `"unified"` deducts Unified Billing credits through AI
+   * Gateway. When omitted, the gateway keeps its current setting.
+   */
+  workersAiBillingMode?: GatewayWorkersAiBillingMode;
 };
+
+export type GatewayWorkersAiBillingMode = "postpaid" | "unified";
 
 export type Gateway = Resource<
   "Cloudflare.AI.Gateway",
@@ -292,10 +301,23 @@ export type Gateway = Resource<
     stripe: GatewayStripe | undefined;
     spendLimits: GatewaySpendLimits | undefined;
     zdr: boolean;
+    workersAiBillingMode: GatewayWorkersAiBillingMode | undefined;
   },
   never,
-  Providers
+  Providers,
+  GatewayLookup
 >;
+
+/**
+ * Props for {@link Gateway.lookup}: find an AI Gateway this stack doesn't
+ * manage, by its id.
+ */
+export type GatewayLookup = {
+  /**
+   * The ID of the existing gateway.
+   */
+  id: string;
+};
 
 // Cloudflare's AI Gateway API uses 0 to mean "disabled" for cache TTL and
 // rate limiting fields. Normalize back to null so user-facing semantics
@@ -466,6 +488,28 @@ export const isAiGateway = (value: unknown): value is Gateway =>
  * });
  * ```
  *
+ * ### Looking up an existing gateway
+ * `Gateway.lookup` binds a gateway Alchemy doesn't manage (created in the
+ * dashboard or by another stack), found by its `id`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** By ID
+ * ```typescript
+ * const gateway = yield* Cloudflare.AI.QueryGateway(
+ *   Cloudflare.AI.Gateway.lookup({ id: "prod-gateway" }),
+ * );
+ * ```
+ *
+ * ### Workers AI Billing
+ * **Example:** Bill Workers AI on Standard billing
+ * `workersAiBillingMode` only affects Workers AI models; third-party
+ * providers keep using Unified Billing or your own provider keys.
+ * ```typescript
+ * const gateway = yield* Cloudflare.AI.Gateway("Gateway", {
+ *   workersAiBillingMode: "postpaid",
+ * });
+ * ```
+ *
  * @resource
  * @product AI Gateway
  * @category AI
@@ -495,6 +539,7 @@ export const GatewayResourceProvider = () =>
       const nextMutable = mutable({
         ...next,
         authentication: next.authentication ?? oldMutable.authentication,
+        workersAiBillingMode: next.workersAiBillingMode ?? oldMutable.workersAiBillingMode,
       } as Gateway["Attributes"]);
       if (!deepEqual(oldMutable, nextMutable)) {
         return { action: "update" } as const;
@@ -551,6 +596,13 @@ export const GatewayResourceProvider = () =>
           id: output.gatewayId,
         })
         .pipe(Effect.catchTag("GatewayNotFound", () => Effect.void));
+    }),
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      return yield* aiGateway.getAiGateway({ accountId, id: props.id }).pipe(
+        Effect.map((gateway) => mapGateway(gateway, accountId)),
+        Effect.catchTag("GatewayNotFound", () => Effect.undefined),
+      );
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
@@ -617,6 +669,8 @@ const desired = (id: string, props: GatewayProps | undefined) =>
       stripe: props?.stripe ?? undefined,
       spendLimits: resolveSpendLimits(props?.spendLimits),
       zdr: props?.zdr ?? false,
+      // Unmanaged when omitted: an existing gateway keeps its current mode.
+      workersAiBillingMode: props?.workersAiBillingMode,
     };
   });
 
@@ -675,6 +729,9 @@ const mapGateway = (
   stripe: gateway.stripe ?? undefined,
   spendLimits: normalizeSpendLimits(gateway.spendLimits),
   zdr: gateway.zdr ?? false,
+  workersAiBillingMode: (gateway.workersAiBillingMode ?? undefined) as
+    | GatewayWorkersAiBillingMode
+    | undefined,
 });
 
 // Normalize spend limits into the user-facing shape and drop server-managed
@@ -743,6 +800,7 @@ const mutable = (gateway: Gateway["Attributes"]) => ({
   stripe: gateway.stripe,
   spendLimits: spendLimitsForDiff(gateway.spendLimits),
   zdr: gateway.zdr,
+  workersAiBillingMode: gateway.workersAiBillingMode,
 });
 
 // Compare spend limits by their user-meaningful shape: drop the
@@ -787,6 +845,7 @@ const createRequest = Effect.fn(function* (id: string, props: GatewayProps | und
     logpush: next.logpush,
     logpushPublicKey: next.logpushPublicKey,
     zdr: next.zdr,
+    workersAiBillingMode: next.workersAiBillingMode,
   } satisfies aiGateway.CreateAiGatewayRequest;
 });
 
@@ -818,5 +877,6 @@ const updateRequest = Effect.fn(function* (
     stripe: next.stripe,
     spendLimits: next.spendLimits,
     zdr: next.zdr,
+    workersAiBillingMode: next.workersAiBillingMode,
   } satisfies aiGateway.UpdateAiGatewayRequest;
 });

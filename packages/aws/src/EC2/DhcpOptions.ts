@@ -9,6 +9,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { nameTagFilter, single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { getDefaultVpcScope } from "./defaultVpcScope.ts";
@@ -85,8 +86,23 @@ export interface DhcpOptions extends Resource<
     vpcId?: VpcId;
   },
   never,
-  Providers
+  Providers,
+  DhcpOptionsLookup
 > {}
+
+/**
+ * Props for {@link DhcpOptions.lookup}: find a DHCP options set this
+ * stack doesn't manage, in the ambient account and region.
+ */
+export type DhcpOptionsLookup =
+  | {
+      /** The options set's id. */
+      dhcpOptionsId: string;
+    }
+  | {
+      /** The value of its `Name` tag; fails when several match. */
+      name: string;
+    };
 
 /**
  * A DHCP options set configures the DHCP parameters (domain name, DNS servers,
@@ -123,6 +139,17 @@ export interface DhcpOptions extends Resource<
  * ```
  * Creates an unassociated options set that you can associate later by setting
  * `vpcId`.
+ *
+ * ### Looking up an existing DHCP options set
+ * `DhcpOptions.lookup` references a DHCP options set Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dhcpOptionsId` or its `Name` tag. It is read during plan/deploy
+ * and never created, updated or deleted. A lookup by `name` fails with
+ * `AmbiguousLookupError` when several match.
+ *
+ * **Example:** Reference a shared DHCP options set
+ * ```typescript
+ * const options = AWS.EC2.DhcpOptions.lookup({ name: "corp-dns" });
+ * ```
  *
  * @resource
  */
@@ -250,6 +277,29 @@ export const DhcpOptionsProvider = () =>
             );
             return items satisfies DhcpOptions["Attributes"][];
           }),
+
+        lookup: Effect.fn(function* (props) {
+          const found = yield* ec2
+            .describeDhcpOptions(
+              "dhcpOptionsId" in props
+                ? { DhcpOptionsIds: [props.dhcpOptionsId] }
+                : { Filters: [nameTagFilter(props.name)] },
+            )
+            .pipe(
+              Effect.catchTags({
+                "InvalidDhcpOptionID.NotFound": () => Effect.succeed({ DhcpOptions: [] }),
+                "InvalidDhcpOptionsID.NotFound": () => Effect.succeed({ DhcpOptions: [] }),
+              }),
+            );
+          const match = yield* single(
+            "AWS.EC2.DhcpOptions",
+            "dhcpOptionsId" in props ? props.dhcpOptionsId : `Name=${props.name}`,
+            found.DhcpOptions ?? [],
+            (x) => x.DhcpOptionsId,
+          );
+          if (!match?.DhcpOptionsId) return undefined;
+          return yield* toAttrs(match, yield* findAssociatedVpc(match.DhcpOptionsId));
+        }),
 
         read: Effect.fn(function* ({ output }) {
           if (!output) return undefined;

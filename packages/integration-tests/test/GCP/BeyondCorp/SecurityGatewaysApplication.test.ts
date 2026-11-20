@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as beyondcorp from "@distilled.cloud/gcp/beyondcorp_v1";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { logLevel, currentProject, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -86,6 +87,14 @@ test.provider.skipIf(!runLifecycle)(
             displayName: "app a",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.BeyondCorp.SecurityGatewaysApplication.lookup({
+          applicationId: created.applicationId,
+          location: created.location,
+          securityGateway: created.securityGateway,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/applications/");

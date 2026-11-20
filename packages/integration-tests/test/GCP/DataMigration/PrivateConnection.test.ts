@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as datamigration from "@distilled.cloud/gcp/datamigration_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import { withNetworkSlot } from "../networkQuota.ts";
 import { logLevel, currentProject, runSlowLifecycle, waitUntilGone } from "./common.ts";
 
@@ -56,6 +57,13 @@ test.provider.skipIf(!runSlowLifecycle)(
           });
           return { network, peering };
         }),
+      );
+      yield* expectFound(
+        GCP.DataMigration.PrivateConnection.lookup({
+          privateConnectionId: created.peering.privateConnectionId,
+          location: created.peering.location,
+        }),
+        created.peering,
       );
 
       expect(created.peering.privateConnectionId).toEqual(expect.any(String));

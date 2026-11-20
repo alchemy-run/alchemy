@@ -29,7 +29,8 @@ my-app/
           FraudReview.policy.ts
         Ledger/
           Ledger.projection.ts        projection + its Live handler
-          LedgerStore.ts              the port it writes through (+ a memory implementation)
+          AccountLedger.query.ts      query + its Live handler, reading through the port
+          LedgerStore.ts              the port both use (+ a memory implementation)
         Session.middleware.ts         RpcMiddleware declaration + its error + client helper
         CurrentActor.context.ts       Domain.RequestContext
         CustomerApi.api.ts
@@ -56,7 +57,7 @@ my-app/
 | Package | Holds | May import |
 | --- | --- | --- |
 | domain | every Domain building block, Apis, middleware declarations, request contexts, ports (`Context.Service` interfaces) with memory implementations, stories | `@alchemy.run/domain`, `@alchemy.run/domain/Story` (tests), `effect` |
-| server | the Worker, `*Live` middleware, external system adapters, port implementations (D1, HTTP), event sources (Stripe webhooks), Api tests | domain, `@alchemy.run/cloudflare`, `@alchemy.run/cloudflare/Domain`, provider packages |
+| server | the Worker, `*Live` middleware, external system adapters, port implementations (D1, HTTP), event sources (Stripe webhooks), Api tests | domain, `@alchemy.run/cloudflare`, `@alchemy.run/domain/Cloudflare`, provider packages |
 | web | the foldkit app and its Worker | domain (Api, ids, value schemas), `@alchemy.run/domain` (client protocols), `foldkit` |
 
 Split a file when it mixes the two sides. For example, `Session.middleware.ts` (the domain declares it) and `Session.ts` (the server implements it).
@@ -115,12 +116,17 @@ Type-check everything with `tsc -b`.
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import BankWorker from "@acme/server/BankWorker";
 
 export default Alchemy.Stack(
   "Bank",
-  { providers: Cloudflare.providers(), state: Cloudflare.state() },
+  {
+    providers: Layer.mergeAll(Cloudflare.providers(), DomainCloudflare.providers()),
+    state: Cloudflare.state(),
+  },
   Effect.gen(function* () {
     const bank = yield* BankWorker;
     const app = yield* Cloudflare.Website.Foldkit("BankApp", {

@@ -2,6 +2,7 @@
 title: Secondary storage
 description: Supply a strongly consistent session and rate-limit store through an Effect layer.
 ---
+import PackageManagers from "../../../../components/PackageManagers.astro";
 
 ## Implement the complete storage contract
 
@@ -141,9 +142,7 @@ export default Alchemy.Stack(
 
 Use Bun, matching `alchemy` and `@alchemy.run/better-auth` releases, Better Auth 1.7.5, Effect 4, and `kysely`, in addition to the Redis SDK. Configure Cloudflare credentials and the external storage inputs before deployment; this stack provisions D1 and a stable signing secret, not the Redis service.
 
-```sh
-bunx alchemy deploy
-```
+<PackageManagers run="alchemy deploy" />
 
 Preserve the local Alchemy state and use the printed URL. A local run must use a separate storage database from production because the REST store is external, not emulated by `alchemy dev`.
 

@@ -42,8 +42,18 @@ export interface KeyValueStore extends Resource<
     comment: string;
   },
   never,
-  Providers
+  Providers,
+  KeyValueStoreLookup
 > {}
+
+/**
+ * Props for {@link KeyValueStore.lookup}: find a key value store this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface KeyValueStoreLookup {
+  /** The name of the existing key value store. */
+  keyValueStoreName: string;
+}
 
 /**
  * A CloudFront KeyValueStore for edge metadata.
@@ -56,6 +66,16 @@ export interface KeyValueStore extends Resource<
  * const store = yield* KeyValueStore("RouterStore", {
  *   comment: "Route metadata",
  * });
+ * ```
+ *
+ * ### Looking up an existing key value store
+ * `KeyValueStore.lookup` references a key value store Alchemy doesn't manage (created in the
+ * console or by another stack), found by `keyValueStoreName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Read an existing key value store from a CloudFront function
+ * ```typescript
+ * const flags = AWS.CloudFront.KeyValueStore.lookup({ keyValueStoreName: "flags" });
  * ```
  *
  * @resource
@@ -90,6 +110,15 @@ export const KeyValueStoreProvider = () =>
           if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ keyValueStoreName: name }) {
+          const current = yield* cloudfront
+            .describeKeyValueStore({ Name: name })
+            .pipe(Effect.catchTag("EntityNotFound", () => getByName(name)));
+          if (!current?.KeyValueStore) {
+            return undefined;
+          }
+          return toAttrs(current.KeyValueStore, name);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.keyValueStoreName ?? (yield* createName(id, olds ?? {}));

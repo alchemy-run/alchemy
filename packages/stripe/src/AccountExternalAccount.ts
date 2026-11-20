@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteAccountExternalAccount,
   GetAccounts,
@@ -446,10 +445,8 @@ export const AccountExternalAccountProvider = () =>
           external_account: news.externalAccount,
           metadata,
           ...(desiredDefault !== undefined ? { default_for_currency: desiredDefault } : {}),
+          idempotencyKey: `alchemy-account-external-account-${instanceId}`,
         }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-account-external-account-${instanceId}`,
-          }),
           Effect.catchIf(
             (e) => e._tag === "InvalidRequestError" || e._tag === "Conflict",
             (e) =>

@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -54,6 +55,13 @@ test.provider(
             networkInterfaces: [{ network: "global/networks/default" }],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.RegionInstanceTemplate.lookup({
+          templateName: created.templateName,
+          region: created.region,
+        }),
+        created,
       );
 
       expect(created.templateName).toEqual(expect.any(String));

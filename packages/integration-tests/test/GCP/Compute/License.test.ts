@@ -6,6 +6,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -60,6 +61,7 @@ test.provider(
           });
         }),
       );
+      yield* expectFound(GCP.Compute.License.lookup({ licenseName: created.licenseName }), created);
 
       expect(created.licenseName).toEqual(expect.any(String));
       expect(created.description).toEqual("marketplace os");

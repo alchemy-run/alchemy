@@ -23,7 +23,7 @@ A `Domain.Model` is how you write one bounded context down. Everything in this m
 
 ## What a model contains
 
-Every model has the same shape. Commands enter on the left and are decided by aggregates. Aggregates record events. Events flow to three kinds of consumer: views, which the model stores and serves; projections, which write a store you own or a stream; and policies, which send further commands.
+Every model has the same shape. Commands enter on the left and are decided by aggregates: one alone, or several together through a decision. Aggregates record events. Events flow to three kinds of consumer: views, which the model stores and serves; projections, which write a store you own or a stream; and policies, which send further commands.
 
 <DAG
   nodes={[
@@ -45,7 +45,7 @@ Every model has the same shape. Commands enter on the left and are decided by ag
   caption="Solid edges happen within one command. Dashed edges are delivered after it commits."
 />
 
-A model declares which aggregates, views, policies, projections and streams it contains. The commands and events come with them, since each aggregate declares the commands it handles and the events it records. The example bank's model contains two aggregates, two views and one policy:
+A model declares which aggregates, decisions, views, policies, projections, streams and queries it contains. The commands and events come with them, since each aggregate and decision declares the commands it handles and the events it records. The example bank's model contains two aggregates, two views and one policy:
 
 ```typescript title="src/Bank.model.ts"
 export class Bank extends Domain.Model("Bank", {
@@ -60,6 +60,8 @@ export class Bank extends Domain.Model("Bank", {
 An aggregate type has many instances, one per id, and every command names the id of the instance it's for. The model routes the command to that instance and no other.
 
 Each instance handles one command at a time. Commands for the same instance queue, and each is decided against the state the previous one left. Commands for different instances run independently. This is what makes an instance a consistency boundary: nothing else changes its state while it decides.
+
+A command that involves several instances names them all in its input. A [decision](/domain/decision) reads them together and records on all of them or on none.
 
 <DAG
   nodes={[
@@ -79,7 +81,7 @@ Each instance handles one command at a time. Commands for the same instance queu
 In the bank, a deposit names the account it's for, so two deposits into `a-1` queue while a deposit into `a-2` runs alongside them:
 
 ```typescript title="src/depositAndRead.ts"
-const receipt = yield* accounts.send(accountId, new DepositMoney({ amount: 100 }));
+const receipt = yield* accounts.send(new DepositMoney({ accountId, amount: 100 }));
 ```
 
 ## The aggregate decides, and everything commits at once
@@ -111,17 +113,19 @@ The caller gets a receipt with the stream and version the command committed at, 
 For a deposit into an open account, `decide` returns one `MoneyDeposited` event carrying the new balance:
 
 ```typescript title="src/Account.aggregate.ts"
-DepositMoney: (s, cmd) =>
-  s._tag !== "Open"
-    ? new NotOpen()
-    : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: s.balance + cmd.amount })],
+decide: {
+  DepositMoney: (account, cmd) =>
+    account._tag !== "Open"
+      ? new NotOpen()
+      : [new MoneyDeposited({ amount: cmd.amount, balanceAfter: account.balance + cmd.amount })],
+},
 ```
 
 ## Consumers catch up
 
 After the commit, the deliveries are sent. Every view, projection and policy receives every event it consumes, at least once, and in the order its source instance recorded them, even if something restarts in between. Views and projections drop events they've already accepted; policies make repeats harmless (see [Policy](/domain/policy#make-it-safe-to-run-twice)).
 
-Because this happens after the commit, views are eventually consistent: for a moment, the aggregate has the new state and a view doesn't yet. A reader who needs to see their own change passes the command's receipt, and the view waits until it has applied that version.
+Because this happens after the commit, views are eventually consistent: for a moment, the aggregate has the new state and a view doesn't yet. A reader who needs to see their own change passes the command's receipt, and the view waits until it has applied that version. A command sent through an Api can also [wait for its views](/domain/command#choose-when-it-answers) before it answers.
 
 In the bank, one `MoneyDeposited` reaches both views that read accounts:
 
@@ -140,7 +144,7 @@ In the bank, one `MoneyDeposited` reaches both views that read accounts:
 And a client that has just deposited reads the summary at that receipt, so it sees the new balance:
 
 ```typescript title="src/depositAndRead.ts"
-return yield* summaries.query(Account.ref(accountId), { atLeast: receipt });
+return yield* summaries.get(Account.ref(accountId), { atLeast: receipt });
 ```
 
 ## Consumers added later receive the history
@@ -218,11 +222,13 @@ That gives a precise guarantee. Within a key, events from one source arrive in t
 
 All three consumers receive the same events. They differ in what they do with them.
 
-A [view](/domain/view) folds events into state that the model stores and serves: `get`, `watch`, `events`, with `validate` and read-your-own-write. Reach for it first when clients need to read something.
+A [view](/domain/view) folds events into state that the model stores and serves: `get`, `watch`, `events`, with a `validate` on its Layer and read-your-own-write. Reach for it first when clients need to read something.
 
 A [projection](/domain/projection) writes events into a store you own, such as a database or a search index, or into a [stream](/domain/stream) the model serves. It never sends commands, so it can always be replayed.
 
 A [policy](/domain/policy) is a business rule. It acts on each new event once, through commands and external systems, and never replays.
+
+A [query](/domain/query) is not a consumer: it serves what a projection wrote to clients, across keys, guarded by middleware and rejections like the model's other reads, with a handler that checks the caller.
 
 ## Declare the model
 
@@ -252,6 +258,22 @@ export class Bank extends Domain.Model("Bank", {
 }) {}
 ```
 
+A [decision](/domain/decision) goes in `decisions`, next to the aggregates it reads. Every command has one implementation, an aggregate or a decision, and a second one is a type error on its entry here.
+
+```typescript
+// src/Bank.model.ts
+import * as Domain from "@alchemy.run/domain";
+import { Account } from "./Account.aggregate.ts";
+import { AccountSummary } from "./AccountSummary.view.ts";
+import { Transfer } from "./Transfer.decision.ts";
+
+export class Bank extends Domain.Model("Bank", {
+  aggregates: [Account],
+  decisions: [Transfer],
+  views: [AccountSummary],
+}) {}
+```
+
 A policy is declared in one place and implemented in another, because its implementation usually needs things from outside the model, like a client for another aggregate or a payment provider. The declaration goes in `policies`; the implementation is a Layer you keep beside it.
 
 ```typescript
@@ -274,9 +296,25 @@ export class Bank extends Domain.Model("Bank", {
 export const BankHandlers = MainAccountProvisioningLive;
 ```
 
+## Describe it
+
+A model's last argument is its [annotations](/domain/annotations). The model lists its declarations, so tooling can walk them and read each one's annotations. See [Build on them](/domain/annotations#build-on-them).
+
+```typescript
+// src/Bank.model.ts
+import * as Domain from "@alchemy.run/domain";
+import { Account } from "./Account.aggregate.ts";
+
+export class Bank extends Domain.Model(
+  "Bank",
+  { aggregates: [Account] },
+  { description: "Accounts, transfers and the ledger of a small bank." },
+) {}
+```
+
 ## Check the declaration
 
-Some mistakes in a declaration only show when the model is hosted: a view that reads a source keyed by another aggregate without `keyOf`, a view with `state` but no `initial`, a policy that waits for an event no source emits, a stream with two writers. Building the model's Layer fails on the first one. `Domain.verify` finds all of them without hosting anything, so one unit test covers the whole model:
+Some mistakes in a declaration only show when the model is hosted: a view that reads a source keyed by another aggregate without `keyOf`, a view with `state` but no `initial`, a policy that waits for an event no source emits, a stream with two writers, a command implemented twice. Building the model's Layer fails on the first one. `Domain.verify` finds all of them without hosting anything, so one unit test covers the whole model:
 
 ```typescript
 // packages/domain/test/Bank.model.test.ts
@@ -293,6 +331,8 @@ it("the model is well defined", () => {
 
 Each problem is a `Domain.DefinitionError`. Its `reason` is a tagged error that says which problem it is, such as `MissingKeyOf` or `TwoWriters`, with the names involved as fields, and its message names the block and the fix. Mistakes that depend on what a handler returns, like `decide` returning an event its command doesn't declare, still fail when the handler runs.
 
+`Domain.verify` checks how the model is declared, not what it does. To check that it keeps its rules, whatever commands arrive, see [Verifying a model](/domain/verifying-models).
+
 ## Run it
 
 A declaration doesn't run anything. `Bank.layer(BankHandlers)` turns it into a Layer that hosts the model, and a platform underneath decides where its state lives.
@@ -306,11 +346,11 @@ import { Bank, BankHandlers } from "./Bank.model.ts";
 export const BankInMemory = Bank.layer(BankHandlers).pipe(Layer.provide(Domain.InMemory));
 ```
 
-`Domain.InMemory` keeps everything in memory, which is what tests want. Swap it for another platform and the model runs there unchanged; every platform keeps the guarantees above. See [Hosting](/domain/cloudflare).
+`Domain.InMemory` keeps everything in memory, which is what tests want. Swap it for another platform and the model runs there unchanged; every platform keeps the guarantees above. See [Cloudflare](/domain/cloudflare), [Rivet](/domain/rivet) and [Effect Cluster](/domain/effect-cluster).
 
 ## Call it from your code
 
-Inside the hosted model, each aggregate and view is a service. `yield* Account` gives you a client for every account, and `send` takes the target id and the command.
+Inside the hosted model, each aggregate and view is a service. `yield* Account` gives you a client for every account, and `send` takes the command, which names the account it is for.
 
 ```typescript
 // src/depositAndRead.ts
@@ -324,12 +364,12 @@ export const depositAndRead = Effect.gen(function* () {
   const accounts = yield* Account;
   const summaries = yield* AccountSummary;
   const accountId = AccountId.make("a-1");
-  const receipt = yield* accounts.send(accountId, new DepositMoney({ amount: 100 }));
-  return yield* summaries.query(Account.ref(accountId), { atLeast: receipt });
+  const receipt = yield* accounts.send(new DepositMoney({ accountId, amount: 100 }));
+  return yield* summaries.get(Account.ref(accountId), { atLeast: receipt });
 });
 ```
 
-Passing the receipt as `atLeast` is the read-your-own-write from earlier: `query` waits until the summary has applied the deposit.
+Passing the receipt as `atLeast` is the read-your-own-write from earlier: `get` waits until the summary has applied the deposit.
 
 Clients outside the model, a browser or another service, reach it through an [Api](/domain/api) instead, which decides what each kind of client may send and read.
 

@@ -2,10 +2,25 @@
 title: Team & organization
 description: Invite teammates and change your Turso organization's settings.
 ---
+import Tree from "../../../components/diagrams/Tree.astro";
 
-These work on the organization your [token](/turso/setup) belongs to.
+These work on the organization your [profile](/turso/setup) names, or your token's organization when it names none.
 
 Invites and members need a team organization on a paid plan. The free plan doesn't allow them.
+
+<Tree
+  nodes={[
+    { id: "org", label: "acme", type: "organization" },
+    { id: "g1", label: "Tenants", type: "group", parent: "org" },
+    { id: "d1", label: "acme", type: "database", parent: "g1", tone: "accent" },
+    { id: "d2", label: "globex", type: "database", parent: "g1", tone: "accent" },
+    { id: "g2", label: "Analytics", type: "group", parent: "org" },
+    { id: "d3", label: "events", type: "database", parent: "g2" },
+    { id: "ana", label: "ana", type: "member · admin", parent: "org", side: true },
+    { id: "sam", label: "sam", type: "member · viewer", parent: "org", side: true },
+  ]}
+  caption="An organization holds the groups and their databases, and the members who can see or change them. Your profile or token decides which organization Alchemy deploys into."
+/>
 
 ## Invite a teammate
 

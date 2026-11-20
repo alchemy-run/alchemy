@@ -265,8 +265,18 @@ export interface Domain extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DomainLookup
 > {}
+
+/**
+ * Props for {@link Domain.lookup}: find a domain this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DomainLookup {
+  /** The domain name of the existing domain. */
+  domainName: string;
+}
 
 /**
  * An Amazon OpenSearch Service domain — a managed OpenSearch/Elasticsearch
@@ -319,6 +329,16 @@ export interface Domain extends Resource<
  *     availabilityZoneCount: 2,
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing domain
+ * `Domain.lookup` references a domain Alchemy doesn't manage (created in the
+ * console or by another stack), found by `domainName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing domain
+ * ```typescript
+ * const existing = AWS.OpenSearch.Domain.lookup({ domainName: "my-domain" });
  * ```
  *
  * @resource
@@ -448,6 +468,13 @@ export const DomainProvider = () =>
           if ((o.vpcOptions === undefined) !== (n.vpcOptions === undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ domainName: name }) {
+          const domain = yield* readDomain(name);
+          if (domain === undefined) return undefined;
+          const attrs = yield* toAttrs(domain);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

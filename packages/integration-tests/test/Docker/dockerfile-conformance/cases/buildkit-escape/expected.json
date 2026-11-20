@@ -1,0 +1,32 @@
+{
+  "ok": true,
+  "directives": {
+    "escape": "`"
+  },
+  "stages": [
+    {
+      "line": 3,
+      "image": "image",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "LABEL",
+          "line": 4,
+          "flags": []
+        },
+        {
+          "tag": "ENV",
+          "line": 5,
+          "flags": [],
+          "vars": [
+            [
+              "GOPATH",
+              "\\go"
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

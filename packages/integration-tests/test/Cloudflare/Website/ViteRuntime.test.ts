@@ -491,11 +491,13 @@ describe.concurrent(
       ["dev"],
     );
 
-    // `cron-triggers/__tests__/cf-worker-header.spec.ts`: outbound fetches
-    // carry `CF-Worker` with the Worker's first custom domain. Attaching a
+    // `cron-triggers/__tests__/cf-worker-header.spec.ts` expects outbound
+    // fetches to carry `CF-Worker` with the Worker's custom domain. Alchemy
+    // deliberately adds none, even with a domain: Cloudflare-fronted sites
+    // answer 403 to one sent from a developer machine (#2965). Attaching a
     // domain deploys only to a zone the account owns, so this runs in dev.
     devTest.provider(
-      "Vite runtime: outbound fetches carry the custom domain as CF-Worker (dev)",
+      "Vite runtime: outbound fetches carry no CF-Worker, even with a custom domain (dev)",
       (stack) =>
         Effect.gen(function* () {
           const seen: Array<string | undefined> = [];
@@ -515,7 +517,7 @@ describe.concurrent(
           const site = yield* deploySite(stack, "dev", { domain: "vite-runtime.example.com" });
           const url = site.url!.replace(/\/$/, "");
           yield* expectJson(`${url}/cf-worker-header?echoUrl=${encodeURIComponent(echoUrl)}`, {
-            cfWorker: "vite-runtime.example.com",
+            cfWorker: null,
           });
         }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },

@@ -187,7 +187,7 @@ export const AddressMapProvider = () =>
       return observed ? toAttributes(observed, output.accountId) : undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ news, output }) {
+    reconcile: Effect.fn(function* ({ news = {}, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 

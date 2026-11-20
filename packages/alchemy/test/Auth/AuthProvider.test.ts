@@ -96,7 +96,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const answered: string[] = [];
-      const quiet = makeNonInteractive({ stdout: { write: () => true } as never });
+      const sink = { write: () => true } as never;
+      const quiet = makeNonInteractive({ stdout: sink, stderr: sink });
       const scripted = (name: string): Interaction["Service"] => ({
         ...quiet,
         prompt: {

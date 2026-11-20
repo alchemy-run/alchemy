@@ -1,0 +1,129 @@
+/*
+ * Shared look for the purpose-made diagrams in this directory (Sequence,
+ * Timeline, WorldMap, Log, StateMachine, Records, BranchGraph, Tree, Fanout,
+ * Queue, Zones, Boundaries, Shell).
+ * Same panel, type and colours as DAG.astro, so every figure reads as one set.
+ */
+.alc-fig {
+  margin: 1.5rem 0;
+}
+.alc-fig__panel {
+  background: var(--alc-bg-elev-1);
+  border: 1px solid var(--alc-hairline-2);
+  border-radius: var(--alc-radius);
+  padding: 1rem;
+  overflow-x: auto;
+}
+.alc-fig__svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-inline: auto;
+}
+.alc-fig__caption {
+  margin-top: 0.625rem;
+  font-family: var(--alc-font-sans);
+  font-size: 13px;
+  color: var(--alc-fg-3);
+  text-align: center;
+}
+
+/* Boxes and text inside an SVG */
+.alc-fig__box {
+  fill: var(--alc-bg-elev-2);
+  stroke: var(--alc-accent-40);
+  stroke-width: 1.5;
+}
+.alc-fig__box--accent {
+  stroke: var(--alc-accent);
+  fill: color-mix(in srgb, var(--alc-accent-soft) 60%, var(--alc-bg-elev-2));
+}
+.alc-fig__box--muted {
+  fill: transparent;
+  stroke: var(--alc-hairline-3);
+  stroke-dasharray: 4 3;
+}
+.alc-fig__box--warn {
+  stroke: var(--alc-warn);
+  fill: color-mix(in srgb, var(--alc-warn) 14%, var(--alc-bg-elev-2));
+}
+.alc-fig__box--danger {
+  stroke: var(--alc-danger);
+  fill: color-mix(in srgb, var(--alc-danger) 12%, var(--alc-bg-elev-2));
+}
+.alc-fig__label {
+  font-family: var(--alc-font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  fill: var(--alc-fg-1);
+}
+.alc-fig__type {
+  font-family: var(--alc-font-mono);
+  font-size: 10.5px;
+  fill: var(--alc-fg-3);
+}
+.alc-fig__small {
+  font-family: var(--alc-font-mono);
+  font-size: 10.5px;
+  fill: var(--alc-fg-3);
+}
+.alc-fig__strong {
+  font-family: var(--alc-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--alc-fg-2);
+}
+.alc-fig__line {
+  stroke: var(--alc-accent);
+  stroke-width: 1.5;
+  fill: none;
+}
+.alc-fig__line--dashed {
+  stroke-dasharray: 5 4;
+}
+.alc-fig__line--muted {
+  stroke: var(--alc-hairline-3);
+  stroke-width: 1.25;
+}
+.alc-fig__line--warn {
+  stroke: var(--alc-warn);
+}
+.alc-fig__dot {
+  fill: var(--alc-accent);
+}
+.alc-fig__halo {
+  fill: color-mix(in srgb, var(--alc-accent) 25%, transparent);
+}
+.alc-fig__land {
+  fill: var(--alc-hairline-3);
+}
+.alc-fig__label-bg {
+  fill: var(--alc-bg-elev-1);
+}
+
+/*
+ * Diagrams that draw a second, narrow layout for phones mark the two SVGs
+ * --wide and --narrow; one shows at a time, so text keeps its size instead of
+ * shrinking with the column.
+ */
+svg.alc-fig__svg--narrow {
+  display: none;
+}
+@media (max-width: 40rem) {
+  .alc-fig__panel {
+    padding: 0.75rem;
+  }
+  svg.alc-fig__svg--wide:has(+ svg.alc-fig__svg--narrow) {
+    display: none;
+  }
+  svg.alc-fig__svg--narrow {
+    display: block;
+  }
+}
+/* Text that a line may cross keeps a ring of panel colour around it. */
+.alc-fig__haloed {
+  paint-order: stroke;
+  stroke: var(--alc-bg-elev-1);
+  stroke-width: 5px;
+  stroke-linejoin: round;
+}

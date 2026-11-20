@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -92,8 +93,27 @@ export type SavedQuery = Resource<
     lastUpdater: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SavedQueryLookup
 >;
+
+/**
+ * Props for {@link SavedQuery.lookup}: find a saved query this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SavedQueryLookup {
+  /**
+   * Saved query id (the `{savedQuery}` segment of
+   * `projects/{project}/savedQueries/{savedQuery}`).
+   */
+  savedQueryId: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Asset Inventory saved query, typically an IAM policy analysis
@@ -141,6 +161,19 @@ export type SavedQuery = Resource<
  *       },
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing saved query
+ * `SavedQuery.lookup` references a saved query Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * saved query.
+ *
+ * **Example:** Reference an existing saved query
+ * ```typescript
+ * const savedQuery = GCP.CloudAsset.SavedQuery.lookup({
+ *   savedQueryId: "my-saved-query",
  * });
  * ```
  *
@@ -218,6 +251,13 @@ export const SavedQueryProvider = () =>
         replaceOn(olds?.parent, news.parent)
       );
     }),
+
+    lookup: Effect.fn(function* ({ savedQueryId }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* observe(env.project, savedQueryId, undefined);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

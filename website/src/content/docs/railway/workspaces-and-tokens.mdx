@@ -1,0 +1,57 @@
+---
+title: Workspaces and tokens
+description: How a Railway workspace holds your projects and billing, which tokens Alchemy can deploy with, and how to keep production apart.
+---
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Everything you run on Railway belongs to a **workspace**: your personal account, or a team you share with others. A workspace holds your projects, their members and their bill. Inside it, each **project** groups services and databases on their own private network.
+
+<Tree
+  nodes={[
+    { id: "ws", label: "acme", type: "workspace · members, bill" },
+    { id: "prod", label: "my-app-prod", type: "project · one per stage", parent: "ws" },
+    { id: "api", label: "api", type: "Service", parent: "prod", tone: "accent" },
+    { id: "pg", label: "Postgres", type: "database", parent: "prod" },
+    { id: "pr", label: "my-app-pr-42", type: "project", parent: "ws" },
+    { id: "api2", label: "api", type: "Service", parent: "pr", tone: "accent" },
+    { id: "pg2", label: "Postgres", type: "database", parent: "pr" },
+  ]}
+  scopes={[{ on: "ws", label: "workspace or account token" }]}
+  caption="A workspace holds a project per stage, and each project its services and databases on a private network. Alchemy needs a token that reaches the workspace, because it creates the projects."
+/>
+
+## Sign in with a profile
+
+Alchemy reaches a workspace through a [profile](/environments/profiles):
+
+```sh
+alchemy profile edit --add Railway
+```
+
+**OAuth** pairs Alchemy with your Railway account in the browser, with no token to create. Or paste an **account** or **workspace token**, made under **Account Settings → Tokens**. A **project token** won't work: it reaches one project, and Alchemy creates projects.
+
+A Project is created in your token's workspace, or, for an account token or OAuth, in your first workspace. To pin it to another workspace your token can reach, set `workspaceId`:
+
+```typescript title="src/project.ts"
+export const Site = Railway.Project("Site", { workspaceId: "ws_123" });
+```
+
+See [Setup](/railway/setup) for the details.
+
+## Keep production apart
+
+A [stage](/environments/stages) decides what you deploy, and each stage gets its own project. For a stronger line around production, give it its own workspace and profile, so its members and its bill are separate:
+
+```sh
+alchemy profile create prod
+alchemy profile edit --profile prod --add Railway
+alchemy deploy --stage prod --profile prod
+```
+
+## In CI
+
+With `CI=true`, Alchemy skips the profile and reads `RAILWAY_API_TOKEN` from the environment. See [CI](/environments/ci).
+
+## Next
+
+Values your Services read at run time are covered in [Variables](/railway/data/variables).

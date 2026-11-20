@@ -15,7 +15,7 @@ Bucket, and deploy it to your Google Cloud project.
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) or Node.js 24.11.1+
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
 - A Google Cloud project and a service-account key that can create
   what you deploy. See [Setup](/gcp/setup).
 
@@ -75,9 +75,7 @@ writes state under `.alchemy/` next to your code. See
 
 Point Alchemy at your project once:
 
-```sh
-bun alchemy profile edit --add GCP
-```
+<PackageManagers run="alchemy profile edit --add GCP" />
 
 Choose **gcloud login**, pick a gcloud configuration and sign in with your
 Google account. (**Service account JSON** works too, with a
@@ -164,9 +162,7 @@ Deploy again. Nothing changed, so there is nothing to do:
 
 `destroy` deletes everything the Stack created:
 
-```sh
-bun alchemy destroy
-```
+<PackageManagers run="alchemy destroy" />
 
 Deploy again afterwards if you try it. Part 2 builds on the Bucket.
 

@@ -1,5 +1,6 @@
 import type * as cf from "@cloudflare/workers-types";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { runInBackground } from "alchemy/Workers/EventLifetime";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -9,9 +10,7 @@ import { resolveAccessContext, type WorkerExecutionContextAccess } from "./Worke
 export const WorkerTypeId = "Cloudflare.Worker";
 export type WorkerTypeId = typeof WorkerTypeId;
 
-export class WorkerEnvironment extends Context.Service<WorkerEnvironment, Record<string, any>>()(
-  "Cloudflare.Workers.WorkerEnvironment",
-) {}
+export { WorkerEnvironment } from "alchemy/Workers/WorkerEnvironment";
 
 export class CachePurgeError extends Data.TaggedError("CachePurgeError")<{
   message: string;
@@ -194,6 +193,8 @@ export const WorkerExecutionContext = Context.Reference<WorkerExecutionContextSe
 );
 export type WorkerExecutionContext = typeof WorkerExecutionContext;
 
+export { EventLifetime, makeEventLifetime, runInBackground } from "alchemy/Workers/EventLifetime";
+
 export const fromExecutionContext = (
   ctx: cf.ExecutionContext,
   env?: Record<string, unknown>,
@@ -204,13 +205,7 @@ export const fromExecutionContext = (
   exports: makeEntrypointExports((name, options) =>
     getLoopbackEntrypoint(ctx.exports, name, options),
   ),
-  waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    Effect.gen(function* () {
-      const context = yield* Effect.context<R>();
-      // Register the promise with workerd un-awaited — waitUntil extends the
-      // invocation's lifetime without blocking the response.
-      yield* Effect.sync(() => ctx.waitUntil(Effect.runPromiseWith(context)(effect)));
-    }),
+  waitUntil: (effect) => runInBackground(effect, (promise) => ctx.waitUntil(promise)),
   passThroughOnException: () => Effect.sync(() => ctx.passThroughOnException()),
   cache: {
     purge: (options) =>
@@ -312,29 +307,8 @@ export const waitUntil = <A, E, R>(
 ): Effect.Effect<void, never, R | RuntimeContext> =>
   WorkerExecutionContext.pipe(Effect.flatMap((ctx) => ctx.waitUntil(effect)));
 
-export type WorkerEvent = Exclude<
-  {
-    [type in keyof cf.ExportedHandler]: {
-      kind: "Cloudflare.Workers.WorkerEvent";
-      type: type;
-      input: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[0];
-      env: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[1];
-      context: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[2];
-    };
-  }[keyof cf.ExportedHandler],
-  undefined
->;
-
-export const isWorkerEvent = (value: any): value is WorkerEvent =>
-  value?.kind === "Cloudflare.Workers.WorkerEvent";
-
-export const ExportedHandlerMethods = [
-  "fetch",
-  "tail",
-  "trace",
-  "tailStream",
-  "scheduled",
-  "test",
-  "email",
-  "queue",
-] as const satisfies (keyof cf.ExportedHandler)[];
+export {
+  ExportedHandlerMethods,
+  isWorkerEvent,
+  type WorkerEvent,
+} from "alchemy/Workers/Workerd/WorkerEvent";

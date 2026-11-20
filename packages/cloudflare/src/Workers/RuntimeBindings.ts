@@ -239,12 +239,16 @@ export const toRuntimeBinding = Effect.fn(function* (
       // the production `service: <own name>` lowering.
       return Service.self(b.name, { entrypoint: b.entrypoint, props: b.props });
     case "service":
-      return Service.local({
-        binding: b.name,
-        scriptName: b.service,
-        entrypoint: b.entrypoint,
-        props: b.props,
-      });
+      // A Worker this stack doesn't run locally (a `Worker.lookup`) is
+      // reached through the remote-binding bridge.
+      return devRemote?.[b.name]
+        ? Service.remote(b.name, b.service, { entrypoint: b.entrypoint, props: b.props })
+        : Service.local({
+            binding: b.name,
+            scriptName: b.service,
+            entrypoint: b.entrypoint,
+            props: b.props,
+          });
     case "stream":
       // Local emulation stores videos in a local simulator (no transcoding,
       // no signed URLs) and serves each video's `preview` URL at
@@ -323,7 +327,9 @@ export const materializeRuntimeBindings = Effect.fn(function* (
     Text.local("ALCHEMY_STAGE", options.stack.stage),
     Text.local("ALCHEMY_CLOUDFLARE_ACCOUNT_ID", options.accountId),
     ...Object.entries(config.env ?? {})
-      .filter(([key]) => !descriptorNames.has(key))
+      // An undefined value binds nothing, as on a deploy: workerd rejects a
+      // binding without a value.
+      .filter(([key, value]) => !descriptorNames.has(key) && value !== undefined)
       .map(([key, value]) => {
         const unredacted = Redacted.isRedacted(value) ? Redacted.value(value) : value;
         return typeof unredacted === "string"

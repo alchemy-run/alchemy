@@ -139,8 +139,23 @@ export interface Channel extends Resource<
     egressEndpoints: medialive.ChannelEgressEndpoint[];
   },
   never,
-  Providers
+  Providers,
+  ChannelLookup
 > {}
+
+/**
+ * Props for {@link Channel.lookup}: find a channel this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ChannelLookup =
+  | {
+      /** The id of the existing channel. */
+      channelId: string;
+    }
+  | {
+      /** The name of the existing channel. */
+      name: string;
+    };
 
 /**
  * An AWS Elemental MediaLive channel — the live encoder that reads from
@@ -183,6 +198,16 @@ export interface Channel extends Resource<
  *     ],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing channel
+ * `Channel.lookup` references a channel Alchemy doesn't manage (created in the
+ * console or by another stack), found by `channelId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing channel
+ * ```typescript
+ * const live = AWS.MediaLive.Channel.lookup({ name: "live" });
  * ```
  *
  * @resource
@@ -273,6 +298,13 @@ export const ChannelProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* (props) {
+          const channel =
+            "channelId" in props
+              ? yield* getChannel(props.channelId)
+              : yield* findByName(props.name);
+          return channel === undefined ? undefined : toAttrs(channel);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const channel =
             output?.channelId !== undefined

@@ -1,0 +1,43 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "EXPOSE",
+          "line": 2,
+          "flags": []
+        },
+        {
+          "tag": "LABEL",
+          "line": 3,
+          "flags": []
+        },
+        {
+          "tag": "VOLUME",
+          "line": 4,
+          "flags": []
+        },
+        {
+          "tag": "VOLUME",
+          "line": 5,
+          "flags": []
+        },
+        {
+          "tag": "MAINTAINER",
+          "line": 6,
+          "flags": []
+        },
+        {
+          "tag": "ONBUILD",
+          "line": 7,
+          "flags": []
+        }
+      ]
+    }
+  ]
+}

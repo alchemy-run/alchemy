@@ -87,8 +87,18 @@ export interface DecoderManifest extends Resource<
     modelManifestArn: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DecoderManifestLookup
 > {}
+
+/**
+ * Props for {@link DecoderManifest.lookup}: find a decoder manifest this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DecoderManifestLookup {
+  /** The decoder manifest name of the existing decoder manifest. */
+  decoderManifestName: string;
+}
 
 /**
  * An AWS IoT FleetWise decoder manifest — the decoding rules (network
@@ -128,6 +138,16 @@ export interface DecoderManifest extends Resource<
  *   ],
  *   status: "ACTIVE",
  * });
+ * ```
+ *
+ * ### Looking up an existing decoder manifest
+ * `DecoderManifest.lookup` references a decoder manifest Alchemy doesn't manage (created in the
+ * console or by another stack), found by `decoderManifestName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing decoder manifest
+ * ```typescript
+ * const existing = AWS.IoTFleetWise.DecoderManifest.lookup({ decoderManifestName: "my-decoder-manifest" });
  * ```
  *
  * @resource
@@ -200,6 +220,13 @@ export const DecoderManifestProvider = () =>
           if (news.modelManifestArn !== olds.modelManifestArn) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ decoderManifestName: name }) {
+          const found = yield* readManifest(name);
+          if (found === undefined) return undefined;
+          const attrs = toAttrs(found);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

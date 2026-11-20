@@ -55,8 +55,18 @@ export interface DeviceProfile extends Resource<
     deviceProfileName: string;
   },
   never,
-  Providers
+  Providers,
+  DeviceProfileLookup
 > {}
+
+/**
+ * Props for {@link DeviceProfile.lookup}: find a device profile this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DeviceProfileLookup {
+  /** The name of the existing device profile. */
+  deviceProfileName: string;
+}
 
 /**
  * An AWS IoT Core for LoRaWAN device profile — the hardware-level LoRaWAN
@@ -86,6 +96,16 @@ export interface DeviceProfile extends Resource<
  * const profile = yield* IoTWireless.DeviceProfile("SidewalkModel", {
  *   sidewalk: {},
  * });
+ * ```
+ *
+ * ### Looking up an existing device profile
+ * `DeviceProfile.lookup` references a device profile Alchemy doesn't manage (created in the
+ * console or by another stack), found by `deviceProfileName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing device profile
+ * ```typescript
+ * const lorawan = AWS.IoTWireless.DeviceProfile.lookup({ deviceProfileName: "lorawan-us915" });
  * ```
  *
  * @resource
@@ -167,6 +187,10 @@ export const DeviceProfileProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* ({ deviceProfileName }) {
+          const profile = yield* observe(undefined, deviceProfileName);
+          return profile === undefined ? undefined : yield* toAttrs(profile, deviceProfileName);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.deviceProfileName ?? (yield* createName(id, olds ?? {}));
           const profile = yield* observe(output, name);

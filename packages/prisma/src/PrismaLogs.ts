@@ -179,11 +179,11 @@ const tailDeploymentLogsWith = (
                   }),
               ),
             );
-            const auth = Redacted.value(request.headers.Authorization);
+            const authorization = request.headers.Authorization;
             const socket = yield* Effect.try({
               try: () =>
                 new WebSocket(request.url, {
-                  headers: { Authorization: auth },
+                  headers: authorization ? { Authorization: Redacted.value(authorization) } : {},
                   maxPayload: MAX_WEBSOCKET_PAYLOAD_BYTES,
                 }),
               catch: () =>
@@ -244,7 +244,7 @@ const tailDeploymentLogsWith = (
                     fail(error);
                   }),
                 ),
-                Effect.runFork,
+                Effect.runForkWith(context),
               );
             };
 

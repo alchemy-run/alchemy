@@ -86,8 +86,23 @@ export interface Gateway extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  GatewayLookup
 > {}
+
+/**
+ * Props for {@link Gateway.lookup}: find a gateway this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type GatewayLookup =
+  | {
+      /** The id of the existing gateway. */
+      gatewayId: string;
+    }
+  | {
+      /** The name of the existing gateway. */
+      gatewayName: string;
+    };
 
 /**
  * An AWS IoT SiteWise gateway — the ingestion point that connects
@@ -109,6 +124,16 @@ export interface Gateway extends Resource<
  *     greengrassV2: { coreDeviceThingName: "FactoryCoreDevice" },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing gateway
+ * `Gateway.lookup` references a gateway Alchemy doesn't manage (created in the
+ * console or by another stack), found by `gatewayId` or `gatewayName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing gateway
+ * ```typescript
+ * const plant = AWS.IoTSiteWise.Gateway.lookup({ gatewayName: "plant-1" });
  * ```
  *
  * @resource
@@ -173,6 +198,13 @@ export const GatewayProvider = () =>
             );
             return hydrated.flatMap((state) => (state === undefined ? [] : [state.attrs]));
           }),
+        lookup: Effect.fn(function* (props) {
+          const state =
+            "gatewayId" in props
+              ? yield* readGatewayById(props.gatewayId)
+              : yield* findGatewayByName(props.gatewayName);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const state = output?.gatewayId
             ? yield* readGatewayById(output.gatewayId)

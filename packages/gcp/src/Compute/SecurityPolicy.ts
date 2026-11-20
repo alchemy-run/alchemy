@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -132,8 +133,26 @@ export type SecurityPolicy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecurityPolicyLookup
 >;
+
+/**
+ * Props for {@link SecurityPolicy.lookup}: find a security policy this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SecurityPolicyLookup {
+  /**
+   * Policy name (RFC1035, 1-63 characters).
+   */
+  securityPolicyName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A global Cloud Armor security policy that filters HTTP(S) requests
@@ -184,6 +203,19 @@ export type SecurityPolicy = Resource<
  *     jsonParsing: "STANDARD",
  *     logLevel: "VERBOSE",
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing security policy
+ * `SecurityPolicy.lookup` references a security policy Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * security policy.
+ *
+ * **Example:** Reference an existing security policy
+ * ```typescript
+ * const securityPolicy = GCP.Compute.SecurityPolicy.lookup({
+ *   securityPolicyName: "my-security-policy",
  * });
  * ```
  *
@@ -524,6 +556,13 @@ export const SecurityPolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ securityPolicyName }) {
+      const env = yield* GcpEnvironment.current;
+      const existing = yield* getByName(env.project, securityPolicyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

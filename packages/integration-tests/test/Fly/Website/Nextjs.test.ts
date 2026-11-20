@@ -9,8 +9,9 @@ import * as pathe from "pathe";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
 import { prepareNextjsFixture } from "../../Cloudflare/Website/TypeScriptCompat.ts";
+import { flyApi } from "../limit.ts";
 
-const { test } = Test.make({ providers: Fly.providers() });
+const { test } = Test.make({ limit: flyApi, providers: Fly.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 

@@ -61,8 +61,7 @@ export const toCloudflareFetcher = Effect.fn(function* (fetcher: Fetcher) {
           Effect.map(
             (response) => HttpServerResponse.toWeb(response, { context }) as any as cf.Response,
           ),
-          Effect.provideContext(context),
-          Effect.runPromise,
+          Effect.runPromiseWith(context),
         ),
     connect() {
       // TODO

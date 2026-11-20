@@ -120,8 +120,18 @@ export interface HealthCheck extends Resource<
     };
   },
   never,
-  Providers
+  Providers,
+  HealthCheckLookup
 > {}
+
+/**
+ * Props for {@link HealthCheck.lookup}: find a health check this stack doesn't
+ * manage, in the ambient account.
+ */
+export interface HealthCheckLookup {
+  /** The id of the existing health check. */
+  healthCheckId: string;
+}
 
 /**
  * A Route 53 health check.
@@ -162,6 +172,17 @@ export interface HealthCheck extends Resource<
  *   failover: "PRIMARY",
  *   healthCheckId: check.id,
  * });
+ * ```
+ *
+ * ### Looking up an existing health check
+ * `HealthCheck.lookup` references a health check Alchemy doesn't manage (created in the
+ * console or by another stack), found by `healthCheckId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Fail over on an existing health check
+ * ```typescript
+ * const primary = AWS.Route53.HealthCheck.lookup({ healthCheckId: "abcdef12-3456-7890-abcd-ef1234567890" });
+ * const healthCheckId = primary.healthCheckId;
  * ```
  *
  * @resource
@@ -328,6 +349,19 @@ export const HealthCheckProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ healthCheckId }) {
+          const check = yield* observe(healthCheckId);
+          if (!check) return undefined;
+          return {
+            id: check.Id,
+            healthCheckId: check.Id,
+            type: check.HealthCheckConfig.Type,
+            configuration: observeHealthCheckConfiguration(
+              check.HealthCheckConfig,
+              yield* observedTags(check.Id),
+            ),
+          };
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) {

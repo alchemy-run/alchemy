@@ -3,18 +3,25 @@ import * as Foldkit from "@alchemy.run/domain/Foldkit";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
-import { CounterApi, CounterId, Limit, Unauthenticated } from "./FoldkitCounter.ts";
+import {
+  Counter as CounterAggregate,
+  CounterApi,
+  CounterId,
+  Incremented,
+  Limit,
+  Unauthenticated,
+} from "./FoldkitCounter.ts";
 
 const Counter = Foldkit.make(CounterApi);
 const target = CounterId.make("one");
-Counter.Reset({ target, input: {}, commandId: "page:0" });
-Counter.Increment({ target, input: { amount: 1 }, commandId: "page:1" });
+Counter.Reset({ input: { counterId: target }, commandId: "page:0" });
+Counter.Increment({ input: { counterId: target, amount: 1 }, commandId: "page:1" });
 // @ts-expect-error the target is branded
-Counter.Increment({ target: "one", input: { amount: 1 }, commandId: "page:1" });
+Counter.Increment({ input: { counterId: "one", amount: 1 }, commandId: "page:1" });
 // @ts-expect-error input uses the decoded side of the transform
-Counter.Increment({ target, input: { amount: "1" }, commandId: "page:1" });
+Counter.Increment({ input: { id: target, amount: "1" }, commandId: "page:1" });
 // @ts-expect-error required command input cannot be omitted
-Counter.Increment({ target, commandId: "page:1" });
+Counter.Increment({ id: { target, commandId: "page:1" } });
 
 const check = (message: typeof Counter.Message.Type) =>
   Counter.Message.match<void>(message, {
@@ -44,7 +51,7 @@ const requirements: Effect.Effect<
   typeof Counter.Message.Type,
   never,
   typeof CounterApi.Client.Identifier
-> = Counter.Increment({ target, input: { amount: 1 }, commandId: "page:1" }).effect;
+> = Counter.Increment({ input: { counterId: target, amount: 1 }, commandId: "page:1" }).effect;
 void check;
 void schema;
 void requirements;
@@ -71,18 +78,6 @@ Counter.Total.watch<{ id: typeof CounterId.Type }, number>({
   ...watchOptions,
   // @ts-expect-error all callbacks produce the selected Message type
   onDefect: () => "failed",
-});
-Counter.Counter.watch(watchOptions);
-Counter.Counter.events({
-  key: () => target,
-  cursor: () => Option.none(),
-  onEntry: (entry) => {
-    const amount: number = entry.event.amount;
-    return amount;
-  },
-  onCaughtUp: (cursor) => cursor,
-  onFailure: () => 0,
-  onDefect: () => 0,
 });
 Counter.Outputs.watch({
   key: () => target,
@@ -129,3 +124,78 @@ Counter.Total.events({
   onFailure: () => 0,
   onDefect: () => 0,
 });
+
+// Queries: one Command per Api query, with typed results and failures.
+const Row = Schema.Struct({ id: Schema.String, amount: Schema.Number });
+class Ledger extends Domain.Projection("FoldkitLedger", {
+  from: [CounterAggregate],
+  key: CounterAggregate,
+  on: [Incremented],
+}) {}
+class Entries extends Domain.Query("Entries", {
+  input: { counter: CounterId },
+  success: Row,
+  paged: true,
+  waitsFor: [Ledger],
+  rejects: [Limit],
+}) {}
+class Count extends Domain.Query("Count", { success: Schema.Number }) {}
+class QueryModel extends Domain.Model("FoldkitQueries", {
+  aggregates: [CounterAggregate],
+  projections: [Ledger],
+  queries: [Entries, Count],
+}) {}
+class QueryApi extends Domain.Api("QueryApi", {
+  model: QueryModel,
+  commands: [],
+  views: [],
+  streams: [],
+  queries: ["Entries", "Count"],
+}) {}
+const Queries = Foldkit.make(QueryApi);
+Queries.Entries({ input: { counter: target }, requestId: "q:0" });
+Queries.Entries({
+  input: { counter: target },
+  requestId: "q:1",
+  atLeast: { stream: "Counter/one", version: 1 },
+  after: "cursor",
+  take: 10,
+});
+Queries.Count({ input: {}, requestId: "q:2" });
+// @ts-expect-error query input keys preserve their brand
+Queries.Entries({ input: { counter: "one" }, requestId: "q:3" });
+// @ts-expect-error a query needs a request id
+Queries.Entries({ input: { counter: target } });
+const read = (message: typeof Queries.Message.Type) =>
+  Queries.Message.match<void>(message, {
+    SucceededEntries: ({ requestId, result }) => {
+      const rows: ReadonlyArray<{ readonly id: string; readonly amount: number }> = result.entries;
+      const cursor: string | null = result.cursor;
+      void [requestId, rows, cursor];
+    },
+    FailedEntries: ({ failure }) => {
+      if (failure._tag === "Rejected") {
+        const rejection: typeof Limit.Type = failure.rejection;
+        void rejection;
+      }
+      // A query that reads projections may time out waiting for `atLeast`.
+      const tag: "Rejected" | "Denied" | "TimedOut" | "Unknown" = failure._tag;
+      void tag;
+    },
+    SucceededCount: ({ result }) => {
+      const count: number = result;
+      void count;
+    },
+    FailedCount: ({ failure }) => {
+      // @ts-expect-error a query with no projections never times out
+      const tag: "TimedOut" = failure._tag;
+      void tag;
+    },
+  });
+const queryRequirements: Effect.Effect<
+  typeof Queries.Message.Type,
+  never,
+  typeof QueryApi.Client.Identifier
+> = Queries.Count({ input: {}, requestId: "q:4" }).effect;
+void read;
+void queryRequirements;

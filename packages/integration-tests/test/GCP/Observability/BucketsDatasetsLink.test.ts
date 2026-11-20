@@ -6,6 +6,7 @@ import * as observability from "@distilled.cloud/gcp/observability_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -93,6 +94,15 @@ test.provider.skipIf(!spansDataset)(
             displayName: "Trace analytics",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Observability.BucketsDatasetsLink.lookup({
+          linkId: created.linkId,
+          location: created.location,
+          dataset: created.dataset,
+          bucket: created.bucket,
+        }),
+        created,
       );
 
       expect(created.linkId).toEqual(expect.any(String));

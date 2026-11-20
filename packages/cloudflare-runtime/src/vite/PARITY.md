@@ -1,27 +1,49 @@
 # Parity with `@cloudflare/vite-plugin`
 
 Alchemy's Vite plugin replaces `@cloudflare/vite-plugin` (checked against
-**1.65.0**, the catalog version). Frameworks are built against the official
+**2.0.0-rc.1**, the `cloudflare-vite-plugin-v2` catalog version; apps use v1, see
+Tracking v2). Frameworks are built against the official
 plugin's behavior, so anything they can observe must match. This file is the
 inventory of that surface: every behavior is **matched** (with the test that
 pins it), **different on purpose** (with the reason), or **out of scope**.
 
-Wrangler-specific behavior is out of scope: Alchemy configures Workers in
-code, so `wrangler.json`, `.dev.vars`/`.env` loading, the Build Output
-Specification, deploy config redirects, tunnels, keyboard shortcuts, agent
-hints, update checks and the local explorer/observability UIs have no
-counterpart.
+Configuration and deploy tooling are out of scope: Alchemy configures Workers
+in code and deploys them itself, so `cloudflare.config.ts` and `wrangler.json`,
+`.dev.vars`/`.env` secret loading, Build Output and `cf deploy`, generated
+Worker types (`.cloudflare/types`), deploy config redirects, tunnels, the
+development registry, keyboard shortcuts, agent hints, update checks and the
+local explorer/observability UIs have no counterpart.
+
+### Tracking v2
+
+Upstream develops v2 on `main`; v1 (`1.x`, on the `vite-plugin-v1` branch)
+only gets maintenance releases, so the differential tests below run against
+v2's prerelease line (the `cloudflare-vite-plugin-v2` catalog). The examples
+and Website fixtures stay on npm `latest` (v1, the default catalog), which is
+what create-cloudflare templates and framework docs install today; a v2 that
+meets their leftover `wrangler.jsonc` rejects the project (see the rows on
+Wrangler configs below). Alchemy's handling of the v1 plugin those apps load
+is covered by `ViteTemplates.test.ts`, which runs every template under
+`alchemy dev` and deployed; the unit tests here import only v2.
+
+Most of v2 is how a project is configured and deployed: native
+`cloudflare.config.ts`, Build Output in `.cloudflare/output/v1` for
+`cf deploy`, no Wrangler. Alchemy uses none of that, so it is out of scope
+above and nothing here changes because of it. What frameworks observe (the
+resolved Vite config, what each environment emits, the dev server) is
+compared with v2 as before. The differences that remain are listed below with
+their reasons; search for "v2" to find them.
 
 ## How parity is enforced
 
 | Test | What it checks |
 | --- | --- |
 | [`test/parity/config.test.ts`](./test/parity/config.test.ts) | Resolves one project with both plugins (`serve` and `build`, with and without `nodejs_compat`/`nodejs_als`, with user overrides, in production) and compares what frameworks read: each environment's `resolve`, `define`, `build`, `optimizeDeps`, the client environment, `appType`, `server.fs.deny`. |
-| [`test/parity/build.test.ts`](./test/parity/build.test.ts) | Builds five project shapes with both plugins and compares the output: every file in `dist/`, entry chunk names and exports. |
-| [`test/parity/constants.test.ts`](./test/parity/constants.test.ts) | Compares the runtime pieces ported verbatim (handler keys, additional module rules, `cloudflare:*` built-ins, Sandbox preview origins) with the installed release. |
+| [`test/parity/build.test.ts`](./test/parity/build.test.ts) | Builds eight project shapes with both plugins and compares what each environment emits (client and Worker files, entry chunk exports). v2's Build Output directories are compared with the `dist/` directories they replace (see Build). |
+| [`test/parity/constants.test.ts`](./test/parity/constants.test.ts) | Compares the runtime pieces ported verbatim (handler keys, additional module rules, `cloudflare:*` built-ins, Sandbox preview origins) with the installed release. v2 states module rules as `@cloudflare/config` globs, so the test checks each glob's file resolves to the same module type. |
 | `packages/integration-tests/test/Cloudflare/Website/Vite*.test.ts` | The plugin's playgrounds and create-cloudflare's templates, deployed and under `alchemy dev`. |
 
-Upgrading `@cloudflare/vite-plugin` in the catalog re-runs all three
+Upgrading `@cloudflare/vite-plugin` in the `cloudflare-vite-plugin-v2` catalog re-runs all three
 differential tests against the new release, so upstream drift in config,
 build output or the ported runtime fails CI here instead of in an app.
 Fixes ported from upstream `main` before a release ships them are listed in
@@ -36,11 +58,14 @@ the differential tests ignore until the installed release catches up.
 | --- | --- | --- |
 | Frameworks detect the plugin by a `vite-plugin-cloudflare` name prefix (React Router, vinext, Vike's `@universal-deploy`, Flue) | Matched (`vite-plugin-cloudflare:alchemy`) | `plugin-name.test.ts` |
 | An official `cloudflare()` left in the config (or added by an async factory, e.g. RedwoodSDK) is neutralized | Matched | `plugin-name.test.ts`, `ViteTemplates.test.ts` |
-| The `config` customizer of a neutralized `cloudflare()` still runs (Flue's `flueWorkerConfig()`) | Matched | `plugin-name.test.ts`, `examples/cloudflare-flue` |
+| The `config` customizer of a neutralized `cloudflare()` still runs (Flue's `flueWorkerConfig()`). In v2 it is a callback over the loaded `cloudflare.config.ts`, and it runs when the project has neither that file nor a Wrangler config (v1 always calls it) | Matched, against the installed release | `plugin-name.test.ts`, `examples/cloudflare-flue` |
+| v2 with a leftover `wrangler.json`, `wrangler.jsonc` or `wrangler.toml` and no `cloudflare.config.ts` | Different: v2 rejects the project before calling the customizer, so a customizer (Flue) doesn't run. That is v2's own migration step (it fails the same way without Alchemy), so Alchemy doesn't work around it; the project still resolves with Alchemy's build | `plugin-name.test.ts` |
+| A framework that reloads `vite.config.ts` for a second Vite server (React Router's child compiler) gets a fresh official `cloudflare()` that Alchemy never sees | Different: that instance runs as configured. v1 reads `wrangler.jsonc` there and works; v2 rejects a leftover `wrangler.jsonc` there, as it does without Alchemy, so `alchemy dev` of the React Router template fails with v2 until the project moves to `cloudflare.config.ts`. The fixtures stay on v1 for this reason | `ViteTemplates.test.ts` (react-router, dev) |
 | `rsc: { serverHandler: false }` for `@vitejs/plugin-rsc` | Matched | React Router RSC fixtures |
-| Worker settings from `wrangler.json` / the customizer's result | Different: declared on the Website resource | — |
+| Worker settings from `cloudflare.config.ts` (v2) or `wrangler.json` (v1), and the customizer's result | Different: declared on the Website resource | — |
 | `auxiliaryWorkers`, `persistState`, `remoteBindings`, `inspectorPort` | Different: separate `Cloudflare.Worker` resources, Alchemy state, `Alchemy.remote()` | — |
-| `experimental.prerenderWorker` | Out of scope (experimental); prerendering through the preview server is matched | `ViteBuild.test.ts` |
+| `assetsOnly`, `tunnel`, `types` (v2) | Out of scope: the deploy shape, tunnels and type generation are Alchemy's own | — |
+| `prerenderWorker` (stable in v2) | Out of scope: Alchemy prerenders through the preview server, which is matched | `ViteBuild.test.ts` |
 
 ### Resolved config
 
@@ -48,9 +73,10 @@ the differential tests ignore until the installed release catches up.
 | --- | --- | --- |
 | `appType: "custom"`; `server.fs.deny` (Vite's, credentials, key stores, `.wrangler`) | Matched, plus Alchemy's state and stack files | `config.test.ts`, `ViteRuntime.test.ts` (sensitive files) |
 | Worker environment `resolve` (conditions, `noExternal`, built-ins) | Matched | `config.test.ts` |
-| `cloudflare:durable-objects` is a runtime built-in | Matched ahead of the release (upstream `main`, after 1.65.0) | `constants.test.ts`, `config.test.ts` via `test/parity/ahead-of-release.ts` |
+| `cloudflare:durable-objects` is a runtime built-in | Matched | `constants.test.ts`, `config.test.ts` |
 | `define`: `process.env.NODE_ENV`; `process.env` as `{}` without `nodejs_compat` | Matched | `config.test.ts`, `ViteRuntime.test.ts` (NODE_ENV) |
-| `build`: target (`es2026` on Rolldown), `cssTarget`, manifest, source maps, `emitAssets`, `copyPublicDir`, `ssr`, output dir, `index` entry input | Matched | `config.test.ts`, `build.test.ts` |
+| `build`: target (`es2026` on Rolldown), `cssTarget` (only when the user sets none), no manifest, source maps, `emitAssets`, `copyPublicDir`, `ssr`, `index` entry input | Matched | `config.test.ts`, `build.test.ts` |
+| `build.outDir` | Different: Alchemy keeps Vite's `<outDir>/<environment>` (`dist/ssr`, `dist/client`) and honors a user's `build.outDir`. v2 points every environment into Build Output and ignores `build.outDir`. Alchemy deploys from Vite's layout, and frameworks and Alchemy's Website resources read it | `config.test.ts` (keeps Vite's output directories) |
 | `optimizeDeps`: entries, `development` condition, Node.js and `cloudflare:*` excluded | Matched | `config.test.ts` |
 | esbuild `supported.using` scoped to Worker environments (Vite 6/7) | Matched | `config.test.ts` (Rolldown); code path mirrors upstream |
 | Assets-only projects declare no Worker environments | Matched | `config.test.ts`, `build.test.ts` |
@@ -59,13 +85,14 @@ the differential tests ignore until the installed release catches up.
 
 | Behavior | Status | Test |
 | --- | --- | --- |
-| Default `buildApp`: Worker environments, then the client; a client with no entry builds for `public/` or Worker-imported assets; imported assets move to the client output | Matched | `build.test.ts` |
-| A user's own `buildApp` is kept | Matched | `ViteRuntime.test.ts` (custom buildApp) |
+| Default `buildApp`: Worker environments, then the client; a client with no entry builds for `public/` or Worker-imported assets; assets the entry Worker and its built children import move to the client output | Matched | `build.test.ts` |
+| A user's own `buildApp` is kept; afterwards the Worker environments and client it left out build and imported assets move | Matched | `build.test.ts`, `ViteRuntime.test.ts` (custom buildApp) |
 | Additional modules (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`, subpath imports), `.wasm?init` | Matched | `build.test.ts`, `ViteRuntime.test.ts` (additional modules) |
 | Node.js compat: unenv aliases, injected globals and polyfills | Matched | `ViteNodeCompat.test.ts` |
 | Unexpected Node.js imports warn without `nodejs_compat` (build and dev) | Matched | `dev-plugin.test.ts`, `ViteNodeCompat.test.ts` (als) |
 | `using` kept native | Matched | `build.test.ts`, `ViteBuild.test.ts` |
 | Deployed modules are the output as written to disk; `.vite/` metadata isn't deployed | Matched | `ViteTemplates.test.ts` (Vike) |
+| Build Output (v2): the client in `.cloudflare/output/v1/workers/default/assets`, the Worker in `…/bundle`, plus `config.json` and `worker.config.json` | Different: Alchemy writes `dist/client` and `dist/ssr` (`dist/` alone for an assets-only project) and no Build Output metadata, which only `cf deploy` reads. The files inside each directory match | `build.test.ts` |
 
 ### Dev server
 
@@ -82,14 +109,17 @@ the differential tests ignore until the installed release catches up.
 | HTML through `transformIndexHtml`, `public/` HTML raw, `server.headers` on assets | Matched | `dev-assets.test.ts` |
 | Vite's bundled dev mode (`experimental.bundledDev`) | Matched | `ViteRuntime.test.ts` (bundled dev) |
 | The Worker's `ASSETS` binding runs through Vite's middlewares | Matched | `dev-assets.test.ts` |
-| WebSockets to the Worker; Vite's HMR socket left alone unless from a Sandbox preview origin; a socket another `upgrade` listener answers is left to it | Matched | `websockets.test.ts`, `constants.test.ts`, `ViteRuntime.test.ts` (WebSockets) |
+| WebSockets to the Worker; Vite's HMR and DevTools (`/__devtools/__ws`) sockets left alone unless from a Sandbox preview origin, HMR upgrades closed when `server.ws` is `false`; a socket another `upgrade` listener answers is left to it | Matched | `websockets.test.ts`, `constants.test.ts`, `ViteRuntime.test.ts` (WebSockets) |
 | A refused WebSocket upgrade | Different: the Worker's response reaches the client (upstream resets the socket) | `websockets.test.ts` |
-| `/cdn-cgi/local/*` trigger endpoints and the legacy `/cdn-cgi/mf/*`, `/cdn-cgi/handler` paths | Matched | `ViteRuntime.test.ts` (scheduled and email) |
+| `/cdn-cgi/local/*` trigger endpoints | Matched | `ViteRuntime.test.ts` (scheduled and email) |
+| The legacy `/cdn-cgi/mf/scheduled`, `/cdn-cgi/handler/scheduled` and `/cdn-cgi/handler/email` trigger paths | Different: still served. v2 stopped rewriting them, but Alchemy's runtime answers both, so scripts written against v1 or Wrangler keep working, and dropping them gains nothing | `Scheduled.test.ts`, `Email.test.ts` |
 | Public URL from the dev server's host, port and HTTPS | Matched | `ViteStreaming.test.ts` (HTTPS) |
 | `X-Forwarded-Host`, `X-Forwarded-Proto` (case-insensitive), `ctx.access` from `dev.access` | Matched | `forwarded-host.test.ts`, `ViteRuntime.test.ts` (headers, Access) |
-| The Worker's response status text (dev and preview) | Matched (upstream `main`, after 1.65.0) | `dev-proxy.test.ts` |
-| Repeated `Set-Cookie` request headers reach the Worker as separate values | Matched (upstream `main`, after 1.65.0) | `dev-proxy.test.ts` |
-| Outbound `fetch`: `CF-Worker`, no `CF-Connecting-IP`, `cf.image` | Matched | `ViteRuntime.test.ts` (CF-Worker, cf.image) |
+| The Worker's response status text (dev and preview) | Matched | `dev-proxy.test.ts` |
+| Repeated `Set-Cookie` request headers reach the Worker as separate values | Matched | `dev-proxy.test.ts` |
+| A request or upgrade target starting with `//` (or `/\`) stays a path on the dev server's origin | Matched | `dev-proxy.test.ts`, `websockets.test.ts` |
+| Outbound `fetch`: no `CF-Connecting-IP`, `cf.image` | Matched | `Runtime.test.ts` (outbound), `ViteRuntime.test.ts` (cf.image) |
+| Outbound `fetch`: `CF-Worker` | Different: not added; Cloudflare-fronted sites answer 403 to one sent from a developer machine (#2965) | `ViteRuntime.test.ts` (CF-Worker), `Runtime.test.ts` (outbound) |
 | Restart after a workerd crash | Matched | `ViteRuntime.test.ts` (workerd crashes) |
 | Containers built from a Dockerfile | Matched | `ViteRuntime.test.ts` (containers) |
 | Alchemy's runtime variables (`ALCHEMY_*`) in `env` and `process.env` | Different: Alchemy's runtime reads them; documented on `env` | `ViteNodeCompat.test.ts` (process-populated-env) |

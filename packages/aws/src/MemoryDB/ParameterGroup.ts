@@ -66,8 +66,18 @@ export interface ParameterGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ParameterGroupLookup
 > {}
+
+/**
+ * Props for {@link ParameterGroup.lookup}: find a parameter group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ParameterGroupLookup {
+  /** The parameter group name of the existing parameter group. */
+  parameterGroupName: string;
+}
 
 /**
  * A MemoryDB parameter group — a named collection of engine parameter
@@ -89,6 +99,16 @@ export interface ParameterGroup extends Resource<
  *   aclName: acl.aclName,
  *   parameterGroupName: params.parameterGroupName,
  * });
+ * ```
+ *
+ * ### Looking up an existing parameter group
+ * `ParameterGroup.lookup` references a parameter group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `parameterGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing parameter group
+ * ```typescript
+ * const existing = AWS.MemoryDB.ParameterGroup.lookup({ parameterGroupName: "my-parameter-group" });
  * ```
  *
  * @resource
@@ -160,6 +180,13 @@ export const ParameterGroupProvider = () =>
           if ((n.description ?? undefined) !== (o.description ?? undefined)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ parameterGroupName: name }) {
+          const group = yield* readGroup(name);
+          if (!group?.ARN) return undefined;
+          const attrs = yield* toAttrs(group);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

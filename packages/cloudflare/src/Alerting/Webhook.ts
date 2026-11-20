@@ -80,8 +80,28 @@ export type NotificationWebhook = Resource<
   NotificationWebhookProps,
   NotificationWebhookAttributes,
   never,
-  Providers
+  Providers,
+  NotificationWebhookLookup
 >;
+
+/**
+ * Props for {@link NotificationWebhook.lookup}: find a webhook destination
+ * this stack doesn't manage, by its id or its name.
+ */
+export type NotificationWebhookLookup =
+  | {
+      /**
+       * The id of the existing webhook destination.
+       */
+      webhookId: string;
+    }
+  | {
+      /**
+       * The name of the existing webhook destination. Names are not unique;
+       * the first destination with this exact name is used.
+       */
+      name: string;
+    };
 
 /**
  * A Cloudflare Notifications webhook destination.
@@ -114,6 +134,21 @@ export type NotificationWebhook = Resource<
  * yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
  *   alertType: "universal_ssl_event_type",
  *   mechanisms: { webhooks: [{ id: webhook.webhookId }] },
+ * });
+ * ```
+ *
+ * ### Looking up an existing webhook
+ * `NotificationWebhook.lookup` references a destination Alchemy doesn't
+ * manage (created in the dashboard or by another stack), found by
+ * `webhookId` or `name`. It is read during plan/deploy and never created,
+ * updated or deleted.
+ *
+ * **Example:** Send a new policy to an existing destination
+ * ```typescript
+ * const pager = Cloudflare.Alerting.NotificationWebhook.lookup({ name: "pager" });
+ * yield* Cloudflare.Alerting.NotificationPolicy("SslAlerts", {
+ *   alertType: "universal_ssl_event_type",
+ *   mechanisms: { webhooks: [{ id: pager.webhookId }] },
  * });
  * ```
  *
@@ -161,6 +196,14 @@ export const NotificationWebhookProvider = () =>
       }
     }),
 
+    lookup: Effect.fn(function* (props) {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const observed =
+        "webhookId" in props
+          ? yield* observeWebhook(accountId, props.webhookId)
+          : yield* findWebhookByName(accountId, props.name);
+      return observed ? toWebhookAttributes(observed, accountId) : undefined;
+    }),
     read: Effect.fn(function* ({ id, output, olds }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;

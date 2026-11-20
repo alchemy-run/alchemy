@@ -58,8 +58,18 @@ export interface VpcLink extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  VpcLinkLookup
 > {}
+
+/**
+ * Props for {@link VpcLink.lookup}: find a VPC link this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface VpcLinkLookup {
+  /** The id of the existing VPC link. */
+  vpcLinkId: string;
+}
 
 /**
  * An API Gateway v2 VPC link — lets an HTTP API reach private resources
@@ -84,6 +94,16 @@ export interface VpcLink extends Resource<
  *   connectionId: link.vpcLinkId,
  *   payloadFormatVersion: "1.0",
  * });
+ * ```
+ *
+ * ### Looking up an existing VPC link
+ * `VpcLink.lookup` references a VPC link Alchemy doesn't manage (created in the
+ * console or by another stack), found by `vpcLinkId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing VPC link
+ * ```typescript
+ * const existing = AWS.ApiGatewayV2.VpcLink.lookup({ vpcLinkId: "..." });
  * ```
  *
  * @resource
@@ -122,6 +142,12 @@ export const VpcLinkProvider = () =>
               .filter((link) => link.VpcLinkId != null)
               .map((link) => snapshotFromVpcLink(link));
           }),
+
+        lookup: Effect.fn(function* ({ vpcLinkId }) {
+          const link = yield* getVpcLinkSafe(vpcLinkId);
+          if (!link?.VpcLinkId) return undefined;
+          return snapshotFromVpcLink(link);
+        }),
 
         read: Effect.fn(function* ({ output }) {
           if (!output?.vpcLinkId) return undefined;

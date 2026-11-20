@@ -1,0 +1,161 @@
+---
+title: Managed Databases
+description: Run managed PostgreSQL, MySQL, Valkey, MongoDB, Kafka and OpenSearch clusters on DigitalOcean, apply SQL migrations on deploy, connect from runtimes, and add users, pools, replicas and trusted sources.
+---
+
+import Tree from "../../../../components/diagrams/Tree.astro";
+
+A **database cluster** is a database server DigitalOcean runs for you: PostgreSQL, MySQL, Valkey, MongoDB, Kafka or OpenSearch, with daily backups and automatic failover to standby nodes. A cluster holds **databases** and **users**, accepts connections only from its **trusted sources** once you list any, and can have read-only **replicas**, in its region or another.
+
+<Tree
+  nodes={[
+    {
+      id: "team", label: "acme", type: "team", icon: "brand:digitalocean", colGap: 8,
+      areas: ["api db", ". replica"],
+      phoneAreas: ["api", "db", "replica"],
+    },
+    { id: "api", label: "Api", type: "App · your app", parent: "team", tone: "accent", icon: "server" },
+    {
+      id: "db", label: "Db", type: "PostgreSQL cluster · nyc3", parent: "team", icon: "brand:postgresql",
+      areas: ["app pool"],
+    },
+    { id: "app", label: "App", type: "database", parent: "db", icon: "database" },
+    { id: "pool", label: "AppPool", type: "connection pool · 10", parent: "db", icon: "layers" },
+    { id: "replica", label: "Read", type: "replica · ams3", parent: "team", icon: "brand:postgresql" },
+  ]}
+  links={[
+    { from: "api", to: "db", label: "connects" },
+    { from: "db", to: "replica", label: "replicates" },
+  ]}
+  caption="The App connects to the cluster, which lists the App as a trusted source. A replica in another region keeps a read-only copy."
+/>
+
+## Create a cluster
+
+```typescript title="src/resources.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+
+export const Db = DigitalOcean.Databases.Cluster("Db", {
+  engine: "pg",
+  size: "db-s-1vcpu-1gb",
+  region: "nyc3",
+});
+```
+
+`engine` is `pg`, `mysql`, `valkey`, `mongodb`, `kafka` or `opensearch`. A new cluster takes five to ten minutes, and deploy waits until it accepts connections. `numNodes: 2` or `3` adds standby nodes that take over on failure.
+
+## Apply migrations on deploy
+
+For PostgreSQL and MySQL, a `Database` applies SQL migrations every deploy:
+
+```typescript
+const db = yield* Db;
+yield* DigitalOcean.Databases.Database("App", {
+  clusterId: db.clusterId,
+  migrations: "./migrations",
+});
+```
+
+`migrations` is a directory of `.sql` files applied in name order, or a drizzle-kit or Prisma migrations directory. Each applied file is recorded in an `__alchemy_migrations` table, so the next deploy runs only new ones, and editing an applied file fails the deploy instead of silently diverging.
+
+## Connect from a runtime
+
+`Connect` gives a runtime a database's connection string as a secret, with the CA certificate to verify it. Declare the database inside an `Effect.gen` that yields the cluster:
+
+```typescript title="src/resources.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+
+export const Db = DigitalOcean.Databases.Cluster("Db", { engine: "pg", size: "db-s-1vcpu-1gb", region: "nyc3" });
+
+export const AppDb = Effect.gen(function* () {
+  const db = yield* Db;
+  return yield* DigitalOcean.Databases.Database("App", { clusterId: db.clusterId, migrations: "./migrations" });
+});
+```
+
+Then bind it:
+
+```typescript title="src/api.ts"
+import * as DigitalOcean from "@alchemy.run/digitalocean";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Redacted from "effect/Redacted";
+import pg from "pg";
+import { AppDb } from "./resources.ts";
+
+export default class Api extends DigitalOcean.App<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const conn = yield* DigitalOcean.Databases.Connect(AppDb);
+    return {
+      fetch: Effect.gen(function* () {
+        const uri = yield* conn.connectionString;
+        const ca = yield* conn.caCertificate;
+        const rows = yield* Effect.tryPromise(async () => {
+          const client = new pg.Client({
+            connectionString: Redacted.value(uri).replace(/[?&]sslmode=[^&]*/, ""),
+            ssl: { ca },
+          });
+          await client.connect();
+          try {
+            return (await client.query("SELECT now()")).rows;
+          } finally {
+            await client.end();
+          }
+        });
+        return HttpServerResponse.json(rows);
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(Effect.provide(DigitalOcean.Databases.ConnectHttp)),
+) {}
+```
+
+DigitalOcean signs each cluster's TLS certificate with its own CA, so a driver that verifies certificates needs `conn.caCertificate`; `pg` uses it only when the string carries no `sslmode`. `Connect(Db)` on the cluster itself connects to its default database, `defaultdb`. `conn.privateConnectionString` is the address inside the cluster's VPC, for Droplets and Kubernetes nodes in it.
+
+## Add users and pools
+
+```typescript
+const user = yield* DigitalOcean.Databases.User("Reporter", {
+  clusterId: db.clusterId,
+  readonly: true,
+});
+yield* DigitalOcean.Databases.ConnectionPool("AppPool", {
+  clusterId: db.clusterId,
+  database: "App",
+  size: 10,
+  mode: "transaction",
+});
+```
+
+A connection pool runs PgBouncer in front of PostgreSQL, so many short-lived connections share a few real ones.
+
+## Limit who can connect
+
+```typescript
+yield* DigitalOcean.Databases.Firewall("Trusted", {
+  clusterId: db.clusterId,
+  rules: [
+    { type: "app", value: api.appId },
+    { type: "ip_addr", value: "203.0.113.4" },
+  ],
+});
+```
+
+Once a cluster has trusted sources, it refuses everything else. Rules name an App, a Droplet, a tag, a Kubernetes cluster or an address.
+
+## Add a replica
+
+```typescript
+yield* DigitalOcean.Databases.Replica("Read", {
+  clusterId: db.clusterId,
+  size: "db-s-1vcpu-1gb",
+  region: "ams3",
+});
+```
+
+## Limits
+
+- A new engine or region replaces the cluster, and with it its data. Changing `size` or `numNodes` resizes it in place.
+- The smallest PostgreSQL cluster costs about $15 a month.

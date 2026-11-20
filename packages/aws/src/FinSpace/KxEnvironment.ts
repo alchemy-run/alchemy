@@ -103,8 +103,18 @@ export interface KxEnvironment extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  KxEnvironmentLookup
 > {}
+
+/**
+ * Props for {@link KxEnvironment.lookup}: find a Kx environment this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface KxEnvironmentLookup {
+  /** The id of the existing Kx environment. */
+  environmentId: string;
+}
 
 /**
  * An Amazon FinSpace Managed kdb environment — the account-level container
@@ -140,6 +150,16 @@ export interface KxEnvironment extends Resource<
  *     { customDNSServerName: "dns.corp.example", customDNSServerIP: "10.0.0.2" },
  *   ],
  * });
+ * ```
+ *
+ * ### Looking up an existing Kx environment
+ * `KxEnvironment.lookup` references a Kx environment Alchemy doesn't manage (created in the
+ * console or by another stack), found by `environmentId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing Kx environment
+ * ```typescript
+ * const existing = AWS.FinSpace.KxEnvironment.lookup({ environmentId: "..." });
  * ```
  *
  * @resource
@@ -297,6 +317,12 @@ export const KxEnvironmentProvider = () =>
               { concurrency: 5 },
             );
           }),
+        lookup: Effect.fn(function* ({ environmentId }) {
+          const env = yield* readKxEnvironmentById(environmentId);
+          if (!env) return undefined;
+          const attrs = yield* toKxAttributes(env, environmentId);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const env = output?.environmentId
             ? yield* readKxEnvironmentById(output.environmentId)

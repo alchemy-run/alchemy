@@ -1,0 +1,55 @@
+{
+  "ok": true,
+  "stages": [
+    {
+      "line": 1,
+      "image": "alpine",
+      "name": null,
+      "flags": [],
+      "instructions": [
+        {
+          "tag": "RUN",
+          "line": 2,
+          "flags": [
+            {
+              "name": "network",
+              "value": "none"
+            }
+          ],
+          "command": {
+            "form": "shell",
+            "script": "true"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 3,
+          "flags": [
+            {
+              "name": "network",
+              "value": "host"
+            }
+          ],
+          "command": {
+            "form": "shell",
+            "script": "true"
+          }
+        },
+        {
+          "tag": "RUN",
+          "line": 4,
+          "flags": [
+            {
+              "name": "network",
+              "value": "default"
+            }
+          ],
+          "command": {
+            "form": "shell",
+            "script": "true"
+          }
+        }
+      ]
+    }
+  ]
+}

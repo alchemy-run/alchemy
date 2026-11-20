@@ -182,8 +182,20 @@ export interface Queue extends Resource<
   {
     policyStatements: PolicyStatement[];
   },
-  Providers
+  Providers,
+  QueueLookup
 > {}
+
+/**
+ * Props for {@link Queue.lookup}: find a queue this stack doesn't manage, in
+ * the ambient account and region, by its name.
+ */
+export interface QueueLookup {
+  /**
+   * The name of the existing queue (a FIFO queue's name ends in `.fifo`).
+   */
+  queueName: string;
+}
 
 class QueueStillExists extends Data.TaggedError("QueueStillExists")<{
   readonly queueUrl: string;
@@ -319,6 +331,20 @@ class QueueStillExists extends Data.TaggedError("QueueStillExists")<{
  *     }
  *   }),
  * );
+ * ```
+ *
+ * ### Looking up an existing queue
+ * `Queue.lookup` references a queue Alchemy doesn't manage (created in the
+ * console or by another stack), found by `queueName`. It is read during
+ * plan/deploy and never created, updated or deleted, and binds like a
+ * declared queue.
+ *
+ * **Example:** Send to an existing queue
+ * ```typescript
+ * const queue = SQS.Queue.lookup({ queueName: "orders" });
+ *
+ * // init
+ * const sendMessage = yield* SQS.SendMessage(queue);
  * ```
  *
  * @resource
@@ -553,6 +579,25 @@ export const QueueProvider = () =>
             );
             return items.filter((item): item is Queue["Attributes"] => item !== undefined);
           }),
+        lookup: Effect.fn(function* ({ queueName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const queueUrl = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
+            Effect.map((r) => r.QueueUrl),
+            Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
+          );
+          if (!queueUrl) return undefined;
+          const tags = yield* sqs.listQueueTags({ QueueUrl: queueUrl }).pipe(
+            Effect.map((r) => r.Tags ?? {}),
+            Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
+          );
+          if (tags === undefined) return undefined;
+          return {
+            queueName,
+            queueUrl,
+            queueArn: `arn:aws:sqs:${region}:${accountId}:${queueName}` as const,
+            tags: definedTags(tags),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const queueName = output?.queueName ?? (yield* createQueueName(id, olds ?? {}));

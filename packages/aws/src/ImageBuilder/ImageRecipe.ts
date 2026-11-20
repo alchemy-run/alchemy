@@ -128,8 +128,18 @@ export interface ImageRecipe extends Resource<
     dateCreated: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ImageRecipeLookup
 > {}
+
+/**
+ * Props for {@link ImageRecipe.lookup}: find an image recipe this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ImageRecipeLookup {
+  /** The image recipe arn of the existing image recipe. */
+  imageRecipeArn: string;
+}
 
 /**
  * An EC2 Image Builder image recipe — the blueprint that combines a parent
@@ -154,6 +164,16 @@ export interface ImageRecipe extends Resource<
  *   imageRecipeArn: recipe.imageRecipeArn,
  *   infrastructureConfigurationArn: infra.infrastructureConfigurationArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing image recipe
+ * `ImageRecipe.lookup` references an image recipe Alchemy doesn't manage (created in the
+ * console or by another stack), found by `imageRecipeArn`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing image recipe
+ * ```typescript
+ * const existing = AWS.ImageBuilder.ImageRecipe.lookup({ imageRecipeArn: "my-image-recipe" });
  * ```
  *
  * @resource
@@ -222,6 +242,13 @@ export const ImageRecipeProvider = () =>
           if (immutableVersionKeysChanged(olds, news, immutableKeys)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ imageRecipeArn: arn }) {
+          const recipe = yield* getRecipe(arn);
+          if (recipe === undefined) return undefined;
+          const attrs = yield* toAttrs(recipe);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

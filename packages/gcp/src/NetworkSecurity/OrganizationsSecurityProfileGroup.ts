@@ -103,8 +103,29 @@ export type OrganizationsSecurityProfileGroup = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  OrganizationsSecurityProfileGroupLookup
 >;
+
+/**
+ * Props for {@link OrganizationsSecurityProfileGroup.lookup}: find an
+ * organizations security profile group this stack doesn't manage by its
+ * identifiers.
+ */
+export interface OrganizationsSecurityProfileGroupLookup {
+  /**
+   * Security profile group id.
+   */
+  securityProfileGroupId: string;
+  /**
+   * Organization id or `organizations/{organization}`.
+   */
+  organization?: string;
+  /**
+   * Location. Profile groups live in `global`.
+   */
+  location?: string;
+}
 
 /**
  * An organization-scoped group of Network Security profiles.
@@ -131,6 +152,20 @@ export type OrganizationsSecurityProfileGroup = Resource<
  *     labels: { env: "prod" },
  *   },
  * );
+ * ```
+ *
+ * ### Looking up an existing organizations security profile group
+ * `OrganizationsSecurityProfileGroup.lookup` references an organizations
+ * security profile group Alchemy doesn't manage (created in the console or
+ * by another stack). It is read during plan/deploy, never created, updated
+ * or deleted, and binds like a declared organizations security profile
+ * group.
+ *
+ * **Example:** Reference an existing organizations security profile group
+ * ```typescript
+ * const organizationsSecurityProfileGroup = GCP.NetworkSecurity.OrganizationsSecurityProfileGroup.lookup({
+ *   securityProfileGroupId: "my-security-profile-group",
+ * });
  * ```
  *
  * @resource
@@ -218,6 +253,23 @@ export const OrganizationsSecurityProfileGroupProvider = () =>
           previousId !== undefined &&
           nextId === previousId,
       };
+    }),
+
+    lookup: Effect.fn(function* ({
+      securityProfileGroupId,
+      organization: lookupOrganization,
+      location: lookupLocation,
+    }) {
+      const organization = yield* resolveOrganization(lookupOrganization, undefined).pipe(
+        Effect.catchTag("GCP.NetworkSecurity.OrganizationRequired", () => Effect.succeed("")),
+      );
+      const location = normalizeLocation(lookupLocation);
+      const name =
+        organization.length > 0 ? resourceName(organization, location, securityProfileGroupId) : "";
+      if (name.length === 0) return undefined;
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

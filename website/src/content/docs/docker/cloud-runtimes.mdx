@@ -1,0 +1,101 @@
+---
+title: Images on cloud runtimes
+description: Hand a pushed image's reference or digest to ECS, Cloudflare Containers, Cloud Run or Kubernetes, let those runtimes build with your local Docker, and write Dockerfiles inline with Dockerfile.inline.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Cloud container runtimes don't reach your engine. They pull images from a **registry**, so an image built on your machine has to be pushed before a cloud can run it. What you give the runtime is a reference: a tag like `ghcr.io/acme/api:latest`, or a **digest** like `ghcr.io/acme/api@sha256:9c2e…`, which names exactly one image.
+
+<Tree
+  areas={["task ghcr"]}
+  phoneAreas={["ghcr", "task"]}
+  colGap={3}
+  nodes={[
+    { id: "task", label: "ECS task", type: "or Cloudflare Container", icon: "server" },
+    { id: "ghcr", label: "ghcr.io", type: "registry", icon: "warehouse", areas: ["repo"] },
+    { id: "repo", label: "acme/api", type: "repository", parent: "ghcr", areas: ["new old"], phoneAreas: ["new old"] },
+    { id: "new", label: "sha256:9c2e…", type: "image · tag latest", parent: "repo", tone: "accent", icon: "package" },
+    { id: "old", label: "sha256:4f1a…", type: "image · last deploy", parent: "repo", tone: "muted", icon: "package" },
+  ]}
+  links={[{ from: "task", to: "new", label: "runs" }]}
+  caption="Each push moves the latest tag to a new image, and the old one stays under its digest. Giving the runtime the digest means it runs exactly the image this deploy pushed."
+/>
+
+## Hand the reference to a runtime
+
+Build and push with `Docker.Image`, then pass its `imageRef` as the runtime's `image`:
+
+```typescript
+const image = yield* Docker.Image("api", {
+  name: "acme/api",
+  build: { context: "./api" },
+  registry: {
+    server: "ghcr.io",
+    username: "acme",
+    password: yield* Config.Redacted("GITHUB_TOKEN"),
+  },
+});
+
+const task = yield* AWS.ECS.Task("Api", {
+  image: image.imageRef,
+});
+```
+
+`image.repoDigest` holds the digest, for when a moving tag isn't precise enough. The same reference works as the `image` of a [Cloudflare Container](/cloudflare/compute/containers), a container in a [Cloud Run service](/gcp/compute/cloud-run) or a [Kubernetes Deployment or Job](/kubernetes/workloads/images). An ECS Task copies it into ECR before it runs. A private registry needs its credentials on the runtime's side as well; see each runtime's page.
+
+## Or let the runtime build it
+
+You often don't need `Docker.Image` at all. ECS, Cloudflare Containers and Kubernetes workloads build your Dockerfile themselves from a `context` prop, and Cloud Run and the others bundle an Effect program from `main`. They build with the same local Docker, then push to their own registry:
+
+```typescript
+const task = yield* AWS.ECS.Task("Api", {
+  context: "./api",
+});
+```
+
+Reach for `Docker.Image` when you want to pick the registry yourself, or share one image between several runtimes or stages.
+
+## Write the Dockerfile inline
+
+A runtime that bundles your Effect program with `main` takes a `dockerfile` for the base it runs on. `Dockerfile.inline` writes it in the Stack, for a base plus a few system packages:
+
+```typescript
+import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
+
+const transcoder = yield* AWS.ECS.Task(
+  "Transcoder",
+  {
+    main: import.meta.url,
+    dockerfile: Dockerfile.inline`
+      FROM oven/bun:1
+      RUN apt-get update && apt-get install -y ffmpeg
+    `,
+  },
+  impl,
+);
+```
+
+Interpolate another resource's output, and the runtime depends on it, rebuilding when it changes:
+
+```typescript
+const base = yield* AWS.ECR.Image("MlBase", { context: "./ml-base" });
+
+const trainer = yield* AWS.ECS.Task(
+  "Trainer",
+  {
+    main: import.meta.url,
+    dockerfile: Dockerfile.inline`
+      FROM ${base.imageUri}
+      RUN pip install -r /opt/requirements.txt
+    `,
+  },
+  impl,
+);
+```
+
+Anything in a Dockerfile is baked into the image's layers, so never interpolate a secret. Use a [build secret](/docker/build-images#use-a-secret-in-a-build) instead.
+
+## Cache builds in CI
+
+Every runtime that builds takes the same `cache` option as `Docker.Image`. See [Build caches](/docker/build-caches).

@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -85,8 +86,30 @@ export type Tensorboard = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TensorboardLookup
 >;
+
+/**
+ * Props for {@link Tensorboard.lookup}: find a tensorboard this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface TensorboardLookup {
+  /**
+   * Region (`us-central1`, …).
+   */
+  location?: string;
+  /**
+   * User-facing display name.
+   */
+  displayName: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Vertex AI Tensorboard, the physical store for training metrics.
@@ -107,6 +130,17 @@ export type Tensorboard = Resource<
  *   description: "experiment store",
  *   labels: { env: "prod" },
  * });
+ * ```
+ *
+ * ### Looking up an existing tensorboard
+ * `Tensorboard.lookup` references a tensorboard Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * tensorboard.
+ *
+ * **Example:** Reference an existing tensorboard
+ * ```typescript
+ * const tensorboard = GCP.AIPlatform.Tensorboard.lookup({ displayName: "training" });
  * ```
  *
  * @resource
@@ -205,6 +239,16 @@ export const TensorboardProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ location: lookupLocation, displayName }) {
+      const env = yield* GcpEnvironment.current;
+      const parent = locationParent(env.project, lookupLocation ?? env.region);
+      const match = yield* findByDisplayName(parent, displayName, env.project);
+      if (match === undefined) return undefined;
+      const existing = yield* getByName(match.name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

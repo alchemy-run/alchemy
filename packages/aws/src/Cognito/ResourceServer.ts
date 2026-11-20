@@ -50,8 +50,20 @@ export interface ResourceServer extends Resource<
     name: string;
   },
   never,
-  Providers
+  Providers,
+  ResourceServerLookup
 > {}
+
+/**
+ * Props for {@link ResourceServer.lookup}: find a resource server this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ResourceServerLookup {
+  /** The user pool the resource server belongs to. */
+  userPoolId: string;
+  /** The identifier of the existing resource server. */
+  identifier: string;
+}
 
 /**
  * An OAuth 2.0 resource server for an Amazon Cognito user pool. Resource
@@ -82,6 +94,16 @@ export interface ResourceServer extends Resource<
  *   allowedOAuthFlows: ["client_credentials"],
  *   allowedOAuthScopes: ["https://api.example.com/read"],
  * });
+ * ```
+ *
+ * ### Looking up an existing resource server
+ * `ResourceServer.lookup` references a resource server Alchemy doesn't manage (created in the
+ * console or by another stack), found by `userPoolId` and `identifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing resource server
+ * ```typescript
+ * const api = AWS.Cognito.ResourceServer.lookup({ userPoolId, identifier: "https://api.example.com" });
  * ```
  *
  * @resource
@@ -132,6 +154,12 @@ export const ResourceServerProvider = () =>
         // doctrine.
         list: () => Effect.succeed([]),
 
+        lookup: Effect.fn(function* ({ userPoolId, identifier }) {
+          const observed = yield* describeServer(userPoolId, identifier);
+          return observed === undefined
+            ? undefined
+            : { identifier, userPoolId, name: observed.Name ?? identifier };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const userPoolId = output?.userPoolId ?? olds?.userPoolId;
           if (userPoolId === undefined) return undefined;

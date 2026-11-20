@@ -6,12 +6,12 @@ import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const hasHetznerCreds = !!process.env.HCLOUD_TOKEN;
 
 const waitUntilGone = (id: number) =>
   floatingIps.getFloatingIp({ id }).pipe(
@@ -24,7 +24,7 @@ const waitUntilGone = (id: number) =>
     }),
   );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "create update delete unassigned ipv4",
   (stack) =>
     Effect.gen(function* () {
@@ -40,6 +40,7 @@ test.provider.skipIf(!hasHetznerCreds)(
           });
         }),
       );
+      yield* expectFound(Hetzner.FloatingIp.lookup({ name: created.name }), created);
 
       expect(created.id).toEqual(expect.any(Number));
       expect(created.name).toEqual(expect.any(String));
@@ -86,6 +87,35 @@ test.provider.skipIf(!hasHetznerCreds)(
       expect(refetched.floating_ip.labels.env).toEqual("prod");
       expect(refetched.floating_ip.labels.role).toEqual("edge");
 
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.FloatingIp("PublicIp", {
+            type: "ipv4",
+            homeLocation: "nbg1",
+            description: "alchemy floating ip update",
+            labels: { env: "prod", role: "edge" },
+            deleteProtection: true,
+          });
+        }),
+      );
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, {
+        logicalId: "PublicIp",
+        tag: "Hetzner.FloatingIpDeleteProtected",
+      });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.FloatingIp("PublicIp", {
+            type: "ipv4",
+            homeLocation: "nbg1",
+            description: "alchemy floating ip update",
+            labels: { env: "prod", role: "edge" },
+            deleteProtection: false,
+          });
+        }),
+      );
+
       yield* stack.destroy();
 
       const gone = yield* waitUntilGone(created.id);
@@ -97,7 +127,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "replace when type changes",
   (stack) =>
     Effect.gen(function* () {
@@ -148,7 +178,7 @@ test.provider.skipIf(!hasHetznerCreds)(
   },
 );
 
-test.provider.skipIf(!hasHetznerCreds)(
+test.provider(
   "list enumerates the deployed floating ip",
   (stack) =>
     Effect.gen(function* () {

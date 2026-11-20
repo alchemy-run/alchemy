@@ -116,8 +116,27 @@ export interface DataSource extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DataSourceLookup
 > {}
+
+/**
+ * Props for {@link DataSource.lookup}: find a data source this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DataSourceLookup =
+  | {
+      /** The index the data source feeds. */
+      indexId: string;
+      /** The id of the existing data source. */
+      id: string;
+    }
+  | {
+      /** The index the data source feeds. */
+      indexId: string;
+      /** The name of the existing data source. */
+      name: string;
+    };
 
 /**
  * An Amazon Kendra data source — a connector that syncs documents from a
@@ -151,6 +170,16 @@ export interface DataSource extends Resource<
  *     S3Configuration: { BucketName: bucket.bucketName },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing data source
+ * `DataSource.lookup` references a data source Alchemy doesn't manage (created in the
+ * console or by another stack), found by `indexId` with `id` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing data source
+ * ```typescript
+ * const wiki = AWS.Kendra.DataSource.lookup({ indexId, name: "wiki" });
  * ```
  *
  * @resource
@@ -300,6 +329,14 @@ export const DataSourceProvider = () =>
         // iterating every index — treated as a sub-resource per the factory
         // list() convention.
         list: () => Effect.succeed([]),
+        lookup: Effect.fn(function* (props) {
+          const arnOf = yield* currentArnOf;
+          const state =
+            "id" in props
+              ? yield* readDataSourceById(props.indexId, props.id, arnOf)
+              : yield* findDataSourceByName(props.indexId, props.name, arnOf);
+          return state?.attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const arnOf = yield* currentArnOf;
           const indexId = output?.indexId ?? olds?.indexId;

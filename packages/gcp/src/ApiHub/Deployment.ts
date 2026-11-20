@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 import {
   ApihubNotResolved,
@@ -151,8 +152,32 @@ export type Deployment = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  DeploymentLookup
 >;
+
+/**
+ * Props for {@link Deployment.lookup}: find a deployment this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface DeploymentLookup {
+  /**
+   * Deployment id (the `{deployment}` segment of
+   * `projects/{project}/locations/{location}/deployments/{deployment}`).
+   */
+  deploymentId: string;
+  /**
+   * Location of the API Hub instance (`us-central1`, …). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An API Hub deployment — a gateway, proxy, or other runtime that hosts
@@ -193,6 +218,19 @@ export type Deployment = Resource<
  *   resourceUri: "organizations/cymbal/environments/staging/apis/orders",
  *   endpoints: ["https://orders.example.com", "https://orders-alt.example.com"],
  *   description: "checkout proxy (updated)",
+ * });
+ * ```
+ *
+ * ### Looking up an existing deployment
+ * `Deployment.lookup` references a deployment Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * deployment.
+ *
+ * **Example:** Reference an existing deployment
+ * ```typescript
+ * const deployment = GCP.ApiHub.Deployment.lookup({
+ *   deploymentId: "my-deployment",
  * });
  * ```
  *
@@ -291,6 +329,15 @@ export const DeploymentProvider = () =>
         ),
       });
     }),
+
+    lookup: Effect.fn(function* ({ deploymentId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, deploymentId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, env.region);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

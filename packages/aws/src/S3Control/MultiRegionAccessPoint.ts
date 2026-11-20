@@ -80,8 +80,18 @@ export interface MultiRegionAccessPoint extends Resource<
     accountId: AccountID;
   },
   never,
-  Providers
+  Providers,
+  MultiRegionAccessPointLookup
 > {}
+
+/**
+ * Props for {@link MultiRegionAccessPoint.lookup}: find a multi region access point this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface MultiRegionAccessPointLookup {
+  /** The name of the existing multi region access point. */
+  multiRegionAccessPointName: string;
+}
 
 /**
  * An Amazon S3 Multi-Region Access Point — a single global endpoint that
@@ -110,6 +120,16 @@ export interface MultiRegionAccessPoint extends Resource<
  * const mrap = yield* S3Control.MultiRegionAccessPoint("global", {
  *   regions: [{ bucket: bucket.bucketName }],
  * });
+ * ```
+ *
+ * ### Looking up an existing multi region access point
+ * `MultiRegionAccessPoint.lookup` references a multi region access point Alchemy doesn't manage (created in the
+ * console or by another stack), found by `multiRegionAccessPointName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing multi region access point
+ * ```typescript
+ * const existing = AWS.S3Control.MultiRegionAccessPoint.lookup({ multiRegionAccessPointName: "..." });
  * ```
  *
  * @resource
@@ -267,6 +287,12 @@ export const MultiRegionAccessPointProvider = () =>
               ),
             );
           }),
+        lookup: Effect.fn(function* ({ multiRegionAccessPointName: name }) {
+          const { accountId } = yield* AWSEnvironment.current;
+          const report = yield* observeMrap(accountId, name);
+          if (report === undefined) return undefined;
+          return toAttrs(name, accountId, report);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId } = yield* AWSEnvironment.current;
           const name = output?.multiRegionAccessPointName ?? (yield* createName(id, olds ?? {}));

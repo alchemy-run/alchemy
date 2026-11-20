@@ -35,7 +35,9 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { WebSocketServer } from "ws";
+import type { AppPromotionNotConverged } from "../../../prisma/src/internal/AppPromotion.ts";
 import { executeArtifactUpload } from "../../../prisma/src/internal/ArtifactUpload.ts";
+import type { PrismaCleanupFailed } from "../../../prisma/src/internal/CleanupFailure.ts";
 import { Credentials } from "../../../prisma/src/internal/Credentials.ts";
 import {
   PrismaHttpClientLive,
@@ -433,13 +435,19 @@ describe(
           })
           .pipe(Effect.flip);
 
-        expect(error).toBeInstanceOf(AggregateError);
-        expect((error as AggregateError).message).toContain("version-1");
-        expect((error as AggregateError).message).toContain("DELETE /v1/deployments/version-1");
-        expect((error as AggregateError).errors).toHaveLength(2);
+        expect(error).toMatchObject({ _tag: "PrismaCleanupFailed" });
+        expect((error as PrismaCleanupFailed).message).toContain("version-1");
+        expect((error as PrismaCleanupFailed).message).toContain(
+          "DELETE /v1/deployments/version-1",
+        );
+        expect((error as PrismaCleanupFailed).errors).toHaveLength(2);
         // Over the wire the injected failures decode into the typed errors.
-        expect(((error as AggregateError).errors[0] as Error).message).toContain("start failed");
-        expect(((error as AggregateError).errors[1] as Error).message).toContain("cleanup failed");
+        expect(((error as PrismaCleanupFailed).errors[0] as Error).message).toContain(
+          "start failed",
+        );
+        expect(((error as PrismaCleanupFailed).errors[1] as Error).message).toContain(
+          "cleanup failed",
+        );
       }).pipe(
         Effect.provide(deploymentProviderLive()),
         Effect.provide(Layer.succeed(PrismaClient, currentClient(client))),
@@ -623,8 +631,8 @@ describe(
           })
           .pipe(Effect.flip);
 
-        expect(error).toBeInstanceOf(AggregateError);
-        expect((error as AggregateError).message).toContain("commit state");
+        expect(error).toMatchObject({ _tag: "AppPromotionNotConverged" });
+        expect((error as AppPromotionNotConverged).message).toContain("commit state");
         expect(calls).not.toContainEqual(["deleteDeployment", "version-1"]);
       }).pipe(
         Effect.provide(deploymentProviderLive()),

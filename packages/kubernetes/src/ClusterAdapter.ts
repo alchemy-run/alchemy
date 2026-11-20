@@ -1,6 +1,7 @@
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import type { DockerfileBuild } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
+import type { ProviderError } from "alchemy/Provider";
 import type { ResourceBinding } from "alchemy/Resource";
 import type { ResourceContext } from "alchemy/ResourceContext";
 import type { Stack } from "alchemy/Stack";
@@ -71,7 +72,7 @@ export interface ClusterTransport {
   /** Skip TLS verification (self-signed local clusters). */
   insecureSkipTlsVerify?: boolean;
   /** Mint the auth headers for one request. */
-  headers: Effect.Effect<Record<string, string>, Error>;
+  headers: Effect.Effect<Record<string, string>, ProviderError>;
   /** PEM client certificate credentials for mutual TLS. */
   clientCert?: { certificate: string; key: string };
 }
@@ -286,28 +287,28 @@ export interface ClusterAdapterService {
    */
   readonly connect: (
     connection: Connection,
-  ) => Effect.Effect<ClusterTransport, ClusterNotFoundError | Error>;
+  ) => Effect.Effect<ClusterTransport, ClusterNotFoundError | ProviderError>;
   /** Workload identity provisioning (Pod Identity on EKS, Workload Identity Federation on GKE). */
   readonly identity?: {
     readonly reconcile: (
       options: WorkloadIdentityReconcileOptions,
-    ) => Effect.Effect<WorkloadIdentityResult, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<WorkloadIdentityResult, ProviderError, AdapterLifecycleServices>;
     readonly delete: (
       options: WorkloadIdentityDeleteOptions,
-    ) => Effect.Effect<void, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<void, ProviderError, AdapterLifecycleServices>;
   };
   /** Managed container-image registry (ECR on EKS, Artifact Registry on GKE). */
   readonly registry?: {
     readonly resolve: (
       options: ImageRegistryResolveOptions,
-    ) => Effect.Effect<ImageRegistryResult, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<ImageRegistryResult, ProviderError, AdapterLifecycleServices>;
     /** Plan-time content hash used by `diff` to surface source drift. */
     readonly hash: (
       options: ImageRegistryHashOptions,
-    ) => Effect.Effect<string | undefined, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<string | undefined, ProviderError, AdapterLifecycleServices>;
     readonly delete: (
       options: ImageRegistryDeleteOptions,
-    ) => Effect.Effect<void, any, AdapterLifecycleServices>;
+    ) => Effect.Effect<void, ProviderError, AdapterLifecycleServices>;
   };
   /**
    * Platform-specific generated container entries for Effect-native
@@ -327,7 +328,7 @@ export interface ClusterAdapterService {
       loadBalancerClass?: string | undefined;
       annotations?: Record<string, string>;
     },
-    any,
+    ProviderError,
     AdapterLifecycleServices
   >;
 }

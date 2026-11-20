@@ -163,8 +163,20 @@ export interface Table extends Resource<
     latestStreamArn: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  TableLookup
 > {}
+
+/**
+ * Props for {@link Table.lookup}: find a table this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface TableLookup {
+  /** The keyspace the table belongs to. */
+  keyspaceName: string;
+  /** The name of the existing table. */
+  tableName: string;
+}
 
 /**
  * An Amazon Keyspaces (for Apache Cassandra) table.
@@ -218,6 +230,16 @@ export interface Table extends Resource<
  *   },
  * });
  * // table.latestStreamArn → consume via the TableStreams binding
+ * ```
+ *
+ * ### Looking up an existing table
+ * `Table.lookup` references a table Alchemy doesn't manage (created in the
+ * console or by another stack), found by `keyspaceName` and `tableName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing table
+ * ```typescript
+ * const events = AWS.Keyspaces.Table.lookup({ keyspaceName: "app", tableName: "events" });
  * ```
  *
  * @resource
@@ -394,6 +416,19 @@ export const TableProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* ({ keyspaceName, tableName }) {
+          const found = yield* readTable(keyspaceName, tableName);
+          if (found === undefined || found.status === "DELETING") return undefined;
+          return {
+            keyspaceName: found.keyspaceName,
+            tableName: found.tableName,
+            tableArn: found.resourceArn,
+            status: found.status ?? "ACTIVE",
+            latestStreamArn: isCdcEnabled(found)
+              ? yield* readLatestStreamArn(found.keyspaceName, found.tableName)
+              : undefined,
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const props = (olds ?? {}) as Partial<TableProps>;
           const keyspaceName = output?.keyspaceName ?? props.keyspaceName;

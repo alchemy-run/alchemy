@@ -4,17 +4,11 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Axiom.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-// Axiom credentials are resolved via the AuthProvider (env method reads
-// AXIOM_TOKEN / AXIOM_API_KEY). When neither is present the suite can't talk
-// to the real API, so skipIf-gate the live list test. On an entitled run the
-// failure mode without creds is an `AuthError`:
-//   "Axiom env credentials not found. Set AXIOM_TOKEN (or AXIOM_API_KEY)."
-const hasAxiomCreds = !!(process.env.AXIOM_TOKEN || process.env.AXIOM_API_KEY);
 
 // Deterministic dataset name so re-runs reconcile the same dataset rather than
 // piling up duplicates (no Date.now in physical names).
@@ -23,7 +17,7 @@ const DATASET_NAME = "alchemy-test-dataset-list";
 // Canonical `list()` test (account collection): Axiom exposes a single
 // org-wide `GET /v2/datasets` op, so `list()` enumerates every dataset and
 // hydrates each row into the exact `read` Attributes shape.
-test.provider.skipIf(!hasAxiomCreds)(
+test.provider(
   "list enumerates the deployed dataset",
   (stack) =>
     Effect.gen(function* () {
@@ -37,6 +31,7 @@ test.provider.skipIf(!hasAxiomCreds)(
           });
         }),
       );
+      yield* expectFound(Axiom.Dataset.lookup({ name: deployed.name }), deployed);
 
       const provider = yield* Provider.findProvider(Axiom.Dataset);
       const all = yield* provider.list();

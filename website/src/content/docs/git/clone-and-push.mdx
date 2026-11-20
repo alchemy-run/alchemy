@@ -2,6 +2,7 @@
 title: Cloning & pushing
 description: Standard git clients over smart HTTP. What the wire supports, where credentials go, and what to do when something hangs.
 ---
+import PackageManagers from "../../../components/PackageManagers.astro";
 
 The host speaks git's smart HTTP protocol. Standard clients work
 unmodified, with no extensions and no wrapper CLI:
@@ -27,11 +28,9 @@ The host from [Getting Started](/git/getting-started) accepts one
 secret, an `Alchemy.Random` the stack outputs. `alchemy deploy` prints
 it:
 
-```sh
-bun alchemy deploy
+<PackageManagers script={`{run} alchemy deploy
 # { url: "https://…workers.dev", secret: "9f2c…" }
-export TOKEN=9f2c…
-```
+export TOKEN=9f2c…`} />
 
 ### A Better Auth API key
 

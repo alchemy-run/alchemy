@@ -65,12 +65,18 @@ const teardownStateBucket = Effect.fn("GCP.state.teardown")(function* (name?: st
 /** The GCP environment of the profile core runs the operation under. */
 const environment = stateEnvironment();
 
+/** The Cloud Storage state store's options. */
+export interface GcpStateStoreOptions {
+  /** A store other than the default, by name. */
+  readonly name?: string;
+}
+
 /**
  * The Cloud Storage state store's lifecycle, for `alchemy state`. The store
  * also creates its bucket on first use, so bootstrapping is only needed to
  * provision it ahead of time (CI).
  */
-export const lifecycle: StateStoreLifecycle = {
+export const lifecycle: StateStoreLifecycle<GcpStateStoreOptions> = {
   bootstrap: ({ name }) =>
     bootstrapStateBucket(name).pipe(
       Effect.map(({ bucketName, project, region, existed }) => ({
@@ -88,4 +94,7 @@ export const lifecycle: StateStoreLifecycle = {
 };
 
 /** The state store GCP contributes. */
-export const stateStore: StateStoreImpl = { layer: state, lifecycle };
+export const stateStore: StateStoreImpl<GcpStateStoreOptions> = {
+  layer: (options) => state({ name: options?.name }),
+  lifecycle,
+};

@@ -67,8 +67,18 @@ export interface CacheCluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  CacheClusterLookup
 > {}
+
+/**
+ * Props for {@link CacheCluster.lookup}: find a cache cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface CacheClusterLookup {
+  /** The id of the existing cache cluster. */
+  cacheClusterId: string;
+}
 
 /**
  * A provisioned Memcached cluster. Use {@link ReplicationGroup} for Valkey or Redis.
@@ -81,6 +91,16 @@ export interface CacheCluster extends Resource<
  *   securityGroupIds: [cacheSecurityGroup.groupId],
  *   numCacheNodes: 2,
  * });
+ * ```
+ *
+ * ### Looking up an existing cache cluster
+ * `CacheCluster.lookup` references a cache cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `cacheClusterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cache cluster
+ * ```typescript
+ * const existing = AWS.ElastiCache.CacheCluster.lookup({ cacheClusterId: "sessions" });
  * ```
  *
  * @resource
@@ -170,6 +190,10 @@ export const CacheClusterProvider = () =>
             return { action: "replace" } as const;
           }
           if (replaces(olds ?? {}, news ?? {})) return { action: "replace" } as const;
+        }),
+        lookup: Effect.fn(function* ({ cacheClusterId }) {
+          const found = yield* readCluster(cacheClusterId);
+          return found?.ARN ? yield* attrs(found) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const cluster = yield* readCluster(
@@ -278,7 +302,20 @@ export const CacheClusterProvider = () =>
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* elasticache.deleteCacheCluster({ CacheClusterId: output.cacheClusterId }).pipe(
-            Effect.catchTag("CacheClusterNotFoundFault", () => Effect.void),
+            Effect.catchTags({
+              CacheClusterNotFoundFault: () => Effect.void,
+              // A cluster already `deleting` rejects a second delete for as
+              // long as the delete runs: an interrupted destroy, or a delete
+              // started outside the stack. Wait for that delete below.
+              InvalidCacheClusterStateFault: (error) =>
+                readCluster(output.cacheClusterId).pipe(
+                  Effect.flatMap((cluster) =>
+                    cluster === undefined || cluster.CacheClusterStatus === "deleting"
+                      ? Effect.void
+                      : Effect.fail(error),
+                  ),
+                ),
+            }),
             Effect.retry({
               while: (error) => error._tag === "InvalidCacheClusterStateFault",
               schedule: Schedule.max([Schedule.fixed("15 seconds"), Schedule.recurs(12)]),

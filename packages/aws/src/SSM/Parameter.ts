@@ -110,8 +110,18 @@ export interface Parameter extends Resource<
     };
   },
   never,
-  Providers
+  Providers,
+  ParameterLookup
 > {}
+
+/**
+ * Props for {@link Parameter.lookup}: find a parameter this stack doesn't
+ * manage, in the ambient account and region, by name.
+ */
+export interface ParameterLookup {
+  /** The parameter's name, e.g. `/prod/db/url`. */
+  parameterName: string;
+}
 
 /**
  * An AWS Systems Manager (SSM) Parameter Store parameter.
@@ -192,6 +202,19 @@ export interface Parameter extends Resource<
  *     return HttpServerResponse.text(String(result.Parameter?.Value));
  *   }),
  * };
+ * ```
+ *
+ * ### Looking up an existing parameter
+ * `Parameter.lookup` references a parameter Alchemy doesn't manage (created in the
+ * console or by another stack), found by `parameterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Read an existing parameter from a function
+ * ```typescript
+ * const dbUrl = AWS.SSM.Parameter.lookup({ parameterName: "/prod/db/url" });
+ *
+ * // init
+ * const getParameter = yield* AWS.SSM.GetParameter(dbUrl);
  * ```
  *
  * @resource
@@ -294,6 +317,37 @@ export const ParameterProvider = () =>
               { concurrency: 5 },
             );
           }),
+
+        lookup: Effect.fn(function* ({ parameterName }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const found = yield* ssm.getParameter({ Name: parameterName }).pipe(
+            Effect.map((r) => r.Parameter),
+            Effect.catchTag("ParameterNotFound", () => Effect.undefined),
+          );
+          if (!found) return undefined;
+          const type = (found.Type ?? "String") as ParameterType;
+          const meta = yield* describeByName(parameterName).pipe(
+            Effect.orElseSucceed(() => undefined),
+          );
+          const keyArn =
+            type === "SecureString"
+              ? yield* resolveKeyArn(meta?.KeyId).pipe(Effect.orElseSucceed(() => undefined))
+              : undefined;
+          return {
+            parameterName,
+            parameterArn: found.ARN ?? parameterArnOf(region, accountId, parameterName),
+            type,
+            version: found.Version ?? 1,
+            keyArn,
+            configuration: {
+              description: meta?.Description,
+              tier: meta?.Tier,
+              allowedPattern: meta?.AllowedPattern,
+              dataType: meta?.DataType ?? "text",
+              tags: {},
+            },
+          };
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const { accountId, region } = yield* AWSEnvironment.current;

@@ -196,8 +196,18 @@ export interface DBCluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  DBClusterLookup
 > {}
+
+/**
+ * Props for {@link DBCluster.lookup}: find a DocumentDB cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface DBClusterLookup {
+  /** The db cluster identifier of the existing DocumentDB cluster. */
+  dbClusterIdentifier: string;
+}
 
 /**
  * An Amazon DocumentDB (MongoDB-compatible) cluster.
@@ -234,6 +244,16 @@ export interface DBCluster extends Resource<
  *   storageEncrypted: true,
  *   enableCloudwatchLogsExports: ["audit", "profiler"],
  * });
+ * ```
+ *
+ * ### Looking up an existing DocumentDB cluster
+ * `DBCluster.lookup` references a DocumentDB cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `dbClusterIdentifier`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing DocumentDB cluster
+ * ```typescript
+ * const existing = AWS.DocDB.DBCluster.lookup({ dbClusterIdentifier: "my-documentdb-cluster" });
  * ```
  *
  * @resource
@@ -406,6 +426,14 @@ export const DBClusterProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ dbClusterIdentifier: identifier }) {
+          const cluster = yield* readCluster(identifier);
+          if (!cluster?.DBClusterArn) {
+            return undefined;
+          }
+          const tags = yield* readTags(cluster.DBClusterArn);
+          return toAttrs({ cluster, tags });
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const identifier =

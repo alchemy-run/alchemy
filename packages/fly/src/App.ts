@@ -82,8 +82,18 @@ export type App = Resource<
     url: string;
   },
   AppBinding,
-  Providers
+  Providers,
+  AppLookup
 >;
+
+/**
+ * Props for {@link App.lookup}: find an App this stack doesn't manage by
+ * its name.
+ */
+export interface AppLookup {
+  /** Fly App name. */
+  name: string;
+}
 
 /**
  * Binding contract accepted by {@link App}. Each {@link Service} placed in
@@ -194,6 +204,20 @@ export interface AppBinding {
  * import * as Fly from "@alchemy.run/fly";
  *
  * export const Site = Fly.App("Site");
+ * ```
+ *
+ * ### Looking up an existing App
+ * `App.lookup` references an App Alchemy doesn't manage (created with
+ * `fly launch` or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and works anywhere a declared App does.
+ *
+ * **Example:** Reference an existing App
+ * ```typescript
+ * const site = Fly.App.lookup({ name: "my-site" });
+ * const db = yield* Fly.Secret("DatabaseUrl", {
+ *   app: site,
+ *   value: Redacted.make("postgres://…"),
+ * });
  * ```
  *
  * @resource
@@ -385,7 +409,7 @@ export const deleteApp = Effect.fn(function* (appName: string) {
   );
   const http = yield* HttpClient.HttpClient;
   const fetchOptions = yield* Effect.serviceOption(FetchHttpClient.RequestInit);
-  yield* machines.deleteApp({ app_name: appName }).pipe(
+  const accepted = yield* machines.deleteApp({ app_name: appName }).pipe(
     Retry.none,
     // Bun can replay DELETE on a reused socket below the SDK retry policy.
     Effect.provideService(
@@ -398,7 +422,10 @@ export const deleteApp = Effect.fn(function* (appName: string) {
       redirect: "error",
     }),
     Effect.timeout("30 seconds"),
-    Effect.catchTag("NotFound", () => Effect.void),
+    Effect.as(true),
+    // Fly's DELETE is authoritative for absence: its GET can keep serving a
+    // deleted App as `pending` long after DELETE answers 404.
+    Effect.catchTag("NotFound", () => Effect.succeed(false)),
     Effect.catchTag(
       [
         "HttpClientError",
@@ -411,6 +438,7 @@ export const deleteApp = Effect.fn(function* (appName: string) {
       (error) => Effect.fail(new AppDeletionAmbiguous({ appName, evidence: error._tag })),
     ),
   );
+  if (!accepted) return;
   const gone = yield* getByName(appName).pipe(
     Effect.map((app) => app === undefined),
     Effect.repeat({ schedule: Schedule.spaced("1 second"), until: (gone) => gone, times: 8 }),
@@ -477,6 +505,11 @@ export const AppProvider = () =>
         };
       }
       return undefined;
+    }),
+
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found, name);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {

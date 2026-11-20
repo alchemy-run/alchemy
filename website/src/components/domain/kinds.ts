@@ -6,6 +6,7 @@
 export type Kind =
   | "command"
   | "aggregate"
+  | "decision"
   | "event"
   | "view"
   | "query"
@@ -51,6 +52,13 @@ export const KINDS: Record<Kind, KindStyle> = {
     hue: "#e3b341",
     shape: "boundary",
     icon: ["M12 3l8 4.5v9L12 21l-8-4.5v-9z", "M4 7.5l8 4.5 8-4.5", "M12 12v9"],
+  },
+  decision: {
+    name: "Decision",
+    hue: "#f2a65a",
+    shape: "octagon",
+    // Several instances, decided as one.
+    icon: ["M4 6h4l4 6h8", "M4 18h4l4-6", "M17 9l3 3-3 3"],
   },
   event: {
     name: "Event",

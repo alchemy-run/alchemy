@@ -18,11 +18,17 @@ import type { Input, InputProps } from "@/Input";
 import * as Namespace from "@/Namespace.ts";
 import * as Output from "@/Output";
 import * as Plan from "@/Plan";
-import { UnsatisfiedResourceCycle } from "@/Plan";
+import { type RefCycleError, UnsatisfiedResourceCycle } from "@/Plan";
 import * as Provider from "@/Provider";
 import { remote } from "@/ProviderMode.ts";
+import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { renamedFrom } from "@/Rename.ts";
-import { Resource, type ResourceBinding } from "@/Resource";
+import {
+  type LookupNotFoundError,
+  type LookupNotSupportedError,
+  Resource,
+  type ResourceBinding,
+} from "@/Resource";
 import { packEnvValue } from "@/RuntimeContext.ts";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
@@ -44,6 +50,11 @@ import {
   Function,
   inDev,
   KindStablesResource,
+  lookupCalls,
+  LookupTarget,
+  OptionalProps,
+  optionalPropsReceived,
+  lookupTargets,
   ModalResource,
   NoPrecreateBindingTarget,
   OverrideStablesResource,
@@ -55,6 +66,7 @@ import {
   TestResource,
   TestResourceHooks,
   type TestResourceProps,
+  UnsupportedLookup,
 } from "./test.resources";
 
 const TEST_STACK = "test";
@@ -1515,6 +1527,47 @@ describe("construct namespaces", { tags: ["unit", "local"] }, () => {
       expect(plan.resources["MarketingSite/A"]?.downstream).toEqual([]);
       expect(plan.resources["MarketingSite/B"]?.downstream).toEqual([]);
       expect(plan.deletions).toEqual({});
+    }),
+  );
+
+  test.provider("binding edges between separate cycles order deletes", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          const A = yield* BindingTarget("A", {});
+          const B = yield* BindingTarget("B", {});
+          const C = yield* BindingTarget("C", {});
+          const D = yield* BindingTarget("D", {});
+          yield* A.bind("FromB", { env: { PEER: B.string } });
+          yield* B.bind("FromA", { env: { PEER: A.string } });
+          yield* C.bind("FromD", { env: { PEER: D.string } });
+          yield* D.bind("FromC", { env: { PEER: C.string } });
+          yield* A.bind("FromC", { env: { PEER: C.string } });
+
+          const E = yield* BindingTarget("E", {});
+          const F = yield* BindingTarget("F", {});
+          yield* E.bind("FromE", { env: { SELF: E.string } });
+          yield* F.bind("FromF", { env: { SELF: F.string } });
+          yield* E.bind("FromF", { env: { PEER: F.string } });
+        }),
+      );
+
+      const live = new Set(["A", "B", "C", "D", "E", "F"]);
+      const boundBy: Record<string, string> = { C: "A", F: "E" };
+      yield* stack.destroy().pipe(
+        Effect.provideService(TestResourceHooks, {
+          delete: (id) =>
+            Effect.gen(function* () {
+              if (id === "A" || id === "E") yield* Effect.sleep("30 millis");
+              if (live.has(boundBy[id])) {
+                return yield* Effect.fail(new Error(`${id} is still bound by ${boundBy[id]}`));
+              }
+              live.delete(id);
+            }),
+        }),
+      );
+
+      expect([...live]).toEqual([]);
     }),
   );
 });
@@ -3749,6 +3802,155 @@ describe("RefExpr resolution", { tags: ["unit", "local"] }, () => {
   );
 });
 
+// `Resource.lookup(props)` finds a resource no stack manages through its
+// provider's `lookup`. It resolves at plan time like a ref, but from the
+// provider instead of state, and never becomes a node in the plan.
+// Every prop of `OptionalProps` is optional, so it may be declared with none.
+// Its provider reads `news` without a default, as most real providers do.
+describe("resources declared without props", { tags: ["unit", "local"] }, () => {
+  test(
+    "plan a create with empty props",
+    Effect.gen(function* () {
+      const plan = yield* OptionalProps("PlanNoProps").pipe(makePlan);
+      expect(plan.resources.PlanNoProps?.action).toBe("create");
+      expect((plan.resources.PlanNoProps as any)?.props).toEqual({});
+    }),
+  );
+
+  // A row created before declarations defaulted to `{}` holds `undefined`
+  // props; the same declaration still plans as a noop, and diff sees `{}`.
+  test(
+    "plan a noop over a row created with undefined props",
+    Effect.gen(function* () {
+      yield* seed({
+        PlanLegacy: {
+          instanceId,
+          providerVersion: 0,
+          logicalId: "PlanLegacy",
+          fqn: "PlanLegacy",
+          namespace: undefined,
+          resourceType: "Test.OptionalProps",
+          status: "created",
+          // What an engine wrote before declarations defaulted to `{}`.
+          props: undefined as never,
+          attr: { label: "PlanLegacy" },
+          bindings: [],
+          downstream: [],
+        },
+      });
+      const plan = yield* OptionalProps("PlanLegacy").pipe(makePlan);
+      expect(plan.resources.PlanLegacy?.action).toBe("noop");
+      expect(optionalPropsReceived.get("PlanLegacy")).toEqual([{ op: "diff", news: {} }]);
+      optionalPropsReceived.delete("PlanLegacy");
+    }),
+  );
+});
+
+describe("Resource.lookup", { tags: ["unit", "local"] }, () => {
+  test(
+    "resolves through the provider's lookup and is not planned",
+    Effect.gen(function* () {
+      lookupTargets.set("plan-found", { name: "plan-found", value: "external" });
+      const plan = yield* Effect.gen(function* () {
+        const found = LookupTarget.lookup({ name: "plan-found" });
+        yield* TestResource("Consumer", { string: found.value });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Consumer?.action).toBe("create");
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({ string: "external" });
+      expect(Object.keys(plan.resources)).toEqual(["Consumer"]);
+      expect(lookupCalls.filter((c) => c.name === "plan-found")).toEqual([
+        { mode: "live", name: "plan-found" },
+      ]);
+    }),
+  );
+
+  test(
+    "a lookup that finds nothing dies with LookupNotFoundError",
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const found = LookupTarget.lookup({ name: "plan-missing" });
+          yield* TestResource("Consumer", { string: found.value });
+        }).pipe(makePlan),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as LookupNotFoundError;
+        expect(err._tag).toBe("LookupNotFoundError");
+        expect(err.type).toBe("Test.LookupTarget");
+        expect(err.props).toEqual({ name: "plan-missing" });
+      }
+    }),
+  );
+
+  test(
+    "a provider without lookup dies with LookupNotSupportedError",
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const found = UnsupportedLookup.lookup({ name: "anything" });
+          yield* TestResource("Consumer", { string: found.name });
+        }).pipe(makePlan),
+      );
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause) as LookupNotSupportedError;
+        expect(err._tag).toBe("LookupNotSupportedError");
+        expect(err.type).toBe("Test.UnsupportedLookup");
+      }
+    }),
+  );
+
+  test(
+    "under alchemy dev a lookup still goes through the live provider",
+    Effect.gen(function* () {
+      lookupTargets.set("plan-dev", { name: "plan-dev", value: "external" });
+      const plan = yield* inDev(
+        Effect.gen(function* () {
+          const found = LookupTarget.lookup({ name: "plan-dev" });
+          yield* TestResource("Consumer", { string: found.value });
+        }).pipe(makePlan),
+      );
+
+      expect((plan.resources.Consumer as any)?.props).toMatchObject({ string: "external" });
+      expect(lookupCalls.filter((c) => c.name === "plan-dev")).toEqual([
+        { mode: "live", name: "plan-dev" },
+      ]);
+    }),
+  );
+
+  test(
+    "a lookup keyed by a resource being created waits for it",
+    Effect.gen(function* () {
+      lookupTargets.set("plan-keyed", { name: "plan-keyed", value: "external" });
+      const plan = yield* Effect.gen(function* () {
+        const key = yield* TestResource("Key", { string: "plan-keyed" });
+        const found = LookupTarget.lookup({ name: key.string });
+        yield* TestResource("Consumer", { string: found.value });
+      }).pipe(makePlan);
+
+      expect(plan.resources.Consumer?.action).toBe("create");
+      expect(Output.isOutput((plan.resources.Consumer as any)?.props.string)).toBe(true);
+      expect(lookupCalls.filter((c) => c.name === "plan-keyed")).toEqual([]);
+    }),
+  );
+
+  test(
+    "a lookup carries its resource type statically",
+    Effect.gen(function* () {
+      const found = LookupTarget.lookup({ name: "plan-static" });
+      expect(found.Type).toBe("Test.LookupTarget");
+      expect(Output.isLookupExpr(found)).toBe(true);
+      // Nothing is looked up until the value is resolved.
+      expect(lookupCalls.filter((c) => c.name === "plan-static")).toEqual([]);
+      // `lookup` exists only on resources that declare lookup props.
+      // @ts-expect-error
+      TestResource.lookup;
+    }),
+  );
+});
+
 // A ref to a resource the same program declares, in the current stack and
 // stage, is a dependency exactly like a direct reference: an edge in the plan
 // DAG (create waits for the target, delete runs the dependent first) and an
@@ -4013,6 +4215,76 @@ describe("same-stack refs to declared resources", { tags: ["unit", "local"] }, (
       expect(plan.resources.Shared!.downstream).toContain("Compute");
     }),
   );
+
+  // #3112: two resources that reference each other, one through a ref,
+  // deadlocked the plan.
+  describe("a ref that closes a cycle (#3112)", () => {
+    const refCycle = Effect.gen(function* () {
+      const api = yield* TestResource.ref("Api");
+      const auth = yield* TestResource("Auth", { string: "auth", stringArray: [api.string] });
+      yield* TestResource("Api", { string: "api", stringArray: [auth.string] });
+    });
+
+    for (const [name, seeded] of [
+      ["neither exists", {}],
+      [
+        "both exist",
+        {
+          Api: row("Api", { string: "api", stringArray: ["auth"] }),
+          Auth: row("Auth", { string: "auth", stringArray: ["api"] }),
+        },
+      ],
+    ] as const) {
+      test(
+        `props cycle fails the plan with RefCycleError when ${name}`,
+        Effect.gen(function* () {
+          yield* seed(seeded);
+          const exit = yield* refCycle.pipe(makePlan, Effect.timeout("5 seconds"), Effect.exit);
+          expect(Exit.isFailure(exit)).toBe(true);
+          if (Exit.isFailure(exit)) {
+            const error = Cause.squash(exit.cause) as RefCycleError;
+            expect(error._tag).toBe("RefCycleError");
+            expect(error.owner).toBe("Auth");
+            expect(error.target).toBe("Api");
+            expect(error.message).toContain("Auth -> Api -> Auth");
+          }
+        }),
+      );
+    }
+
+    test(
+      "binding cycle: plan finishes and plans noops",
+      Effect.gen(function* () {
+        const host = (fqn: string, sid: string, env: Record<string, string>) =>
+          ({
+            instanceId,
+            providerVersion: 0,
+            logicalId: fqn,
+            fqn,
+            namespace: undefined,
+            resourceType: "Test.BindingTarget",
+            status: "created",
+            props: { name: fqn },
+            attr: { name: fqn, string: "", env, replaceString: undefined },
+            bindings: [{ sid, data: { env } }],
+            downstream: [],
+          }) as ResourceState;
+        yield* seed({
+          Api: host("Api", "Auth", { AUTH: "Auth" }),
+          Auth: host("Auth", "Api", { API: "Api" }),
+        });
+        const plan = yield* Effect.gen(function* () {
+          const apiRef = yield* BindingTarget.ref("Api");
+          const auth = yield* BindingTarget("Auth", { name: "Auth" });
+          yield* auth.bind("Api", { env: { API: apiRef.name } });
+          const api = yield* BindingTarget("Api", { name: "Api" });
+          yield* api.bind("Auth", { env: { AUTH: auth.name } });
+        }).pipe(makePlan, Effect.timeout("5 seconds"));
+        expect(plan.resources.Api!.action).toBe("noop");
+        expect(plan.resources.Auth!.action).toBe("noop");
+      }),
+    );
+  });
 });
 
 describe("StackRefExpr resolution", { tags: ["unit", "local"] }, () => {
@@ -6035,6 +6307,227 @@ describe("resource selection patterns", { tags: ["unit", "local"] }, () => {
       );
       expect(Exit.isFailure(exit)).toBe(true);
       if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain("A -> B");
+    }),
+  );
+});
+
+describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
+  const protectedRow = (state: ResourceState): ResourceState => ({
+    ...state,
+    removalPolicy: "protect",
+  });
+  const created = (props: TestResourceProps) =>
+    createTestResourceState({ logicalId: "A", status: "created", props });
+  const refusalOf = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.exit(effect).pipe(
+      Effect.map((exit) =>
+        Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isFailReason)?.error : undefined,
+      ),
+    );
+  const declare = (props: TestResourceProps, protect = true) =>
+    Effect.gen(function* () {
+      yield* TestResource("A", props).pipe(RemovalPolicy.protect(protect));
+    });
+
+  test(
+    "protect() on the declaration alone refuses a replacement",
+    Effect.gen(function* () {
+      yield* seed({ A: created({ replaceString: "v1" }) });
+      const error = yield* refusalOf(makePlan(declare({ replaceString: "v2" })));
+      expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
+    }),
+  );
+
+  test(
+    "a new replacement of a replaced row (restart) is refused",
+    Effect.gen(function* () {
+      yield* seed({
+        A: protectedRow(
+          createReplacedState({
+            logicalId: "A",
+            props: { replaceString: "v2" },
+            old: created({ replaceString: "v1" }),
+          }),
+        ),
+      });
+      const error = yield* refusalOf(makePlan(declare({ replaceString: "v3" })));
+      expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
+    }),
+  );
+
+  // A failed update that drops protect() leaves an `updating` row with the
+  // declared policy on top and the last successful row on `old`.
+  const failedUnprotect = (old: ResourceState | undefined) =>
+    ({
+      ...createTestResourceState({
+        logicalId: "A",
+        status: "updating",
+        props: { replaceString: "v1", string: "b" },
+      }),
+      removalPolicy: "destroy",
+      ...(old ? { old } : {}),
+    }) as ResourceState;
+
+  test(
+    "a failed unprotect update still refuses a replacement",
+    Effect.gen(function* () {
+      yield* seed({
+        A: failedUnprotect(protectedRow(created({ replaceString: "v1", string: "a" }))),
+      });
+      const error = yield* refusalOf(
+        makePlan(declare({ replaceString: "v2", string: "b" }, false)),
+      );
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "replace" }],
+      });
+    }),
+  );
+
+  test(
+    "a failed unprotect update still refuses an orphan delete",
+    Effect.gen(function* () {
+      yield* seed({
+        A: failedUnprotect(protectedRow(created({ replaceString: "v1", string: "a" }))),
+      });
+      const error = yield* refusalOf(makePlan(Effect.void));
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+    }),
+  );
+
+  test(
+    "a failed unprotect update still refuses an Action taking over its FQN",
+    Effect.gen(function* () {
+      yield* seed({
+        A: failedUnprotect(protectedRow(created({ replaceString: "v1", string: "a" }))),
+      });
+      const A = Action("A", (input: { value: string }) => Effect.succeed(input));
+      const error = yield* refusalOf(
+        makePlan(
+          Effect.gen(function* () {
+            yield* A({ value: "x" });
+          }),
+        ),
+      );
+      expect(error).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+    }),
+  );
+
+  test(
+    "an updating row that was never protected can be replaced",
+    Effect.gen(function* () {
+      yield* seed({ A: failedUnprotect(created({ replaceString: "v1", string: "a" })) });
+      const plan = yield* makePlan(declare({ replaceString: "v2", string: "b" }, false));
+      expect(plan.resources.A.action).toBe("replace");
+    }),
+  );
+
+  test(
+    "an updating row without old can be replaced",
+    Effect.gen(function* () {
+      yield* seed({ A: failedUnprotect(undefined) });
+      const plan = yield* makePlan(declare({ replaceString: "v2", string: "b" }, false));
+      expect(plan.resources.A.action).toBe("replace");
+    }),
+  );
+
+  test(
+    "resuming an in-flight replacement is refused",
+    Effect.gen(function* () {
+      yield* seed({
+        A: protectedRow(
+          createReplacingState({
+            logicalId: "A",
+            props: { replaceString: "v2" },
+            old: created({ replaceString: "v1" }),
+          }),
+        ),
+      });
+      const error = yield* refusalOf(makePlan(declare({ replaceString: "v2" })));
+      expect(error).toMatchObject({ resources: [{ fqn: "A", action: "replace" }] });
+    }),
+  );
+});
+
+// A pool collects env from what it hosts and hands it to its host as a prop,
+// and what it hosts binds the host's address: the members form a cycle, and a
+// change to bound data alone has to reach every member that reads it.
+describe("binding changes across a cycle", { tags: ["unit", "local"] }, () => {
+  const hosted = (generation: string, replaceString?: string) =>
+    Effect.gen(function* () {
+      const pool = yield* BindingTarget("Pool", { name: "pool", replaceString });
+      const host = yield* Function("Host", { name: "host", env: { GEN: pool.env.GEN } });
+      yield* pool.bind("Entity", { env: { GEN: generation, HOST: host.functionArn } });
+    });
+
+  test.provider("an unchanged cycle plans nothing", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(hosted("1"));
+      const plan = yield* stack.plan(hosted("1"));
+      expect(plan.resources.Pool.action).toBe("noop");
+      expect(plan.resources.Host.action).toBe("noop");
+    }),
+  );
+
+  test.provider("a binding-only change updates the members that read it", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(hosted("1"));
+      const plan = yield* stack.plan(hosted("2"));
+      expect(plan.resources.Pool.action).toBe("update");
+      expect(plan.resources.Host.action).toBe("update");
+    }),
+  );
+
+  test.provider("a member planned for replacement stays replaced", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.deploy(hosted("1", "a"));
+      const plan = yield* stack.plan(hosted("2", "b"));
+      expect(plan.resources.Pool.action).toBe("replace");
+      expect(plan.resources.Host.action).not.toBe("noop");
+    }),
+  );
+
+  test.provider("a changed member updates the consumers of the member it is bound to", (stack) =>
+    Effect.gen(function* () {
+      const program = (generation: string) =>
+        Effect.gen(function* () {
+          const pool = yield* BindingTarget("Pool", { name: "pool" });
+          const host = yield* Function("Host", { name: "host", env: { GEN: pool.env.GEN } });
+          const entity = yield* Function("Entity", {
+            name: "entity",
+            env: { GEN: generation, HOST: host.functionArn },
+          });
+          yield* pool.bind("Entity", { env: { GEN: entity.env.GEN } });
+        });
+      yield* stack.deploy(program("1"));
+      const plan = yield* stack.plan(program("2"));
+      expect(plan.resources.Entity.action).toBe("update");
+      expect(plan.resources.Pool.action).toBe("update");
+      expect(plan.resources.Host.action).toBe("update");
+    }),
+  );
+
+  test.provider("a binding-only change crosses every binding of the cycle", (stack) =>
+    Effect.gen(function* () {
+      const program = (generation: string) =>
+        Effect.gen(function* () {
+          const outer = yield* BindingTarget("Outer", { name: "outer" });
+          const inner = yield* BindingTarget("Inner", { name: "inner" });
+          const host = yield* Function("Host", { name: "host", env: { GEN: outer.env.GEN } });
+          yield* inner.bind("Entity", { env: { GEN: generation, HOST: host.functionArn } });
+          yield* outer.bind("Relay", { env: { GEN: inner.env.GEN } });
+        });
+      yield* stack.deploy(program("1"));
+      const plan = yield* stack.plan(program("2"));
+      expect(plan.resources.Inner.action).toBe("update");
+      expect(plan.resources.Outer.action).toBe("update");
+      expect(plan.resources.Host.action).toBe("update");
     }),
   );
 });

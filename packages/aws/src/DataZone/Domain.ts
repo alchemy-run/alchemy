@@ -92,8 +92,25 @@ export interface Domain extends Resource<
      * {@link DomainProps.domainExecutionRole} is used.
      */
     roleName: string | undefined;
-  }
+  },
+  never,
+  undefined,
+  DomainLookup
 > {}
+
+/**
+ * Props for {@link Domain.lookup}: find a domain this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type DomainLookup =
+  | {
+      /** The id of the existing domain. */
+      domainId: string;
+    }
+  | {
+      /** The name of the existing domain. */
+      name: string;
+    };
 
 /**
  * An Amazon DataZone domain — the top-level container for data-governance
@@ -131,6 +148,17 @@ export interface Domain extends Resource<
  *   domainId: domain.domainId,
  *   description: "Analytics team project",
  * });
+ * ```
+ *
+ * ### Looking up an existing domain
+ * `Domain.lookup` references a domain Alchemy doesn't manage (created in the
+ * console or by another stack), found by `domainId` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing domain
+ * ```typescript
+ * const catalog = AWS.DataZone.Domain.lookup({ name: "catalog" });
+ * const domainId = catalog.domainId;
  * ```
  *
  * @resource
@@ -302,6 +330,25 @@ export const DomainProvider = () =>
             }));
           }),
 
+        lookup: Effect.fn(function* (props) {
+          const { region, accountId } = yield* AWSEnvironment.current;
+          const domainId = "domainId" in props ? props.domainId : yield* findByName(props.name);
+          if (domainId === undefined) return undefined;
+          const domain = yield* getDomainOrUndefined(domainId);
+          if (domain === undefined || domain.status === "DELETING" || domain.status === "DELETED")
+            return undefined;
+          return {
+            domainId: domain.id,
+            domainArn: domain.arn ?? domainArnOf(region, accountId, domain.id),
+            name: domain.name ?? "",
+            status: domain.status,
+            portalUrl: domain.portalUrl,
+            rootDomainUnitId: domain.rootDomainUnitId,
+            domainExecutionRole: domain.domainExecutionRole,
+            // The execution role names the role a declared domain records.
+            roleName: domain.domainExecutionRole?.split("/").at(-1),
+          };
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const { region, accountId } = yield* AWSEnvironment.current;
           const domainId =

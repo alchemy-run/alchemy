@@ -24,6 +24,8 @@ import {
   hasAlchemyLabels,
   stripInternalLabels,
   toLabels,
+  isReplacedGeneration,
+  keepsName,
 } from "./Labels.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -76,6 +78,16 @@ export type ServerStatus =
   | "migrating"
   | "rebuilding"
   | "unknown";
+
+/**
+ * Deletion was refused because the server has delete protection on, set
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
+ */
+export class ServerDeleteProtected extends Data.TaggedError("Hetzner.ServerDeleteProtected")<{
+  readonly id: number;
+  readonly message: string;
+}> {}
 
 export interface ServerProps {
   /**
@@ -166,8 +178,9 @@ export interface ServerProps {
    */
   startAfterCreate?: boolean;
   /**
-   * Prevent the Server from being deleted or rebuilt via the API until
-   * this is cleared. The provider disables protection before delete.
+   * Prevent the Server from being deleted or rebuilt via the API.
+   * While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    *
    * @default false
    */
@@ -214,6 +227,8 @@ export type Server = Resource<
     volumeIds: number[];
     /** Attached private Network IDs. */
     networkIds: number[];
+    /** The Server's address on each attached private Network, in {@link networkIds} order. */
+    privateIps: string[];
     /** Firewall IDs applied to the public NIC. */
     firewallIds: number[];
     /** Placement Group ID, or `undefined` if unassigned. */
@@ -243,8 +258,18 @@ export type Server = Resource<
      */
     volumes?: Array<{ volumeId: number; path: string }>;
   },
-  Providers
+  Providers,
+  ServerLookup
 >;
+
+/**
+ * Props for {@link Server.lookup}: find a server this stack
+ * doesn't manage by its name.
+ */
+export interface ServerLookup {
+  /** Server name (unique in the project). */
+  name: string;
+}
 
 /**
  * A Hetzner Cloud Server — a virtual machine in a Location, created from
@@ -321,6 +346,19 @@ export type Server = Resource<
  * multipart cloud-init document, so both run. It is applied on first boot
  * only — changing it replaces the Server.
  *
+ * ### Looking up an existing server
+ * `Server.lookup` references a server Alchemy doesn't manage (created in
+ * the Hetzner Console or by another stack). It is read during plan/deploy,
+ * never created, updated or deleted.
+ * Alchemy holds a server's SSH key only for servers it created, so a
+ * looked-up server has no `privateKey`.
+ *
+ * **Example:** Reference an existing server
+ * ```typescript
+ * const server = Hetzner.Server.lookup({ name: "web-1" });
+ * const address = server.ipv4;
+ * ```
+ *
  * @resource
  * @product Server
  */
@@ -390,6 +428,10 @@ const toAttrs = (server: CloudServer): Server["Attributes"] => ({
   networkIds: server.private_net
     .map((item) => item.network)
     .filter((id): id is number => typeof id === "number"),
+  privateIps: server.private_net
+    .filter((item) => typeof item.network === "number")
+    .map((item) => item.ip)
+    .filter((ip): ip is string => typeof ip === "string"),
   firewallIds: (server.public_net.firewalls ?? [])
     .map((item) => item.id)
     .filter((id): id is number => typeof id === "number"),
@@ -788,7 +830,7 @@ const syncVolumes = Effect.fn(function* (input: {
     if (observed.has(volumeId)) continue;
     const { action } = yield* Hetzner.volumeActions.attachVolume({
       id: volumeId,
-      server: input.serverId,
+      assignee: { id: input.serverId, type: "server" },
     });
     yield* waitForAction(action);
   }
@@ -872,14 +914,14 @@ export const ServerProvider = () =>
         // Cloud-init runs once, on first boot — a changed init script can
         // only take effect on a freshly provisioned Server.
         if (news.userData !== olds?.userData) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         const location = news.location ?? DEFAULT_LOCATION;
         if (!sameRef(location, output.location, output.locationId)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         if (!sameRef(news.serverType, output.serverType, output.serverTypeId)) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
         const imageId = output.imageId;
         const imageMatches =
@@ -887,15 +929,30 @@ export const ServerProvider = () =>
             ? true
             : imageId !== undefined && news.image === String(imageId);
         if (!imageMatches) {
-          return { action: "replace" } as const;
+          return { action: "replace", deleteFirst: keepsName(news, output) } as const;
         }
       }
       return undefined;
     }),
-    read: Effect.fn(function* ({ id, olds, output }) {
+    lookup: Effect.fn(function* ({ name }) {
+      const found = yield* getByName(name);
+      return found === undefined ? undefined : toAttrs(found);
+    }),
+
+    read: Effect.fn(function* ({ id, olds, output, previous }) {
       const name = yield* createServerName(id, olds?.name, output?.name);
       const found = yield* observe({ id, name, outputId: output?.id ?? output?.serverId });
       if (found === undefined) return undefined;
+      if (
+        isReplacedGeneration({
+          previousId: previous?.id ?? previous?.serverId,
+          foundId: found.id,
+          claimedName: olds?.name,
+          foundName: found.name,
+        })
+      ) {
+        return undefined;
+      }
       const attrs = {
         ...toAttrs(found),
         privateKey: output?.privateKey,
@@ -1055,7 +1112,16 @@ export const ServerProvider = () =>
         deploySshKeyId: deployKey.deploySshKeyId,
       };
     }),
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
+      // Delete protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
+      const protectedServer = yield* getById(output.id);
+      if (protectedServer?.protection.delete === true && force !== true) {
+        return yield* new ServerDeleteProtected({
+          id: output.id,
+          message: `Hetzner server '${output.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+        });
+      }
       // Keep the server discoverable if key deletion fails. Removing the project
       // key does not revoke the public key already injected into the server.
       yield* deleteDeployKey(output.deploySshKeyId);

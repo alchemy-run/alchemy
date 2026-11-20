@@ -90,7 +90,7 @@ export const SigningKeyProvider = () =>
   Provider.succeed(SigningKey, {
     stables: ["keyName", "accountId", "value"],
 
-    diff: Effect.fn(function* ({ olds, news, output }) {
+    diff: Effect.fn(function* ({ olds, news = {}, output }) {
       // News may still contain unresolved plan-time expressions — defer to
       // the engine's default update logic until everything is concrete.
       if (!isResolved(news)) return undefined;
@@ -147,7 +147,7 @@ export const SigningKeyProvider = () =>
       );
     }),
 
-    reconcile: Effect.fn(function* ({ id, news }) {
+    reconcile: Effect.fn(function* ({ id, news = {} }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Inputs have been resolved to concrete strings by Plan.
       const acct = (news.accountId as string | undefined) ?? accountId;

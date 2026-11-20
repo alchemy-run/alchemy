@@ -68,7 +68,7 @@ export const makeHttpBucketBinding = <Client>(options: {
 export interface HttpScope {
   accountId: string;
   bucketName: string;
-  cfR2Jurisdiction: string | undefined;
+  jurisdiction: string | undefined;
 }
 export interface HttpToken {
   value: Effect.Effect<Redacted.Redacted<string>>;
@@ -95,7 +95,7 @@ export const makeR2HttpScope = (
     return {
       accountId: accountId_,
       bucketName: bucket,
-      cfR2Jurisdiction: j === "default" ? undefined : j,
+      jurisdiction: j === "default" ? undefined : j,
     };
   });
 

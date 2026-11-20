@@ -7,6 +7,7 @@ import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -185,8 +186,34 @@ export type Cluster = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 >;
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface ClusterLookup {
+  /**
+   * Cluster id (the `{cluster}` segment of
+   * `projects/{project}/locations/{location}/clusters/{cluster}`).
+   * Lowercase letters, digits, and hyphens; max 53 characters (longer
+   * values are truncated).
+   */
+  clusterId: string;
+  /**
+   * Region (`us-central1`, …). `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Managed Service for Apache Kafka cluster.
@@ -212,6 +239,16 @@ export type Cluster = Resource<
  *   capacityConfig: { vcpuCount: 3, memoryBytes: 3221225472 },
  *   labels: { env: "prod" },
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in
+ * the console or by another stack). It is read during plan/deploy, never
+ * created, updated or deleted, and binds like a declared cluster.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const cluster = GCP.ManagedKafka.Cluster.lookup({ clusterId: "my-cluster" });
  * ```
  *
  * @resource
@@ -306,6 +343,15 @@ export const ClusterProvider = () =>
           (kmsOf(news) ?? "") !== (olds?.kmsKey ?? output?.kmsKey ?? ""),
       });
     }),
+
+    lookup: Effect.fn(function* ({ clusterId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation, env.region);
+      const name = resourceName(env.project, location, clusterId);
+      const existing = yield* getCluster(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

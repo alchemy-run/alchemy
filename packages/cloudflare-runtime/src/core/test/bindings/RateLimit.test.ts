@@ -5,9 +5,14 @@ import * as RateLimit from "../../bindings/rate-limit/RateLimit.ts";
 import makeBinding from "../../bindings/rate-limit/RateLimitBinding.worker.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
+// Only the test's own path counts against the limit: local tools (T3 Code,
+// VS Code port detection) probe fresh localhost servers with `GET /`.
 const RATE_LIMIT_SCRIPT = `
 export default {
   async fetch(request, env) {
+    if (new URL(request.url).pathname !== "/limit") {
+      return new Response("Not Found", { status: 404 });
+    }
     const { success } = await env.TESTRATE.limit({ key: "test" });
     if (!success) {
       return new Response("rate limited", { status: 429 });
@@ -25,6 +30,10 @@ export default {
     const period = url.searchParams.get("period");
     if (period !== null) {
       options.period = Number(period);
+    }
+    const delta = url.searchParams.get("delta");
+    if (delta !== null) {
+      options.delta = Number(delta);
     }
     const { success } = await env.TESTRATE.limit(options);
     if (!success) {
@@ -68,15 +77,15 @@ layer(localRuntimeLayer)("RateLimit binding", (it) => {
           ],
         });
 
-        let res = yield* fetch("/");
+        let res = yield* fetch("/limit");
         expect(res.status).toBe(200);
         expect(yield* Effect.promise(() => res.text())).toBe("success");
 
-        res = yield* fetch("/");
+        res = yield* fetch("/limit");
         expect(res.status).toBe(200);
         expect(yield* Effect.promise(() => res.text())).toBe("success");
 
-        res = yield* fetch("/");
+        res = yield* fetch("/limit");
         expect(res.status).toBe(429);
         expect(yield* Effect.promise(() => res.text())).toBe("rate limited");
       }),
@@ -227,6 +236,23 @@ layer(localRuntimeLayer)("RateLimit binding", (it) => {
           error: "Error: period must be a number: bad",
         },
         { options: { period: 1 }, error: "Error: unsupported period: 1" },
+        // `delta` errors match production, where workerd converts it to a `uint32`
+        {
+          options: { delta: "bad" },
+          error: "TypeError: The value cannot be converted because it is not an integer.",
+        },
+        {
+          options: { delta: -1 },
+          error:
+            "TypeError: The value cannot be converted because it is negative and this API expects a positive number.",
+        },
+        {
+          options: { delta: 2 ** 32 },
+          error: "TypeError: Value out of range. Must be less than or equal to 4294967295.",
+        },
+        { options: { delta: 0 }, error: "RangeError: delta must be non-zero" },
+        // Truncated to 0, as production does
+        { options: { delta: 0.5 }, error: "RangeError: delta must be non-zero" },
       ];
 
       for (const { options, error } of TESTS) {
@@ -237,6 +263,89 @@ layer(localRuntimeLayer)("RateLimit binding", (it) => {
         expect(res.status).toBe(200);
         expect(yield* Effect.promise(() => res.text())).toBe(error);
       }
+    }),
+  );
+
+  it.effect(
+    "counts weighted increments with delta",
+    () =>
+      Effect.gen(function* () {
+        const { fetch } = yield* startTestWorker({
+          name: "ratelimit-weighted",
+          compatibilityDate: "2026-03-10",
+          compatibilityFlags: [],
+          modules: [{ name: "main.js", type: "ESModule", content: RATE_LIMIT_QUERY_SCRIPT }],
+          bindings: [
+            RateLimit.local({
+              binding: "TESTRATE",
+              namespaceId: 1,
+              simple: { limit: 5, period: 60 },
+            }),
+          ],
+        });
+
+        const call = (key: string, delta?: number) =>
+          fetch(delta === undefined ? `/?key=${key}` : `/?key=${key}&delta=${delta}`).pipe(
+            Effect.tap((res) => Effect.promise(() => res.text())),
+            Effect.map((res) => res.status),
+          );
+
+        // Each call consumes its weight: 2 + 2 leaves room for exactly one more.
+        expect(yield* call("a", 2)).toBe(200);
+        expect(yield* call("a", 2)).toBe(200);
+        expect(yield* call("a")).toBe(200);
+        expect(yield* call("a")).toBe(429);
+
+        // As in production, the decision uses the count before the call, so a
+        // call that overshoots the limit is still allowed while any headroom
+        // remains...
+        expect(yield* call("b", 4)).toBe(200);
+        expect(yield* call("b", 100)).toBe(200);
+        // ...and everything after it is limited.
+        expect(yield* call("b", 1)).toBe(429);
+      }),
+    { retry: 0 },
+  );
+
+  it.effect("rejects a BigInt delta like production", () =>
+    Effect.gen(function* () {
+      // BigInts can't be sent as JSON, so this calls `limit()` from the Worker
+      const { fetch } = yield* startTestWorker({
+        name: "ratelimit-bigint",
+        compatibilityDate: "2026-03-10",
+        compatibilityFlags: [],
+        modules: [
+          {
+            name: "main.js",
+            type: "ESModule",
+            content: `
+export default {
+  async fetch(request, env) {
+    try {
+      await env.TESTRATE.limit({ key: "a", delta: 2n });
+    } catch (e) {
+      return new Response(String(e));
+    }
+    return new Response("should have resulted in error", { status: 500 });
+  },
+};
+`,
+          },
+        ],
+        bindings: [
+          RateLimit.local({
+            binding: "TESTRATE",
+            namespaceId: 1,
+            simple: { limit: 5, period: 60 },
+          }),
+        ],
+      });
+
+      const res = yield* fetch("/");
+      expect(res.status).toBe(200);
+      expect(yield* Effect.promise(() => res.text())).toBe(
+        "TypeError: Cannot convert a BigInt value to a number",
+      );
     }),
   );
 });

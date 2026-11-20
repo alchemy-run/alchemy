@@ -97,8 +97,18 @@ export interface ApiKey extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ApiKeyLookup
 > {}
+
+/**
+ * Props for {@link ApiKey.lookup}: find an API key this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ApiKeyLookup {
+  /** The key name of the existing API key. */
+  keyName: string;
+}
 
 /**
  * An Amazon Location Service API key. API keys authorize **unsigned**
@@ -142,6 +152,16 @@ export interface ApiKey extends Resource<
  *   },
  *   expireTime: "2027-01-01T00:00:00Z",
  * });
+ * ```
+ *
+ * ### Looking up an existing API key
+ * `ApiKey.lookup` references an API key Alchemy doesn't manage (created in the
+ * console or by another stack), found by `keyName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing API key
+ * ```typescript
+ * const existing = AWS.Location.ApiKey.lookup({ keyName: "my-api-key" });
  * ```
  *
  * @resource
@@ -214,6 +234,11 @@ export const ApiKeyProvider = () =>
             });
             return hydrated.filter((attrs): attrs is ApiKey["Attributes"] => attrs !== undefined);
           }),
+        lookup: Effect.fn(function* ({ keyName }) {
+          const state = yield* readKey(keyName);
+          if (!state) return undefined;
+          return state;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const keyName = output?.keyName ?? (yield* createKeyName(id, olds ?? {}));
           const state = yield* readKey(keyName);

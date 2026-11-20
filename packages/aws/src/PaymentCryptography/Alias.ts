@@ -36,8 +36,18 @@ export interface Alias extends Resource<
     keyArn: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AliasLookup
 > {}
+
+/**
+ * Props for {@link Alias.lookup}: find an alias this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AliasLookup {
+  /** The alias name of the existing alias. */
+  aliasName: string;
+}
 
 /**
  * A friendly name for an AWS Payment Cryptography {@link Key}. Aliases give
@@ -60,6 +70,16 @@ export interface Alias extends Resource<
  *   aliasName: "alias/payments/data-encryption",
  *   keyArn: key.keyArn,
  * });
+ * ```
+ *
+ * ### Looking up an existing alias
+ * `Alias.lookup` references an alias Alchemy doesn't manage (created in the
+ * console or by another stack), found by `aliasName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing alias
+ * ```typescript
+ * const existing = AWS.PaymentCryptography.Alias.lookup({ aliasName: "my-alias" });
  * ```
  *
  * @resource
@@ -100,6 +120,11 @@ export const AliasProvider = () =>
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk).map(toAttrs)),
           ),
+        lookup: Effect.fn(function* ({ aliasName }) {
+          const alias = yield* observeAlias(aliasName);
+          if (alias === undefined) return undefined;
+          return toAttrs(alias);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const aliasName = output?.aliasName ?? (yield* createAliasName(id, olds ?? {}));
           const alias = yield* observeAlias(aliasName);

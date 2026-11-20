@@ -4,6 +4,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as androidpublisher from "@distilled.cloud/gcp/androidpublisher_v3";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { logLevel, packageName, probePackageName, missingTag, runLifecycle } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -87,6 +88,13 @@ test.provider.skipIf(!runLifecycle)(
             listings: [{ languageCode: "en-US", title: "Premium" }],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.AndroidPublisher.MonetizationSubscription.lookup({
+          productId: created.productId,
+          packageName: created.packageName,
+        }),
+        created,
       );
 
       expect(created.productId.length).toBeGreaterThan(0);

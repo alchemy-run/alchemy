@@ -3,11 +3,10 @@ import type { HttpEffect } from "alchemy/Http";
 import type { Input } from "alchemy/Input";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { effectClass, taggedFunction } from "alchemy/Util/effect";
+import { wrapRpcDurableObjectImpl } from "alchemy/Workers/Workerd/RpcDurableObject";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Fiber from "effect/Fiber";
 import type { HttpServerError } from "effect/http/HttpServerError";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import type { HttpServerResponse } from "effect/http/HttpServerResponse";
@@ -15,10 +14,6 @@ import * as Layer from "effect/Layer";
 import type { Rpc, RpcGroup } from "effect/rpc";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcClientError from "effect/rpc/RpcClientError";
-import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
-import * as RpcSerialization from "effect/rpc/RpcSerialization";
-import * as RpcServer from "effect/rpc/RpcServer";
-import * as Scope from "effect/Scope";
 import {
   DurableObject,
   type DurableObjectGetDurableObjectOptions,
@@ -29,7 +24,6 @@ import {
 } from "./DurableObject.ts";
 import { DurableObjectState } from "./DurableObjectState.ts";
 import { bindEffectRpc } from "./Rpc.ts";
-import * as RpcWebSocket from "./RpcWebSocket.ts";
 import type { Worker as WorkerService } from "./Worker.ts";
 
 export interface RpcDurableObjectProps<Rpcs extends Rpc.Any> {
@@ -510,82 +504,7 @@ const rpcWrap = (
 };
 
 const wrapImpl = (impl: Effect.Effect<Effect.Effect<any>>, props: RpcDurableObjectProps<any>) =>
-  impl.pipe(
-    Effect.map((inner) =>
-      inner.pipe(
-        Effect.flatMap((value) => {
-          if (Layer.isLayer(value)) {
-            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped impl value; layer requirements are provided by the DO bridge
-            return makeHandlers(props, value as Layer.Layer<any, never, any>);
-          }
-          return Effect.succeed({ fetch: value });
-        }),
-      ),
-    ),
-  ) as Effect.Effect<Effect.Effect<any>>;
-
-class RpcRequestLifetime extends RpcMiddleware.Service<RpcRequestLifetime>()(
-  "Cloudflare.RpcDurableObject.RequestLifetime",
-) {}
-
-const makeHandlers = Effect.fn(function* (
-  props: RpcDurableObjectProps<any>,
-  handlers: Layer.Layer<any, never, any>,
-) {
-  // The protocol outlives the constructor's temporary layer scope.
-  return yield* Effect.acquireUseRelease(
-    Scope.make(),
-    (instanceScope) =>
-      Effect.gen(function* () {
-        const memoMap = Layer.makeMemoMapUnsafe();
-        const context = yield* Layer.buildWithMemoMap(handlers, memoMap, instanceScope);
-        const services = Layer.succeedContext(context);
-        const http = Effect.gen(function* () {
-          const handler = yield* RpcServer.toHttpEffect(props.schema).pipe(
-            Effect.provide(Layer.mergeAll(services, RpcSerialization.layerNdjson)),
-          );
-          return yield* handler;
-        });
-        const state = yield* DurableObjectState;
-        const runtime = yield* RuntimeContext;
-        const lifetime = Layer.succeed(RpcRequestLifetime, (effect) =>
-          Effect.withFiber((fiber) =>
-            // RpcServer sends Exit before finalization and drops sends after disconnect.
-            state
-              .waitUntil(Fiber.await(fiber))
-              .pipe(Effect.provideService(RuntimeContext, runtime), Effect.andThen(effect)),
-          ),
-        );
-        const transport = yield* RpcWebSocket.make.pipe(Effect.provide(RpcSerialization.layerJson));
-        yield* Layer.buildWithMemoMap(
-          RpcServer.layer(props.schema.middleware(RpcRequestLifetime)).pipe(
-            Layer.provide(
-              Layer.mergeAll(
-                services,
-                lifetime,
-                Layer.succeed(RpcServer.Protocol, transport.protocol),
-              ),
-            ),
-          ),
-          memoMap,
-          instanceScope,
-        );
-        return {
-          webSocketMessage: transport.webSocketMessage,
-          webSocketClose: transport.webSocketClose,
-          webSocketError: transport.webSocketError,
-          fetch: Effect.gen(function* () {
-            const request = yield* HttpServerRequest;
-            return yield* request.headers.upgrade?.toLowerCase() === "websocket"
-              ? transport.fetch
-              : http;
-          }),
-        };
-      }),
-    (instanceScope, exit) =>
-      Exit.isFailure(exit) ? Scope.close(instanceScope, exit) : Effect.void,
-  );
-});
+  wrapRpcDurableObjectImpl(DurableObjectState, impl, props.schema);
 
 const build = (
   name: string,

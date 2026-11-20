@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { single } from "../internal/Lookup.ts";
 import type { Providers } from "../Providers.ts";
 
 export class ResponseHeadersPolicyConflict extends Data.TaggedError(
@@ -99,8 +100,23 @@ export interface ResponseHeadersPolicy extends Resource<
     removeHeadersConfig: cloudfront.ResponseHeadersPolicyRemoveHeadersConfig | undefined;
   },
   never,
-  Providers
+  Providers,
+  ResponseHeadersPolicyLookup
 > {}
+
+/**
+ * Props for {@link ResponseHeadersPolicy.lookup}: find a response headers policy this stack doesn't
+ * manage, custom or AWS managed.
+ */
+export type ResponseHeadersPolicyLookup =
+  | {
+      /** The id of the existing policy. */
+      responseHeadersPolicyId: string;
+    }
+  | {
+      /** The policy's name, including AWS managed policies such as `Managed-SecurityHeadersPolicy`. */
+      name: string;
+    };
 
 /**
  * A CloudFront response headers policy.
@@ -134,6 +150,17 @@ export interface ResponseHeadersPolicy extends Resource<
  *     ReferrerPolicy: { ReferrerPolicy: "no-referrer", Override: true },
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing response headers policy
+ * `ResponseHeadersPolicy.lookup` references a response headers policy Alchemy doesn't manage (created in the
+ * console or by another stack), found by `responseHeadersPolicyId` or `name`, AWS managed policies included. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Use an AWS managed policy
+ * ```typescript
+ * const policy = AWS.CloudFront.ResponseHeadersPolicy.lookup({ name: "Managed-SecurityHeadersPolicy" });
+ * const responseHeadersPolicyId = policy.responseHeadersPolicyId;
  * ```
  *
  * @resource
@@ -208,6 +235,26 @@ export const ResponseHeadersPolicyProvider = () =>
           if ((yield* createName(id, olds ?? {})) !== (yield* createName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* (props) {
+          const id =
+            "responseHeadersPolicyId" in props
+              ? props.responseHeadersPolicyId
+              : (yield* single(
+                  "AWS.CloudFront.ResponseHeadersPolicy",
+                  props.name,
+                  (
+                    (yield* cloudfront.listResponseHeadersPolicies({})).ResponseHeadersPolicyList
+                      ?.Items ?? []
+                  ).filter(
+                    (item) =>
+                      item.ResponseHeadersPolicy?.ResponseHeadersPolicyConfig?.Name === props.name,
+                  ),
+                  (item) => item.ResponseHeadersPolicy?.Id,
+                ))?.ResponseHeadersPolicy?.Id;
+          if (id === undefined) return undefined;
+          const found = yield* getById(id);
+          return found ? toAttrs(id, found.config, found.etag) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           if (output?.responseHeadersPolicyId) {

@@ -1,0 +1,246 @@
+---
+title: Entities
+description: How an Effect Cluster entity is written in Alchemy — its declaration, its two-phase implementation, its instances, and where its code lives.
+---
+
+import Queue from "../../../components/diagrams/Queue.astro";
+import Timeline from "../../../components/diagrams/Timeline.astro";
+
+An entity is a class with one instance per id. Every instance runs the same code against its own state, and handles its messages one at a time.
+
+Each instance has a mailbox. Messages to one id queue in the order they arrive, and the instance takes the next only when it has finished the last. Two instances never wait on each other:
+
+<Queue
+  title="Room · two instances"
+  producer={{ label: "callers", send: "getByName" }}
+  consumers={[
+    { id: "lobby", label: "lobby", type: "Room instance" },
+    { id: "kitchen", label: "kitchen", type: "Room instance" },
+  ]}
+  groups={[
+    { label: "lobby", messages: [{ label: "Join sam", to: "lobby" }, { label: "Join ada" }, { label: "Members" }] },
+    { label: "kitchen", messages: [{ label: "Join kim", to: "kitchen" }] },
+  ]}
+  caption="The lobby handles Join sam while Join ada and Members wait behind it. The kitchen handles its own message at the same time."
+/>
+
+## Declare and implement it
+
+An entity is declared from an Effect Cluster entity, made with Effect's `Entity.make` from a type and the messages it accepts. The class takes it with the entity's implementation:
+
+```typescript title="src/Room.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import { Entity } from "effect/cluster";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+import { Rpc } from "effect/rpc";
+import * as Schema from "effect/Schema";
+import { Default } from "./Cluster.ts";
+
+export class RoomFull extends Schema.TaggedError<RoomFull>()("RoomFull", {
+  capacity: Schema.Int,
+}) {}
+
+const Rooms = Entity.make("Room", [
+  Rpc.make("Join", { payload: { name: Schema.String }, success: Schema.Int, error: RoomFull }),
+  Rpc.make("Members", { success: Schema.Array(Schema.String) }),
+]);
+
+export default class Room extends Cluster.Entity<Room>()(
+  Rooms,
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const capacity = yield* Config.Int("ROOM_CAPACITY");
+    return Effect.gen(function* () {
+      const members = yield* Ref.make(new Set<string>());
+      return Rooms.of({
+        Join: ({ payload }) =>
+          Effect.gen(function* () {
+            const all = yield* Ref.get(members);
+            if (all.size >= capacity) return yield* new RoomFull({ capacity });
+            const next = new Set(all).add(payload.name);
+            yield* Ref.set(members, next);
+            return next.size;
+          }),
+        Members: () => Effect.map(Ref.get(members), (all) => [...all]),
+      });
+    });
+  }).pipe(Effect.provide(Default)),
+) {}
+```
+
+`Rooms.of` types the handlers against the messages: each takes the request envelope, with the payload at `payload`, and returns the RPC's success, error or stream.
+
+Providing the pool, `Default`, is what deploys it. `yield* Room` returns the entity's namespace, from any runtime.
+
+`main` is the module whose default export is this class. Each runner in the pool imports it, so export the class as `default`.
+
+## Two phases
+
+The implementation in `src/Room.ts` above is two Effects, one inside the other.
+
+The outer Effect runs once per runner, when it starts. Resolve what every instance shares there: bindings to other entities, secrets, Config values. The inner Effect runs once per instance, on its first message, and holds that instance's state:
+
+```typescript
+Effect.gen(function* () {
+  const capacity = yield* Config.Int("ROOM_CAPACITY");
+  return Effect.gen(function* () {
+    const members = yield* Ref.make(new Set<string>());
+    return Rooms.of({
+      Join: ({ payload }) =>
+        Effect.gen(function* () {
+          const all = yield* Ref.get(members);
+          if (all.size >= capacity) return yield* new RoomFull({ capacity });
+          const next = new Set(all).add(payload.name);
+          yield* Ref.set(members, next);
+          return next.size;
+        }),
+      Members: () => Effect.map(Ref.get(members), (all) => [...all]),
+    });
+  });
+});
+```
+
+Every room on a runner reads the same `capacity`. Each room gets its own `members`:
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "runner", label: "runner" },
+    { id: "lobby", label: "lobby" },
+    { id: "kitchen", label: "kitchen" },
+  ]}
+  bars={[
+    { lane: "runner", start: 0.2, end: 1.4, label: "outer", tone: "warn" },
+    { lane: "lobby", start: 2, end: 2.8, label: "inner", tone: "warn" },
+    { lane: "lobby", start: 2.8, end: 4.2, label: "Join" },
+    { lane: "lobby", start: 4.2, end: 5.6, label: "Join" },
+    { lane: "kitchen", start: 5, end: 5.8, label: "inner", tone: "warn" },
+    { lane: "kitchen", start: 5.8, end: 7.4, label: "Join" },
+    { lane: "lobby", start: 7.6, end: 9.4, label: "Members" },
+  ]}
+  legend={[{ tone: "warn", label: "phase runs" }, { tone: "accent", label: "message" }]}
+  caption="The runner builds the outer Effect once. Each room builds the inner Effect on its first message, then handles every later message with the state it made."
+/>
+
+Inside the inner Effect, `Entity.CurrentAddress`, from `effect/cluster`, holds the instance's id and shard:
+
+```typescript
+const { entityId } = yield* Entity.CurrentAddress;
+```
+
+## How long an instance lives
+
+An instance stops after sitting idle for a minute. Its next message starts it again, from the inner Effect, with fresh state:
+
+<Timeline
+  end={10}
+  lanes={[{ id: "lobby", label: "lobby" }]}
+  bars={[
+    { lane: "lobby", start: 0.2, end: 1, label: "inner", tone: "warn" },
+    { lane: "lobby", start: 1, end: 2.4, label: "Join" },
+    { lane: "lobby", start: 2.4, end: 5.6, label: "idle", tone: "muted" },
+    { lane: "lobby", start: 7, end: 7.8, label: "inner", tone: "warn" },
+    { lane: "lobby", start: 7.8, end: 9.2, label: "Join" },
+  ]}
+  marks={[{ at: 5.6, label: "maxIdleTime" }]}
+  caption="After maxIdleTime with no messages, the lobby stops and its members are gone. The next Join builds the inner Effect again and starts from an empty room."
+/>
+
+Set how long it waits, and how many of its messages may run at once, next to `main`:
+
+```typescript
+{ main: import.meta.url, maxIdleTime: "10 minutes", concurrency: 1 }
+```
+
+`mailboxCapacity` sets how many messages an instance may hold before new ones fail with `MailboxFull`. A persisted message doesn't fail: it is stored, and runs once there is room. `disableFatalDefects` sends a handler's defect to its caller instead of restarting the instance.
+
+An instance also stops when its runner does, including on every deploy, and when its shard moves to another runner. Keep state that must outlive it in a database.
+
+## Keep its code out of its callers
+
+A caller imports the class to call it, and the class carries its implementation with it: the handlers, everything they import, and the pool Layer.
+
+Inside a pool that costs nothing. The pool already bundles every class it hosts into one program, so an entity calling another on the same pool adds no code.
+
+Outside the pool it does. A Worker, a Lambda or a container that calls `Room` would bundle the room's code and its pool, which it never runs. So would an entity on a different pool, whose own runners never host a room.
+
+For those callers, declare the entity on its own, from its type and its messages, the same arguments Effect's `Entity.make` takes:
+
+```typescript title="src/Room.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import { Rpc } from "effect/rpc";
+import * as Schema from "effect/Schema";
+
+export class Room extends Cluster.Entity<Room>()("Room", [
+  Rpc.make("Join", { payload: { name: Schema.String }, success: Schema.Int }),
+  Rpc.make("Members", { success: Schema.Array(Schema.String) }),
+]) {}
+```
+
+Callers import this declaration. It holds the schemas they need to call the room, and nothing else.
+
+The implementation moves to a file of its own, as a Layer made with `.make`:
+
+```typescript title="src/RoomLive.ts"
+import * as Effect from "effect/Effect";
+import * as Ref from "effect/Ref";
+import { Default } from "./Cluster.ts";
+import { Room } from "./Room.ts";
+
+export default Room.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
+      const members = yield* Ref.make(new Set<string>());
+      return Room.of({
+        Join: ({ payload }) =>
+          Ref.modify(members, (all) => {
+            const next = new Set(all).add(payload.name);
+            return [next.size, next];
+          }),
+        Members: () => Effect.map(Ref.get(members), (all) => [...all]),
+      });
+    });
+  }).pipe(Effect.provide(Default)),
+);
+```
+
+`main` is now this file, and its default export is the Layer. Provide the Layer to the Stack, as [Pools](/cluster/pools#deploying-with-layers) shows.
+
+## Messages
+
+Each RPC's schema shapes what callers send and get back. Effect Cluster's own annotations, in `ClusterSchema`, and its helpers work unchanged:
+
+```typescript title="src/Room.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import { ClusterSchema } from "effect/cluster";
+import { Rpc } from "effect/rpc";
+import * as Schema from "effect/Schema";
+
+export class Room extends Cluster.Entity<Room>()("Room", [
+  // Written to the database first, delivered at least once, handled once per key.
+  Rpc.make("Post", {
+    payload: { messageId: Schema.String, text: Schema.String },
+    primaryKey: ({ messageId }) => messageId,
+  }).annotate(ClusterSchema.Persisted, true),
+  // A stream of values back to the caller.
+  Rpc.make("History", { success: Schema.String, stream: true }),
+]) {}
+```
+
+In a handler, `Rpc.fork` lets a message run beside the others, and `Entity.keepAlive` keeps the instance from going idle.
+
+## Use an Effect Cluster entity you already have
+
+A bare declaration also takes an entity made with Effect's `Entity.make`, as the class with its implementation does, and exposes it as `Room.entity`:
+
+```typescript title="src/Room.ts"
+import * as Cluster from "@alchemy.run/effect-cluster";
+import { Room as RoomEntity } from "./entities/room.ts";
+
+export class Room extends Cluster.Entity<Room>()(RoomEntity) {}
+```
+
+To deploy a whole Effect Cluster program as it is, see [Existing programs](/cluster/existing-programs).

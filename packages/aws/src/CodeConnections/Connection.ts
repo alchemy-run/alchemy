@@ -50,8 +50,23 @@ export interface Connection extends Resource<
     providerType: string;
   },
   never,
-  Providers
+  Providers,
+  ConnectionLookup
 > {}
+
+/**
+ * Props for {@link Connection.lookup}: find a connection this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ConnectionLookup =
+  | {
+      /** The ARN of the existing connection. */
+      connectionArn: string;
+    }
+  | {
+      /** The name of the existing connection. */
+      connectionName: string;
+    };
 
 /**
  * An AWS CodeConnections connection to a source-code provider (GitHub,
@@ -70,6 +85,17 @@ export interface Connection extends Resource<
  * });
  * // connection.connectionStatus === "PENDING"
  * // Complete the handshake in the console before using it in a pipeline.
+ * ```
+ *
+ * ### Looking up an existing connection
+ * `Connection.lookup` references a connection Alchemy doesn't manage (created in the
+ * console or by another stack), found by `connectionArn` or `connectionName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing connection
+ * ```typescript
+ * const github = AWS.CodeConnections.Connection.lookup({ connectionName: "github" });
+ * const connectionArn = github.connectionArn;
  * ```
  *
  * @resource
@@ -126,6 +152,17 @@ export const ConnectionProvider = () =>
           }
         }),
 
+        lookup: Effect.fn(function* (props) {
+          const found =
+            "connectionArn" in props
+              ? yield* getByArn(props.connectionArn)
+              : yield* findByName(props.connectionName);
+          if (found?.ConnectionArn === undefined) return undefined;
+          return toAttrs(
+            found,
+            found.ConnectionName ?? ("connectionName" in props ? props.connectionName : ""),
+          );
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.connectionName ?? (yield* toName(id, olds ?? {}));
           const connection = output?.connectionArn

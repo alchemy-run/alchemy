@@ -42,8 +42,18 @@ export interface SubnetGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  SubnetGroupLookup
 > {}
+
+/**
+ * Props for {@link SubnetGroup.lookup}: find a subnet group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface SubnetGroupLookup {
+  /** The name of the existing subnet group. */
+  subnetGroupName: string;
+}
 
 /**
  * A VPC subnet group for provisioned ElastiCache resources.
@@ -55,6 +65,16 @@ export interface SubnetGroup extends Resource<
  *   description: "cache subnets",
  *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
  * });
+ * ```
+ *
+ * ### Looking up an existing subnet group
+ * `SubnetGroup.lookup` references a subnet group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `subnetGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing subnet group
+ * ```typescript
+ * const existing = AWS.ElastiCache.SubnetGroup.lookup({ subnetGroupName: "sessions" });
  * ```
  *
  * @resource
@@ -102,6 +122,10 @@ export const SubnetGroupProvider = () =>
             (yield* toName(id, news ?? { description: "", subnetIds: [] }))
           )
             return { action: "replace" } as const;
+        }),
+        lookup: Effect.fn(function* ({ subnetGroupName }) {
+          const found = yield* readGroup(subnetGroupName);
+          return found?.ARN ? yield* attrs(found) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const group = yield* readGroup(

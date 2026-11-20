@@ -63,8 +63,18 @@ export interface ApiKey extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ApiKeyLookup
 > {}
+
+/**
+ * Props for {@link ApiKey.lookup}: find an API key this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ApiKeyLookup {
+  /** The id of the existing API key. */
+  apiKeyId: string;
+}
 
 /**
  * API Gateway API key for usage plans and `apiKeyRequired` methods.
@@ -75,6 +85,17 @@ export interface ApiKey extends Resource<
  * const key = yield* ApiGateway.ApiKey("PartnerKey", {
  *   generateDistinctId: true,
  * });
+ * ```
+ *
+ * ### Looking up an existing API key
+ * `ApiKey.lookup` references an API key Alchemy doesn't manage (created in the
+ * console or by another stack), found by `apiKeyId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Attach an existing key to a usage plan
+ * ```typescript
+ * const partner = AWS.ApiGateway.ApiKey.lookup({ apiKeyId: "abcdef1234" });
+ * const keyId = partner.id;
  * ```
  */
 const ApiKeyResource = Resource<ApiKey>("AWS.ApiGateway.ApiKey");
@@ -123,6 +144,13 @@ export const ApiKeyProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ apiKeyId }) {
+          const k = yield* ag
+            .getApiKey({ apiKey: apiKeyId, includeValue: false })
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
+          if (!k?.id) return undefined;
+          return { id: k.id, name: k.name, enabled: k.enabled, tags: tagRecord(k.tags) };
         }),
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;

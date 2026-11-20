@@ -1,3 +1,4 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Prisma from "@alchemy.run/prisma";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -8,11 +9,16 @@ import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { doWork, OtelCollector, waitForWorkSpan, withCollectorUrl } from "../Utils/Telemetry.ts";
+import TracedCompute from "./fixtures/traced-compute.ts";
 
-const { test } = Test.make({ providers: Prisma.providers() });
+const { test } = Test.make({
+  providers: Layer.mergeAll(Prisma.providers(), Cloudflare.providers()),
+});
 
 // Manual recovery tool for a Compute app whose destroy failed; not part of the suite.
 const runCleanup =
@@ -430,6 +436,43 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:prisma", "provider:prisma:compute", "provider:prisma:project", "live"],
+    timeout: 600_000,
+  },
+);
+
+test.provider(
+  "live Compute app exports spans to the bound OTLP destination",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      // The traced program binds the collector url at deploy, so it deploys first.
+      const collector = yield* stack.deploy(OtelCollector());
+      const app = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            yield* OtelCollector();
+            return yield* TracedCompute;
+          }),
+        )
+        .pipe(withCollectorUrl(collector.url!));
+
+      expect(yield* doWork(app.url!, "prisma")).toBe("did work prisma");
+      const traces = yield* waitForWorkSpan(collector.url!, "prisma");
+      expect(traces).toContain("work:prisma");
+      expect(traces).toContain("prisma-compute-e2e");
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:prisma",
+      "provider:prisma:compute",
+      "provider:prisma:project",
+      "provider:cloudflare",
+      "provider:cloudflare:worker",
+      "live",
+    ],
     timeout: 600_000,
   },
 );

@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitRegionOperation } from "./operations.ts";
@@ -100,8 +101,31 @@ export type RegionSslPolicy = Resource<
     kind: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RegionSslPolicyLookup
 >;
+
+/**
+ * Props for {@link RegionSslPolicy.lookup}: find a region ssl policy this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface RegionSslPolicyLookup {
+  /**
+   * SSL policy name (RFC1035, 1-63 chars).
+   */
+  sslPolicyName: string;
+  /**
+   * Region the policy lives in (e.g. `us-central1`). `US-CENTRAL1` is
+   * accepted and normalized to `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine SSL policy for HTTPS and SSL load balancing.
@@ -128,6 +152,19 @@ export type RegionSslPolicy = Resource<
  *   description: "prod frontend",
  *   profile: "MODERN",
  *   minTlsVersion: "TLS_1_2",
+ * });
+ * ```
+ *
+ * ### Looking up an existing region ssl policy
+ * `RegionSslPolicy.lookup` references a region ssl policy Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * region ssl policy.
+ *
+ * **Example:** Reference an existing region ssl policy
+ * ```typescript
+ * const regionSslPolicy = GCP.Compute.RegionSslPolicy.lookup({
+ *   sslPolicyName: "my-ssl-policy",
  * });
  * ```
  *
@@ -329,6 +366,14 @@ export const RegionSslPolicyProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ sslPolicyName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, sslPolicyName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

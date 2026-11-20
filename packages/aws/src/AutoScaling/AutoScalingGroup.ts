@@ -198,8 +198,18 @@ export interface AutoScalingGroup extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  AutoScalingGroupLookup
 > {}
+
+/**
+ * Props for {@link AutoScalingGroup.lookup}: find an auto scaling group this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AutoScalingGroupLookup {
+  /** The auto scaling group name of the existing auto scaling group. */
+  autoScalingGroupName: string;
+}
 
 /**
  * An EC2 Auto Scaling Group that manages a fleet of instances from a launch
@@ -290,6 +300,16 @@ export interface AutoScalingGroup extends Resource<
  *   predefinedMetricType: "ASGAverageCPUUtilization",
  *   targetValue: 60,
  * });
+ * ```
+ *
+ * ### Looking up an existing auto scaling group
+ * `AutoScalingGroup.lookup` references an auto scaling group Alchemy doesn't manage (created in the
+ * console or by another stack), found by `autoScalingGroupName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing auto scaling group
+ * ```typescript
+ * const existing = AWS.AutoScaling.AutoScalingGroup.lookup({ autoScalingGroupName: "my-auto-scaling-group" });
  * ```
  *
  * @resource
@@ -500,6 +520,10 @@ export const AutoScalingGroupProvider = () =>
               stables: ["autoScalingGroupArn", "autoScalingGroupName"],
             } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ autoScalingGroupName: name }) {
+          const group = yield* describeGroup(name);
+          return group ? toAttributes(group) : undefined;
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.autoScalingGroupName ?? (yield* toName(id, olds ?? {}));

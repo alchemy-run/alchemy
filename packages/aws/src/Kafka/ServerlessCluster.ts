@@ -73,8 +73,23 @@ export interface ServerlessCluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ServerlessClusterLookup
 > {}
+
+/**
+ * Props for {@link ServerlessCluster.lookup}: find a serverless cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type ServerlessClusterLookup =
+  | {
+      /** The ARN of the existing cluster. */
+      clusterArn: string;
+    }
+  | {
+      /** The name of the existing cluster. */
+      clusterName: string;
+    };
 
 /**
  * An Amazon MSK (Managed Streaming for Apache Kafka) **Serverless** cluster.
@@ -102,6 +117,17 @@ export interface ServerlessCluster extends Resource<
  * yield* Kafka.consumeKafkaTopic(cluster, { topics: ["orders"] }, (records) =>
  *   records.pipe(Stream.runForEach((r) => Effect.log(r.value))),
  * );
+ * ```
+ *
+ * ### Looking up an existing serverless cluster
+ * `ServerlessCluster.lookup` references a serverless cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterArn` or `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Produce to an existing cluster
+ * ```typescript
+ * const events = AWS.Kafka.ServerlessCluster.lookup({ clusterName: "events" });
+ * const clusterArn = events.clusterArn;
  * ```
  *
  * @resource
@@ -239,6 +265,14 @@ export const ServerlessClusterProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* (props) {
+          const cluster =
+            "clusterArn" in props
+              ? yield* describeByArn(props.clusterArn)
+              : yield* findByName(props.clusterName);
+          return cluster?.ClusterArn ? yield* toAttrs(cluster) : undefined;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

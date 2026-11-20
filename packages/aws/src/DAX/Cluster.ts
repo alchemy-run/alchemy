@@ -145,8 +145,18 @@ export interface Cluster extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ClusterLookup
 > {}
+
+/**
+ * Props for {@link Cluster.lookup}: find a cluster this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ClusterLookup {
+  /** The cluster name of the existing cluster. */
+  clusterName: string;
+}
 
 /**
  * An Amazon DAX cluster — a fully managed, in-memory write-through cache for
@@ -192,6 +202,16 @@ export interface Cluster extends Resource<
  *   sseEnabled: true,
  *   clusterEndpointEncryptionType: "TLS",
  * });
+ * ```
+ *
+ * ### Looking up an existing cluster
+ * `Cluster.lookup` references a cluster Alchemy doesn't manage (created in the
+ * console or by another stack), found by `clusterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing cluster
+ * ```typescript
+ * const existing = AWS.DAX.Cluster.lookup({ clusterName: "my-cluster" });
  * ```
  *
  * @resource
@@ -348,6 +368,13 @@ export const ClusterProvider = () =>
           if (!sameStringSet(n.availabilityZones, o.availabilityZones)) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ clusterName: name }) {
+          const cluster = yield* readCluster(name);
+          if (!cluster?.ClusterArn) return undefined;
+          const attrs = yield* toAttrs(cluster);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

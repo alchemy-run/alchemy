@@ -5,30 +5,31 @@
  * Outbound interceptor at the top of the user Worker's `globalOutbound`
  * chain, ported from Miniflare's `workers/core/outbound.worker.ts`:
  *
- * 1. Every outbound `fetch()` drops `CF-Connecting-IP` and carries
- *    `CF-Worker` with the Worker's zone, as on Cloudflare's edge.
+ * 1. Every outbound `fetch()` drops `CF-Connecting-IP`. Unlike Miniflare, it
+ *    does not add `CF-Worker`: on the edge Cloudflare sets it after the
+ *    destination zone's WAF runs, but sent from a developer machine it
+ *    reaches the WAF as a forged header, and Cloudflare-fronted sites
+ *    answer 403 (alchemy-run/alchemy#2965, findings in the PR).
  * 2. A fetch with `cf.image` transform options (`fetch(url, { cf: { image } })`)
  *    fetches the origin image and transforms it locally with Sharp,
  *    mirroring "transform via Workers". If Sharp can't transform it, the
  *    origin image is returned as is.
  */
 interface Env {
-  CF_WORKER_ZONE: string;
   /** Node-side Sharp transform (`globals/CfImage.ts`). */
   CF_IMAGE: Fetcher;
 }
 
 const RESIZING_VIA_TOKEN = "image-resizing";
 
-const outboundHeaders = (request: Request, env: Env) => {
+const outboundHeaders = (request: Request) => {
   const headers = new Headers(request.headers);
   headers.delete("CF-Connecting-IP");
-  headers.set("CF-Worker", env.CF_WORKER_ZONE);
   return headers;
 };
 
 const resizeImage = async (request: Request, env: Env, image: Record<string, unknown>) => {
-  const headers = outboundHeaders(request, env);
+  const headers = outboundHeaders(request);
   const via = headers.get("via");
   headers.set("via", via ? `${via}, ${RESIZING_VIA_TOKEN}` : RESIZING_VIA_TOKEN);
   const origin = await fetch(request, { headers });
@@ -58,6 +59,6 @@ export default {
     if (typeof image === "object" && image !== null && Object.keys(image).length > 0) {
       return resizeImage(request, env, image as Record<string, unknown>);
     }
-    return fetch(request, { headers: outboundHeaders(request, env) });
+    return fetch(request, { headers: outboundHeaders(request) });
   },
 };

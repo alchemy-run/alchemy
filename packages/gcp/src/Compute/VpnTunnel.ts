@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import {
   createInternalLabels,
   diffLabels,
@@ -191,8 +192,31 @@ export type VpnTunnel = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  VpnTunnelLookup
 >;
+
+/**
+ * Props for {@link VpnTunnel.lookup}: find a vpn tunnel this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface VpnTunnelLookup {
+  /**
+   * Tunnel name.
+   */
+  vpnTunnelName: string;
+  /**
+   * Region the tunnel lives in. `US-CENTRAL1` is accepted and normalized to
+   * `us-central1`.
+   */
+  region?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A regional Compute Engine Cloud VPN tunnel.
@@ -253,6 +277,19 @@ export type VpnTunnel = Resource<
  *   sharedSecret: "replace-me-with-a-secret",
  *   localTrafficSelector: ["10.0.0.0/16"],
  *   remoteTrafficSelector: ["172.16.0.0/16"],
+ * });
+ * ```
+ *
+ * ### Looking up an existing vpn tunnel
+ * `VpnTunnel.lookup` references a vpn tunnel Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * vpn tunnel.
+ *
+ * **Example:** Reference an existing vpn tunnel
+ * ```typescript
+ * const vpnTunnel = GCP.Compute.VpnTunnel.lookup({
+ *   vpnTunnelName: "my-vpn-tunnel",
  * });
  * ```
  *
@@ -566,6 +603,14 @@ export const VpnTunnelProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ vpnTunnelName, region: lookupRegion }) {
+      const env = yield* GcpEnvironment.current;
+      const region = normalizeRegion(lookupRegion, env.region);
+      const existing = yield* getByName(env.project, region, vpnTunnelName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output, previous }) {
       const env = yield* GcpEnvironment.current;

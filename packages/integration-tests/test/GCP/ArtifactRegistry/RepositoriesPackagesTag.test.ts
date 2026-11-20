@@ -5,6 +5,7 @@ import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { IMAGE, pushDockerVersion } from "./registry.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -72,6 +73,15 @@ test.provider(
           });
           return { images, tag };
         }),
+      );
+      yield* expectFound(
+        GCP.ArtifactRegistry.RepositoriesPackagesTag.lookup({
+          tagId: created.tag.tagId,
+          location: created.tag.location,
+          repository: created.tag.repository,
+          packageId: created.tag.packageId,
+        }),
+        created.tag,
       );
 
       expect(created.tag.name).toContain("/tags/");

@@ -47,6 +47,9 @@ const workerConfig = (
   },
 });
 
+// Declarations are emitted by tsrs, the same checker `pnpm typecheck` runs.
+const DTS = { incremental: false, generator: "tsrs" } as const;
+
 export default defineConfig([
   {
     cwd: ".",
@@ -55,7 +58,7 @@ export default defineConfig([
     outDir: "dist/rolldown",
     tsconfig: "tsconfig.json",
     unbundle: true,
-    dts: { incremental: false },
+    dts: DTS,
     shims: false,
     sourcemap: true,
     target: "esnext",
@@ -72,7 +75,7 @@ export default defineConfig([
     "!src/core/internal/shared.worker.ts",
     "!src/core/**/R2Bucket.worker.ts",
   ]),
-  // The R2 worker uses `node:crypto`; the 2026-08-31 date enables Node.js
+  // The R2 worker uses `node:crypto`; the 2026-11-17 date enables Node.js
   // compatibility without a redundant flag. Don't
   // clean the shared `dist/workers` directory, which the previous config
   // already populated. The entry is named explicitly to keep the output at
@@ -98,7 +101,7 @@ export default defineConfig([
     outDir: "dist/core/node",
     tsconfig: "tsconfig.json",
     unbundle: true,
-    dts: { incremental: false },
+    dts: DTS,
     shims: false,
     target: "esnext",
     format: "esm",
@@ -148,7 +151,7 @@ export default defineConfig([
     exports: false,
     outDir: "dist/vite/node",
     tsconfig: "tsconfig.json",
-    dts: { incremental: false },
+    dts: DTS,
     shims: false,
     target: "esnext",
     format: "esm",

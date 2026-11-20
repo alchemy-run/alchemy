@@ -56,8 +56,18 @@ export interface Lexicon extends Resource<
     lexemesCount: number | undefined;
   },
   never,
-  Providers
+  Providers,
+  LexiconLookup
 > {}
+
+/**
+ * Props for {@link Lexicon.lookup}: find a lexicon this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface LexiconLookup {
+  /** The lexicon name of the existing lexicon. */
+  lexiconName: string;
+}
 
 /**
  * An Amazon Polly pronunciation lexicon — a W3C PLS document stored in a
@@ -87,6 +97,16 @@ export interface Lexicon extends Resource<
  *   Text: "The W3C maintains the PLS standard.",
  *   LexiconNames: [lexicon.lexiconName],
  * });
+ * ```
+ *
+ * ### Looking up an existing lexicon
+ * `Lexicon.lookup` references a lexicon Alchemy doesn't manage (created in the
+ * console or by another stack), found by `lexiconName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing lexicon
+ * ```typescript
+ * const existing = AWS.Polly.Lexicon.lookup({ lexiconName: "my-lexicon" });
  * ```
  *
  * @resource
@@ -210,6 +230,15 @@ export const LexiconProvider = () =>
           if ((yield* toName(id, olds ?? { content: "" })) !== (yield* toName(id, news))) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ lexiconName: name }) {
+          const found = yield* getOne(name);
+          if (!found) return undefined;
+          return toAttributes(
+            name,
+            found.LexiconAttributes?.LexiconArn ?? (yield* lexiconArn(name)),
+            found.LexiconAttributes,
+          );
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.lexiconName ?? (yield* toName(id, olds ?? { content: "" }));

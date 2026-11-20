@@ -1,0 +1,41 @@
+---
+title: "Part 4: Update the Template"
+description: Change the E2B template, redeploy, and see the snapshot rebuilt on it, while existing sandboxes keep what they started with.
+sidebar:
+  order: 4
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+## Add a tool to the image
+
+Install pnpm in the template:
+
+```diff lang="typescript"
+// src/Sandbox.ts
+export const MyTemplate = E2B.Template("MyTemplate", {
+  dockerfile: Dockerfile.inline`
+    FROM node:22-bookworm
+    RUN apt-get update && apt-get install -y git
++    RUN npm install -g pnpm
+  `,
+  cpuCount: 2,
+  memoryMB: 2048,
+});
+```
+
+## Deploy the new base
+
+<PackageManagers run="alchemy deploy" />
+
+The Dockerfile changed, so E2B builds `MyTemplate` again. `Warm` starts from `MyTemplate`, so Alchemy snapshots it again on the new build, and clones the repository into it. The Worker is unchanged and isn't redeployed.
+
+<PackageManagers script={`curl -X POST "$URL/run" --data 'pnpm --version'`} />
+
+## Running sandboxes keep what they started with
+
+A sandbox keeps the snapshot it booted from. Users whose sandbox is paused keep it, with their changes and without pnpm. Sandboxes started after the deploy get the new base. To move a user onto it, kill their sandbox; their next request starts a new one from `Warm`.
+
+## Next
+
+[Part 5](/e2b/tutorial/part-5) tests it.

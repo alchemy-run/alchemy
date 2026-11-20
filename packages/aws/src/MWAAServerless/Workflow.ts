@@ -142,8 +142,18 @@ export interface Workflow extends Resource<
     triggerMode: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  WorkflowLookup
 > {}
+
+/**
+ * Props for {@link Workflow.lookup}: find a workflow this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface WorkflowLookup {
+  /** The name of the existing workflow. */
+  name: string;
+}
 
 /**
  * An Amazon Managed Workflows for Apache Airflow **Serverless** workflow —
@@ -192,6 +202,17 @@ export interface Workflow extends Resource<
  *   loggingConfiguration: { logGroupName: "/mwaa-serverless/etl" },
  *   tags: { team: "data" },
  * });
+ * ```
+ *
+ * ### Looking up an existing workflow
+ * `Workflow.lookup` references a workflow Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing workflow
+ * ```typescript
+ * const etl = AWS.MWAAServerless.Workflow.lookup({ name: "etl" });
+ * const workflowArn = etl.workflowArn;
  * ```
  *
  * @resource
@@ -323,6 +344,12 @@ export const WorkflowProvider = () =>
             }
             return workflows;
           }),
+        lookup: Effect.fn(function* ({ name }) {
+          const live = yield* observe(name, undefined);
+          return live === undefined || live.Name === undefined
+            ? undefined
+            : toAttributes(live, name);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* createName(id, olds ?? {}));
           const live = yield* observe(name, output?.workflowArn);

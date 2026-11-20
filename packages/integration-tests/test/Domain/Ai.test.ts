@@ -1,12 +1,14 @@
 import * as Domain from "@alchemy.run/domain";
 import * as DomainAi from "@alchemy.run/domain/Ai";
 import { InMemory } from "@alchemy.run/domain/InMemory";
+import * as InMemoryPlatform from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import { McpProtocol, McpServer, Tool } from "effect/ai";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";
@@ -38,8 +40,7 @@ class OverLimit extends Domain.Rejection("OverLimit", { limit: Schema.Int }) {}
 class NotOwner extends Domain.Rejection("NotOwner") {}
 
 class Deposit extends Domain.Command("Deposit", {
-  target: WalletId,
-  input: { amount: Schema.Int },
+  input: { walletId: WalletId, amount: Schema.Int },
   middleware: [Session],
   events: [Deposited],
   rejects: [OverLimit],
@@ -51,11 +52,12 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Int }),
   initial: { balance: 0 },
   commands: [Deposit],
+  keyOf: (command) => command.walletId,
   decide: {
-    Deposit: (s, cmd) =>
+    Deposit: (wallet, cmd) =>
       cmd.amount > 100
         ? new OverLimit({ limit: 100 })
-        : [new Deposited({ amount: cmd.amount, balance: s.balance + cmd.amount })],
+        : [new Deposited({ amount: cmd.amount, balance: wallet.balance + cmd.amount })],
   },
   evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
   reply: { Deposit: (s) => ({ balance: s.balance }) },
@@ -67,28 +69,71 @@ class Balance extends Domain.View("Balance", {
   key: Wallet,
   middleware: [Session],
   rejects: [NotOwner],
-  validate: Effect.fn(function* ({ key }) {
-    if (`${yield* Owner}-wallet` !== key.id) return yield* new NotOwner();
-  }),
   state: Schema.Struct({ balance: Schema.Int }),
   initial: { balance: 0 },
   evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
 }) {}
 
-class Wallets extends Domain.Model("Wallets", { aggregates: [Wallet], views: [Balance] }) {}
+/** Who may read each key of Balance. */
+const BalanceLive = Balance.toLayer(
+  Effect.succeed(
+    Effect.fn(function* ({ key }) {
+      if (`${yield* Owner}-wallet` !== key.id) return yield* new NotOwner();
+    }),
+  ),
+);
+
+class UnknownBase extends Domain.Rejection("UnknownBase", { base: Schema.String }) {}
+
+/** Exchange rates: a paged query over rows outside the model. */
+class Rates extends Domain.Query("Rates", {
+  input: { base: Schema.String },
+  success: Schema.Struct({ currency: Schema.String, rate: Schema.Number }),
+  paged: true,
+  middleware: [Session],
+  rejects: [UnknownBase],
+}) {}
+const rates = [
+  { currency: "EUR", rate: 0.9 },
+  { currency: "GBP", rate: 0.8 },
+  { currency: "JPY", rate: 150 },
+];
+const RatesLive = Rates.toLayer(
+  Effect.succeed(({ base }, { after, take }) => {
+    if (base !== "USD") return Effect.fail(new UnknownBase({ base }));
+    const rest = rates.filter((row) => after === undefined || row.currency > after);
+    const entries = rest.slice(0, take);
+    return Effect.succeed({
+      entries,
+      cursor: rest.length > take ? entries.at(-1)!.currency : null,
+    });
+  }),
+);
+
+class Wallets extends Domain.Model("Wallets", {
+  aggregates: [Wallet],
+  views: [Balance],
+  queries: [Rates],
+}) {}
 
 class WalletApi extends Domain.Api("WalletApi", { model: Wallets }) {}
 
-const WalletsLive = Layer.mergeAll(Wallets.layer(Layer.empty), SessionLive).pipe(
-  Layer.provide(InMemory),
-);
+const walletsOn = (platform: typeof InMemory) =>
+  Layer.mergeAll(Wallets.layer(Layer.merge(RatesLive, BalanceLive)), SessionLive).pipe(
+    Layer.provide(platform),
+  );
+const WalletsLive = walletsOn(InMemory);
 
 /** Who the agent acts for, in this test: the owner its calls carry. */
 const ActingFor = Context.Reference<string | undefined>("Test/ActingFor", {
   defaultValue: () => undefined,
 });
 
+/** Every call of the Api that returns once. */
+const expose = ["Deposit", "Balance.get", "Balance.list", "Balance.snapshot", "Rates"] as const;
+
 const walletTools = DomainAi.toToolkit(WalletApi, {
+  expose,
   headers: Effect.map(ActingFor, (owner): Headers.Input => (owner ? { "x-owner": owner } : {})),
 });
 
@@ -111,13 +156,27 @@ const ServerCredential = RpcMiddleware.layerClient(Session, ({ request, next }) 
 // ---------------------------------------------------------------- tests
 
 describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
-  it("has one tool per call that returns once, with the Api's schemas", () => {
-    const { toolkit } = DomainAi.toToolkit(WalletApi);
+  it("gives no tool it is not told to expose", () => {
+    // @ts-expect-error a stream is not one tool result
+    DomainAi.toToolkit(WalletApi, { expose: ["Balance.watch"] });
+    // @ts-expect-error a stream is not one tool result
+    DomainAi.toToolkit(WalletApi, { expose: ["Balance.events"] });
+    // @ts-expect-error an operation the view does not have
+    DomainAi.toToolkit(WalletApi, { expose: ["Balance.nope"] });
+    expect(Object.keys(DomainAi.toToolkit(WalletApi).toolkit.tools)).toEqual([]);
+    expect(
+      Object.keys(DomainAi.toToolkit(WalletApi, { expose: ["Balance.get"] }).toolkit.tools),
+    ).toEqual(["WalletApi_Balance_get"]);
+  });
+
+  it("has one tool per exposed call, with the Api's schemas", () => {
+    const { toolkit } = DomainAi.toToolkit(WalletApi, { expose });
     expect(Object.keys(toolkit.tools)).toEqual([
       "WalletApi_Deposit_send",
       "WalletApi_Balance_get",
       "WalletApi_Balance_list",
       "WalletApi_Balance_snapshot",
+      "WalletApi_Rates_ask",
     ]);
     /** The JSON Schema of the JSON a schema reads and writes on the wire. */
     const wire = (schema: Schema.Top) => Tool.getJsonSchemaFromSchema(Schema.toCodecJson(schema));
@@ -127,7 +186,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
     // The tool's parameters are the call's own wire payload.
     expect(Tool.getJsonSchema(send)).toEqual(wire(depositRpc.payloadSchema));
     expect(Tool.getJsonSchema(send)).toMatchObject({
-      properties: { target: {}, commandId: {}, input: { properties: { amount: {} } } },
+      properties: { commandId: {}, input: { properties: { walletId: {}, amount: {} } } },
     });
     expect(Tool.getJsonSchemaFromSchema(send.successSchema)).toEqual(
       wire(depositRpc.successSchema),
@@ -152,25 +211,156 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
     });
   });
 
+  it("describes each tool with its entry's description annotation", () => {
+    class Withdraw extends Domain.Command(
+      "Withdraw",
+      {
+        input: { walletId: WalletId, amount: Schema.Int },
+        events: [Deposited],
+      },
+      { description: "Take money out of a wallet. The amount is in cents." },
+    ) {}
+    class Purse extends Domain.Aggregate("Purse", {
+      id: WalletId,
+      state: Schema.Struct({ balance: Schema.Int }),
+      initial: { balance: 0 },
+      commands: [Withdraw],
+      keyOf: (command) => command.walletId,
+      decide: { Withdraw: () => [] },
+      evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
+    }) {}
+    class Total extends Domain.View(
+      "Total",
+      {
+        from: [Purse],
+        key: Purse,
+        state: Schema.Struct({ balance: Schema.Int }),
+        initial: { balance: 0 },
+        evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
+      },
+      { description: "The current balance of one purse." },
+    ) {}
+    class Purses extends Domain.Model("Purses", { aggregates: [Purse], views: [Total] }) {}
+    class PurseApi extends Domain.Api("PurseApi", { model: Purses }) {}
+    const { toolkit } = DomainAi.toToolkit(PurseApi, {
+      expose: ["Withdraw", "Total.get", "Total.list"],
+    });
+    const description = (name: string) => Tool.getDescription(toolkit.tools[name]!);
+    // A command's description replaces the sentence; a read's follows it.
+    expect(description("PurseApi_Withdraw_send")).toBe(
+      "Take money out of a wallet. The amount is in cents.",
+    );
+    expect(description("PurseApi_Total_get")).toBe(
+      "Get the current Total of a key. The current balance of one purse.",
+    );
+    expect(description("PurseApi_Total_list")).toBe(
+      "List a page of the Total entries of a key. The current balance of one purse.",
+    );
+  });
+
   it.live("a write tool sends the command and returns its receipt", () =>
     Effect.gen(function* () {
       const result = yield* call(
         "WalletApi_Deposit_send",
-        { target: "sam-wallet", input: { amount: 30 } },
+        { input: { walletId: "sam-wallet", amount: 30 } },
         "sam",
       );
       expect(result).toEqual({
         isFailure: false,
-        encoded: { reply: { balance: 30 }, stream: "Wallet/sam-wallet", version: 1 },
+        encoded: {
+          reply: { balance: 30 },
+          stream: "Wallet/sam-wallet",
+          version: 1,
+          commits: [{ stream: "Wallet/sam-wallet", version: 1 }],
+        },
       });
     }).pipe(Effect.provide(ToolsLive)),
   );
+
+  it.live(
+    "a write tool asked for strong answers once the views have the command, so a read tool sees it",
+    () => {
+      // Nothing reaches the view until the platform drains.
+      const hosted = InMemoryPlatform.make({ manual: true });
+      const settle: Effect.Effect<void> = Effect.gen(function* () {
+        while (true) {
+          yield* hosted.control.drain;
+          if (yield* hosted.control.idle) return;
+          yield* Effect.sleep("1 millis");
+        }
+      });
+      const deposit = (extra: object) =>
+        call(
+          "WalletApi_Deposit_send",
+          { input: { walletId: "sam-wallet", amount: 30 }, ...extra },
+          "sam",
+        );
+      const balance = call("WalletApi_Balance_get", { key: "sam-wallet" }, "sam");
+      return Effect.gen(function* () {
+        // The deploy is done: the view has its (empty) history.
+        yield* settle;
+        const sent = yield* deposit({ consistency: "strong" }).pipe(Effect.forkChild);
+        yield* Effect.sleep("100 millis");
+        expect(sent.pollUnsafe()).toBeUndefined();
+        // One drain is not enough: on a busy machine the command may not have committed yet.
+        while (sent.pollUnsafe() === undefined) {
+          yield* settle;
+          yield* Effect.sleep("5 millis");
+        }
+        expect((yield* Fiber.join(sent)).isFailure).toBe(false);
+        // The agent passes no receipt: the read has the deposit.
+        expect(yield* balance).toEqual({ isFailure: false, encoded: { value: { balance: 30 } } });
+        // Unless a tool call asks to wait, the view is a moment behind.
+        expect((yield* deposit({})).isFailure).toBe(false);
+        expect(yield* balance).toEqual({ isFailure: false, encoded: { value: { balance: 30 } } });
+        yield* settle;
+        expect(yield* balance).toEqual({ isFailure: false, encoded: { value: { balance: 60 } } });
+      }).pipe(Effect.provide(walletTools.layer.pipe(Layer.provideMerge(walletsOn(hosted.layer)))));
+    },
+  );
+
+  it.live("tools built with a strong default wait on every command", () => {
+    const hosted = InMemoryPlatform.make({ manual: true });
+    const settle: Effect.Effect<void> = Effect.gen(function* () {
+      while (true) {
+        yield* hosted.control.drain;
+        if (yield* hosted.control.idle) return;
+        yield* Effect.sleep("1 millis");
+      }
+    });
+    return Effect.gen(function* () {
+      yield* settle;
+      const sent = yield* call(
+        "WalletApi_Deposit_send",
+        { input: { walletId: "sam-wallet", amount: 30 } },
+        "sam",
+      ).pipe(Effect.forkChild);
+      yield* Effect.sleep("100 millis");
+      expect(sent.pollUnsafe()).toBeUndefined();
+      while (sent.pollUnsafe() === undefined) {
+        yield* settle;
+        yield* Effect.sleep("5 millis");
+      }
+      expect((yield* Fiber.join(sent)).isFailure).toBe(false);
+      expect(yield* call("WalletApi_Balance_get", { key: "sam-wallet" }, "sam")).toEqual({
+        isFailure: false,
+        encoded: { value: { balance: 30 } },
+      });
+    }).pipe(
+      Effect.provide(
+        walletTools.layer.pipe(
+          Layer.provide(Layer.succeed(Domain.DefaultConsistency, "strong")),
+          Layer.provideMerge(walletsOn(hosted.layer)),
+        ),
+      ),
+    );
+  });
 
   it.live("a rejection comes back as the tool's typed failure", () =>
     Effect.gen(function* () {
       const result = yield* call(
         "WalletApi_Deposit_send",
-        { target: "sam-wallet", input: { amount: 500 } },
+        { input: { walletId: "sam-wallet", amount: 500 } },
         "sam",
       );
       expect(result).toEqual({ isFailure: true, encoded: { _tag: "OverLimit", limit: 100 } });
@@ -180,8 +370,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
   it.live("the call runs the Api's middleware: no session, no command", () =>
     Effect.gen(function* () {
       const result = yield* call("WalletApi_Deposit_send", {
-        target: "sam-wallet",
-        input: { amount: 5 },
+        input: { walletId: "sam-wallet", amount: 5 },
       });
       expect(result).toEqual({ isFailure: true, encoded: { _tag: "Unauthenticated" } });
       // Nothing was recorded.
@@ -193,8 +382,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
   it.live("a middleware's client half never signs the agent in as the server", () =>
     Effect.gen(function* () {
       const result = yield* call("WalletApi_Deposit_send", {
-        target: "server-wallet",
-        input: { amount: 5 },
+        input: { walletId: "server-wallet", amount: 5 },
       });
       expect(result).toEqual({ isFailure: true, encoded: { _tag: "Unauthenticated" } });
     }).pipe(Effect.provide(ToolsLive.pipe(Layer.provide(ServerCredential)))),
@@ -204,7 +392,7 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
     Effect.gen(function* () {
       const receipt = yield* call(
         "WalletApi_Deposit_send",
-        { target: "sam-wallet", input: { amount: 7 } },
+        { input: { walletId: "sam-wallet", amount: 7 } },
         "sam",
       );
       const atLeast = { stream: "Wallet/sam-wallet", version: 1 };
@@ -220,14 +408,93 @@ describe("Domain Ai: toToolkit", { tags: ["unit", "local"] }, () => {
     }).pipe(Effect.provide(ToolsLive)),
   );
 
+  it("a query's tool takes its input and page, and is read-only", () => {
+    const { toolkit } = DomainAi.toToolkit(WalletApi, { expose: ["Rates"] });
+    const ask = toolkit.tools.WalletApi_Rates_ask!;
+    const rpc = WalletApi.group.requests.get("Rates") as Rpc.AnyWithProps;
+    const wire = (schema: Schema.Top) => Tool.getJsonSchemaFromSchema(Schema.toCodecJson(schema));
+    expect(Tool.getJsonSchema(ask)).toEqual(wire(rpc.payloadSchema));
+    expect(Tool.getJsonSchema(ask)).toMatchObject({
+      properties: { input: { properties: { base: {} } }, after: {}, take: {}, atLeast: {} },
+    });
+    expect(Tool.getDescription(ask)).toBe("Ask the Rates query for a page of entries.");
+    expect(Context.get(ask.annotations, Tool.Readonly)).toBe(true);
+    expect(Context.get(ask.annotations, Tool.Destructive)).toBe(false);
+    const failure = JSON.stringify(Tool.getJsonSchemaFromSchema(ask.failureSchema));
+    for (const tag of ["UnknownBase", "Unauthenticated"]) expect(failure).toContain(tag);
+  });
+
+  it("a query with no input takes an empty JSON object", () => {
+    class Reset extends Domain.Command("Reset", {
+      input: { walletId: WalletId },
+      events: [Deposited],
+    }) {}
+    class Till extends Domain.Aggregate("Till", {
+      id: WalletId,
+      state: Schema.Struct({ balance: Schema.Int }),
+      initial: { balance: 0 },
+      commands: [Reset],
+      keyOf: (command) => command.walletId,
+      decide: { Reset: () => [] },
+      evolve: { Deposited: (_, e) => ({ balance: e.balance }) },
+    }) {}
+    class Currencies extends Domain.Query("Currencies", { success: Schema.Array(Schema.String) }) {}
+    class Tills extends Domain.Model("Tills", { aggregates: [Till], queries: [Currencies] }) {}
+    class TillApi extends Domain.Api("TillApi", { model: Tills }) {}
+    const { toolkit } = DomainAi.toToolkit(TillApi, { expose: ["Reset", "Currencies"] });
+    // A command always names its instance, so only a query can have no input.
+    for (const [name, payload] of [["TillApi_Currencies_ask", {}]] as const) {
+      const tool = toolkit.tools[name]!;
+      // An object with no properties, so an agent sends `{}`, not the string `"{}"`.
+      expect(Tool.getJsonSchema(tool)).toMatchObject({
+        properties: { input: { type: "object", additionalProperties: false } },
+      });
+      const parameters = tool.parametersSchema as Schema.Codec<unknown, unknown>;
+      const decodes = (input: unknown) =>
+        Exit.isSuccess(Schema.decodeUnknownExit(parameters)({ ...payload, input }));
+      expect(decodes({})).toBe(true);
+      expect(decodes("{}")).toBe(false);
+      expect(decodes(42)).toBe(false);
+    }
+  });
+
+  it.live("a query tool answers with a page, and its rejection as the typed failure", () =>
+    Effect.gen(function* () {
+      expect(
+        yield* call("WalletApi_Rates_ask", { input: { base: "USD" }, take: 2 }, "sam"),
+      ).toEqual({
+        isFailure: false,
+        encoded: {
+          entries: [
+            { currency: "EUR", rate: 0.9 },
+            { currency: "GBP", rate: 0.8 },
+          ],
+          cursor: "GBP",
+        },
+      });
+      expect(
+        yield* call("WalletApi_Rates_ask", { input: { base: "USD" }, after: "GBP" }, "sam"),
+      ).toEqual({
+        isFailure: false,
+        encoded: { entries: [{ currency: "JPY", rate: 150 }], cursor: null },
+      });
+      expect(yield* call("WalletApi_Rates_ask", { input: { base: "XYZ" } }, "sam")).toEqual({
+        isFailure: true,
+        encoded: { _tag: "UnknownBase", base: "XYZ" },
+      });
+      expect(yield* call("WalletApi_Rates_ask", { input: { base: "USD" } })).toEqual({
+        isFailure: true,
+        encoded: { _tag: "Unauthenticated" },
+      });
+    }).pipe(Effect.provide(ToolsLive)),
+  );
+
   it.live("a tool name a model provider would refuse fails the Layer with a DefinitionError", () =>
     Effect.gen(function* () {
       class LongApi extends Domain.Api("A".repeat(60), { model: Wallets, views: [] }) {}
-      const exit = yield* Layer.build(DomainAi.toToolkit(LongApi).layer).pipe(
-        Effect.provide(WalletsLive),
-        Effect.scoped,
-        Effect.exit,
-      );
+      const exit = yield* Layer.build(
+        DomainAi.toToolkit(LongApi, { expose: ["Deposit"] }).layer,
+      ).pipe(Effect.provide(WalletsLive), Effect.scoped, Effect.exit);
       expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toMatchObject({
         _tag: "DefinitionError",
         message: `The tool name ${"A".repeat(60)}_Deposit_send is longer than 64 characters`,
@@ -279,7 +546,7 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
   it.live("serves the tools over MCP; a call carries the request's headers to the Api", () =>
     Effect.gen(function* () {
       const { handler, dispose } = HttpRouter.toWebHandler(
-        DomainAi.toMcp(WalletApi).pipe(
+        DomainAi.toMcp(WalletApi, { expose }).pipe(
           Layer.provide(
             McpServer.layerHttp({
               name: "wallet",
@@ -303,6 +570,7 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
         "WalletApi_Balance_get",
         "WalletApi_Balance_list",
         "WalletApi_Balance_snapshot",
+        "WalletApi_Rates_ask",
       ]);
       const [send, get] = tools;
       expect(send.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
@@ -312,7 +580,7 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
 
       const deposit = {
         name: "WalletApi_Deposit_send",
-        arguments: { target: "sam-wallet", input: { amount: 30 } },
+        arguments: { input: { walletId: "sam-wallet", amount: 30 } },
       };
       const sent = yield* mcp.request("tools/call", deposit, { "x-owner": "sam" });
       expect(sent!.result.isError).toBe(false);
@@ -320,6 +588,7 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
         reply: { balance: 30 },
         stream: "Wallet/sam-wallet",
         version: 1,
+        commits: [{ stream: "Wallet/sam-wallet", version: 1 }],
       });
 
       const anonymous = yield* mcp.request("tools/call", deposit);
@@ -333,7 +602,7 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
   it.live("serves a request-scoped MCP endpoint, as on a Worker", () =>
     Effect.gen(function* () {
       const { handler, dispose } = HttpRouter.toWebHandler(
-        DomainAi.toMcp(WalletApi).pipe(
+        DomainAi.toMcp(WalletApi, { expose }).pipe(
           Layer.provide(
             McpServer.layerHttpRequestScoped({
               name: "wallet",
@@ -372,7 +641,7 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
                     "io.modelcontextprotocol/clientCapabilities": {},
                   },
                   name: "WalletApi_Deposit_send",
-                  arguments: { target: "sam-wallet", input: { amount: 3 } },
+                  arguments: { input: { walletId: "sam-wallet", amount: 3 } },
                 },
               }),
             }),
@@ -386,6 +655,7 @@ describe("Domain Ai: toMcp", { tags: ["unit", "local"] }, () => {
         reply: { balance: 3 },
         stream: "Wallet/sam-wallet",
         version: 1,
+        commits: [{ stream: "Wallet/sam-wallet", version: 1 }],
       });
       const anonymous = yield* deposit({});
       expect(anonymous.isError).toBe(true);

@@ -3,6 +3,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as saasservicemgmt from "@distilled.cloud/gcp/saasservicemgmt_v1";
 import * as Effect from "effect/Effect";
+import { expectFound } from "../lookup.ts";
 import {
   location,
   logLevel,
@@ -76,6 +77,13 @@ test.provider.skipIf(!runBlueprintLifecycle)(
           });
           return { product, tenant, kind, release, unit, operation };
         }),
+      );
+      yield* expectFound(
+        GCP.SaasServiceManagement.UnitOperation.lookup({
+          unitOperationId: created.operation.unitOperationId,
+          location: created.operation.location,
+        }),
+        created.operation,
       );
 
       expect(created.operation.name).toContain("/unitOperations/");

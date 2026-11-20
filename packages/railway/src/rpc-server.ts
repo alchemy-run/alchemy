@@ -92,7 +92,8 @@ export const serveRailwayRpc = <Req = never>(
     if (queryAt !== -1) name = name.slice(0, queryAt);
     name = decodeURIComponent(name);
 
-    const method = shape[name];
+    // Never `Object.prototype` members (`constructor`, `__proto__`, ...).
+    const method = name in Object.prototype ? undefined : shape[name];
     if (typeof method !== "function") {
       return HttpServerResponse.text(`Unknown RPC method "${name}"`, {
         status: 404,
@@ -115,7 +116,7 @@ export const serveRailwayRpc = <Req = never>(
     if (!Effect.isEffect(invoked)) {
       return yield* HttpServerResponse.json(invoked ?? null);
     }
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- RPC methods are pre-provided service Effects
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion, effecttsgo/any-unknown-in-error-context -- RPC methods are pre-provided service Effects of any shape
     const result = yield* Effect.result(invoked as Effect.Effect<unknown, unknown>);
     if (Result.isSuccess(result)) {
       return yield* HttpServerResponse.json(result.success ?? null);

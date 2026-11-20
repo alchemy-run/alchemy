@@ -6,6 +6,7 @@ import * as dataplex from "@distilled.cloud/gcp/dataplex_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 import { withDataplexSlot } from "./quota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
@@ -58,6 +59,13 @@ test.provider.skipIf(!!process.env.FAST)(
             labels: { env: "test" },
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Dataplex.DataProduct.lookup({
+          dataProductId: created.dataProductId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/dataProducts/");

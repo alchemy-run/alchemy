@@ -28,32 +28,29 @@ import * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import type * as Aggregate from "./Aggregate.ts";
+import type { Annotations } from "./Annotations.ts";
 import * as Command from "./Command.ts";
-import { DefinitionError, NotInModel, Unreadable, UnroutedCommand } from "./DefinitionError.ts";
+import { DefinitionError, NotInModel, UnroutedCommand } from "./DefinitionError.ts";
 import { type Filter, matches } from "./Filter.ts";
-import { decodeEnvelope } from "./Kernel.ts";
+import { internalError, redactCause } from "./internal.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import * as Model from "./Model.ts";
-import {
-  type AggregateStore,
-  captureContext,
-  type StreamStore,
-  type Subscription,
-  type ViewStore,
-} from "./Platform.ts";
+import { captureContext, type StreamStore, type Subscription, type ViewStore } from "./Platform.ts";
+import * as Query from "./Query.ts";
 import type * as Read from "./Read.ts";
-import { contractOf, nameOf, readRpcs } from "./ReadRpcs.ts";
+import { nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
 import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
 import * as Watch from "./Watch.ts";
 
 /**
- * What an Api exposes: commands (writes); views, streams, and aggregates that
- * declare a `read` contract (reads).
+ * What an Api exposes: commands (writes); views and streams (reads of one
+ * key); queries (reads across keys). An aggregate is never read directly: a
+ * view projects what clients may see of it.
  */
-export type Servable = Command.Any | View.Any | Aggregate.Any | DomainStream.Any;
+export type Servable = Command.Any | View.Any | DomainStream.Any | Query.Any;
 
 /** The names of the commands a model holds: their tags. */
 export type CommandName<M extends Model.Any> = M["commands"][number]["tag"];
@@ -61,28 +58,20 @@ export type CommandName<M extends Model.Any> = M["commands"][number]["tag"];
 export type ViewName<M extends Model.Any> = M["views"][number]["viewName"];
 /** The names of the streams a model holds. */
 export type StreamName<M extends Model.Any> = M["streams"][number]["streamName"];
-/** The names of the aggregates a model holds that declare `read`, so an Api may serve them. */
-export type AggregateName<M extends Model.Any> = ReadableName<M["aggregates"][number]>;
-
-/** An aggregate's name, unless its type says it declared no `read`. */
-type ReadableName<A> = A extends Aggregate.Any
-  ? [A["definition"]["read"]] extends [undefined]
-    ? never
-    : A["aggregateName"]
-  : never;
+/** The names of the queries a model holds. */
+export type QueryName<M extends Model.Any> = M["queries"][number]["queryName"];
 
 /**
  * What {@link make} takes: the model, and the names of what of it the Api
- * serves. A kind it does not list is served whole: every command, view and
- * stream of the model, and every aggregate that declares `read`. `[]` serves
- * none of a kind.
+ * serves. A kind it does not list is served whole: every command, view,
+ * stream and query of the model. `[]` serves none of a kind.
  */
 export interface Options<
   M extends Model.Any,
   C extends ReadonlyArray<CommandName<M>>,
   V extends ReadonlyArray<ViewName<M>>,
   S extends ReadonlyArray<StreamName<M>>,
-  A extends ReadonlyArray<AggregateName<M>>,
+  Q extends ReadonlyArray<QueryName<M>> = ReadonlyArray<QueryName<M>>,
 > {
   /** The model the Api is over. */
   readonly model: M;
@@ -92,8 +81,8 @@ export interface Options<
   readonly views?: V;
   /** The streams a client may read. Every stream of the model by default. */
   readonly streams?: S;
-  /** The aggregates a client may read directly, through their `read` contract. Every one that declares `read` by default. */
-  readonly aggregates?: A;
+  /** The queries a client may ask. Every query of the model by default. */
+  readonly queries?: Q;
 }
 
 /** What an Api over `M` serves, from the names it lists. */
@@ -102,17 +91,17 @@ export type ServedBy<
   C extends ReadonlyArray<string>,
   V extends ReadonlyArray<string>,
   S extends ReadonlyArray<string>,
-  A extends ReadonlyArray<string>,
+  Q extends ReadonlyArray<string> = ReadonlyArray<string>,
 > =
   | Extract<M["commands"][number], { readonly tag: C[number] }>
   | Extract<M["views"][number], { readonly viewName: V[number] }>
   | Extract<M["streams"][number], { readonly streamName: S[number] }>
-  | Extract<M["aggregates"][number], { readonly aggregateName: A[number] }>;
+  | Extract<M["queries"][number], { readonly queryName: Q[number] }>;
 
 type Commands<E extends Servable> = Extract<E, Command.Any>;
 type Views<E extends Servable> = Extract<E, View.Any>;
 type Streams<E extends Servable> = Extract<E, DomainStream.Any>;
-type Aggregates<E extends Servable> = Exclude<E, Command.Any | View.Any | DomainStream.Any>;
+type Queries<E extends Servable> = Extract<E, Query.Any>;
 
 // ---------------------------------------------------------------- client types
 
@@ -136,8 +125,12 @@ export interface ViewClient<V extends View.Any> {
   readonly get: (
     key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
-      /** Wait until the view has applied this write (a command's `stream` and `version`). */
-      readonly atLeast?: { readonly stream: string; readonly version: number };
+      /**
+       * Wait until the view has applied these writes (commands' receipts).
+       * Left out, the read waits for the commands this client sent; `[]`
+       * waits for nothing.
+       */
+      readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.StateOf<V>>;
     },
   ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]> | View.ConsistencyTimeout>;
@@ -167,8 +160,12 @@ export interface ViewClient<V extends View.Any> {
   readonly list: (
     key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
-      /** Wait until the view has applied this write (a command's `stream` and `version`). */
-      readonly atLeast?: { readonly stream: string; readonly version: number };
+      /**
+       * Wait until the view has applied these writes (commands' receipts).
+       * Left out, the read waits for the commands this client sent; `[]`
+       * waits for nothing.
+       */
+      readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.EventOf<V>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
@@ -186,8 +183,12 @@ export interface ViewClient<V extends View.Any> {
   readonly snapshot: (
     key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
-      /** Wait until the view has applied this write (a command's `stream` and `version`). */
-      readonly atLeast?: { readonly stream: string; readonly version: number };
+      /**
+       * Wait until the view has applied these writes (commands' receipts).
+       * Left out, the read waits for the commands this client sent; `[]`
+       * waits for nothing.
+       */
+      readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<View.StateOf<V>>;
     },
   ) => Effect.Effect<
@@ -202,8 +203,12 @@ export interface StreamClient<S extends DomainStream.Any> {
   readonly peek: (
     key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
-      /** Wait until the stream's writer has handled this write (a command's `stream` and `version`). */
-      readonly atLeast?: { readonly stream: string; readonly version: number };
+      /**
+       * Wait until the stream's writers have handled these writes (commands'
+       * receipts). Left out, the read waits for the commands this client
+       * sent; `[]` waits for nothing.
+       */
+      readonly atLeast?: Query.AtLeastInput;
     },
   ) => Effect.Effect<
     DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>> | null,
@@ -238,6 +243,12 @@ export interface StreamClient<S extends DomainStream.Any> {
   readonly list: (
     key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
+      /**
+       * Wait until the stream's writers have handled these writes (commands'
+       * receipts). Left out, the read waits for the commands this client
+       * sent; `[]` waits for nothing.
+       */
+      readonly atLeast?: Query.AtLeastInput;
       readonly where?: Filter<DomainStream.EventOf<S>>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
@@ -245,7 +256,7 @@ export interface StreamClient<S extends DomainStream.Any> {
     },
   ) => Effect.Effect<
     View.Page<DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>>>,
-    ReadError<S["definition"]>
+    ReadError<S["definition"]> | View.ConsistencyTimeout
   >;
 }
 
@@ -255,43 +266,27 @@ export interface Recorded<E, Id> {
   readonly envelope: Aggregate.Envelope<Id>;
 }
 
-/** The typed client of an aggregate exposed in an Api (through its `read` contract). */
-export interface AggregateClient<A extends Aggregate.Any> {
-  /** The instance's current state. */
-  readonly get: (
-    key: Aggregate.IdOf<A>,
-    options?: CallOptions,
-  ) => Effect.Effect<Aggregate.StateOf<A>, ReadError<A["definition"]["read"]>>;
-  /** The instance's state with its cursor, then its state after every commit. */
-  readonly watch: (
-    key: Aggregate.IdOf<A>,
-    options?: CallOptions,
-  ) => Stream.Stream<Read.Snapshot<Aggregate.StateOf<A>>, ReadError<A["definition"]["read"]>>;
-  /**
-   * The instance's committed events: history from `after` (a cursor), a
-   * {@link Read.CaughtUp} frame, then live.
-   */
-  readonly events: (
-    key: Aggregate.IdOf<A>,
-    options?: CallOptions & { readonly after?: number },
-  ) => Stream.Stream<
-    Recorded<Aggregate.EventOf<A>, Aggregate.IdOf<A>> | Read.CaughtUp,
-    ReadError<A["definition"]["read"]>
-  >;
-}
-
 /** How a command is sent: its idempotency key and the call's headers. */
 export interface CommandOptions extends CallOptions {
   /** A resend with the same id returns the first receipt instead of deciding again. */
   readonly commandId?: string;
+  /**
+   * When the command answers. `"eventual"` answers as soon as the events are
+   * committed. `"strong"` answers once every view its events reach has
+   * applied them: any read of a view after the answer includes the command.
+   * If a view takes longer than 10 seconds the call fails with
+   * `ConsistencyTimeout`, though the command is committed.
+   * @default the client's `Domain.DefaultConsistency`, which is `"eventual"`
+   */
+  readonly consistency?: Command.Consistency;
 }
 
-/** The input and options after a command's target. The input may be left out when it has no required field. */
+/** A command's input and options. The input may be left out when it has no required field. */
 type CommandArgs<Input> = {} extends Input
   ? [input?: Input, options?: CommandOptions]
   : [input: Input, options?: CommandOptions];
 
-/** The typed client of a command exposed in an Api: `bank.WithdrawMoney(target, input, options)`. */
+/** The typed client of a command exposed in an Api: `bank.WithdrawMoney(input, options)`. */
 export type CommandClient<C extends Command.Any> =
   C["rpc"] extends Rpc.Rpc<
     infer _Tag,
@@ -301,9 +296,8 @@ export type CommandClient<C extends Command.Any> =
     infer Middleware,
     infer _Requires
   >
-    ? Payload["Type"] extends { readonly target: infer Target; readonly input: infer Input }
+    ? Payload["Type"] extends { readonly input: infer Input }
       ? (
-          target: Target,
           ...args: CommandArgs<Input>
         ) => Effect.Effect<
           Success["Type"],
@@ -320,17 +314,71 @@ export type CommandClient<C extends Command.Any> =
     : never;
 
 /**
- * The typed client of an Api: commands as methods (`bank.WithdrawMoney(...)`),
- * views and aggregates as namespaces (`bank.AccountSummary.watch(...)`).
+ * Everything a query can fail with: its rejections, `ConsistencyTimeout` when
+ * it has `waitsFor`, its middleware's errors, transport.
+ */
+export type QueryError<Q extends Query.Any> =
+  | Query.FailureOf<Q>
+  | Middleware.Errors<Q["middleware"]>
+  | RpcClientError.RpcClientError;
+
+/** How a client asks a query. */
+export interface QueryOptions extends CallOptions {
+  /**
+   * Wait until the query's projections have handled this write (a
+   * command's receipt), or each of these writes, one receipt per command.
+   * Left out, the query waits for the commands this client sent; `[]` waits
+   * for nothing.
+   */
+  readonly atLeast?: Query.AtLeastInput;
+  /** The cursor of the previous page, for a paged query. */
+  readonly after?: string;
+  /** Rows per page, for a paged query; capped by the query Layer's `take.max`. */
+  readonly take?: number;
+}
+
+/** One entry of a paged query's pages. */
+export type EntryOf<Q extends Query.Any> =
+  Query.ResultOf<Q> extends Query.Page<infer Row> ? Row : never;
+
+/**
+ * The typed client of a query exposed in an Api: one method. A paged query's
+ * method also streams its pages (`pages`) or its entries (`entries`), following
+ * each cursor until the last page.
+ */
+export type QueryClient<Q extends Query.Any> = ((
+  input: Query.InputOf<Q>,
+  options?: QueryOptions,
+) => Effect.Effect<Query.ResultOf<Q>, QueryError<Q>>) &
+  (NonNullable<Q["definition"]["paged"]> extends true ? PagedQueryClient<Q> : {});
+
+/** A paged query's Streams. `after` starts mid-way; `atLeast` waits before the first page. */
+export interface PagedQueryClient<Q extends Query.Any> {
+  /** Every page, from `after` (or the first) to the last. */
+  readonly pages: (
+    input: Query.InputOf<Q>,
+    options?: QueryOptions,
+  ) => Stream.Stream<Query.ResultOf<Q>, QueryError<Q>>;
+  /** Every entry of every page, in order. */
+  readonly entries: (
+    input: Query.InputOf<Q>,
+    options?: QueryOptions,
+  ) => Stream.Stream<EntryOf<Q>, QueryError<Q>>;
+}
+
+/**
+ * The typed client of an Api: commands and queries as methods
+ * (`bank.WithdrawMoney(...)`, `bank.AccountLedger(...)`), views and
+ * streams as namespaces (`bank.AccountSummary.watch(...)`).
  */
 export type ApiClient<E extends Servable> = {
   readonly [C in Commands<E> as C["tag"]]: CommandClient<C>;
 } & {
+  readonly [Q in Queries<E> as Q["queryName"]]: QueryClient<Q>;
+} & {
   readonly [V in Views<E> as V["viewName"]]: ViewClient<V>;
 } & {
   readonly [S in Streams<E> as S["streamName"]]: StreamClient<S>;
-} & {
-  readonly [A in Aggregates<E> as A["aggregateName"]]: AggregateClient<A>;
 };
 
 /** Type-level identity of an Api's client service. */
@@ -355,10 +403,11 @@ export interface ApiClass<
 > extends Effect.Effect<ApiServer, never, Model.Internals | MiddlewareServices<Serves>> {
   new (_: never): {};
   readonly kind: "Api";
+  readonly annotations: Annotations;
   readonly apiName: Name;
   /** The model this Api is over. */
   readonly model: Model.Any;
-  /** The commands, views, streams and aggregates this Api serves. */
+  /** The commands, views, streams and queries this Api serves. */
   readonly serves: Serves;
   /** The command classes this Api exposes, in the order it lists them. */
   readonly commands: ReadonlyArray<Commands<Serves[number]>>;
@@ -429,13 +478,11 @@ export interface ApiClass<
   >;
 }
 
-type EntryMiddleware<E> = E extends Command.Any
+type EntryMiddleware<E> = E extends Command.Any | Query.Any
   ? E["middleware"][number]
   : E extends View.Any | DomainStream.Any
     ? NonNullable<E["definition"]["middleware"]>[number]
-    : E extends Aggregate.Any
-      ? NonNullable<NonNullable<E["definition"]["read"]>["middleware"]>[number]
-      : never;
+    : never;
 
 /** The middleware services the server needs for every entry. */
 type MiddlewareServices<Serves extends ReadonlyArray<Servable>> =
@@ -456,47 +503,95 @@ type MiddlewareClients<Serves extends ReadonlyArray<Servable>> =
     : never;
 
 const rpcsOf = (entry: Servable): ReadonlyArray<Rpc.Any> =>
-  entry.kind === "Command" ? [entry.rpc] : Object.values(readRpcs(entry));
+  entry.kind === "Command" || entry.kind === "Query" ? [entry.rpc] : Object.values(readRpcs(entry));
 
 // ---------------------------------------------------------------- handlers
 
 /**
- * Only an entry's declared errors are public. Anything else (an
- * infrastructure error, an undeclared rejection) becomes a defect, so it
- * never leaks as a typed error the client cannot decode.
+ * Only an entry's declared errors are public. Anything else (a defect, an
+ * infrastructure error, an undeclared rejection) is logged here, with its
+ * full cause, and reaches the client as one generic defect.
  */
 const declaredOnly = (rpc: Rpc.Any) => {
   const props = rpc as Rpc.AnyWithProps;
   const isDeclared = Schema.is(props.errorSchema);
   const success = props.successSchema as Schema.Top & { readonly error?: Schema.Top };
   const isDeclaredInStream = success.error ? Schema.is(success.error) : isDeclared;
+  const redactEffect = redactCause(isDeclared, props._tag);
+  const redactStream = redactCause(isDeclaredInStream, props._tag);
   return {
-    effect: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      Effect.catchIf(
-        effect,
-        (e) => !isDeclared(e),
-        (e) => Effect.die(e),
-      ),
+    effect: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.catchCause(effect, redactEffect),
     stream: <A, E, R>(stream: Stream.Stream<A, E, R>) =>
-      Stream.catchIf(
-        stream,
-        (e) => !isDeclaredInStream(e),
-        (e) => Stream.die(e),
-      ),
+      Stream.catchCause(stream, (cause) => cause.pipe(redactStream, Stream.fromEffect)),
   };
 };
 
-/** The wire payload of a command: its target, an optional command id, and its input. */
+/** Whether an error is one a call may fail with: its own, its stream's, or its middleware's. */
+const declaredByCall = new WeakMap<Rpc.AnyWithProps, (error: unknown) => boolean>();
+const declaredBy = (rpc: Rpc.AnyWithProps) => {
+  const cached = declaredByCall.get(rpc);
+  if (cached) return cached;
+  const success = rpc.successSchema as Schema.Top & { readonly error?: Schema.Top };
+  const errors = [
+    rpc.errorSchema,
+    ...(success.error ? [success.error] : []),
+    ...[...rpc.middlewares].map((middleware) => middleware.error as Schema.Top),
+  ];
+  const declared = Schema.is(Schema.Union(errors));
+  declaredByCall.set(rpc, declared);
+  return declared;
+};
+
+type MiddlewareFn = (
+  effect: Effect.Effect<unknown, unknown>,
+  options: { readonly rpc: Rpc.AnyWithProps },
+) => Effect.Effect<unknown, unknown>;
+
+/**
+ * The group's middleware services in `context`, each wrapped so that what it
+ * fails or dies with reaches the client only as a declared error or one
+ * generic defect: a middleware's defect (an auth adapter's) is logged, never
+ * sent. Middleware runs outside each handler's own redaction.
+ */
+const redactMiddleware = (
+  group: RpcGroup.RpcGroup<Rpc.Any>,
+  context: Context.Context<never>,
+): Context.Context<never> => {
+  const services = new Set<Context.Key<any, any>>();
+  for (const rpc of group.requests.values()) {
+    for (const middleware of (rpc as Rpc.AnyWithProps).middlewares) services.add(middleware);
+  }
+  let redacted = Context.empty();
+  for (const key of services) {
+    const service = Context.getOption(context, key);
+    if (Option.isNone(service)) continue;
+    const run = service.value as MiddlewareFn;
+    const wrapped: MiddlewareFn = (effect, options) =>
+      Effect.catchCause(
+        run(effect, options),
+        redactCause(declaredBy(options.rpc), options.rpc._tag),
+      );
+    redacted = Context.add(redacted, key, wrapped);
+  }
+  return redacted;
+};
+
+/** The wire payload of a command: an optional command id, and its input. */
 interface CommandPayload {
-  readonly target: string;
   readonly commandId?: string;
   readonly input: object;
+  readonly consistency?: Command.Consistency;
+}
+
+/** The wire payload of a query: its input, and the page and write to read at least. */
+interface QueryPayload extends Query.RunOptions {
+  readonly input: unknown;
 }
 
 interface ReadPayload {
   readonly key: string;
   readonly where?: unknown;
-  readonly atLeast?: { readonly stream: string; readonly version: number };
+  readonly atLeast?: Query.AtLeastInput;
   readonly after?: number;
   readonly order?: "asc" | "desc";
   readonly take?: number;
@@ -504,44 +599,106 @@ interface ReadPayload {
 
 const caughtUpAt = (seq: number): Read.CaughtUp => ({ _tag: "CaughtUp", cursor: seq });
 
+/** How a read judges a key's state, and what of an event it filters on. */
+interface Judge<A> {
+  /** `validate` on a state of the key. */
+  readonly judge: (state: unknown) => Effect.Effect<void, unknown>;
+  /** The key's state once `event` applied, as `validate` sees it. */
+  readonly stateOf: (event: A) => unknown;
+  /** Whether the read's `where` keeps `event`. */
+  readonly keeps: (event: A) => boolean;
+}
+
 /**
  * A key's events from `start`, with a `CaughtUp` frame after its history: the
- * events up to `end`, the key's `seq` when the read began. `keep` judges and
- * filters each event after the end is found, so a filtered-out last event
- * still ends the history.
+ * events up to `end`, the key's `seq` when the read began, whose state is
+ * `endState`. Every event the filter keeps is judged before it is sent, and
+ * the `CaughtUp` frame is judged like an event: against the state the
+ * history ends at. So a caller `validate` refuses is refused the same way
+ * whether the key has history or none (#3060).
  */
 const withCaughtUp = <A>(
   start: number,
   end: number,
+  endState: unknown,
   events: Stream.Stream<A, unknown>,
   seqOf: (event: A) => number,
-  keep: (event: A) => Effect.Effect<ReadonlyArray<unknown>, unknown>,
+  { judge, stateOf, keeps }: Judge<A>,
 ): Stream.Stream<unknown, unknown> => {
   let sent = start >= end;
   const rest = events.pipe(
-    Stream.mapEffect((event) =>
-      keep(event).pipe(
-        Effect.map((out) => {
-          if (sent || seqOf(event) < end) return out;
+    Stream.mapEffect(
+      Effect.fn(function* (event: A) {
+        const kept = keeps(event);
+        const ends = !sent && seqOf(event) >= end;
+        // A kept event is judged before it is sent; one that ends the history is judged for the marker.
+        if (kept || ends) yield* judge(stateOf(event));
+        const out: Array<unknown> = kept ? [event] : [];
+        if (ends) {
           sent = true;
-          return [...out, caughtUpAt(seqOf(event))];
-        }),
-      ),
+          out.push(caughtUpAt(seqOf(event)));
+        }
+        return out;
+      }),
     ),
     Stream.flatMap((out) => Stream.fromIterable(out)),
   );
-  return start >= end ? Stream.concat(Stream.succeed(caughtUpAt(start)), rest) : rest;
+  return start >= end
+    ? Stream.concat(Stream.fromEffect(Effect.as(judge(endState), caughtUpAt(start))), rest)
+    : rest;
+};
+
+/**
+ * Read a key for a caller, judged before anything the caller asked for
+ * runs: `validate` judges the key's current state, then, if the read waits
+ * for `atLeast`, the state after the wait (only if it moved). A caller
+ * `validate` refuses is refused at once, so how long a wait takes tells it
+ * nothing about the key (#2906).
+ */
+const judgedRead = Effect.fn(function* <A>(
+  read: Effect.Effect<A, unknown>,
+  judge: (value: A) => Effect.Effect<void, unknown>,
+  versionOf: (value: A) => number,
+  wait: Effect.Effect<void, unknown> | undefined,
+) {
+  const current = yield* read;
+  yield* judge(current);
+  if (wait === undefined) return current;
+  yield* wait;
+  const waited = yield* read;
+  if (versionOf(waited) !== versionOf(current)) yield* judge(waited);
+  return waited;
+});
+
+/**
+ * The wait a read's `atLeast` asks for: until the view has applied each of
+ * those commands' events on `key`, or the stream's writers have handled
+ * them. A command whose events never reach the key costs one read of its
+ * events and no wait, so a client can send every receipt it holds with
+ * every read.
+ */
+const waitFor = (
+  caughtUp: Query.CaughtUp | undefined,
+  atLeast: Query.AtLeastInput | undefined,
+  key?: string,
+): Effect.Effect<void, unknown> | undefined => {
+  const receipts = Query.receiptsOf(atLeast);
+  return caughtUp === undefined || receipts.length === 0
+    ? undefined
+    : Effect.forEach(receipts, (receipt) => caughtUp(receipt, { key }), {
+        concurrency: "unbounded",
+        discard: true,
+      });
 };
 
 type Handler = (input: never) => unknown;
 
 /**
- * The first thing an Api lists that it cannot serve: a name its model does
- * not hold, or an aggregate without a `read` contract. The type of the
- * options rules both out; this catches a model typed as `Model.Any`.
+ * Why an Api cannot serve something it lists: a name its model does not
+ * hold. The type of the options rules it out; this catches a model typed as
+ * `Model.Any`.
  */
-/** Why an Api cannot serve something it lists. */
-type Unservable = NotInModel | Unreadable;
+type Unservable = NotInModel;
 
 const notInModel = (
   _apiModel: Model.Any,
@@ -570,30 +727,44 @@ const handlersOf = (
         const declared = declaredOnly(entry.rpc);
         // Runs inside the command's middleware, so the context it provides
         // (the session's actor) travels with the command to its aggregate.
-        handlers[entry.tag] = ({ target, commandId, input }: CommandPayload) =>
+        handlers[entry.tag] = ({ commandId, input, consistency }: CommandPayload) =>
           declared.effect(
             // oxlint-disable-next-line effecttsgo/new-schema-class -- `make` on a generic command class loses its instance type
-            aggregate.send(target, new entry(input), { commandId }).pipe(
+            aggregate.send(new entry(input), { commandId }).pipe(
+              // The events are committed. When asked to, answer once the views
+              // have them, so a read after the answer includes the command.
+              Effect.tap((receipt) =>
+                consistency === "strong" ? internals.applied(receipt) : Effect.void,
+              ),
               Effect.map((receipt) => ({
                 reply: receipt.reply,
                 stream: receipt.stream,
                 version: receipt.version,
+                commits: receipt.commits,
               })),
             ),
           );
         continue;
       }
-      // Serving an aggregate's state without its read contract would skip its middleware.
-      if (entry.kind === "Aggregate" && !entry.definition.read) {
-        return yield* Effect.die(
-          new DefinitionError({ reason: new Unreadable({ aggregate: entry.aggregateName }) }),
-        );
+      if (entry.kind === "Query") {
+        const query = internals.queries.get(entry.queryName);
+        if (!query) {
+          return yield* Effect.die(
+            new DefinitionError({
+              reason: new NotInModel({ entity: entry.queryName, model: apiModel.modelName }),
+            }),
+          );
+        }
+        const declared = declaredOnly(entry.rpc);
+        // Runs inside the query's middleware, so the handler reads the context it provides.
+        handlers[entry.queryName] = ({ input, after, take, atLeast }: QueryPayload) =>
+          declared.effect(query.run(input, { after, take, atLeast }));
+        continue;
       }
       const name = nameOf(entry);
       const rpcs = readRpcs(entry);
-      const validate = contractOf(entry).validate as
-        | ((request: Read.Request<unknown>, state: unknown) => Effect.Effect<void, unknown>)
-        | undefined;
+      const validate = internals.validators.get(name);
+      const caughtUp = internals.caughtUp.get(name);
       const check = (mode: Read.Mode, key: unknown) => (state: unknown) =>
         validate ? validate({ mode, key }, state) : Effect.void;
       const effect =
@@ -612,11 +783,11 @@ const handlersOf = (
         const latest = (id: string) =>
           host.peek(refOf(id)).pipe(Effect.orDie, Effect.map(Option.getOrNull));
         handlers[`${name}.peek`] = effect(rpcs.get, ({ key: id, atLeast }) =>
-          host.peek(refOf(id), { atLeast }).pipe(
-            Effect.flatMap((found) => {
-              const entry = Option.getOrNull(found);
-              return check("get", refOf(id))(entry).pipe(Effect.as(entry));
-            }),
+          judgedRead(
+            host.peek(refOf(id)).pipe(Effect.map(Option.getOrNull)),
+            check("get", refOf(id)),
+            (entry) => entry?.envelope.seq ?? 0,
+            waitFor(caughtUp, atLeast),
           ),
         );
         handlers[`${name}.watch`] = stream(rpcs.watch, ({ key: id }) =>
@@ -638,100 +809,29 @@ const handlersOf = (
                 withCaughtUp(
                   start,
                   last?.envelope.seq ?? 0,
+                  last,
                   host.events(refOf(id), { after: start }),
                   (entry) => entry.envelope.seq,
-                  // Each entry is judged as the key's latest entry at that point.
-                  (entry) =>
-                    matches(where as Filter<unknown> | undefined, entry.event)
-                      ? check("events", refOf(id))(entry).pipe(Effect.as([entry]))
-                      : Effect.succeed([]),
+                  {
+                    judge: check("events", refOf(id)),
+                    // Each entry is judged as the key's latest entry at that point.
+                    stateOf: (entry) => entry,
+                    keeps: (entry) => matches(where as Filter<unknown> | undefined, entry.event),
+                  },
                 ),
               ),
             ),
           );
         });
-        handlers[`${name}.list`] = effect(rpcs.list!, ({ key: id, where, order, take, after }) =>
-          latest(id).pipe(
-            Effect.flatMap((entry) => check("list", refOf(id))(entry)),
-            Effect.andThen(
-              host.list(refOf(id), {
-                where: where as Filter<unknown> | undefined,
-                order,
-                take,
-                after,
-              }),
-            ),
-          ),
-        );
-        continue;
-      }
-
-      if (entry.kind === "View") {
-        const host = internals.viewHosts.get(name)!;
-        const key = entry.definition.key;
-        const refOf = (id: string) => Key.refOf(key, id);
-        const visible = (state: unknown, where: unknown) =>
-          state !== null && matches(where as Filter<unknown> | undefined, state) ? state : null;
-        handlers[`${name}.get`] = effect(rpcs.get, ({ key: id, atLeast, where }) =>
-          host.query(refOf(id), { atLeast }).pipe(
-            Effect.flatMap((found) => {
-              const state = Option.getOrNull(found);
-              return check("get", refOf(id))(state).pipe(Effect.as(visible(state, where)));
-            }),
-          ),
-        );
-        const viewStore = internals.views.get(name)!;
-        // From the stored snapshots, so each state comes with the seq it is valid at.
-        handlers[`${name}.watch`] = stream(rpcs.watch, ({ key: id, where }) =>
-          viewStore.changes(id).pipe(
-            Stream.mapEffect((snapshot) => {
-              const state =
-                snapshot.state === null
-                  ? null
-                  : internals.kernel.decodeViewState(entry, snapshot.state);
-              return check(
-                "watch",
-                refOf(id),
-              )(state).pipe(Effect.as({ state: visible(state, where), cursor: snapshot.seq }));
-            }),
-          ),
-        );
-        handlers[`${name}.events`] = stream(rpcs.events, ({ key: id, after, where }) => {
-          const start = after ?? 0;
-          return Stream.unwrap(
-            viewStore.read(id).pipe(
-              Effect.map((snapshot) =>
-                withCaughtUp(
-                  start,
-                  snapshot.seq,
-                  host.events(refOf(id), { after: start }),
-                  (entry) => entry.envelope.seq,
-                  (entry) =>
-                    matches(where as Filter<unknown> | undefined, entry.event)
-                      ? check("events", refOf(id))(entry.state).pipe(Effect.as([entry]))
-                      : Effect.succeed([]),
-                ),
-              ),
-            ),
-          );
-        });
-        handlers[`${name}.snapshot`] = effect(rpcs.snapshot!, ({ key: id, atLeast, where }) =>
-          host
-            .snapshot(refOf(id), { atLeast })
-            .pipe(
-              Effect.flatMap(({ state, cursor }) =>
-                check(
-                  "get",
-                  refOf(id),
-                )(state).pipe(Effect.as({ state: visible(state, where), cursor })),
-              ),
-            ),
-        );
         handlers[`${name}.list`] = effect(
           rpcs.list!,
           ({ key: id, atLeast, where, order, take, after }) =>
-            host.query(refOf(id), { atLeast }).pipe(
-              Effect.flatMap((found) => found.pipe(Option.getOrNull, check("list", refOf(id)))),
+            judgedRead(
+              latest(id),
+              check("list", refOf(id)),
+              (entry) => entry?.envelope.seq ?? 0,
+              waitFor(caughtUp, atLeast),
+            ).pipe(
               Effect.andThen(
                 host.list(refOf(id), {
                   where: where as Filter<unknown> | undefined,
@@ -745,50 +845,94 @@ const handlersOf = (
         continue;
       }
 
-      const store = internals.aggregates.get(name)!;
-      const refOf = (id: string) => ({ aggregate: name, id });
-      const stateOf = (json: unknown) => internals.kernel.decodeState(entry, json);
-      handlers[`${name}.get`] = effect(rpcs.get, ({ key: id }) =>
-        store.state(id).pipe(
-          Effect.flatMap(({ state }) => {
-            const decoded = stateOf(state);
-            return check("get", refOf(id))(decoded).pipe(Effect.as(decoded));
-          }),
-        ),
-      );
-      handlers[`${name}.watch`] = stream(rpcs.watch, ({ key: id }) =>
-        store.changes(id).pipe(
-          Stream.mapEffect(({ state, version }) => {
-            const decoded = stateOf(state);
-            return check(
-              "watch",
-              refOf(id),
-            )(decoded).pipe(Effect.as({ state: decoded, cursor: version }));
-          }),
-        ),
-      );
-      handlers[`${name}.events`] = stream(rpcs.events, ({ key: id, after }) => {
-        const start = after ?? 0;
-        return Stream.unwrap(
-          store.state(id).pipe(
-            Effect.map(({ version }) =>
-              withCaughtUp(
-                start,
-                version,
-                store.tail(id, start),
-                (stored) => stored.envelope.seq,
-                // Judged against the instance's state now, since events carry no state.
-                (stored) =>
-                  store.state(id).pipe(
-                    Effect.flatMap(({ state }) => check("events", refOf(id))(stateOf(state))),
-                    Effect.andThen(internals.kernel.decodeEvent(stored.event)),
-                    Effect.map((event) => [{ event, envelope: decodeEnvelope(stored.envelope) }]),
-                  ),
-              ),
-            ),
+      if (entry.kind === "View") {
+        const host = internals.viewHosts.get(name)!;
+        const key = entry.definition.key;
+        const refOf = (id: string) => Key.refOf(key, id);
+        const visible = (state: unknown, where: unknown) =>
+          state !== null && matches(where as Filter<unknown> | undefined, state) ? state : null;
+        // The key's state with its cursor, judged before the read waits for `atLeast`.
+        const judgedSnapshot = (
+          id: string,
+          mode: Read.Mode,
+          atLeast: Query.AtLeastInput | undefined,
+        ) =>
+          judgedRead(
+            host.snapshot(refOf(id)),
+            (snapshot) => check(mode, refOf(id))(snapshot.state),
+            (snapshot) => snapshot.cursor,
+            waitFor(caughtUp, atLeast, id),
+          );
+        handlers[`${name}.get`] = effect(rpcs.get, ({ key: id, atLeast, where }) =>
+          (Query.receiptsOf(atLeast).length === 0
+            ? host.get(refOf(id)).pipe(
+                Effect.map(Option.getOrNull),
+                Effect.tap((state) => check("get", refOf(id))(state)),
+              )
+            : Effect.map(judgedSnapshot(id, "get", atLeast), (snapshot) => snapshot.state)
+          ).pipe(Effect.map((state) => visible(state, where))),
+        );
+        const viewStore = internals.views.get(name)!;
+        // From the stored snapshots, so each state comes with the seq it is valid at.
+        handlers[`${name}.watch`] = stream(rpcs.watch, ({ key: id, where }) =>
+          viewStore.changes(id).pipe(
+            Stream.mapEffect((snapshot) => {
+              const state =
+                snapshot.state === null
+                  ? null
+                  : internals.kernel.decodeViewState(entry, snapshot.state);
+              return check(
+                "watch",
+                refOf(id),
+              )(state).pipe(
+                Effect.map(() => ({ state: visible(state, where), cursor: snapshot.seq })),
+              );
+            }),
           ),
         );
-      });
+        handlers[`${name}.events`] = stream(rpcs.events, ({ key: id, after, where }) => {
+          const start = after ?? 0;
+          return Stream.unwrap(
+            viewStore.read(id).pipe(
+              Effect.map((snapshot) =>
+                withCaughtUp(
+                  start,
+                  snapshot.seq,
+                  snapshot.state === null
+                    ? null
+                    : internals.kernel.decodeViewState(entry, snapshot.state),
+                  host.events(refOf(id), { after: start }),
+                  (event) => event.envelope.seq,
+                  {
+                    judge: check("events", refOf(id)),
+                    stateOf: (event) => event.state,
+                    keeps: (event) => matches(where as Filter<unknown> | undefined, event.event),
+                  },
+                ),
+              ),
+            ),
+          );
+        });
+        handlers[`${name}.snapshot`] = effect(rpcs.snapshot!, ({ key: id, atLeast, where }) =>
+          judgedSnapshot(id, "get", atLeast).pipe(
+            Effect.map(({ state, cursor }) => ({ state: visible(state, where), cursor })),
+          ),
+        );
+        handlers[`${name}.list`] = effect(
+          rpcs.list!,
+          ({ key: id, atLeast, where, order, take, after }) =>
+            judgedSnapshot(id, "list", atLeast).pipe(
+              Effect.andThen(
+                host.list(refOf(id), {
+                  where: where as Filter<unknown> | undefined,
+                  order,
+                  take,
+                  after,
+                }),
+              ),
+            ),
+        );
+      }
     }
     return handlers;
   });
@@ -842,18 +986,13 @@ const liveReads = (
     {
       readonly rpc: Rpc.AnyWithProps;
       readonly mode: "watch" | "events";
-      readonly store?: AggregateStore | ViewStore | StreamStore;
+      readonly store?: ViewStore | StreamStore;
     }
   >();
   for (const entry of entries) {
-    if (entry.kind === "Command") continue;
+    if (entry.kind === "Command" || entry.kind === "Query") continue;
     const name = nameOf(entry);
-    const store =
-      entry.kind === "View"
-        ? internals.views.get(name)
-        : entry.kind === "Stream"
-          ? internals.streams.get(name)
-          : internals.aggregates.get(name);
+    const store = entry.kind === "View" ? internals.views.get(name) : internals.streams.get(name);
     const rpcs = readRpcs(entry);
     reads.set(`${name}.watch`, { rpc: rpcs.watch as Rpc.AnyWithProps, mode: "watch", store });
     reads.set(`${name}.events`, { rpc: rpcs.events as Rpc.AnyWithProps, mode: "events", store });
@@ -899,8 +1038,15 @@ const liveReads = (
     };
     const judged = yield* authorized.pipe(
       Effect.map((context): Subscription => ({ ...subscription, context })),
-      Effect.catch((error) =>
-        Watch.refuse(read.rpc, error).pipe(
+      // A refusal, or a defect (already logged and redacted by the middleware), ends the read.
+      Effect.catchCause((cause) =>
+        Watch.refuse(
+          read.rpc,
+          Option.match(Cause.findErrorOption(cause), {
+            onSome: (error) => Exit.fail(error),
+            onNone: () => Exit.die(internalError()),
+          }),
+        ).pipe(
           Effect.orDie,
           Effect.map((refused): Subscription => ({ ...subscription, refused })),
         ),
@@ -934,17 +1080,55 @@ const liveReads = (
 
 type Flat = Record<string, (payload: unknown, options?: CallOptions) => unknown>;
 
-/** Shape the flat Effect RPC client into commands plus view and aggregate namespaces. */
-const nest = (entries: ReadonlyArray<Servable>, flat: Flat): unknown => {
+/** Shape the flat Effect RPC client into commands and queries, plus view and stream namespaces. */
+const nest = (
+  entries: ReadonlyArray<Servable>,
+  flat: Flat,
+  defaultConsistency: Command.Consistency,
+): unknown => {
   const client: Record<string, unknown> = {};
   for (const entry of entries) {
     if (entry.kind === "Command") {
       const send = flat[entry.tag]!;
       client[entry.tag] = (
-        target: unknown,
         input: object = {},
-        { commandId, ...options }: CommandOptions = {},
-      ) => send({ target, commandId, input }, options);
+        { commandId, consistency = defaultConsistency, ...options }: CommandOptions = {},
+      ) => send({ commandId, input, consistency }, options);
+      continue;
+    }
+    if (entry.kind === "Query") {
+      const name = entry.queryName;
+      const ask = (input: unknown, options: QueryOptions = {}) => {
+        const { headers, ...rest } = options;
+        return flat[name]!({ input, ...rest }, { headers }) as Effect.Effect<unknown, unknown>;
+      };
+      if (!entry.definition.paged) {
+        client[name] = ask;
+        continue;
+      }
+      const pages = (input: unknown, { after, atLeast, ...options }: QueryOptions = {}) =>
+        Stream.unfold({ after, atLeast, done: false }, (state) =>
+          state.done
+            ? Effect.succeed(undefined)
+            : Effect.map(
+                ask(input, { ...options, after: state.after, atLeast: state.atLeast }),
+                (result) => {
+                  const page = result as Query.Page<unknown>;
+                  // The first page already waited for `atLeast`; later pages read the same store.
+                  const next = {
+                    after: page.cursor ?? undefined,
+                    atLeast: undefined,
+                    done: page.cursor === null,
+                  };
+                  return [page, next] as const;
+                },
+              ),
+        );
+      client[name] = Object.assign(ask, {
+        pages,
+        entries: (input: unknown, options?: QueryOptions) =>
+          Stream.flatMap(pages(input, options), (page) => Stream.fromIterable(page.entries)),
+      });
       continue;
     }
     const name = nameOf(entry);
@@ -963,9 +1147,7 @@ const nest = (entries: ReadonlyArray<Servable>, flat: Flat): unknown => {
             list: call("list"),
             snapshot: call("snapshot"),
           }
-        : entry.kind === "Stream"
-          ? { peek: call("peek"), watch: call("watch"), events: call("events"), list: call("list") }
-          : { get: call("get"), watch: call("watch"), events: call("events") };
+        : { peek: call("peek"), watch: call("watch"), events: call("events"), list: call("list") };
   }
   return client;
 };
@@ -1018,11 +1200,13 @@ const makeProtocolInProcess = (
       });
       const handlers = yield* handlersOf(model, entries, unresolved);
       // The middleware services in the caller's scope run for every request.
+      const middleware = redactMiddleware(group, yield* captureContext());
       yield* RpcServer.make(group).pipe(
         Effect.provide(
           Layer.mergeAll(
             Layer.succeed(RpcServer.Protocol, server),
             group.toLayer(handlers as never) as Layer.Layer<never>,
+            Layer.succeedContext(middleware),
           ),
         ),
         Effect.forkScoped,
@@ -1053,10 +1237,13 @@ const build = (
   entries: ReadonlyArray<Servable>,
   unresolved: ReadonlyArray<Unservable>,
   group: RpcGroup.RpcGroup<Rpc.Any>,
+  annotations: Annotations,
 ): unknown => {
-  const client = RpcClient.make(group).pipe(
-    Effect.map((flat) => nest(entries, flat as unknown as Flat)),
-  );
+  const client = Effect.gen(function* () {
+    // Read once, here: the consistency of every command sent without one.
+    const consistency = yield* Command.DefaultConsistency;
+    return nest(entries, (yield* RpcClient.make(group)) as unknown as Flat, consistency);
+  });
   const Client = Context.Service<ClientKey<string>, unknown>()(`alchemy/Domain/Api/${name}/Client`);
   const commands = entries.filter((entry): entry is Command.Any => entry.kind === "Command");
   const rejectionClasses = [...new Set(commands.flatMap((command) => command.rejects))];
@@ -1065,7 +1252,7 @@ const build = (
   const serve = Effect.gen(function* () {
     const handlers = yield* handlersOf(model, entries, unresolved);
     // The middleware services (declared in the Api's requirements), for every request.
-    const middleware = yield* captureContext();
+    const middleware = redactMiddleware(group, yield* captureContext());
     const layer = Layer.mergeAll(
       group.toLayer(handlers as never),
       RpcSerialization.layerNdjson,
@@ -1091,6 +1278,7 @@ const build = (
     Effectable.Prototype({ label: `alchemy/Domain/Api<${name}>`, evaluate: () => serve }),
     {
       kind: "Api" as const,
+      annotations,
       apiName: name,
       model,
       serves: entries,
@@ -1114,8 +1302,7 @@ const build = (
 
 /**
  * The public surface of a domain for one kind of client: the commands it may
- * send, and the views and aggregates (with a `read` contract) it may read.
- * Nothing in an Api needs a handler. The class is an Effect: `yield* MyApi`
+ * send, the views and streams it may read, and the queries it may ask. Nothing in an Api needs a handler. The class is an Effect: `yield* MyApi`
  * gives a Worker its `fetch`. Call it with a typed client over
  * `Domain.protocolHttp`, `Domain.protocolWebSocket` or
  * `Domain.protocolInProcess`, or with `clientHttp`, `clientWebSocket` or
@@ -1134,7 +1321,6 @@ const build = (
  *   model: Bank,
  *   commands: ["DepositMoney", "WithdrawMoney"],
  *   views: ["AccountSummary"],
- *   aggregates: ["Account"],
  * }) {}
  * ```
  *
@@ -1142,7 +1328,7 @@ const build = (
  * **Example:** The Api as a Worker's fetch
  * ```typescript
  * import * as Cloudflare from "@alchemy.run/cloudflare";
- * import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+ * import * as DomainCloudflare from "@alchemy.run/domain/Cloudflare";
  * import * as Effect from "effect/Effect";
  * import * as Layer from "effect/Layer";
  * import { Bank, BankPolicies } from "./Bank.ts";
@@ -1172,11 +1358,25 @@ const build = (
  * **Example:** A typed client
  * ```typescript
  * const bank = yield* CustomerApi.client;
- * const { reply } = yield* bank.DepositMoney(accountId, { amount: 1_000 });
+ * const { reply } = yield* bank.DepositMoney({ accountId, amount: 1_000 });
  * const summary = yield* bank.AccountSummary.get(accountId);
  * yield* bank.AccountSummary.watch(accountId).pipe(
  *   Stream.runForEach(({ state }) => Effect.log(state?.balance)),
  * );
+ * ```
+ *
+ * ### Reading your own writes
+ * A client remembers the commands it sent. Its `get`, `list`, `snapshot`,
+ * `peek` and queries carry their receipts and wait until the view, stream or
+ * projection has applied them. `atLeast` names other writes to wait for, and
+ * `[]` waits for none.
+ *
+ * **Example:** A read right after a command
+ * ```typescript
+ * const bank = yield* CustomerApi.client;
+ * yield* bank.DepositMoney({ accountId, amount: 1_000 });
+ * const summary = yield* bank.AccountSummary.get(accountId); // includes the deposit
+ * const now = yield* bank.AccountSummary.get(accountId, { atLeast: [] });
  * ```
  *
  * ### Calling it in process
@@ -1190,7 +1390,24 @@ const build = (
  *   Effect.provideService(effect, CurrentActor, system("payments-webhook")),
  * );
  * const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));
- * yield* bank.DepositMoney(accountId, { amount: 1_000 });
+ * yield* bank.DepositMoney({ accountId, amount: 1_000 });
+ * ```
+ *
+ * ### Annotating Apis
+ * The last argument is its annotations: data for what is built on the
+ * model, read back as `X.annotations`. Add your own keys by augmenting
+ * `Domain.Annotations`.
+ *
+ * Its `description` heads the CLI's root help and is the OpenAPI document's
+ * `info.description`.
+ *
+ * **Example:** A description
+ * ```typescript
+ * export class CustomerApi extends Domain.Api(
+ *   "CustomerApi",
+ *   { model: Bank, commands: ["DepositMoney"], views: ["AccountSummary"] },
+ *   { description: "The bank, as a customer reaches it." },
+ * ) {}
  * ```
  *
  * @primitive
@@ -1201,11 +1418,12 @@ export const make = <
   const C extends ReadonlyArray<CommandName<M>> = ReadonlyArray<CommandName<M>>,
   const V extends ReadonlyArray<ViewName<M>> = ReadonlyArray<ViewName<M>>,
   const S extends ReadonlyArray<StreamName<M>> = ReadonlyArray<StreamName<M>>,
-  const A extends ReadonlyArray<AggregateName<M>> = ReadonlyArray<AggregateName<M>>,
+  const Q extends ReadonlyArray<QueryName<M>> = ReadonlyArray<QueryName<M>>,
 >(
   name: Name,
-  options: Options<M, C, V, S, A>,
-): ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, A>>> => {
+  options: Options<M, C, V, S, Q>,
+  annotations: Annotations = {},
+): ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, Q>>> => {
   const { model } = options;
   // What the Api lists but cannot serve, as the message it dies with when served.
   const unresolved: Array<Unservable> = [];
@@ -1226,14 +1444,7 @@ export const make = <
     ...pick(model.commands, options.commands, (c) => c.tag),
     ...pick(model.views, options.views, (v) => v.viewName),
     ...pick(model.streams, options.streams, (s) => s.streamName),
-    ...pick(model.aggregates, options.aggregates, (a) => a.aggregateName).filter((aggregate) => {
-      if (aggregate.definition.read !== undefined) return true;
-      // Unlisted, an aggregate without `read` is simply not served; listed, it is a mistake.
-      if (options.aggregates !== undefined) {
-        unresolved.push(new Unreadable({ aggregate: aggregate.aggregateName }));
-      }
-      return false;
-    }),
+    ...pick(model.queries, options.queries, (q) => q.queryName),
   ];
   return build(
     name,
@@ -1241,7 +1452,8 @@ export const make = <
     serves,
     unresolved,
     RpcGroup.make(...serves.flatMap(rpcsOf)) as unknown as RpcGroup.RpcGroup<Rpc.Any>,
-  ) as ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, A>>>;
+    annotations,
+  ) as ApiClass<Name, ReadonlyArray<ServedBy<M, C, V, S, Q>>>;
 };
 
 /**
@@ -1431,10 +1643,11 @@ type RejectionUnion<R> = [R] extends [never]
  */
 export interface Any {
   readonly kind: "Api";
+  readonly annotations: Annotations;
   readonly apiName: string;
   /** The model the Api is over. */
   readonly model: Model.Any;
-  /** The commands, views, streams and aggregates the Api serves. */
+  /** The commands, views, streams and queries the Api serves. */
   readonly serves: ReadonlyArray<Servable>;
   /** The command classes the Api exposes, in order. */
   readonly commands: ReadonlyArray<Command.Any>;
@@ -1446,6 +1659,9 @@ export interface Any {
 
 /** The command classes an Api exposes. */
 export type CommandsOf<A extends Any> = A["commands"][number];
+
+/** The query classes an Api exposes. */
+export type QueriesOf<A extends Any> = Extract<A["serves"][number], Query.Any>;
 
 /** The rejection classes the commands of an Api declare. */
 export type RejectionsOf<A extends Any> = CommandsOf<A>["rejects"][number];

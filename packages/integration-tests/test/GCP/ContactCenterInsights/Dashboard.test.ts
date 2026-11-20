@@ -6,6 +6,7 @@ import * as cci from "@distilled.cloud/gcp/contactcenterinsights_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -61,6 +62,13 @@ test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_CCI_DASHBOARDS)
             description: "call quality",
           });
         }),
+      );
+      yield* expectFound(
+        GCP.ContactCenterInsights.Dashboard.lookup({
+          dashboardId: created.dashboardId,
+          location: created.location,
+        }),
+        created,
       );
 
       expect(created.name).toContain("/dashboards/");

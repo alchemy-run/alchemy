@@ -52,8 +52,18 @@ export interface List extends Resource<
     arn: string;
   },
   never,
-  Providers
+  Providers,
+  ListLookup
 > {}
+
+/**
+ * Props for {@link List.lookup}: find a list this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ListLookup {
+  /** The name of the existing list. */
+  name: string;
+}
 
 /**
  * An Amazon Fraud Detector list — a set of input values for a variable (an
@@ -85,6 +95,16 @@ export interface List extends Resource<
  * //   FraudDetector.UpdateListHttp,
  * //   FraudDetector.GetListElementsHttp,
  * // )))
+ * ```
+ *
+ * ### Looking up an existing list
+ * `List.lookup` references a list Alchemy doesn't manage (created in the
+ * console or by another stack), found by `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing list
+ * ```typescript
+ * const existing = AWS.FraudDetector.List.lookup({ name: "my-list" });
  * ```
  *
  * @resource
@@ -137,6 +157,13 @@ export const ListProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+
+        lookup: Effect.fn(function* ({ name }) {
+          const list = yield* get(name);
+          if (list === undefined) return undefined;
+          const attrs = toAttrs(list);
+          return attrs;
         }),
 
         read: Effect.fn(function* ({ id, olds, output }) {

@@ -16,11 +16,10 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import type { LogLine, LogsInput } from "alchemy/Provider";
 import * as Provider from "alchemy/Provider";
-import { Resource, type ResourceBinding } from "alchemy/Resource";
+import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
-import { packEnvValue, RuntimeContext, unpackEnvValue } from "alchemy/RuntimeContext";
+import { packEnvValue, RuntimeContext, unpackEnvValue, envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
-import { Stage } from "alchemy/Stage";
 import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "alchemy/Tags";
 import { buildEventTelemetry } from "alchemy/Telemetry";
 import { sha256 } from "alchemy/Util/sha256";
@@ -33,7 +32,6 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -103,6 +101,11 @@ class FunctionUpdatePending extends Data.TaggedError("FunctionUpdatePending")<{
     return `Lambda function ${this.functionName} is not ready: state=${this.state ?? "unknown"} (${this.stateReason ?? "no reason"}), update=${this.lastUpdateStatus ?? "unknown"} (${this.lastUpdateStatusReason ?? "no reason"})`;
   }
 }
+
+class FunctionTagsMismatch extends Data.TaggedError("FunctionTagsMismatch")<{
+  functionName: string;
+  message: string;
+}> {}
 
 class FunctionUpdateFailed extends Data.TaggedError("FunctionUpdateFailed")<{
   functionName: string;
@@ -376,8 +379,11 @@ export interface FunctionCommonProps extends PlatformProps {
    * Asynchronous invocation settings (retries, event age, destinations) for
    * the unqualified function. Omit to remove any existing config and fall
    * back to Lambda's defaults (2 retries, 6-hour max event age, no
-   * destinations). Use {@link AliasProps.eventInvokeConfig} to scope the
-   * config to an alias instead.
+   * destinations). The function's role is granted what it needs to send to
+   * each destination (`sqs:SendMessage`, `sns:Publish`,
+   * `lambda:InvokeFunction`, `events:PutEvents`, or `s3:PutObject`). Use
+   * {@link AliasProps.eventInvokeConfig} to scope the config to an alias
+   * instead.
    */
   eventInvokeConfig?: EventInvokeConfig;
   /**
@@ -765,9 +771,38 @@ export interface Function extends Resource<
       /** Local mount path inside the function (must begin with `/mnt/`). */
       localMountPath: string;
     }[];
+    /**
+     * Async invocation settings a binding needs (e.g. a failure destination
+     * for the events it delivers). Merged with the Function's own
+     * `eventInvokeConfig` prop and other bindings' settings; two sources
+     * that set the same field differently fail the deploy, since Lambda
+     * keeps one config per function.
+     */
+    eventInvokeConfig?: EventInvokeConfig;
   },
-  Providers
+  Providers,
+  FunctionLookup
 > {}
+
+/**
+ * Props for {@link Function.lookup}: find a function this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface FunctionLookup {
+  /**
+   * The function's name, or its full or partial ARN.
+   */
+  functionName: string;
+}
+
+/** The CloudWatch Logs live-tail stream behind `alchemy logs --tail` broke. */
+export class LambdaLiveTailError extends Data.TaggedError("LambdaLiveTailError")<{
+  cause: Error;
+}> {
+  override get message() {
+    return `Lambda live tail failed: ${this.cause.message}`;
+  }
+}
 
 /**
  * Lambda refused to publish a version or create the alias for a Function
@@ -780,6 +815,71 @@ export class FunctionAliasPublishFailed extends Data.TaggedError("FunctionAliasP
   reason: "CodeStorageExceeded" | "VersionLimitExceeded" | "AliasLimitExceeded";
   message: string;
 }> {}
+
+/**
+ * Two sources (the `eventInvokeConfig` prop and a binding, or two bindings)
+ * set the same async invocation field to different values. Lambda keeps one
+ * config per function, so they can't both apply.
+ */
+export class ConflictingEventInvokeConfig extends Data.TaggedError("ConflictingEventInvokeConfig")<{
+  readonly field: string;
+  readonly message: string;
+}> {}
+
+/**
+ * Merge the `eventInvokeConfig` prop with the settings bindings request.
+ * Each field may be set by any number of sources as long as they agree.
+ */
+const mergeEventInvokeConfig = (
+  prop: EventInvokeConfig | undefined,
+  requested: ReadonlyArray<EventInvokeConfig>,
+) =>
+  Effect.gen(function* () {
+    const sources = [...(prop ? [prop] : []), ...requested];
+    if (sources.length === 0) return undefined;
+    const pick = <A>(
+      field: string,
+      read: (config: EventInvokeConfig) => A | undefined,
+      key: (a: A) => unknown = (a) => a,
+    ) =>
+      Effect.gen(function* () {
+        const values = sources.flatMap((config) => {
+          const value = read(config);
+          return value === undefined ? [] : [value];
+        });
+        const distinct = [...new Set(values.map(key))];
+        if (distinct.length > 1) {
+          return yield* new ConflictingEventInvokeConfig({
+            field,
+            message: `eventInvokeConfig.${field} is set to ${distinct.map(String).join(" and ")} by different sources. Lambda keeps one async invocation config per function; set it in one place.`,
+          });
+        }
+        return values[0];
+      });
+    const onSuccess = yield* pick(
+      "destinationConfig.OnSuccess",
+      (c) => c.destinationConfig?.OnSuccess?.Destination,
+    );
+    const onFailure = yield* pick(
+      "destinationConfig.OnFailure",
+      (c) => c.destinationConfig?.OnFailure?.Destination,
+    );
+    return {
+      maximumRetryAttempts: yield* pick("maximumRetryAttempts", (c) => c.maximumRetryAttempts),
+      maximumEventAge: yield* pick(
+        "maximumEventAge",
+        (c) => c.maximumEventAge,
+        (age) => Duration.toMillis(age),
+      ),
+      destinationConfig:
+        onSuccess || onFailure
+          ? {
+              OnSuccess: onSuccess ? { Destination: onSuccess } : undefined,
+              OnFailure: onFailure ? { Destination: onFailure } : undefined,
+            }
+          : undefined,
+    } satisfies EventInvokeConfig;
+  });
 
 /** An event source was used inside a Lambda Web Function. */
 export class EventSourceRequiresFunction extends Data.TaggedError("EventSourceRequiresFunction")<{
@@ -975,6 +1075,18 @@ export const normalizeFunctionUrl = (
  * FROM public.ecr.aws/lambda/java:21
  * COPY target/function.jar ${LAMBDA_TASK_ROOT}/lib/
  * CMD ["com.example.Handler::handleRequest"]
+ * ```
+ *
+ * #### Cache build layers
+ * Image builds reuse the local BuildKit cache of the machine they run on. Set
+ * `cache: true` to keep every stage's layers at the function repository's
+ * `:buildcache` tag, so a fresh builder (a new CI runner) skips unchanged
+ * steps:
+ *
+ * ```typescript
+ * const func = yield* AWS.Lambda.Function("JavaFunction", {
+ *   image: { context: "./lambda", dockerfile: "Dockerfile", cache: true },
+ * });
  * ```
  *
  * ### Effect Functions
@@ -1367,6 +1479,20 @@ export const normalizeFunctionUrl = (
  * );
  * ```
  *
+ * ### Looking up an existing function
+ * `Function.lookup` references a function Alchemy doesn't manage (deployed
+ * by another tool or stack), found by `functionName`. It is read during
+ * plan/deploy and never created, updated or deleted, and binds like a
+ * declared function.
+ *
+ * **Example:** Invoke an existing function
+ * ```typescript
+ * const resize = AWS.Lambda.Function.lookup({ functionName: "image-resize" });
+ *
+ * // init
+ * const invoke = yield* AWS.Lambda.InvokeFunction(resize);
+ * ```
+ *
  * @resource
  */
 export const Function: Platform<
@@ -1376,7 +1502,8 @@ export const Function: Platform<
   FunctionContext,
   {},
   FunctionZipProps
-> = Platform(FunctionTypeId, {
+> &
+  LookupMethod<Function> = Platform(FunctionTypeId, {
   // The custom-domain front door integrates the Function's own ARN, so it
   // composes AFTER the Function resource is declared.
   onCreate: (resource, props) =>
@@ -1402,7 +1529,7 @@ export const Function: Platform<
         // Key is already canonical (see RuntimeContext.sanitizeKey). Read
         // straight from `process.env` — see `unpackEnvValue` for why this
         // must never resolve through `Config.String`.
-        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- must read the raw env, Config would unwrap packed values and recurse (see unpackEnvValue)
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- must read the raw env, Config would unwrap packed values (see unpackEnvValue)
         Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
         ctx.listen(
@@ -1468,10 +1595,10 @@ export const Function: Platform<
                       Layer.effectContext(
                         buildEventTelemetry(services, scope, (ctx as FunctionContext).telemetry),
                       ),
-                    ).pipe(Layer.provideMerge(Layer.succeedContext(services))),
+                    ),
                   ),
                   Effect.tap(Effect.logDebug),
-                  Effect.runPromiseExit,
+                  Effect.runPromiseExitWith(services),
                 );
                 if (!isScopeEjected(scope)) {
                   // The HttpMiddleware tracer ends the request's root span
@@ -1484,7 +1611,7 @@ export const Function: Platform<
                       log: "Warn",
                       message: "Lambda invocation scope close failed",
                     }),
-                    Effect.runPromise,
+                    Effect.runPromiseWith(services),
                   );
                 }
                 if (deadline.fired) {
@@ -1512,6 +1639,32 @@ export const Function: Platform<
     return ctx;
   },
 });
+
+/**
+ * What the function's role needs to deliver async invocation records to a
+ * destination: Lambda sends them as the role, so without these a configured
+ * `OnFailure` queue silently receives nothing.
+ */
+const destinationStatements = (arn: string): IAM.PolicyStatement[] => {
+  const service = arn.split(":")[2];
+  switch (service) {
+    case "sqs":
+      return [{ Effect: "Allow", Action: ["sqs:SendMessage"], Resource: [arn] }];
+    case "sns":
+      return [{ Effect: "Allow", Action: ["sns:Publish"], Resource: [arn] }];
+    case "lambda":
+      return [{ Effect: "Allow", Action: ["lambda:InvokeFunction"], Resource: [arn] }];
+    case "events":
+      return [{ Effect: "Allow", Action: ["events:PutEvents"], Resource: [arn] }];
+    case "s3":
+      return [
+        { Effect: "Allow", Action: ["s3:ListBucket"], Resource: [arn] },
+        { Effect: "Allow", Action: ["s3:PutObject"], Resource: [`${arn}/*`] },
+      ];
+    default:
+      return [];
+  }
+};
 
 export const FunctionProvider = () =>
   Provider.effect(
@@ -1561,12 +1714,15 @@ export const FunctionProvider = () =>
         // functionArn,
         // functionName,
         bindings,
+        destinations,
       }: {
         roleName: string;
         policyName: string;
         functionArn: string;
         functionName: string;
         bindings: ResourceBinding<Function["Binding"]>[];
+        /** Async invocation destinations, which Lambda sends to as the function's role. */
+        destinations: ReadonlyArray<string>;
       }) {
         const activeBindings = bindings.filter(
           (binding: ResourceBinding<Function["Binding"]> & { action?: string }) =>
@@ -1581,6 +1737,11 @@ export const FunctionProvider = () =>
               ...stmt,
               Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
             })) ?? [],
+        );
+        policyStatements.push(
+          ...destinations
+            .flatMap(destinationStatements)
+            .map((stmt) => ({ ...stmt, Sid: undefined })),
         );
         // VPC attachments requested through the binding channel (DECISION
         // #5) — set-union across bindings; merged with the `vpc` prop in
@@ -1939,6 +2100,18 @@ export const FunctionProvider = () =>
             Effect.map((policy) => JSON.parse(decodeURIComponent(policy.PolicyDocument))),
             Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           );
+        const readAttachedManagedPolicies = iam
+          .listAttachedRolePolicies({ RoleName: roleName })
+          .pipe(
+            Effect.map((result) =>
+              (result.AttachedPolicies ?? []).flatMap((policy) =>
+                policy.PolicyArn && managedExecutionPolicyArns.has(policy.PolicyArn)
+                  ? [policy.PolicyArn]
+                  : [],
+              ),
+            ),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed([] as string[])),
+          );
         const [urlConfig, logRetentionInDays, attached, bindingPolicy, guardPolicy, invokeConfig] =
           yield* Effect.all(
             [
@@ -1955,16 +2128,7 @@ export const FunctionProvider = () =>
                           )?.retentionInDays,
                       ),
                     ),
-              iam.listAttachedRolePolicies({ RoleName: roleName }).pipe(
-                Effect.map((result) =>
-                  (result.AttachedPolicies ?? []).flatMap((policy) =>
-                    policy.PolicyArn && managedExecutionPolicyArns.has(policy.PolicyArn)
-                      ? [policy.PolicyArn]
-                      : [],
-                  ),
-                ),
-                Effect.catchTag("NoSuchEntityException", () => Effect.succeed([] as string[])),
-              ),
+              readAttachedManagedPolicies,
               readInlinePolicy(policyName),
               readInlinePolicy(logGroupGuardPolicyName),
               observeEventInvokeConfig(functionName, qualifier),
@@ -2171,29 +2335,7 @@ export const FunctionProvider = () =>
         } satisfies PreparedFunctionCode;
       });
 
-      const createOrUpdateFunction: (input: {
-        id: string;
-        news: FunctionProps;
-        roleArn: string;
-        code: FunctionDeploymentCode;
-        env: Record<string, string> | undefined;
-        functionName: string;
-        preferUpdate?: boolean;
-        // Resolved EFS mounts. `undefined` leaves the function's existing
-        // config untouched (precreate stub); `[]` explicitly clears mounts.
-        fileSystemConfigs?: Lambda.FileSystemConfig[];
-        // Effective VPC attachment (prop ∪ binding-channel requests).
-        // Omitted for the precreate stub: `news` is UNRESOLVED at precreate
-        // (Output-valued subnet/security-group ids would fail to serialize),
-        // and the stub doesn't need connectivity — `reconcile` attaches the
-        // resolved VPC config afterwards.
-        vpc?: FunctionProps["vpc"];
-        session: { note: (note: string) => Effect.Effect<void> };
-      }) => Effect.Effect<
-        void,
-        any,
-        Credentials | Region | HttpClient | Stack | Stage | AWSEnvironment
-      > = Effect.fn(function* ({
+      const createOrUpdateFunction = Effect.fn(function* ({
         id,
         news,
         roleArn,
@@ -2212,7 +2354,14 @@ export const FunctionProvider = () =>
         env: Record<string, string> | undefined;
         functionName: string;
         preferUpdate?: boolean;
+        // Resolved EFS mounts. `undefined` leaves the function's existing
+        // config untouched (precreate stub); `[]` explicitly clears mounts.
         fileSystemConfigs?: Lambda.FileSystemConfig[];
+        // Effective VPC attachment (prop ∪ binding-channel requests).
+        // Omitted for the precreate stub: `news` is UNRESOLVED at precreate
+        // (Output-valued subnet/security-group ids would fail to serialize),
+        // and the stub doesn't need connectivity — `reconcile` attaches the
+        // resolved VPC config afterwards.
         vpc?: FunctionProps["vpc"];
         session: { note: (note: string) => Effect.Effect<void> };
       }) {
@@ -2384,7 +2533,7 @@ export const FunctionProvider = () =>
               yield* Lambda.tagResource({ Resource: configured.FunctionArn, Tags: tags });
             }
           }
-        }) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
+        });
 
         const getAndUpdate = Lambda.getFunction({
           FunctionName: functionName,
@@ -2406,11 +2555,13 @@ export const FunctionProvider = () =>
           Effect.filterOrFail(
             (owned) => owned,
             () =>
-              // TODO(sam): add custom
-              new Error("Function tags do not match expected values"),
+              new FunctionTagsMismatch({
+                functionName,
+                message: "Function tags do not match expected values",
+              }),
           ),
           Effect.andThen(update),
-        ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
+        );
 
         const create = Lambda.createFunction(createFunctionRequest).pipe(
           Effect.tapError((e) => Effect.logDebug(e)),
@@ -2421,7 +2572,7 @@ export const FunctionProvider = () =>
           Effect.catchTags({
             ResourceConflictException: () => getAndUpdate,
           }),
-        ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
+        );
 
         if (preferUpdate) {
           // The engine has admitted this function (`read`/`observe`, or
@@ -2443,18 +2594,16 @@ export const FunctionProvider = () =>
         functionName: string,
         qualifier: string | undefined,
       ) {
+        const removePermission = (StatementId: string) =>
+          Lambda.removePermission({
+            FunctionName: functionName,
+            Qualifier: qualifier,
+            StatementId,
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
         yield* Effect.all(
           [
-            Lambda.removePermission({
-              FunctionName: functionName,
-              Qualifier: qualifier,
-              StatementId: publicUrlAccessStatementId,
-            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
-            Lambda.removePermission({
-              FunctionName: functionName,
-              Qualifier: qualifier,
-              StatementId: publicUrlInvokeStatementId,
-            }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void)),
+            removePermission(publicUrlAccessStatementId),
+            removePermission(publicUrlInvokeStatementId),
           ],
           { concurrency: "unbounded" },
         );
@@ -2507,14 +2656,15 @@ export const FunctionProvider = () =>
         qualifier: string | undefined,
       ) {
         yield* Effect.logDebug(`deleting function url config ${functionName}`);
+        const deleteUrlConfig = Lambda.deleteFunctionUrlConfig({
+          FunctionName: functionName,
+          Qualifier: qualifier,
+        }).pipe(
+          retryFunctionMutation,
+          Effect.catchTag("ResourceNotFoundException", () => Effect.void),
+        );
         yield* Effect.all([
-          Lambda.deleteFunctionUrlConfig({
-            FunctionName: functionName,
-            Qualifier: qualifier,
-          }).pipe(
-            retryFunctionMutation,
-            Effect.catchTag("ResourceNotFoundException", () => Effect.void),
-          ),
+          deleteUrlConfig,
           removePublicFunctionUrlPermissions(functionName, qualifier),
         ]);
         yield* Effect.logDebug(`deleted function url config ${functionName}`);
@@ -2906,6 +3056,29 @@ export const FunctionProvider = () =>
           } satisfies Function["Attributes"];
           return (yield* hasAlchemyTags(id, tagsResult)) ? attrs : Unowned(attrs);
         }),
+        lookup: Effect.fn(function* ({ functionName }) {
+          const result = yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+          );
+          const fn = result?.Configuration;
+          if (!fn?.FunctionArn || !fn.FunctionName || !fn.Role) return undefined;
+          const functionUrl = yield* readFunctionUrlConfig(fn.FunctionName, undefined).pipe(
+            Effect.map((config) => config?.FunctionUrl),
+          );
+          return {
+            functionArn: fn.FunctionArn,
+            functionName: fn.FunctionName,
+            qualifiedArn: fn.FunctionArn,
+            functionUrl,
+            roleArn: fn.Role,
+            roleName: fn.Role.split("/").pop()!,
+            code: { hash: fn.CodeSha256 ?? "" },
+            ...(fn.MemorySize === undefined ? {} : { memorySize: fn.MemorySize }),
+            ...(fn.Timeout === undefined ? {} : { timeoutSeconds: fn.Timeout }),
+            ...(fn.Runtime === undefined ? {} : { runtime: fn.Runtime }),
+            ...(fn.Handler === undefined ? {} : { handler: fn.Handler }),
+          } satisfies Function["Attributes"];
+        }),
         // Account/region collection: exhaustively paginate `listFunctions`
         // (its `Functions` items are `FunctionConfiguration`s, the same shape
         // `read` pulls from `getFunction().Configuration`), then hydrate each
@@ -3077,6 +3250,16 @@ export const FunctionProvider = () =>
           yield* syncLogGroupGuard({ roleName, functionName });
           yield* ensureLogGroup({ id, functionName, retention: news.logging?.retention });
 
+          // The prop and every binding's request converge on one config.
+          const invokeConfig = yield* mergeEventInvokeConfig(
+            news.eventInvokeConfig,
+            bindings.flatMap(
+              (binding: ResourceBinding<Function["Binding"]> & { action?: string }) =>
+                binding.action !== "delete" && binding.data?.eventInvokeConfig
+                  ? [binding.data.eventInvokeConfig]
+                  : [],
+            ),
+          );
           const {
             env,
             vpc: bindingVpc,
@@ -3087,6 +3270,10 @@ export const FunctionProvider = () =>
             functionArn,
             functionName,
             bindings,
+            destinations: [
+              invokeConfig?.destinationConfig?.OnSuccess?.Destination,
+              invokeConfig?.destinationConfig?.OnFailure?.Destination,
+            ].filter((arn): arn is string => typeof arn === "string"),
           });
 
           // Both VPC paths (the `vpc` prop and binding-channel requests)
@@ -3173,10 +3360,10 @@ export const FunctionProvider = () =>
             news,
             roleArn,
             code: prepared.deployment,
-            env: {
+            env: envStrings({
               ...env,
               ...news.env,
-            },
+            }),
             functionName,
             // On update an omitted VpcConfig means "leave as-is"; detach
             // explicitly so a VPC attached out-of-band is removed.
@@ -3246,7 +3433,7 @@ export const FunctionProvider = () =>
           yield* syncEventInvokeConfig({
             functionName,
             qualifier: news.alias,
-            config: news.eventInvokeConfig,
+            config: invokeConfig,
           });
           if (news.alias) {
             // The config moved to the alias; `$LATEST` falls back to defaults.
@@ -3409,6 +3596,7 @@ export const FunctionProvider = () =>
                 }
                 return Stream.empty;
               }),
+              Stream.mapError((cause) => new LambdaLiveTailError({ cause })),
             );
           });
 

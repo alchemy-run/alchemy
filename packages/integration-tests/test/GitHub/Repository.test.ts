@@ -7,6 +7,7 @@ import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { expectFound } from "./lookup.ts";
 import { gh } from "./scope.ts";
 
 const { test } = Test.make({ providers: GitHub.providers() });
@@ -66,6 +67,10 @@ test.provider.skipIf(!owner || !canDeleteRepos)(
             topics: ["alchemy", "test"],
           }).pipe(destroy());
         }),
+      );
+      yield* expectFound(
+        GitHub.Repository.lookup({ owner, name: created.fullName.split("/")[1]! }),
+        created,
       );
 
       expect(created.repoId).toBeGreaterThan(0);

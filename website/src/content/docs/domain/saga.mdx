@@ -5,7 +5,7 @@ description: A process that spans several aggregates and takes time, run step by
 
 import DAG from "../../../components/DAG.astro";
 
-A saga runs a process that spans several aggregates. An aggregate changes one instance at a time, and no transaction spans two, so a process that touches several runs as a series of steps, each committed on its own. When a step fails after earlier ones succeeded, the saga undoes them with compensations.
+A saga runs a process that spans several aggregates and takes time. It runs as a series of steps, each committed on its own. When a step fails after earlier ones succeeded, the saga undoes them with compensations.
 
 A saga is an [Effect workflow](https://effect.website/docs/workflow). Each step's result is stored, so a run that's interrupted resumes after its last finished step, and a run can wait hours or days for a signal or a timer. A policy usually decides when to start one.
 
@@ -30,11 +30,11 @@ In the example bank, a transfer is a saga: it debits one account, credits anothe
   caption="A policy decides when the transfer runs; the saga carries it out, one step at a time."
 />
 
-This chapter starts with why a process across aggregates can't be one transaction, and what to do instead. Then it builds the transfer saga step by step.
+## A process is steps, not one decision
 
-## No transaction spans two aggregates
+A rule that can be answered at once, over instances in the same model, is a [decision](/domain/decision): it records on all of them or on none.
 
-Moving money between two accounts touches two aggregates, and each is its own consistency boundary. There's no step in which both change together. So a transfer can't be "debit and credit, or neither", the way a database transaction would make it.
+The example bank's transfer isn't one. It may wait a day for an approval, and it asks a fraud check along the way, so it can't be decided in one step.
 
 Instead, it's a sequence of steps, each committed on its own: debit the source, then credit the destination. In between, the money is in flight. It has left one account and not yet reached the other, and anyone reading both balances at that moment sees it. That's not a bug to hide; it's how money moves in real banks too, and the `Transfer` aggregate records that the transfer is pending so screens can show it.
 
@@ -57,11 +57,13 @@ When a later step fails, the earlier ones have already happened. Their events ar
 
 These undo steps are called **compensations**. Each step that can be undone declares its compensation next to it, and a saga that fails runs them in reverse order. A compensation must not be refused, or the process would be stuck halfway, so the command it sends records a fact in every state. See [Never refuse a compensation](/domain/aggregate#never-refuse-a-compensation).
 
-## Saga or policy?
+## Saga, policy or decision?
 
 A [policy](/domain/policy) is one reaction: an event arrives, the policy acts, and it's done. A saga is a process with memory. It knows which step it's on, waits between steps, and knows what to undo if something fails.
 
-Reach for a saga when a process has more than one step, waits for something, a decision or a timer, or has to undo earlier steps on failure. A policy usually starts the saga, on the event that records the request.
+A [decision](/domain/decision) is neither: it's one command, decided once across several instances, with nothing in between to undo.
+
+Reach for a saga when a process has more than one step, waits for something, an approval or a timer, or has to undo earlier steps on failure. A policy usually starts the saga, on the event that records the request.
 
 ## Declare a saga
 
@@ -81,6 +83,28 @@ export class ExecuteTransfer extends Domain.Saga("ExecuteTransfer", {
 }) {}
 ```
 
+## Describe it
+
+A saga's last argument is its [annotations](/domain/annotations). Its `description` is for the people and the tools that read the model, as `ExecuteTransfer.annotations`.
+
+```typescript title="packages/domain/src/Transfer/ExecuteTransfer.saga.ts"
+export class ExecuteTransfer extends Domain.Saga(
+  "ExecuteTransfer",
+  {
+    key: TransferId,
+    input: {
+      from: AccountId,
+      to: AccountId,
+      amount: Cents,
+      requestedBy: Actor,
+      needsApproval: Schema.Boolean,
+    },
+    rejects: [NotOpen, NotOwner, Frozen, InsufficientFunds, DestinationClosed],
+  },
+  { description: "Debits one account, credits another, and refunds the debit if the credit fails." },
+) {}
+```
+
 ## Run its steps
 
 Its Layer resolves the clients its steps use, then returns what each run does. Each step is an `Activity`: a named Effect whose result is stored. When the run replays, a finished step returns its stored result instead of running again.
@@ -90,7 +114,7 @@ yield* Activity.make({
   name: "credit",
   error: DestinationClosed,
   execute: accounts
-    .send(to, new CreditTransfer({ transferId: key, amount }))
+    .send(new CreditTransfer({ accountId: to, transferId: key, amount }))
     .pipe(Effect.catchTag("NotOpen", () => Effect.fail(new DestinationClosed()))),
 });
 ```
@@ -107,12 +131,12 @@ A step can carry a compensation: what to do if the run fails after the step succ
 yield* Activity.make({
   name: "debit",
   error: Schema.Union([NotOpen, NotOwner, Frozen, InsufficientFunds]),
-  execute: accounts.send(from, new DebitTransfer({ transferId: key, amount, requestedBy })),
+  execute: accounts.send(new DebitTransfer({ accountId: from, transferId: key, amount, requestedBy })),
 }).pipe(
   ExecuteTransfer.withCompensation(() =>
     Activity.make({
       name: "refund",
-      execute: accounts.send(from, new RefundTransfer({ transferId: key, amount })),
+      execute: accounts.send(new RefundTransfer({ accountId: from, transferId: key, amount })),
     }),
   ),
 );
@@ -145,7 +169,7 @@ The Transfer aggregate shows where every transfer stands, so the saga reports ba
 ```typescript title="packages/domain/src/Transfer/ExecuteTransfer.saga.ts"
 yield* Activity.make({
   name: "complete",
-  execute: transfers.send(key, new CompleteTransfer()),
+  execute: transfers.send(new CompleteTransfer({ transferId: key })),
 });
 ```
 
@@ -157,7 +181,7 @@ yield* Workflow.addFinalizer((exit) =>
     ? Effect.void
     : Activity.make({
         name: "record-failure",
-        execute: transfers.send(key, new FailTransfer({ reason: reasonOf(exit.cause) })),
+        execute: transfers.send(new FailTransfer({ transferId: key, reason: reasonOf(exit.cause) })),
       }).pipe(Effect.orDie),
 );
 ```
@@ -207,22 +231,22 @@ sagas: [ExecuteTransfer],
 
 `start` returns as soon as the run is recorded. Its run handle also has `result`, which waits for the run to finish, but a run can take days, and a policy that waits holds up every later event on its key. Use `result` in tests and scripts. Anything that needs to react to how a saga ends should react to the events it reports instead, like `TransferCompleted` or `TransferFailed`.
 
-## Wait for a decision
+## Wait for an approval
 
-A run can wait as long as it needs to. A large transfer waits until the Transfer decides it: an agent approves it, or its approval window closes first. The saga waits on a `DurableDeferred`, and suspends until someone completes it.
+A run can wait as long as it needs to. A large transfer waits until an agent approves it, or its approval window closes first. The saga waits on a `DurableDeferred`, and suspends until someone completes it.
 
 ```typescript title="packages/domain/src/Transfer/ExecuteTransfer.saga.ts"
 if (needsApproval) {
-  // The Transfer decides between approval and expiry; nothing to do if it expired.
-  if ((yield* DurableDeferred.await(Decision)) === "expired") return;
+  // An agent approved it, or the window closed; nothing to do if it expired.
+  if ((yield* DurableDeferred.await(Approval)) === "expired") return;
 }
 ```
 
-The policy passes on the decision with the run's `signal`. `get` returns the run with a key:
+The policy passes on the outcome with the run's `signal`. `get` returns the run with a key:
 
 ```typescript title="packages/domain/src/Transfer/TransferExecution.policy.ts"
 case "TransferApproved":
-  return yield* executions.get(source).signal(Decision, "approved");
+  return yield* executions.get(source).signal(Approval, "approved");
 ```
 
 The Transfer decides the race between approval and expiry, so there's one source of truth for it. See [Deadlines](/domain/deadlines).
@@ -266,11 +290,11 @@ To test a saga on its own, complete what it waits for with `Story.signal`, and m
 
 ```typescript
 Story.saga(ExecuteTransfer, transfer, { _tag: "Running" }),
-Story.signal(ExecuteTransfer, transfer, Decision, "approved"),
+Story.signal(ExecuteTransfer, transfer, Approval, "approved"),
 ```
 
 A step that calls an external system waits until the story answers the call, as a policy does. A run that dies fails the story, unless a step expects it with `Story.saga(ExecuteTransfer, transfer, { _tag: "Died" })`.
 
-A saga runs wherever its model runs: in memory in a story, and on [Cloudflare Durable Objects](/domain/cloudflare) in production, with each run's steps stored durably.
+A saga runs wherever its model runs: in memory in a story, and on [Cloudflare](/domain/cloudflare), [Rivet](/domain/rivet) or [Effect Cluster](/domain/effect-cluster) in production, with each run's steps stored durably.
 
 Next, [External System](/domain/external-system): how the model talks to the world outside it.

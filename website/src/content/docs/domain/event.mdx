@@ -7,7 +7,7 @@ import DAG from "../../../components/DAG.astro";
 
 An event records something that happened: `AccountOpened`, `MoneyDeposited`, `MoneyWithdrawn`. It's named in the past tense because, by the time anyone sees it, it's a fact.
 
-Events are the only thing an aggregate stores as its history. Its state, every view, and every policy's reaction are all derived from them. This chapter covers how to find a business's events, how to declare one, what to put in it, and what happens to it after it's recorded.
+Events are the only thing an aggregate stores as its history. Its state, every view, and every policy's reaction are all derived from them.
 
 ## Events are the business's memory
 
@@ -56,6 +56,18 @@ export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
 ```
 
 Each field is a schema, so events are encoded the same way wherever they're stored or sent. An event that needs no data has no fields: `Domain.Event("AccountClosed")`.
+
+## Describe it
+
+An event's last argument is its [annotations](/domain/annotations). Give it a `description` that says what happened, in the business's words. It is the event Schema's description too.
+
+```typescript title="src/WithdrawMoney.command.ts"
+export class MoneyWithdrawn extends Domain.Event(
+  "MoneyWithdrawn",
+  { amount: Schema.Int, balanceAfter: Schema.Int },
+  { description: "Money left an account. Amounts are in cents." },
+) {}
+```
 
 ## Only decide creates events
 
@@ -148,11 +160,11 @@ A view can record events of its own as it folds, such as one `StatementLine` per
 
 ## Follow an instance's events
 
-A client can read an instance's history directly, then keep receiving new events as they're recorded.
+A client reads an account's history through a view that follows it, then keeps receiving new events as they're recorded. `AccountSummary` declares no events of its own, so it emits every event it applies.
 
 ```typescript title="packages/server/test/followAccount.ts"
 export const followAccount = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
-  yield* bank.Account.events(accountId).pipe(
+  yield* bank.AccountSummary.events(accountId).pipe(
     Stream.filter(Domain.Read.isEvent),
     Stream.runForEach(({ event, envelope }) =>
       Effect.log(`#${envelope.seq} ${event._tag} (command ${envelope.commandId})`),

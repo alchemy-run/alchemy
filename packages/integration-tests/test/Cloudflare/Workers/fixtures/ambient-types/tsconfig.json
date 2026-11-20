@@ -1,0 +1,22 @@
+{
+  // Types a Durable Object the way Cloudflare's recommended setup does: the
+  // workerd globals from `"types"`, no DOM lib. `state.raw` must stay
+  // assignable to helpers written against the ambient `DurableObjectState`
+  // (#3119); a regression hangs the checker rather than failing it.
+  "extends": "../../../../../../../tsconfig.base.json",
+  "include": ["ambient-durable-object-state.ts"],
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "target": "ESNext",
+    "lib": ["ES2023"],
+    "types": ["@cloudflare/workers-types"]
+  },
+  "references": [
+    { "path": "../../../../../../alchemy/tsconfig.json" },
+    { "path": "../../../../../../cloudflare/tsconfig.json" }
+  ]
+}

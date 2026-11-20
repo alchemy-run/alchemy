@@ -68,8 +68,23 @@ export interface Rotation extends Resource<
     startTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  RotationLookup
 > {}
+
+/**
+ * Props for {@link Rotation.lookup}: find a rotation this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export type RotationLookup =
+  | {
+      /** The ARN of the existing rotation. */
+      rotationArn: string;
+    }
+  | {
+      /** The name of the existing rotation. */
+      name: string;
+    };
 
 /**
  * An Incident Manager on-call rotation — a recurring schedule that rotates
@@ -89,6 +104,17 @@ export interface Rotation extends Resource<
  *     DailySettings: [{ HourOfDay: 9, MinuteOfHour: 0 }],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing rotation
+ * `Rotation.lookup` references a rotation Alchemy doesn't manage (created in the
+ * console or by another stack), found by `rotationArn` or `name`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing rotation
+ * ```typescript
+ * const oncall = AWS.SSMContacts.Rotation.lookup({ name: "oncall" });
+ * const rotationArn = oncall.rotationArn;
  * ```
  */
 const RotationResource = Resource<Rotation>("AWS.SSMContacts.Rotation");
@@ -172,6 +198,11 @@ export const RotationProvider = () =>
             ),
           ),
 
+        lookup: Effect.fn(function* (props) {
+          const arn = "rotationArn" in props ? props.rotationArn : yield* rotationArn(props.name);
+          const found = yield* getRotation(arn);
+          return found === undefined ? undefined : buildAttrs(found);
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* createName(id, olds ?? {}));
           const arn = output?.rotationArn ?? (yield* rotationArn(name));

@@ -98,7 +98,9 @@ a worker)? Are names spelled out rather than abbreviated
 (`CertificateTransparencyAlerting`, not `CtAlerting`)? What are the defaults?
 Does it slow the happy path? Are values assumed resolved that could be
 `Output`s? Does it put things in the right namespace? Does it follow the
-library's design rules, or is it really user error? Surface product decisions
+library's design rules, or is it really user error? Does it create a
+long-lived key or shared token where the platform signs an identity it
+could federate instead (see "Federated identity over keys" in AGENTS.md)? Surface product decisions
 (e.g. a change in how resources are named per stage) with their migration cost
 rather than making them silently.
 

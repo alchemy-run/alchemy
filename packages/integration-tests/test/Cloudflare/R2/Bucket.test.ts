@@ -8,8 +8,10 @@ import * as Nuke from "alchemy/Nuke";
 import { findProviderByType } from "alchemy/Provider";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
 import { type ResourceState, State } from "alchemy/State";
+import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
@@ -451,6 +453,75 @@ test.provider(
       // suite reclaims both out of band.
       yield* forceDeleteBucket(accountId, oldName);
       yield* forceDeleteBucket(accountId, newName);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"], timeout: 180_000 },
+);
+
+// `protect()` is the policy for resources whose replacement is itself the
+// damage. Every plan that would replace or delete the bucket — a name change,
+// removing the declaration, `destroy` — must fail before anything reaches
+// R2, until a deploy of its own drops the protection.
+test.provider(
+  "a protected bucket refuses replacement, removal and destroy until unprotected",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const oldName = testName("alchemy-test-protected-old");
+      const newName = testName("alchemy-test-protected-new");
+
+      const declare = (name: string, protect: boolean) =>
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("Protected", { name, forceDestroy: true }).pipe(
+            RemovalPolicy.protect(protect),
+          );
+        });
+
+      // An interrupted run can leave the row protected, and destroy refuses
+      // it by design. Unprotect it first — the state only ever holds the old
+      // name while protected, so this deploy is a noop or an allowed replace.
+      yield* stack.deploy(declare(oldName, false));
+      yield* stack.destroy();
+
+      // ── 1. deploy protected ──
+      const bucket = yield* stack.deploy(declare(oldName, true));
+      expect(bucket.bucketName).toEqual(oldName);
+      yield* getBucketWhenReady(oldName, accountId);
+      expect(yield* removalPolicyOf(stack, "Protected")).toEqual("protect");
+
+      // ── 2. a name change is a replacement: refused, nothing created ──
+      const replace = yield* refusalOf(stack.deploy(declare(newName, true)));
+      expect(replace).toBeInstanceOf(RemovalPolicy.ProtectedResource);
+      expect(replace).toMatchObject({ resources: [{ fqn: "Protected", action: "replace" }] });
+      expect(yield* bucketExists(accountId, newName)).toBe(false);
+      expect((yield* stateOf(stack, "Protected"))?.attr).toMatchObject({ bucketName: oldName });
+
+      // Dropping protect() in the same deploy is still refused: the
+      // persisted policy counts.
+      const sameDeploy = yield* refusalOf(stack.deploy(declare(newName, false)));
+      expect(sameDeploy).toBeInstanceOf(RemovalPolicy.ProtectedResource);
+      expect(yield* bucketExists(accountId, newName)).toBe(false);
+
+      // ── 3. removing the declaration and destroy: refused ──
+      const removed = yield* refusalOf(stack.plan(Effect.void));
+      expect(removed).toMatchObject({ resources: [{ fqn: "Protected", action: "delete" }] });
+      const destroyed = yield* refusalOf(stack.destroy());
+      expect(destroyed).toBeInstanceOf(RemovalPolicy.ProtectedResource);
+      expect(yield* bucketExists(accountId, oldName)).toBe(true);
+
+      // ── 4. unprotect with its own deploy: a noop that re-commits the policy ──
+      const plan = yield* stack.plan(declare(oldName, false));
+      expect((Object.values(plan.resources) as { action: string }[])[0]?.action).toEqual("noop");
+      yield* stack.deploy(declare(oldName, false));
+      expect(yield* removalPolicyOf(stack, "Protected")).toEqual("destroy");
+
+      // ── 5. now the replacement goes through and deletes the old bucket ──
+      const replaced = yield* stack.deploy(declare(newName, false));
+      expect(replaced.bucketName).toEqual(newName);
+      yield* getBucketWhenReady(newName, accountId);
+      yield* waitForBucketToBeDeleted(oldName, accountId);
+
+      yield* stack.destroy();
+      yield* waitForBucketToBeDeleted(newName, accountId);
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"], timeout: 180_000 },
 );
@@ -1507,3 +1578,17 @@ const forceDeleteBucket = Effect.fn(function* (accountId: string, bucketName: st
     .deleteBucket({ accountId, bucketName })
     .pipe(Effect.catchTag("NoSuchBucket", () => Effect.void));
 });
+
+/** The typed failure of `effect`, or `undefined` when it succeeds. */
+const refusalOf = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.exit(effect).pipe(
+    Effect.map((exit) =>
+      Exit.isFailure(exit) ? exit.cause.reasons.find(Cause.isFailReason)?.error : undefined,
+    ),
+  );
+
+const bucketExists = (accountId: string, bucketName: string) =>
+  r2.getBucket({ accountId, bucketName }).pipe(
+    Effect.as(true),
+    Effect.catchTag("NoSuchBucket", () => Effect.succeed(false)),
+  );

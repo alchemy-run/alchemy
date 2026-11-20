@@ -5,6 +5,7 @@ import * as compute from "@distilled.cloud/gcp/compute_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -36,6 +37,10 @@ test.provider.skipIf(!!process.env.FAST)(
             targetTags: ["alchemy-fw"],
           });
         }),
+      );
+      yield* expectFound(
+        GCP.Compute.Firewall.lookup({ firewallName: created.firewallName }),
+        created,
       );
 
       expect(created.firewallName).toEqual(expect.any(String));

@@ -6,6 +6,7 @@ import * as apihub from "@distilled.cloud/gcp/apihub_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectFound } from "../lookup.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -97,6 +98,13 @@ test.provider.skipIf(!runLifecycle)(
           });
           return { api, version, operation };
         }),
+      );
+      yield* expectFound(
+        GCP.ApiHub.ApisVersionsOperation.lookup({
+          apiOperationId: created.operation.apiOperationId,
+          version: created.operation.version,
+        }),
+        created.operation,
       );
 
       expect(created.operation.name).toContain("/operations/");

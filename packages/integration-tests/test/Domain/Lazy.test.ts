@@ -8,8 +8,7 @@ import * as Schema from "effect/Schema";
 
 class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 class Deposit extends Domain.Command("Deposit", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Deposited],
 }) {}
 class Account extends Domain.Aggregate("Account", {
@@ -17,6 +16,7 @@ class Account extends Domain.Aggregate("Account", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit],
+  keyOf: (command) => command.id,
   decide: { Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })] },
   evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }) },
 }) {}
@@ -75,13 +75,13 @@ const platform = () => {
 const deposit = (id: string, amount: number) =>
   Effect.gen(function* () {
     const accounts = yield* Account;
-    yield* accounts.send(Account.ref(id), new Deposit({ amount }));
+    yield* accounts.send(new Deposit({ id: Account.ref(id).id, amount }));
   });
 
 const amounts = (id: string) =>
   Effect.gen(function* () {
     const view = yield* Deposits;
-    return Option.getOrUndefined(yield* view.query(Account.ref(id)))?.amounts;
+    return Option.getOrUndefined(yield* view.get(Account.ref(id)))?.amounts;
   });
 
 const history = [deposit("a-1", 1), deposit("a-1", 2), deposit("a-2", 5)];

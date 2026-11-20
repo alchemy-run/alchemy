@@ -764,6 +764,47 @@ test.provider(
   { tags: ["unit", "local"] },
 );
 
+// #2981: plan diffs a deployed resource twice when a downstream resource
+// resolves its outputs, and the second diff waited forever on the first
+// one's failed `detectDrift`.
+test.provider(
+  "a failing diff of a deployed schema fails the plan instead of hanging",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const ws = yield* stageWorkspace(SQLITE_SCHEMA_SOURCE);
+      const schemas = (schema: string) =>
+        Effect.gen(function* () {
+          const upstream = yield* Drizzle.Schema("upstream", {
+            dialect: "sqlite",
+            schema,
+            out: ws.out,
+          });
+          // Resolving `upstream.out` diffs `upstream` a second time.
+          yield* Drizzle.Schema("downstream", {
+            dialect: "sqlite",
+            schema: ws.schemaPath,
+            out: upstream.out,
+          });
+        });
+      yield* stack.deploy(schemas(ws.schemaPath));
+
+      const invalidPath = path.join(ws.root, "invalid.ts");
+      yield* fs.writeFileString(
+        invalidPath,
+        SQLITE_SCHEMA_SOURCE.replace('name: text("name")', 'name: text("id")'),
+      );
+      const result = yield* Effect.result(stack.deploy(schemas(invalidPath)));
+
+      expect(Result.isFailure(result)).toBe(true);
+      if (Result.isFailure(result)) {
+        expect(String(result.failure)).toContain("found errors in the schema");
+      }
+    }),
+  { tags: ["unit", "local"], timeout: 30_000 },
+);
+
 test.provider(
   "converts postgres snapshots written by earlier Alchemy versions",
   (stack) =>

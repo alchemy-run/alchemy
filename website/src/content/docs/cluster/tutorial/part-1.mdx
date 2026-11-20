@@ -1,0 +1,185 @@
+---
+title: "Part 1: Your First Entity"
+description: Run an Effect Cluster database and runners on Docker, and deploy a chat room entity that tracks who's in it.
+sidebar:
+  order: 1
+---
+
+Build chat rooms in four parts, starting with a room that tracks who's in it. Each room is an entity: later parts let only signed-in users join, add invitations that wait for an answer, then move everything to AWS. This part runs on your machine: no cloud account needed yet.
+
+If Effect Cluster is new to you, read [What is Effect Cluster?](/cluster/what-is-effect-cluster) first. The finished code is in [`examples/effect-cluster-rooms`](https://github.com/alchemy-run/alchemy/tree/main/examples/effect-cluster-rooms).
+
+## Prerequisites
+
+Finish [setup](/cluster/setup), including `docker swarm init`. Install `@alchemy.run/effect-cluster`, `@alchemy.run/docker`, `alchemy` and `effect`.
+
+## Run a database
+
+```diff lang="typescript"
++// src/Cluster.ts
++import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
++
++export const Database = ClusterDocker.Database("Cluster");
+```
+
+The database is a Postgres the runners coordinate through: who owns which rooms, and the messages waiting for them. This one runs on your Docker swarm.
+
+## Add a pool
+
+```diff lang="typescript"
+// src/Cluster.ts
+import * as ClusterDocker from "@alchemy.run/effect-cluster/Docker";
++import * as Layer from "effect/Layer";
+
+export const Database = ClusterDocker.Database("Cluster");
++
++export const Default = ClusterDocker.SwarmPool("Default", { replicas: 2 }).pipe(
++  Layer.provide(Database),
++);
+```
+
+A pool is a group of runners, the processes that run your rooms. `Layer.provide(Database)` tells it which database to join. With two runners, each runs about half the rooms.
+
+## Declare the room
+
+```diff lang="typescript"
++// src/Room.ts
++import * as Cluster from "@alchemy.run/effect-cluster";
++import { Rpc } from "effect/rpc";
++import * as Schema from "effect/Schema";
++
++export class Room extends Cluster.Entity<Room>()("Room", [
++  Rpc.make("Join", { payload: { name: Schema.String }, success: Schema.Int }),
++]) {}
+```
+
+The declaration lists the messages a room accepts, as Effect RPC schemas. `Join` takes a name and returns how many people are in the room.
+
+## Implement it
+
+```diff lang="typescript"
++// src/RoomLive.ts
++import * as Effect from "effect/Effect";
++import { Default } from "./Cluster.ts";
++import { Room } from "./Room.ts";
++
++export default Room.make(
++  { main: import.meta.url },
++  Effect.gen(function* () {
++    return Effect.gen(function* () {
++      return Room.of({
++        Join: () => Effect.succeed(1),
++      });
++    });
++  }).pipe(Effect.provide(Default)),
++);
+```
+
+An entity's code runs in two phases. The outer Effect runs once on each runner; the inner Effect runs once per room, on its first message, and returns its handlers. `Room.of` types them against the declaration. Providing `Default` runs the room on that pool.
+
+## Track who's in the room
+
+```diff lang="typescript"
+// src/RoomLive.ts
+import * as Effect from "effect/Effect";
++import * as Ref from "effect/Ref";
+import { Default } from "./Cluster.ts";
+import { Room } from "./Room.ts";
+
+export default Room.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return Effect.gen(function* () {
++      const members = yield* Ref.make(new Set<string>());
+      return Room.of({
+-        Join: () => Effect.succeed(1),
++        Join: ({ payload }) =>
++          Ref.modify(members, (all) => {
++            const next = new Set(all).add(payload.name);
++            return [next.size, next];
++          }),
+      });
+    });
+  }).pipe(Effect.provide(Default)),
+);
+```
+
+Each room keeps its members in memory. A room handles its messages one at a time, so a plain `Ref` is enough: no two joins ever race.
+
+## Serve an API
+
+```diff lang="typescript"
++// src/Api.ts
++import * as Cluster from "@alchemy.run/effect-cluster";
++import * as Docker from "@alchemy.run/docker";
++import * as Effect from "effect/Effect";
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
++import * as HttpServerResponse from "effect/http/HttpServerResponse";
++import { Database } from "./Cluster.ts";
++import { Room } from "./Room.ts";
++
++export default class Api extends Docker.Service<Api>()(
++  "Api",
++  Effect.gen(function* () {
++    const database = yield* Cluster.Database.Database;
++    return {
++      main: import.meta.url,
++      port: 3000,
++      ports: [{ external: 8080, internal: 3000 }],
++      networks: database.network?.kind === "docker" ? [{ name: database.network.name }] : [],
++    };
++  }).pipe(Effect.provide(Database)),
++  Effect.gen(function* () {
++    const rooms = yield* Room;
++    return {
++      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        const url = new URL(request.url, "http://api");
++        const [, room = "lobby", name = "guest"] = url.pathname.split("/");
++        const target = yield* rooms.getByName(room);
++        return yield* HttpServerResponse.json({ members: yield* target.Join({ name }) });
++      }).pipe(Effect.orDie),
++    };
++  }),
++) {}
+```
+
+The API is a container on the database's network. `yield* Room` gives it the rooms by id; `getByName` names one, and `Join` sends it a message through the pool's gateway.
+
+## Deploy it
+
+```diff lang="typescript"
++// alchemy.run.ts
++import * as Alchemy from "alchemy";
++import * as Cluster from "@alchemy.run/effect-cluster";
++import * as Docker from "@alchemy.run/docker";
++import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
++import Api from "./src/Api.ts";
++import RoomLive from "./src/RoomLive.ts";
++
++export default Alchemy.Stack(
++  "Rooms",
++  { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) },
++  Effect.gen(function* () {
++    const api = yield* Api;
++    return { api: api.name };
++  }).pipe(Effect.provide(RoomLive)),
++);
+```
+
+The Stack deploys the API and provides the room's implementation, which brings the pool and the database with it.
+
+```sh
+alchemy deploy
+curl localhost:8080/lobby/sam
+# {"members":1}
+curl localhost:8080/lobby/ada
+# {"members":2}
+curl localhost:8080/kitchen/sam
+# {"members":1}
+```
+
+The lobby and the kitchen are separate instances, each with its own members.
+
+Next, let only signed-in users join, in [Part 2](/cluster/tutorial/part-2).

@@ -14,6 +14,7 @@ import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Self } from "alchemy/Self";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -130,7 +131,8 @@ type EksAdapterDeps =
   | Region
   | AWSEnvironment
   | FileSystem.FileSystem
-  | Path.Path;
+  | Path.Path
+  | SecureRandom.SecureRandom;
 
 /** Mint an EKS SigV4 bearer token (STS `GetCallerIdentity` presign). */
 const mintEksToken = Effect.fn(function* (clusterName: string, region: string) {
@@ -238,11 +240,10 @@ import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { makeEntrypointLayer, RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
 import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -306,12 +307,7 @@ const program = tag.pipe(
       Layer.provideMerge(Region.fromEnv()),
       Layer.provideMerge(BunHttpServer()),
       Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
+      Layer.provideMerge(RuntimeConfigProviderLive),
     )
   ),
   Effect.scoped
@@ -337,11 +333,10 @@ export const makeEksJobBootstrap =
 import { BunServices } from "@effect/platform-bun";
 import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
-import { makeEntrypointLayer, reifyBoundConfigProvider } from "alchemy/Runtime";
+import { makeEntrypointLayer, RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { provideProcessTelemetry } from "alchemy/Telemetry";
 import * as Context from "effect/Context";
 import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Credentials from "@distilled.cloud/aws/Credentials";
 import * as Effect from "effect/Effect";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -397,12 +392,7 @@ const program = tag.pipe(
       Layer.provideMerge(Credentials.fromChain()),
       Layer.provideMerge(Region.fromEnv()),
       Layer.provideMerge(platform),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env)
-        )
-      ),
+      Layer.provideMerge(RuntimeConfigProviderLive),
     )
   ),
   Effect.scoped

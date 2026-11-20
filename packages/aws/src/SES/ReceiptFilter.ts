@@ -47,8 +47,18 @@ export interface ReceiptFilter extends Resource<
     filterName: string;
   },
   never,
-  Providers
+  Providers,
+  ReceiptFilterLookup
 > {}
+
+/**
+ * Props for {@link ReceiptFilter.lookup}: find a receipt filter this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ReceiptFilterLookup {
+  /** The filter name of the existing receipt filter. */
+  filterName: string;
+}
 
 /**
  * An Amazon SES receipt IP address filter — an account-level allow/block rule
@@ -72,6 +82,16 @@ export interface ReceiptFilter extends Resource<
  * const filter = yield* SES.ReceiptFilter("AllowPartner", {
  *   ipFilter: { policy: "Allow", cidr: "192.0.2.10" },
  * });
+ * ```
+ *
+ * ### Looking up an existing receipt filter
+ * `ReceiptFilter.lookup` references a receipt filter Alchemy doesn't manage (created in the
+ * console or by another stack), found by `filterName`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing receipt filter
+ * ```typescript
+ * const existing = AWS.SES.ReceiptFilter.lookup({ filterName: "my-receipt-filter" });
  * ```
  *
  * @resource
@@ -111,6 +131,11 @@ export const ReceiptFilterProvider = () =>
                 ),
               ),
             ),
+
+        lookup: Effect.fn(function* ({ filterName: name }) {
+          const found = yield* findFilter(name);
+          return found ? { filterName: name } : undefined;
+        }),
 
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.filterName ?? (yield* createName(id, olds));

@@ -2,6 +2,7 @@
 title: Migrations
 description: Apply SQL migrations and seed data to Neon projects and branches as part of every deploy — ordered, hashed, and tracked in Alchemy's __alchemy_migrations table.
 ---
+import BranchGraph from "../../../../components/diagrams/BranchGraph.astro";
 
 Both `Neon.Project` and `Neon.Branch` accept a `migrations` prop — a
 folder of `.sql` files (or a [`Drizzle.Schema`](/sql/drizzle/migrations)
@@ -26,6 +27,20 @@ const featureBranch = yield* Neon.Branch("feature", {
   migrations: "./migrations",
 });
 ```
+
+<BranchGraph
+  end={10}
+  branches={[
+    { id: "main", label: "main", type: "production", tone: "accent" },
+    { id: "pr", label: "pr-42", type: "preview", from: { branch: "main", at: 4 }, until: 9 },
+  ]}
+  points={[
+    { branch: "main", at: 1, label: "0001_init" },
+    { branch: "main", at: 2.6, label: "0002_orders" },
+    { branch: "pr", at: 6, label: "0003_refunds" },
+  ]}
+  caption="pr-42 forks after 0002, so it already has both migrations and their rows in the tracking table. Its deploy applies only 0003, and main never sees it until the file merges."
+/>
 
 ## Ordering and hashing
 

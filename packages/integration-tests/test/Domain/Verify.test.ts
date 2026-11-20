@@ -12,8 +12,7 @@ import * as SchemaGetter from "effect/SchemaGetter";
 
 class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 class Deposit extends Domain.Command("Deposit", {
-  target: Schema.String,
-  input: { amount: Schema.Number },
+  input: { id: Schema.String, amount: Schema.Number },
   events: [Deposited],
 }) {}
 class Wallet extends Domain.Aggregate("Wallet", {
@@ -21,14 +20,14 @@ class Wallet extends Domain.Aggregate("Wallet", {
   state: Schema.Struct({ balance: Schema.Number }),
   initial: { balance: 0 },
   commands: [Deposit],
+  keyOf: (command) => command.id,
   decide: { Deposit: (_, cmd) => [new Deposited({ amount: cmd.amount })] },
   evolve: { Deposited: (s, e) => ({ balance: s.balance + e.amount }) },
 }) {}
 
 class Sent extends Domain.Event("Sent", { to: Schema.String, amount: Schema.Number }) {}
 class Send extends Domain.Command("Send", {
-  target: Schema.String,
-  input: { to: Schema.String, amount: Schema.Number },
+  input: { id: Schema.String, to: Schema.String, amount: Schema.Number },
   events: [Sent],
 }) {}
 class Payment extends Domain.Aggregate("Payment", {
@@ -36,6 +35,7 @@ class Payment extends Domain.Aggregate("Payment", {
   state: Schema.Struct({}),
   initial: {},
   commands: [Send],
+  keyOf: (command) => command.id,
   decide: { Send: (_, { to, amount }) => [new Sent({ to, amount })] },
   evolve: { Sent: (s) => s },
 }) {}
@@ -122,14 +122,20 @@ class AlsoBroken extends Domain.Model("AlsoBroken", {
 const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
 const CustomerId = Schema.String.pipe(Schema.brand("CustomerId"));
 class Opened extends Domain.Event("Opened") {}
-class OpenAccount extends Domain.Command("OpenAccount", { target: AccountId, events: [Opened] }) {}
+class OpenAccount extends Domain.Command("OpenAccount", {
+  input: { accountId: AccountId },
+  events: [Opened],
+}) {}
 // Addresses a customer, so it does not belong on Account.
 class OpenForCustomer extends Domain.Command("OpenForCustomer", {
-  target: CustomerId,
+  input: { customerId: CustomerId },
   events: [Opened],
 }) {}
 // A plain string target accepts ids that are not an AccountId.
-class OpenAny extends Domain.Command("OpenAny", { target: Schema.String, events: [Opened] }) {}
+class OpenAny extends Domain.Command("OpenAny", {
+  input: { id: Schema.String },
+  events: [Opened],
+}) {}
 
 describe("Domain verify", { tags: ["unit", "local"] }, () => {
   it("finds no problem in a correct model", () => {
@@ -173,42 +179,45 @@ describe("Domain verify", { tags: ["unit", "local"] }, () => {
     });
   });
 
-  describe("command target", { tags: ["unit", "local"] }, () => {
+  describe("aggregate keyOf", { tags: ["unit", "local"] }, () => {
     it("a command addresses its aggregate's id", () => {
       class Account extends Domain.Aggregate("Account", {
         id: AccountId,
         state: Schema.Struct({}),
         initial: {},
         commands: [OpenAccount],
+        keyOf: (command) => command.accountId,
         decide: { OpenAccount: () => [new Opened()] },
         evolve: { Opened: (s) => s },
       }) {}
       expect(Account.ref("a-1").id).toBe("a-1");
     });
 
-    it("a command whose target is another id schema is a type error", () => {
+    it("a keyOf that returns another id schema is a type error", () => {
       class Account extends Domain.Aggregate("Account", {
         id: AccountId,
         state: Schema.Struct({}),
         initial: {},
-        commands: [
-          OpenAccount,
-          // @ts-expect-error OpenForCustomer's target must be this aggregate's id schema
-          OpenForCustomer,
-        ],
-        decide: { OpenAccount: () => [new Opened()], OpenForCustomer: () => [new Opened()] },
+        commands: [OpenAccount, OpenForCustomer],
+        // @ts-expect-error a CustomerId is not this aggregate's id
+        keyOf: (command) => ("accountId" in command ? command.accountId : command.customerId),
+        decide: {
+          OpenAccount: () => [new Opened()],
+          OpenForCustomer: () => [new Opened()],
+        },
         evolve: { Opened: (s) => s },
       }) {}
       expect(Account.aggregateName).toBe("Account");
     });
 
-    it("a command whose target is wider than the id is a type error", () => {
+    it("a keyOf that returns a wider type than the id is a type error", () => {
       class Account extends Domain.Aggregate("Account", {
         id: AccountId,
         state: Schema.Struct({}),
         initial: {},
-        // @ts-expect-error OpenAny's target must be this aggregate's id schema
         commands: [OpenAny],
+        // @ts-expect-error a plain string is not this aggregate's id
+        keyOf: (command) => command.id,
         decide: { OpenAny: () => [new Opened()] },
         evolve: { Opened: (s) => s },
       }) {}

@@ -7,6 +7,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -101,8 +102,34 @@ export type AppgroupsApp = Resource<
     lastModifiedAt: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AppgroupsAppLookup
 >;
+
+/**
+ * Props for {@link AppgroupsApp.lookup}: find an appgroups app this stack
+ * doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface AppgroupsAppLookup {
+  /**
+   * App id.
+   */
+  appId: string;
+  /**
+   * Apigee organization id.
+   */
+  organizationId?: string;
+  /**
+   * Parent AppGroup id or `organizations/{org}/appgroups/{appgroup}`.
+   */
+  appgroup: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * An app belonging to an Apigee AppGroup, with auto-generated API keys
@@ -118,6 +145,20 @@ export type AppgroupsApp = Resource<
  *   appgroup: group.appgroupId,
  *   apiProducts: [product.apiproductId],
  *   callbackUrl: "https://example.com/oauth",
+ * });
+ * ```
+ *
+ * ### Looking up an existing appgroups app
+ * `AppgroupsApp.lookup` references an appgroups app Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * appgroups app.
+ *
+ * **Example:** Reference an existing appgroups app
+ * ```typescript
+ * const appgroupsApp = GCP.Apigee.AppgroupsApp.lookup({
+ *   appId: "my-app",
+ *   appgroup: "my-appgroup",
  * });
  * ```
  *
@@ -199,6 +240,17 @@ export const AppgroupsAppProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ appId, organizationId: lookupOrganizationId, appgroup }) {
+      const env = yield* GcpEnvironment.current;
+      const organizationId = lookupOrganizationId ?? (yield* resolveOrgId(env.project));
+      const appgroupId = lastSegment(appgroup ?? "");
+      if (appgroupId.length === 0) return undefined;
+      const name = resourceName(organizationId, appgroupId, appId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project, organizationId, appgroupId);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -112,15 +112,30 @@ export class MigrationHistoryConflictError extends Data.TaggedError(
 /**
  * Already-applied migration files were edited or removed. History is
  * forward-only: add a new migration instead of rewriting files that have
- * already run. PlanetScale development branches replace rather than
- * raising this; production branches (and in-place apply on any target)
- * fail with it.
+ * already run. Renaming an applied file is not a rewrite when its
+ * contents are unchanged: its row moves to the new name. PlanetScale
+ * development branches replace rather than raising this; production
+ * branches (and in-place apply on any target) fail with it.
  */
 export class RewrittenMigrationHistoryError extends Data.TaggedError(
   "RewrittenMigrationHistoryError",
 )<{
   changed: ReadonlyArray<string>;
   removed: ReadonlyArray<string>;
+  message: string;
+}> {}
+
+/**
+ * A pending migration file sorts before one that is already applied. It
+ * would run after it here but before it on every fresh database, so the
+ * two orders can produce different schemas. Rename the file so it sorts
+ * last; a database that already applied it carries the rename over.
+ */
+export class NonLinearMigrationHistoryError extends Data.TaggedError(
+  "NonLinearMigrationHistoryError",
+)<{
+  pending: ReadonlyArray<string>;
+  newestApplied: string;
   message: string;
 }> {}
 
@@ -139,4 +154,5 @@ export const describeRewrittenHistory = (options: {
 export type MigrationApplyError =
   | MigrationError
   | MigrationHistoryConflictError
-  | RewrittenMigrationHistoryError;
+  | RewrittenMigrationHistoryError
+  | NonLinearMigrationHistoryError;

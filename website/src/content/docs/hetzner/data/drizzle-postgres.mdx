@@ -3,7 +3,7 @@ title: Drizzle Postgres on Hetzner
 description: Run a Drizzle API on a Hetzner Server with external Neon Postgres and reviewed SQL migrations.
 ---
 
-Alchemy's Hetzner provider has no managed Postgres resource; this guide runs the application on Hetzner and stores its data in **Neon Postgres**. Start with [Hetzner setup](/hetzner/setup), the [Service tutorial](/hetzner/tutorial/part-2), [Neon setup](/neon/setup), and a `src/schema.ts` exporting `Users` from the [Postgres client guide](/sql/drizzle/postgres).
+Alchemy's Hetzner provider has no managed Postgres resource, so run the application on Hetzner and store its data in **Neon Postgres**. Start with [Hetzner setup](/hetzner/setup), the [Service tutorial](/hetzner/tutorial/part-2), [Neon setup](/neon/setup), and a `src/schema.ts` exporting `Users` from the [Postgres client guide](/sql/drizzle/postgres).
 
 ## Install the database dependencies
 
@@ -110,7 +110,7 @@ Keep the tutorial's `/health` route independent of database tables so systemd de
 pnpm exec drizzle-kit migrate
 ```
 
-Supply the Neon project's `connectionUri` as secret `DATABASE_URL` in the migration runner, retaining its TLS parameters. This guide keeps Drizzle as the migration owner and does not set Neon's optional `migrations` prop.
+Supply the Neon project's `connectionUri` as secret `DATABASE_URL` in the migration runner, retaining its TLS parameters. Drizzle stays the migration owner, so Neon's optional `migrations` prop stays unset.
 
 ## Read the URL at runtime
 
@@ -151,4 +151,4 @@ For later changes, generate, review, and commit the schema, SQL, and snapshots b
 
 ## Continue
 
-See the [Neon connection guide](/neon/data/connections), [portable Postgres queries](/sql/drizzle/postgres), and [migration workflow](/sql/drizzle/migrations). The [hetzner-website-vite example](https://github.com/alchemy-run/alchemy/tree/main/examples/hetzner-website-vite) supplies the Neon-to-Service environment wiring; this guide uses committed migrations instead of that example's request-time table creation.
+See the [Neon connection guide](/neon/data/connections), [portable Postgres queries](/sql/drizzle/postgres), and [migration workflow](/sql/drizzle/migrations). The [hetzner-website-vite example](https://github.com/alchemy-run/alchemy/tree/main/examples/hetzner-website-vite) supplies the Neon-to-Service environment wiring; use committed migrations instead of that example's request-time table creation.

@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitZoneOperation } from "./operations.ts";
@@ -129,8 +130,31 @@ export type InstanceGroupManager = Resource<
     creationTimestamp: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  InstanceGroupManagerLookup
 >;
+
+/**
+ * Props for {@link InstanceGroupManager.lookup}: find an instance group
+ * manager this stack doesn't manage by its identifiers, in the ambient
+ * project unless `project` names another.
+ */
+export interface InstanceGroupManagerLookup {
+  /**
+   * Name of the managed instance group. Must be 1–63 characters and comply
+   * with RFC1035.
+   */
+  managerName: string;
+  /**
+   * Zone of the group (e.g. `"us-central1-a"`).
+   */
+  zone?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A zonal Compute Engine managed instance group (MIG).
@@ -159,6 +183,19 @@ export type InstanceGroupManager = Resource<
  *   instanceTemplate: template.templateName,
  *   targetSize: 2,
  *   namedPorts: [{ name: "http", port: 80 }],
+ * });
+ * ```
+ *
+ * ### Looking up an existing instance group manager
+ * `InstanceGroupManager.lookup` references an instance group manager
+ * Alchemy doesn't manage (created in the console or by another stack). It
+ * is read during plan/deploy, never created, updated or deleted, and binds
+ * like a declared instance group manager.
+ *
+ * **Example:** Reference an existing instance group manager
+ * ```typescript
+ * const instanceGroupManager = GCP.Compute.InstanceGroupManager.lookup({
+ *   managerName: "my-manager",
  * });
  * ```
  *
@@ -489,6 +526,14 @@ export const InstanceGroupManagerProvider = () =>
           previousZone === nextZone,
       };
     }),
+
+    lookup: Effect.fn(function* ({ managerName, zone: lookupZone }) {
+      const env = yield* GcpEnvironment.current;
+      const zone = lastSegment(lookupZone ?? DEFAULT_ZONE);
+      const existing = yield* getByName(env.project, zone, managerName);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

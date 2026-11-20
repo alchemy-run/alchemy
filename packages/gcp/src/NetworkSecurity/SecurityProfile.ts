@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import {
@@ -184,8 +185,34 @@ export type SecurityProfile = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  SecurityProfileLookup
 >;
+
+/**
+ * Props for {@link SecurityProfile.lookup}: find a security profile this
+ * stack doesn't manage by its identifiers, in the ambient project unless
+ * `project` names another.
+ */
+export interface SecurityProfileLookup {
+  /**
+   * SecurityProfile id (the `{securityProfile}` segment of
+   * `projects/{projec
+   * t}/locations/{location}/securityProfiles/{securityProfile}`). Must be
+   * 1-63 characters, letters, numbers, hyphens, and underscores, and must
+   * not start with a number.
+   */
+  securityProfileId: string;
+  /**
+   * Location. Security profiles live in `global`.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Network Security SecurityProfile — the behavior for one ProfileType
@@ -229,6 +256,19 @@ export type SecurityProfile = Resource<
  *   threatPreventionProfile: {
  *     severityOverrides: [{ severity: "CRITICAL", action: "DENY" }],
  *   },
+ * });
+ * ```
+ *
+ * ### Looking up an existing security profile
+ * `SecurityProfile.lookup` references a security profile Alchemy doesn't
+ * manage (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * security profile.
+ *
+ * **Example:** Reference an existing security profile
+ * ```typescript
+ * const securityProfile = GCP.NetworkSecurity.SecurityProfile.lookup({
+ *   securityProfileId: "my-security-profile",
  * });
  * ```
  *
@@ -470,6 +510,15 @@ export const SecurityProfileProvider = () =>
       }
       return undefined;
     }),
+
+    lookup: Effect.fn(function* ({ securityProfileId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = normalizeLocation(lookupLocation);
+      const name = resourceName(env.project, location, COLLECTION, securityProfileId);
+      const existing = yield* getByName(name);
+      if (existing === undefined) return undefined;
+      return toAttrs(existing, env.project);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

@@ -152,8 +152,8 @@ const assertBucketDeleted = (Bucket: string) =>
     Effect.flatMap(() => Effect.fail(new BucketStillExists())),
     Effect.retry({
       while: (error) => error._tag === "BucketStillExists",
-      schedule: Schedule.spaced("1 second"),
-      times: 10,
+      schedule: Schedule.spaced("2 seconds"),
+      times: 15,
     }),
     Effect.catchTag("NotFound", () => Effect.void),
   );

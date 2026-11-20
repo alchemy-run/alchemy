@@ -72,8 +72,18 @@ export interface Adapter extends Resource<
     creationTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  AdapterLookup
 > {}
+
+/**
+ * Props for {@link Adapter.lookup}: find an adapter this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface AdapterLookup {
+  /** The adapter id of the existing adapter. */
+  adapterId: string;
+}
 
 /**
  * An Amazon Textract adapter — a container for custom, trained adapter
@@ -103,6 +113,16 @@ export interface Adapter extends Resource<
  *     Adapters: [{ AdapterId: adapter.adapterId, Version: "1" }],
  *   },
  * });
+ * ```
+ *
+ * ### Looking up an existing adapter
+ * `Adapter.lookup` references an adapter Alchemy doesn't manage (created in the
+ * console or by another stack), found by `adapterId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing adapter
+ * ```typescript
+ * const existing = AWS.Textract.Adapter.lookup({ adapterId: "my-adapter" });
  * ```
  *
  * @resource
@@ -193,6 +213,12 @@ export const AdapterProvider = () =>
           ) {
             return { action: "replace" } as const;
           }
+        }),
+        lookup: Effect.fn(function* ({ adapterId }) {
+          if (!adapterId) return undefined;
+          const found = yield* getOne(adapterId);
+          if (!found) return undefined;
+          return toAttributes(yield* adapterArn(adapterId), found);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const adapterId =

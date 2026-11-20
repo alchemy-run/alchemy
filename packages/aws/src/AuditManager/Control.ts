@@ -130,8 +130,18 @@ export interface Control extends Resource<
     tags: Record<string, string>;
   },
   never,
-  Providers
+  Providers,
+  ControlLookup
 > {}
+
+/**
+ * Props for {@link Control.lookup}: find a control this stack doesn't
+ * manage, in the ambient account and region.
+ */
+export interface ControlLookup {
+  /** The id of the existing control. */
+  controlId: string;
+}
 
 /**
  * A custom control in AWS Audit Manager — a compliance requirement paired
@@ -172,6 +182,16 @@ export interface Control extends Resource<
  *     sourceFrequency: "DAILY",
  *   }],
  * });
+ * ```
+ *
+ * ### Looking up an existing control
+ * `Control.lookup` references a control Alchemy doesn't manage (created in the
+ * console or by another stack), found by `controlId`. It is read during
+ * plan/deploy and never created, updated or deleted.
+ *
+ * **Example:** Reference an existing control
+ * ```typescript
+ * const existing = AWS.AuditManager.Control.lookup({ controlId: "..." });
  * ```
  *
  * @resource
@@ -252,6 +272,12 @@ export const ControlProvider = () =>
               control === undefined ? [] : [toAttributes(control)],
             );
           }),
+        lookup: Effect.fn(function* ({ controlId }) {
+          const control = yield* readControlById(controlId);
+          if (!control) return undefined;
+          const attrs = toAttributes(control);
+          return attrs;
+        }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const control = output?.controlId
             ? yield* readControlById(output.controlId)

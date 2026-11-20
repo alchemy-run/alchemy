@@ -1,5 +1,5 @@
 import type { ResourceBinding } from "alchemy/Resource";
-import { packEnvValue } from "alchemy/RuntimeContext";
+import { envString } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import {
@@ -196,8 +196,9 @@ export const mergeContainerEnv = <V extends ContainerEnvVar>(
   const byName = new Map<string, V>();
   for (const source of injected) {
     for (const [name, value] of Object.entries(source ?? {})) {
-      if (value === undefined) continue;
-      byName.set(name, { name, value: packEnvValue(value) } as V);
+      const text = envString(value);
+      if (text === undefined) continue;
+      byName.set(name, { name, value: text } as V);
     }
   }
   for (const entry of explicit ?? []) {

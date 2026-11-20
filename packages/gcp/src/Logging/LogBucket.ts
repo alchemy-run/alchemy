@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
+import { inLookupProject } from "../internal/Lookup.ts";
 import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
 import { waitForDeleteOperation } from "./operations.ts";
@@ -127,8 +128,34 @@ export type LogBucket = Resource<
     updateTime: string | undefined;
   },
   never,
-  Providers
+  Providers,
+  LogBucketLookup
 >;
+
+/**
+ * Props for {@link LogBucket.lookup}: find a log bucket this stack doesn't
+ * manage by its identifiers, in the ambient project unless `project` names
+ * another.
+ */
+export interface LogBucketLookup {
+  /**
+   * Bucket id (the `{bucket}` segment of
+   * `projects/{project}/locations/{location}/buckets/{bucket}`). Limited to
+   * 100 characters: letters, digits, underscores, hyphens, periods; first
+   * character must be alphanumeric.
+   */
+  bucketId: string;
+  /**
+   * Location that stores log entries. `global` leaves placement
+   * unspecified.
+   */
+  location?: string;
+  /**
+   * Project the resource lives in.
+   * @default the ambient GCP project
+   */
+  project?: string;
+}
 
 /**
  * A Cloud Logging log bucket that stores log entries in a location.
@@ -165,6 +192,17 @@ export type LogBucket = Resource<
  *   description: "retained application logs",
  *   retentionDays: 60,
  * });
+ * ```
+ *
+ * ### Looking up an existing log bucket
+ * `LogBucket.lookup` references a log bucket Alchemy doesn't manage
+ * (created in the console or by another stack). It is read during
+ * plan/deploy, never created, updated or deleted, and binds like a declared
+ * log bucket.
+ *
+ * **Example:** Reference an existing log bucket
+ * ```typescript
+ * const logBucket = GCP.Logging.LogBucket.lookup({ bucketId: "my-bucket" });
  * ```
  *
  * @resource
@@ -385,6 +423,15 @@ export const LogBucketProvider = () =>
       if (!idChanged && !locationChanged) return undefined;
       return { action: "replace" as const, deleteFirst: false };
     }),
+
+    lookup: Effect.fn(function* ({ bucketId, location: lookupLocation }) {
+      const env = yield* GcpEnvironment.current;
+      const location = lookupLocation ?? DEFAULT_LOCATION;
+      const name = resourceName(env.project, location, bucketId);
+      const existing = yield* getByName(name);
+      if (isDeleted(existing)) return undefined;
+      return toAttrs(existing, env.project, location);
+    }, inLookupProject),
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;

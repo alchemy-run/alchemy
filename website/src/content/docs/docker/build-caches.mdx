@@ -1,0 +1,89 @@
+---
+title: Build caches
+description: Keep an image's build layers in a registry or GitHub Actions cache, so fresh CI runners skip the steps that didn't change.
+---
+
+import Timeline from "../../../components/diagrams/Timeline.astro";
+
+A build reuses the layers it finds in its **builder's cache**, and the builder lives on one machine. Your laptop keeps its layers between builds. A CI runner starts empty every time, so without help it reruns every step of the Dockerfile on every deploy. A **remote cache** stores the layers somewhere every builder can read them, such as the registry next to the image.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "laptop", label: "your laptop", type: "second build" },
+    { id: "fresh", label: "fresh CI runner", type: "no cache" },
+    { id: "cached", label: "fresh CI runner", type: "cache: true" },
+  ]}
+  bars={[
+    { lane: "laptop", start: 0, end: 1.4, label: "reused", tone: "muted" },
+    { lane: "laptop", start: 1.4, end: 2.6, label: "COPY src", tone: "accent" },
+    { lane: "fresh", start: 0, end: 1.6, label: "FROM" },
+    { lane: "fresh", start: 1.6, end: 8.2, label: "RUN bun install" },
+    { lane: "fresh", start: 8.2, end: 9.4, label: "COPY src", tone: "accent" },
+    { lane: "cached", start: 0, end: 2.6, label: "pull :buildcache", tone: "muted" },
+    { lane: "cached", start: 2.6, end: 3.8, label: "COPY src", tone: "accent" },
+    { lane: "cached", start: 3.8, end: 6.2, label: "push :buildcache", tone: "muted" },
+  ]}
+  ticks={[{ at: 0, label: "build starts" }]}
+  caption="The same change to src, built three ways. A fresh runner reruns the install. With cache: true it pulls the unchanged layers from the registry, builds the one step that changed, and saves the layers for the next run."
+/>
+
+## Cache layers next to the image
+
+```typescript title="alchemy.run.ts"
+import * as Alchemy from "alchemy";
+import * as Docker from "@alchemy.run/docker";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyApp",
+  {
+    providers: Docker.providers(),
+    state: Alchemy.localState(),
+  },
+  Effect.gen(function* () {
+    const image = yield* Docker.Image("api", {
+      name: "acme/api",
+      build: { context: "./api", cache: true },
+      registry: {
+        server: "ghcr.io",
+        username: "acme",
+        password: yield* Config.Redacted("GITHUB_TOKEN"),
+      },
+    });
+    return { ref: image.imageRef };
+  }),
+);
+```
+
+`cache: true` keeps the layers at the image repository's `:buildcache` tag, here `ghcr.io/acme/api:buildcache`, using the image's `registry` credentials. It keeps every stage's layers, not only the final image's, so a multi-stage build skips its build stage too.
+
+## Use another cache backend
+
+For any other [BuildKit cache backend](https://docs.docker.com/build/cache/backends/), pass its `--cache-from` and `--cache-to` values. In GitHub Actions:
+
+```typescript
+const image = yield* Docker.Image("api", {
+  name: "acme/api",
+  build: {
+    context: "./api",
+    cache: {
+      from: ["type=gha,scope=api"],
+      to: ["type=gha,scope=api,mode=max"],
+    },
+  },
+});
+```
+
+Backends like `gha` and `s3` take their credentials from the environment. These values appear on the `docker` command line, so never put a secret in them.
+
+## The builder must support it
+
+Saving a cache needs a builder that can export one: a `docker-container` Buildx builder, which `docker/setup-buildx-action` creates in GitHub Actions, or the default builder with the containerd image store turned on.
+
+The cache never changes the image itself, so turning it on or off doesn't rebuild or redeploy anything.
+
+## The same option elsewhere
+
+Every resource that builds an image takes the same `cache` option: [Cloudflare Containers](/cloudflare/compute/containers), [ECS](/aws/compute/ecs), [Cloud Run](/gcp/compute/cloud-run) and [Kubernetes workloads](/kubernetes/workloads/images) under `build`, and `AWS.ECR.Image` and Lambda container images next to `buildArgs`.
