@@ -233,8 +233,7 @@ const NoJson = Schema.instanceOf(Blob);
 class Tagged extends Domain.Rejection("Tagged", { blob: NoJson }) {}
 class Stored extends Domain.Event("Stored", { blob: NoJson }) {}
 class Store extends Domain.Command("Store", {
-  target: Schema.String,
-  input: { blobs: Schema.Array(NoJson) },
+  input: { target: Schema.String, blobs: Schema.Array(NoJson) },
   events: [Stored],
   rejects: [Tagged],
   reply: { blob: NoJson },
@@ -245,6 +244,7 @@ const blobModel = (state: Schema.Top, initial: unknown) => {
     state: state as typeof NoJson,
     initial: initial as Blob,
     commands: [Store],
+    keyOf: (command) => command.target,
     decide: { Store: () => [] },
     evolve: { Stored: (s) => s },
     reply: { Store: (s) => ({ blob: s }) },
