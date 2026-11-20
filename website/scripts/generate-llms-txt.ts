@@ -712,6 +712,7 @@ const SECTIONS: Section[] = [
         "ai/skills",
         "ai/sandboxes",
         "ai/sandbox-platforms",
+        "ai/custom-sandboxes",
       ],
     },
   },

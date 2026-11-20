@@ -64,11 +64,11 @@ import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { FastLive, Fast } from "./models.ts";
-import { BoatSandbox } from "./sandboxes.ts";
+import { Sandbox } from "./Sandbox.ts";
 
 const HarnessLive = Layer.mergeAll(
   FastLive,
-  BoatSandbox,
+  Sandbox,
   OpenCode.CodingTools,
   OpenCodeCloudflare.DurableObjectInstance,
 );

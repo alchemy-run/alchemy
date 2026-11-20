@@ -38,27 +38,24 @@ The deploy creates the repository with a README. It is public, so a sandbox can 
 Replace the `Base` snapshot with one that clones the repository to `~/repo`:
 
 ```diff lang="typescript"
-import * as AI from "@alchemy.run/ai";
+import * as AIBoat from "@alchemy.run/ai/Boat";
 import * as Boat from "@alchemy.run/boat";
 +import * as Output from "alchemy/Output";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
++import * as Effect from "effect/Effect";
 +import { Repo } from "./Repo.ts";
 
-export const Sandbox = Layer.effect(
-  AI.Sandboxes,
-  Effect.gen(function* () {
--    const base = yield* Boat.Snapshot("Base", { run: ["git --version"] });
--    const sandboxes = yield* Boat.CreateSandbox(base);
+-export const Sandbox = AIBoat.Sandboxes(Boat.Snapshot("Base", { run: ["git --version"] }));
++export const Sandbox = AIBoat.Sandboxes(
++  Effect.gen(function* () {
 +    const repo = yield* Repo;
-+    const checkout = yield* Boat.Snapshot("Checkout", {
++    return yield* Boat.Snapshot("Checkout", {
 +      run: [Output.interpolate`git clone ${repo.cloneUrl} ~/repo`],
 +    });
-+    const sandboxes = yield* Boat.CreateSandbox(checkout);
-    const find = (key: string) => sandboxes.list({ labels: { key } });
++  }),
++);
 ```
 
-The snapshot's command uses the repository's clone URL, so the deploy creates the repository first and builds the snapshot after.
+The Layer takes the snapshot as a declaration or as an Effect that returns one. This one yields the repository first, so the deploy creates the repository and builds the snapshot after.
 
 ## Work in the repository
 

@@ -83,7 +83,7 @@ const harness = yield* Pi.Harness({ models: [Fast], tools: [SaveNote] });
 const HarnessLive = Layer.mergeAll(
   FastLive,
   PiCloudflare.DurableObjectStorage,
-  Pi.CodingTools.pipe(Layer.provideMerge(BoatSandbox)),
+  Pi.CodingTools.pipe(Layer.provideMerge(Sandbox)),
 );
 
 const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools] });
@@ -96,7 +96,7 @@ Pi has no search tools, so `Pi.Grep` and `Pi.Glob` are tools that run `grep` and
 Each has a Layer of its own (`Pi.Bash`, `Pi.Read`, `Pi.Edit`, `Pi.Write`, `Pi.Grep`, `Pi.Glob`), for a harness that lists only some:
 
 ```typescript
-const ReadOnlyLive = Layer.mergeAll(Pi.Read, Pi.Grep, Pi.Glob).pipe(Layer.provideMerge(BoatSandbox));
+const ReadOnlyLive = Layer.mergeAll(Pi.Read, Pi.Grep, Pi.Glob).pipe(Layer.provideMerge(Sandbox));
 
 const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.Read, AI.Grep, AI.Glob] });
 ```

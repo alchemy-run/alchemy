@@ -2514,6 +2514,7 @@ export default defineConfig({
               items: [
                 { label: "Sandboxes", link: "/ai/sandboxes" },
                 { label: "Sandbox platforms", link: "/ai/sandbox-platforms" },
+                { label: "Build your own", link: "/ai/custom-sandboxes" },
               ],
             },
           ],

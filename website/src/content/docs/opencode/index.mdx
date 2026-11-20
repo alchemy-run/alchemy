@@ -15,6 +15,7 @@ A model, and where sandboxes run:
 
 ```typescript title="src/agent.ts"
 import * as AI from "@alchemy.run/ai";
+import * as AIBoat from "@alchemy.run/ai/Boat";
 import * as Boat from "@alchemy.run/boat";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
@@ -29,36 +30,9 @@ export const FastLive = Layer.unwrap(
   }),
 ).pipe(Layer.provide(Cloudflare.Workers.AIBinding));
 
-export const BoatSandbox = Layer.effect(
-  AI.Sandboxes,
-  Effect.gen(function* () {
-    const base = yield* Boat.Snapshot("Base", { run: ["npm install --global pnpm"] });
-    const sandboxes = yield* Boat.CreateSandbox(base);
-    const find = (key: string) => sandboxes.list({ labels: { key } });
-
-    return {
-      open: Effect.fn(function* (key) {
-        const [existing] = yield* find(key);
-        if (existing === undefined) {
-          return yield* sandboxes.create({ type: "small", noEnv: true, labels: { key } });
-        }
-        const sandbox = yield* sandboxes.connect(existing.id);
-        yield* sandbox.resume();
-        return sandbox;
-      }),
-      suspend: Effect.fn(function* (key) {
-        const [existing] = yield* find(key);
-        if (existing === undefined) return;
-        const sandbox = yield* sandboxes.connect(existing.id);
-        yield* sandbox.stop();
-      }),
-      remove: Effect.fn(function* (key) {
-        const found = yield* find(key);
-        yield* Effect.forEach(found, (sandbox) => sandboxes.delete(sandbox.id));
-      }),
-    };
-  }),
-).pipe(Layer.provide(Boat.CreateSandboxHttp));
+export const Sandbox = AIBoat.Sandboxes(
+  Boat.Snapshot("Base", { run: ["npm install --global pnpm"] }),
+);
 ```
 
 A Durable Object yields the harness and prompts a session by name:
@@ -70,11 +44,11 @@ import * as OpenCode from "@alchemy.run/opencode";
 import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { BoatSandbox, Fast, FastLive } from "./agent.ts";
+import { Fast, FastLive, Sandbox } from "./agent.ts";
 
 const HarnessLive = Layer.mergeAll(
   FastLive,
-  BoatSandbox,
+  Sandbox,
   OpenCode.CodingTools,
   OpenCodeCloudflare.DurableObjectInstance,
 );

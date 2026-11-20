@@ -7,7 +7,7 @@ A Durable Object can't run a process or hold a file system, so a Pi harness that
 
 ## Give the harness sandboxes
 
-Provide your `AI.Sandboxes` Layer to `Pi.CodingTools`:
+Provide an `AI.Sandboxes` Layer to `Pi.CodingTools`:
 
 ```typescript title="src/Workspace.ts"
 import * as AI from "@alchemy.run/ai";
@@ -17,12 +17,12 @@ import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Fast, FastLive } from "./models.ts";
-import { BoatSandbox } from "./sandboxes.ts";
+import { Sandbox } from "./Sandbox.ts";
 
 const HarnessLive = Layer.mergeAll(
   FastLive,
   PiCloudflare.DurableObjectStorage,
-  Pi.CodingTools.pipe(Layer.provideMerge(BoatSandbox)),
+  Pi.CodingTools.pipe(Layer.provideMerge(Sandbox)),
 );
 
 export default class Workspace extends Cloudflare.DurableObject<Workspace>()(
@@ -43,7 +43,7 @@ export default class Workspace extends Cloudflare.DurableObject<Workspace>()(
 ) {}
 ```
 
-`BoatSandbox` is the Layer on the [Sandboxes](/ai/sandboxes#say-where-sandboxes-run) page. `Layer.provideMerge` gives it to the coding tools and to the harness.
+`Sandbox` is the Boat Layer from the [Sandboxes](/ai/sandboxes#say-where-sandboxes-run) page. `Layer.provideMerge` gives it to the coding tools and to the harness.
 
 ## One sandbox per conversation
 
@@ -71,7 +71,7 @@ export const RunTestsLive = RunTests.make(
 );
 ```
 
-Its Layer requires `AI.Sandboxes`, like the coding tools: `RunTestsLive.pipe(Layer.provideMerge(BoatSandbox))`.
+Its Layer requires `AI.Sandboxes`, like the coding tools: `RunTestsLive.pipe(Layer.provideMerge(Sandbox))`.
 
 ## Suspend a sandbox
 

@@ -890,7 +890,8 @@ What every agent harness shares: models, tools and their failures, the coding to
 - [MCP servers](https://alchemy.run/ai/mcp-servers) — Name an MCP server once with AI.McpServer, reach it with an Effect AI McpClient Layer, and give its tools to any harness.
 - [Skills](https://alchemy.run/ai/skills) — Declare a skill with AI.Skill: a description the model always sees, and instructions, files and tools it loads only when the task calls for them.
 - [Sandboxes](https://alchemy.run/ai/sandboxes) — AI.Sandboxes maps each conversation to a sandbox on E2B, Daytona, Modal, Boat or Archil, and AI.Sandbox gives a tool that conversation's files and shell.
-- [Sandbox platforms](https://alchemy.run/ai/sandbox-platforms) — The AI.Sandboxes Layer for E2B, Daytona, Modal, Boat and Archil — how each one finds a conversation's sandbox, and what suspend does there.
+- [Sandbox platforms](https://alchemy.run/ai/sandbox-platforms) — The AI.Sandboxes Layer for Boat, E2B, Daytona, Modal and Archil — one import each, and what finding and suspending a sandbox means on each platform.
+- [Build your own](https://alchemy.run/ai/custom-sandboxes) — Write an AI.Sandboxes Layer for a sandbox platform of your own, or one that finds, creates and suspends sandboxes differently from the Layers @alchemy.run/ai ships.
 
 ## Pi
 
@@ -1376,4 +1377,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~287 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~288 KB) — only fetch it when you need to locate a specific resource's reference page.

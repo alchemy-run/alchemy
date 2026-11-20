@@ -49,11 +49,11 @@ import * as OpenCode from "@alchemy.run/opencode";
 import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
 import * as Layer from "effect/Layer";
 import { FastLive } from "./models.ts";
-import { BoatSandbox } from "./sandboxes.ts";
+import { Sandbox } from "./Sandbox.ts";
 
 export const HarnessLive = Layer.mergeAll(
   FastLive,
-  BoatSandbox,
+  Sandbox,
   OpenCode.CodingTools,
   OpenCodeCloudflare.DurableObjectInstance,
 );
@@ -62,7 +62,7 @@ export const HarnessLive = Layer.mergeAll(
 `OpenCode.CodingTools` provides OpenCode's own six tools, which OpenCode runs inside the sandbox. `Pi.CodingTools` provides Pi's, which run in the harness and reach the sandbox from there, so it needs your sandboxes:
 
 ```typescript
-const CodingToolsLive = Pi.CodingTools.pipe(Layer.provideMerge(BoatSandbox));
+const CodingToolsLive = Pi.CodingTools.pipe(Layer.provideMerge(Sandbox));
 ```
 
 Moving a harness from one to the other changes the Layer and nothing in its `tools`.
