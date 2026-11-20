@@ -1,5 +1,6 @@
 import * as AI from "@alchemy.run/ai";
 import * as Pi from "@alchemy.run/pi";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -101,6 +102,17 @@ const AddValue = Add.make(({ a, b }) => a + b);
 type _ShortHandlersNeedNothing = Assert<
   Equals<Layer.Services<typeof AddFn> | Layer.Services<typeof AddValue>, never>
 >;
+// A handler built in an Effect may use what only exists while a call runs.
+const AddBuilt = Add.make(
+  Effect.gen(function* () {
+    return Effect.fn(function* ({ a, b }) {
+      yield* Effect.context<RuntimeContext>();
+      return a + b;
+    });
+  }),
+);
+type _BuiltRuntimeHandlerNeedsNothing = Assert<Equals<Layer.Services<typeof AddBuilt>, never>>;
+
 // A declared failure is a schema, so it can be a union. The handler may fail with nothing else.
 class TooBig extends Schema.TaggedError<TooBig>()("TooBig", { limit: Schema.Number }) {}
 class Missing extends Schema.TaggedError<Missing>()("Missing", { path: Schema.String }) {}

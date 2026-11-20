@@ -407,6 +407,9 @@
       "path": "./examples/cloudflare-pi/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-pi-github/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-planetscale-mysql-drizzle/tsconfig.json"
     },
     {

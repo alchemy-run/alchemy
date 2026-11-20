@@ -124,6 +124,12 @@ export interface ToolClass<
   make<Uses extends ToolServices = never, R = never>(
     impl: ToolImpl<Spec, Uses, R>,
   ): Layer.Layer<Self, never, ImplRequirements<Uses, R>>;
+  make<R>(
+    impl: Effect.Effect<PlainToolHandler<Spec>, never, R>,
+  ): Layer.Layer<Self, never, Exclude<R, Scope.Scope>>;
+  make<R>(
+    impl: Effect.Effect<ToolHandler<Spec>, never, R>,
+  ): Layer.Layer<Self, never, Exclude<R, Scope.Scope> | Sandboxes>;
 }
 
 /** A tool declared inline, closing over whatever is in scope. */

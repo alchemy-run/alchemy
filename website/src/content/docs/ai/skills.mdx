@@ -1,0 +1,55 @@
+---
+title: Skills
+description: Declare a skill with AI.Skill: a description the model always sees, and instructions, files and tools it loads only when the task calls for them.
+---
+
+A skill is instructions the model loads only when a task calls for them, after the [Agent Skills](https://agentskills.io) idea. The model always sees the skill's name and description. When it decides the skill applies, it reads the instructions, and the skill's files are there to use. Twenty skills cost the model twenty short descriptions, not twenty pages.
+
+## Declare a skill
+
+A skill is a class with a name, a description and its instructions:
+
+```typescript title="src/skills.ts"
+import * as AI from "@alchemy.run/ai";
+
+export class Releasing extends AI.Skill<Releasing>()("releasing", {
+  description: "Cut and upload a release. Use when the user asks to ship.",
+  instructions: "Run the tests, bump the version in package.json, build, then call deploy.",
+}) {}
+```
+
+Write the description for the model: it is all the model has to decide whether to load the skill.
+
+## Bring files
+
+A skill's `files` are written into the conversation's sandbox, so the instructions can tell the model to run or read them:
+
+```typescript
+export class Releasing extends AI.Skill<Releasing>()("releasing", {
+  description: "Cut and upload a release. Use when the user asks to ship.",
+  instructions: "Run the tests, run .skills/releasing/bump.sh, build, then call deploy.",
+  files: { "bump.sh": "npm version patch --no-git-tag-version\n" },
+}) {}
+```
+
+## Bring tools
+
+A skill can list tools that are enabled wherever the skill is selected. They are the harness's own tools, so their Layers are provided like any other:
+
+```typescript
+export class Releasing extends AI.Skill<Releasing>()("releasing", {
+  description: "Cut and upload a release. Use when the user asks to ship.",
+  instructions: "Run the tests, build, then call deploy.",
+  tools: [Deploy],
+}) {}
+```
+
+## Give it to a harness
+
+Each harness takes skills its own way. Pi selects them per conversation, as extensions, and can add one while a conversation runs. OpenCode takes them for the whole harness and finds them with its own `skill` tool.
+
+```typescript
+const harness = yield* OpenCode.Harness({ models: [Fast], skills: [Releasing] });
+```
+
+See [Skills on Pi](/pi/skills) and [Skills on OpenCode](/opencode/skills).

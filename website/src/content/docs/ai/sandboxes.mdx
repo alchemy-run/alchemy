@@ -1,0 +1,137 @@
+---
+title: Sandboxes
+description: AI.Sandboxes maps each conversation to a sandbox on E2B, Daytona, Modal, Boat or Archil, and AI.Sandbox gives a tool that conversation's files and shell.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+A Durable Object has no file system and can't run a process. Tools that need files or a shell work in a **sandbox**: a Linux machine on a sandbox platform. Two services split the work. `AI.Sandboxes` is a Layer you write once: it opens, suspends and removes a sandbox on your platform. `AI.Sandbox` is what a tool uses: the files and shell of the conversation its call belongs to.
+
+Take a `Coder` Durable Object with two conversations, `pr-142` and `pr-157`. The harness gives each its own sandbox, started from one image.
+
+<Tree
+  nodes={[
+    {
+      id: "coder", label: "Coder", type: "Durable Object", icon: "box",
+      areas: ["tool", "layer"], phoneAreas: ["tool", "layer"],
+    },
+    { id: "tool", label: "run_tests", type: "tool · AI.Sandbox", parent: "coder", icon: "wrench" },
+    { id: "layer", label: "AI.Sandboxes", type: "your Layer", parent: "coder", tone: "accent", icon: "layers" },
+    {
+      id: "platform", label: "Boat", type: "sandbox platform", icon: "brand:boat",
+      areas: ["a b", "base base"], phoneAreas: ["a b", "base base"],
+    },
+    { id: "a", label: "pr-142", type: "sandbox · running", parent: "platform", icon: "box" },
+    { id: "b", label: "pr-157", type: "sandbox · stopped", parent: "platform", tone: "muted", icon: "box" },
+    { id: "base", label: "Base", type: "snapshot", parent: "platform", icon: "camera" },
+  ]}
+  areas={["coder platform"]}
+  phoneAreas={["coder", "platform"]}
+  colGap={5}
+  links={[
+    { from: "tool", to: "a", label: "exec" },
+    { from: "layer", to: "platform", label: "opens one per key" },
+    { from: "base", to: "a", label: "disk" },
+    { from: "base", to: "b" },
+  ]}
+  caption="The harness chooses a key for each conversation. Your AI.Sandboxes Layer maps a key to a sandbox on Boat, each started from the Base snapshot. A tool's AI.Sandbox is the sandbox of its own conversation: run_tests, called in pr-142, runs there."
+/>
+
+## Use the sandbox from a tool
+
+`AI.Sandbox` runs commands and reads and writes files:
+
+```typescript
+const sandbox = yield* AI.Sandbox;
+
+const result = yield* sandbox.exec(["npm", "test"], { cwd: "/home/user/repo", timeout: 120_000 });
+const text = yield* sandbox.readTextFile("/home/user/repo/package.json");
+yield* sandbox.writeFile("/home/user/repo/notes.md", "checked\n");
+```
+
+`exec` takes an argument list or a shell line, and returns `exitCode`, `stdout` and `stderr`. Every operation fails with `AI.SandboxError`.
+
+A tool that uses `AI.Sandbox` makes its Layer require `AI.Sandboxes`. See [Tools](/ai/tools#work-in-the-sandbox).
+
+## Say where sandboxes run
+
+`AI.Sandboxes` has three operations, each given a `key`. This Layer runs them on Boat, finding a sandbox by a label:
+
+```typescript title="src/sandboxes.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Boat from "@alchemy.run/boat";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export const BoatSandbox = Layer.effect(
+  AI.Sandboxes,
+  Effect.gen(function* () {
+    const base = yield* Boat.Snapshot("Base", { run: ["npm install --global pnpm"] });
+    const sandboxes = yield* Boat.CreateSandbox(base);
+    const find = (key: string) => sandboxes.list({ labels: { key } });
+
+    return {
+      open: Effect.fn(function* (key) {
+        const [existing] = yield* find(key);
+        if (existing === undefined) {
+          return yield* sandboxes.create({
+            type: "small",
+            noEnv: true,
+            autoStop: "10 minutes",
+            labels: { key },
+          });
+        }
+        const sandbox = yield* sandboxes.connect(existing.id);
+        yield* sandbox.resume({ autoStop: "10 minutes" });
+        return sandbox;
+      }),
+      suspend: Effect.fn(function* (key) {
+        const [existing] = yield* find(key);
+        if (existing === undefined) return;
+        const sandbox = yield* sandboxes.connect(existing.id);
+        yield* sandbox.stop();
+      }),
+      remove: Effect.fn(function* (key) {
+        const found = yield* find(key);
+        yield* Effect.forEach(found, (sandbox) => sandboxes.delete(sandbox.id));
+      }),
+    };
+  }),
+).pipe(Layer.provide(Boat.CreateSandboxHttp));
+```
+
+The snapshot is declared inside the Layer, so the deploy builds it, and every sandbox starts from it.
+
+## Keys
+
+The harness chooses the key, and your Layer only maps it to a sandbox. Pi uses one key for each conversation, and OpenCode one for each session. A key is lowercase letters, digits and `-`, at most 48 characters, so it works as a name or a label on every platform.
+
+Because the key is stored on the platform, the same conversation reaches the same sandbox after its Durable Object is evicted.
+
+## Open, suspend, remove
+
+All three operations are safe to repeat. `open` returns the key's sandbox running, whatever state it was in: it creates it, resumes it, or returns it as it is. `suspend` stops paying for compute and keeps the files where the platform can. `remove` deletes the sandbox, and does nothing when it is already gone.
+
+A harness opens a sandbox when a tool first needs it. Suspending and removing are yours to call, when a conversation goes quiet or ends:
+
+```typescript
+yield* harness.suspendSandbox("pr-142");
+yield* harness.removeSandbox("pr-142");
+```
+
+Whether files outlive an idle sandbox is up to the platform. A sandbox the platform deleted is created again, empty, by the next `open`.
+
+## Change platform
+
+Changing platform is providing a different Layer. Nothing in the harness or its tools changes:
+
+```diff lang="typescript"
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  PiCloudflare.DurableObjectStorage,
+-  Pi.CodingTools.pipe(Layer.provideMerge(BoatSandbox)),
++  Pi.CodingTools.pipe(Layer.provideMerge(E2BSandbox)),
+);
+```
+
+See [Sandbox platforms](/ai/sandbox-platforms) for the Layer on each one.

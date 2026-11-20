@@ -38,6 +38,7 @@ export const DOCS_CATEGORIES = [
   "Actors",
   "Containers",
   "Sandboxes",
+  "AI",
   "Databases",
   "Auth",
   "Payments",
@@ -130,6 +131,10 @@ export const DOCS_TABS: DocsTab[] = [
     category: "Sandboxes",
     hint: "sandboxes · ECS · EKS · EC2",
   },
+
+  hub("AI", "ai", "AI", "models · tools · skills · sandboxes"),
+  hub("Pi", "pi", "AI", "conversations · extensions · code mode"),
+  hub("OpenCode", "opencode", "AI", "sessions · prompts · skills"),
 
   hub("Rivet", "rivet", "Actors", "durable objects · control planes · pools", ["/providers/rivet"]),
   hub("Effect Cluster", "cluster", "Actors", "entities · workflows · pools", [

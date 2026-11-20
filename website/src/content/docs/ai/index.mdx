@@ -1,0 +1,89 @@
+---
+title: AI
+description: Declare models, tools, skills, MCP servers and sandboxes once with @alchemy.run/ai, and run them on any agent harness.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+`@alchemy.run/ai` is what every agent harness shares: models, tools, skills, MCP servers and sandboxes. You declare each once and run it on any harness. A harness is the loop around a model that calls tools until a task is done; [Pi](/pi) and [OpenCode](/opencode) are the two Alchemy hosts today.
+
+**New to agent harnesses?** Start with [What is an agent harness?](/ai/what-is-a-harness).
+
+## A quick example
+
+Name a model. Which LLM answers is the Layer behind the name:
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = Layer.unwrap(
+  Effect.gen(function* () {
+    const ai = yield* Cloudflare.Workers.AI();
+    return Fast.layer(ai.model({ model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" }));
+  }),
+).pipe(Layer.provide(Cloudflare.Workers.AIBinding));
+```
+
+Declare a tool: what it takes, what it returns, and a handler:
+
+```typescript title="src/tools.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Schema from "effect/Schema";
+
+export class Add extends AI.Tool<Add>()("add", {
+  description: "Add two integers.",
+  parameters: Schema.Struct({ a: Schema.Number, b: Schema.Number }),
+  success: Schema.Struct({ sum: Schema.Number }),
+}) {}
+
+export const AddLive = Add.make(({ a, b }) => ({ sum: a + b }));
+```
+
+List both on a harness, here Pi in a Durable Object, and provide their Layers:
+
+```typescript title="src/Session.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Pi from "@alchemy.run/pi";
+import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive } from "./models.ts";
+import { Add, AddLive } from "./tools.ts";
+
+const HarnessLive = Layer.mergeAll(FastLive, AddLive, PiCloudflare.DurableObjectStorage);
+
+export default class Session extends Cloudflare.DurableObject<Session>()(
+  "Session",
+  Effect.gen(function* () {
+    const harness = yield* Pi.Harness({ models: [Fast], tools: [Add] });
+
+    return Effect.gen(function* () {
+      return {
+        prompt: Effect.fn(function* (name: string, text: string, requestId: string) {
+          const conversation = yield* harness.createConversation({ name });
+          const submission = yield* conversation.submit({ type: "input", content: text, requestId });
+          return (yield* submission.wait).status;
+        }),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+## Where to start
+
+**Want to build?** Install the package and pick a harness: the [Pi tutorial](/pi/tutorial/part-1) or the [OpenCode tutorial](/opencode/tutorial/part-1) builds a bot that answers issues on a GitHub repository.
+
+<PackageManagers add="@alchemy.run/ai" />
+
+**Looking for something specific?** Every section of these docs is listed below.
+
+## The docs
+
+<HubMap />
