@@ -78,7 +78,7 @@ export const SwarmPool = (
             // One node image per stack; every pool builds FROM it.
             build: {
               context: fileURLToPath(new URL("../../images/node", import.meta.url)),
-              args: { RIVETKIT_VERSION },
+              args: { RIVETKIT_VERSION: options.rivetkitVersion ?? RIVETKIT_VERSION },
             },
           }).pipe(
             Effect.flatMap((image) =>

@@ -54,7 +54,7 @@ export const Default = RivetGCP.CloudRunPool("Default", {
 }).pipe(Layer.provide(Cluster));
 ```
 
-The nodes run as the worker pool's own service account unless you name one, and that account is granted each secret before a revision reads it. `RIVET_TOKEN` stays plain environment unless you name it in `secrets`. Cloud Run holds a private network's addresses for up to a few hours after the pool is deleted, so a destroy in that window fails on the subnetwork, keeps it in state, and succeeds when run again later.
+The nodes run as the worker pool's own service account unless you name one, and that account is granted each secret before a revision reads it. The control plane's token reaches the nodes the same way, from a secret the pool keeps, so it never appears in the worker pool's configuration. Cloud Run holds a private network's addresses for up to a few hours after the pool is deleted, so a destroy in that window fails on the subnetwork, keeps it in state, and succeeds when run again later.
 
 ## On Compute Engine
 
@@ -67,7 +67,7 @@ export const Default = RivetGCP.ComputeEnginePool("Default", {
 }).pipe(Layer.provide(Cluster));
 ```
 
-Each deploy updates running nodes in place.
+Each deploy updates running nodes in place, one at a time. A node restarts only once the node before it runs the new program and the control plane lists every node connected again, and it gets `stopTimeout` seconds (default 30) to drain before it is killed. A node still waiting after `rolloutTimeout` seconds (default 600) keeps its current program, so a program that never connects stops the rollout at its first node. The control plane's token reaches the nodes from Secret Manager, never instance metadata.
 
 ## Rivet Services
 

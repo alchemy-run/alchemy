@@ -41,9 +41,6 @@ WORKDIR /app
 RUN bun add rivetkit@${version}
 `;
 
-/** A node image environment: bun with RivetKit installed. */
-export const NODE_DOCKERFILE = nodeDockerfile(RIVETKIT_VERSION);
-
 /** Packages the node image provides, kept out of the node bundle. */
 const EXTERNAL = ["rivetkit", /^rivetkit\//, /^@rivetkit\//];
 
@@ -113,6 +110,14 @@ export interface PoolSettings extends Pick<
    * @default ${stack}-${stage}-${id}
    */
   name?: string;
+  /**
+   * RivetKit release the nodes run a JavaScript program with. Nodes speak
+   * the control plane protocol of their release: a 3.0 node works with a
+   * 3.0 or 3.1 control plane, a 3.1 node needs a 3.1 one. A Rust program
+   * brings its own.
+   * @default "3.0.0"
+   */
+  rivetkitVersion?: string;
 }
 
 /** A JavaScript node program: its entry and bundler settings, run with RivetKit beside it. */

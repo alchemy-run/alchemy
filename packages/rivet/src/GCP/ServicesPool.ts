@@ -1,6 +1,7 @@
 import * as ArtifactRegistry from "@alchemy.run/gcp/ArtifactRegistry";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Run from "@alchemy.run/gcp/Run";
+import * as SecretManager from "@alchemy.run/gcp/SecretManager";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import {
@@ -75,17 +76,34 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
           mode: "REMOTE_REPOSITORY",
           remoteRepositoryConfig: { dockerRepository: { publicRepository: "DOCKER_HUB" } },
         });
-        yield* Run.WorkerPool(`${id}Nodes`, {
+        // The control plane's token reaches the nodes from Secret Manager,
+        // never the worker pool's config.
+        const token = yield* SecretManager.Secret(`${id}Token`, {
+          value: nodes.environment.RIVET_TOKEN,
+        });
+        const tokenRef = token.version.pipe(
+          Output.map((version) => {
+            const at = (version ?? "").lastIndexOf("/versions/");
+            return {
+              secret: (version ?? "").slice(0, at),
+              version: (version ?? "").slice(at + 10),
+            };
+          }),
+        );
+        const workerPool = yield* Run.WorkerPool(`${id}Nodes`, {
           location,
           scaling: { manualInstanceCount: options.replicas ?? 1 },
           template: {
             containers: [
               {
                 image: hub.registryUri.pipe(Output.map((registry) => `${registry}/${nodes.image}`)),
-                env: servicesEnvironment(nodes).pipe(
-                  Output.map((env) =>
-                    Object.entries(env).map(([name, value]) => ({ name, value })),
-                  ),
+                env: Output.all(servicesEnvironment(nodes), tokenRef).pipe(
+                  Output.map(([env, secretKeyRef]) => [
+                    ...Object.entries(env)
+                      .filter(([name]) => name !== "RIVET_TOKEN")
+                      .map(([name, value]) => ({ name, value })),
+                    { name: "RIVET_TOKEN", valueSource: { secretKeyRef } },
+                  ]),
                 ),
                 resources: {
                   limits: { cpu: options.cpu ?? "1", memory: options.memory ?? "2Gi" },
@@ -94,5 +112,19 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
             ],
           },
         });
+        // Cloud Run checks a revision can read the token before it rolls it
+        // out: the worker pool grants its own account first.
+        yield* workerPool.bind`RivetGCP.ServicesPool.token(${id})`(
+          token.name.pipe(
+            Output.map((name) => ({
+              iam: [
+                {
+                  role: "roles/secretmanager.secretAccessor",
+                  resource: { kind: "secretmanager.secret" as const, name },
+                },
+              ],
+            })),
+          ),
+        );
       }),
   });

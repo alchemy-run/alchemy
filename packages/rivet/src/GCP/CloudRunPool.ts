@@ -1,5 +1,6 @@
 import * as IAM from "@alchemy.run/gcp/IAM";
 import * as Run from "@alchemy.run/gcp/Run";
+import * as SecretManager from "@alchemy.run/gcp/SecretManager";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
@@ -46,8 +47,9 @@ export interface CloudRunPoolOptions extends PoolSettings {
    * The nodes' service account is granted `roles/secretmanager.secretAccessor`
    * on each secret before the worker pool rolls out a revision that reads it,
    * and Cloud Run hands the values to the container, so they stay out of the
-   * worker pool's configuration. The control plane's token is plain
-   * environment unless `RIVET_TOKEN` is named here.
+   * worker pool's configuration. The control plane's token reaches the
+   * nodes this way too, from a secret the pool keeps; name `RIVET_TOKEN`
+   * here to use a secret of your own instead.
    */
   secrets?: Record<string, Input<string>>;
   /**
@@ -71,13 +73,6 @@ export interface CloudRunPoolOptions extends PoolSettings {
    * @default the subnetwork named like `network`
    */
   subnetwork?: Input<string>;
-  /**
-   * RivetKit release the nodes run a TypeScript program with. Nodes speak
-   * the control plane protocol of their release: a 3.0 node works with a
-   * 3.0 or 3.1 control plane, a 3.1 node needs a 3.1 one.
-   * @default "3.0.0"
-   */
-  rivetkitVersion?: string;
 }
 
 const asOutput = (value: Input<string>): Output.Output<string> =>
@@ -193,7 +188,19 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
         const location =
           options.location ?? (nodes.network?.kind === "gcp" ? nodes.network.region : undefined);
         const { program } = nodes;
-        const secrets = Object.entries(options.secrets ?? {});
+        // The control plane's token reaches the nodes from Secret Manager,
+        // never the worker pool's config, unless the pool names its own.
+        const token =
+          options.secrets?.RIVET_TOKEN === undefined
+            ? (yield* SecretManager.Secret(`${id}Token`, {
+                value: nodes.environment.RIVET_TOKEN,
+              })).version.pipe(Output.map((version) => version ?? ""))
+            : undefined;
+        const secretMap: Record<string, Input<string>> = {
+          ...(token === undefined ? {} : { RIVET_TOKEN: token }),
+          ...options.secrets,
+        };
+        const secrets = Object.entries(secretMap);
         const { serviceAccount } = options;
         const secretEnv: Array<Input<Run.WorkerPoolEnvVar>> = [];
         for (const [name, version] of secrets) {
@@ -238,7 +245,7 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
           scaling: { manualInstanceCount: options.replicas ?? 1 },
           template: nodeTemplate(options, { serviceAccount, secretEnv }),
           env: Output.all(nodeEnvironment(nodes), own).pipe(
-            Output.map(([env, extra]) => plainEnvironment({ ...env, ...extra }, options.secrets)),
+            Output.map(([env, extra]) => plainEnvironment({ ...env, ...extra }, secretMap)),
           ),
         });
         if (serviceAccount === undefined && secrets.length > 0) {

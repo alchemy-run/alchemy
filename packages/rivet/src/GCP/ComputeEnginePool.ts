@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import * as Compute from "@alchemy.run/gcp/Compute";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as IAM from "@alchemy.run/gcp/IAM";
+import * as SecretManager from "@alchemy.run/gcp/SecretManager";
 import * as Storage from "@alchemy.run/gcp/Storage";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
@@ -24,6 +26,8 @@ const HASH_KEY = "rivet-node-hash";
 const ENV_KEY = "rivet-node-env";
 const INDEX_KEY = "rivet-node-index";
 const SECRETS_KEY = "rivet-node-secrets";
+const ROLLOUT_KEY = "rivet-node-rollout";
+const REPLICAS_KEY = "rivet-node-replicas";
 
 export interface ComputeEnginePoolOptions extends PoolSettings {
   /**
@@ -54,14 +58,15 @@ export interface ComputeEnginePoolOptions extends PoolSettings {
    */
   stopTimeout?: number;
   /**
-   * Seconds between two nodes restarting when a deploy changes them: node
-   * `i` restarts `i * rolloutInterval` seconds after the change reaches it.
-   * This is a timer, not a readiness gate: node `i` stops whether or not
-   * node `i - 1` has reconnected. Make it longer than `stopTimeout` plus the
-   * time a node takes to start, so the restarts do not overlap.
-   * @default 60
+   * Seconds a node waits for its turn when a deploy changes the nodes.
+   * Node `i` restarts only once node `i - 1` has restarted on the new
+   * program and the control plane lists every node of the pool connected
+   * again. A node still waiting when this has passed keeps running its
+   * current program, and so does every node after it: a program that
+   * never connects stops the rollout at its first node.
+   * @default 600
    */
-  rolloutInterval?: number;
+  rolloutTimeout?: number;
   /**
    * Environment each node runs with, besides the pool's own.
    */
@@ -74,9 +79,10 @@ export interface ComputeEnginePoolOptions extends PoolSettings {
    * and the values stay out of instance metadata and the node's env file.
    * Docker still keeps a container's environment in its configuration on
    * the VM's disk, so root on the VM can read them.
-   * Name `RIVET_TOKEN` here to keep the control plane's token out of
-   * metadata too. A node that cannot read a secret keeps running what it
-   * ran before.
+   * The control plane's token reaches the nodes this way too, from a
+   * secret the pool keeps; name `RIVET_TOKEN` here to use a secret of your
+   * own instead. A node that cannot read a secret keeps running what it ran
+   * before.
    */
   secrets?: Record<string, Input<string>>;
   /**
@@ -84,13 +90,6 @@ export interface ComputeEnginePoolOptions extends PoolSettings {
    * @default a service account of the pool's own
    */
   serviceAccount?: Input<string>;
-  /**
-   * RivetKit release the nodes run a TypeScript program with. Nodes speak
-   * the control plane protocol of their release: a 3.0 node works with a
-   * 3.0 or 3.1 control plane, a 3.1 node needs a 3.1 one.
-   * @default "3.0.0"
-   */
-  rivetkitVersion?: string;
 }
 
 const asOutput = (value: Input<string>): Output.Output<string> =>
@@ -148,27 +147,69 @@ const readSecrets = `SECRET_ARGS=()
     SECRET_ARGS+=(-e "$NAME")
   done <<< "$(curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/attributes/${SECRETS_KEY}")"`;
 
+/**
+ * Rollout markers and readiness: `marker N` names the object node N
+ * writes to the bucket once it runs this rollout's program, and
+ * `ready_nodes` counts the pool's nodes the control plane lists as
+ * connected and not stopping.
+ */
+const rolloutFunctions = (
+  bucket: string,
+) => `md() { curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/attributes/$1"; }
+env_value() { grep -m1 "^$1=" ${APP_PATH}/env.list | cut -d= -f2-; }
+marker() { printf 'https://storage.googleapis.com/storage/v1/b/${bucket}/o/rollout%%2F%s%%2F%s' "$ROLLOUT" "$1"; }
+ready_nodes() {
+  curl -sf -H "Authorization: Bearer \${RIVET_TOKEN:-}" \\
+    "$(env_value RIVET_ENDPOINT)/pools/$(env_value RIVET_POOL)/nodes?namespace=$(env_value RIVET_NAMESPACE)&limit=100" \\
+    | grep -o '{[^{}]*}' | grep -E '"connected": *true' | grep -cE '"stopping": *false'
+}
+# Whether the control plane lists every node connected; any failure is a no.
+pool_whole() {
+  local count
+  count="$(ready_nodes 2>/dev/null | tail -n 1)"
+  [ "\${count:-0}" -ge "$REPLICAS" ] 2>/dev/null
+}
+# Wait until node \`$1\` has written its marker (none: no wait) and the pool
+# is whole, or give up at the deadline.
+await_turn() {
+  until { [ -z "$1" ] || curl -sf -o /dev/null -H "Authorization: Bearer $TOKEN" "$(marker "$1")"; } \\
+    && pool_whole; do
+    if [ "$SECONDS" -ge "$DEADLINE" ]; then return 1; fi
+    sleep 5
+  done
+}`;
+
 /** The startup script every node runs, rendered for a pool. @internal */
 export const startupScript = (options: {
   readonly bucket: string;
   readonly image: boolean;
   readonly stopTimeout: number;
-  readonly rolloutInterval: number;
+  readonly rolloutTimeout: number;
   readonly rivetkitVersion?: string;
 }) => `#!/bin/bash
 set -uo pipefail
 MD=http://metadata.google.internal/computeMetadata/v1
 mkdir -p ${APP_PATH}
+${rolloutFunctions(options.bucket)}
+log() { echo "rivet-node: $*" > /dev/ttyS0 2>/dev/null || echo "rivet-node: $*"; }
 start() {
   TOKEN="$(curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/service-accounts/default/token" | sed -E 's/.*"access_token":"([^"]+)".*/\\1/')"
   ${readSecrets}
   ${prepareProgram(options.bucket, options.image)}
-  curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/attributes/${ENV_KEY}" > ${APP_PATH}/env.list
+  md ${ENV_KEY} > ${APP_PATH}/env.list
+  INDEX="$(md ${INDEX_KEY} || echo 0)"
+  REPLICAS="$(md ${REPLICAS_KEY} || echo 1)"
+  ROLLOUT="$(md ${ROLLOUT_KEY} || echo none)"
+  DEADLINE=$((SECONDS + ${options.rolloutTimeout}))
   if docker inspect rivet-node >/dev/null 2>&1; then
-    # A deploy: node i waits its turn, so the pool restarts one node at a
-    # time and the others keep serving while it does.
-    INDEX="$(curl -sf -H 'Metadata-Flavor: Google' "$MD/instance/attributes/${INDEX_KEY}" || echo 0)"
-    sleep $((INDEX * ${options.rolloutInterval}))
+    # A deploy: node i waits until node i-1 runs the new program and every
+    # node is connected, so the pool restarts one node at a time and the
+    # others keep serving while it does.
+    PREVIOUS="$([ "$INDEX" -gt 0 ] && echo $((INDEX - 1)))"
+    if ! await_turn "$PREVIOUS"; then
+      log "rollout $ROLLOUT: node \${PREVIOUS:-0} did not come back within ${options.rolloutTimeout}s; keeping this node on its current program"
+      return 1
+    fi
     # SIGTERM first, so the node drains its actors; SIGKILL only after the grace.
     docker stop -t ${options.stopTimeout} rivet-node >/dev/null 2>&1 || true
     docker rm -f rivet-node >/dev/null 2>&1 || true
@@ -181,6 +222,13 @@ start() {
         : ` \\
     -v ${APP_PATH}/node.mjs:/program/node.mjs:ro -w /app`
     } "$IMAGE"${runCommand(options.image, options.rivetkitVersion ?? RIVETKIT_VERSION)}
+  # Once the pool is whole again, tell the next node it is its turn.
+  if await_turn ""; then
+    curl -sf -o /dev/null -X POST -H "Authorization: Bearer $TOKEN" --data-binary '' \\
+      "https://storage.googleapis.com/upload/storage/v1/b/${options.bucket}/o?uploadType=media&name=rollout%2F$ROLLOUT%2F$INDEX" || true
+  else
+    log "rollout $ROLLOUT: the pool did not reconnect within ${options.rolloutTimeout}s"
+  fi
 }
 etag() {
   curl -sf -H 'Metadata-Flavor: Google' -D - -o /dev/null "$MD/instance/attributes/?recursive=true$1" \\
@@ -212,8 +260,9 @@ pgrep -f "docker logs -f rivet-node" >/dev/null || setsid sh -c 'while true; do 
  * `Rivet.DurableObject` given this pool in a Node container. The node
  * program sits in a Cloud Storage bucket the instances read as their own
  * service account; a deploy that changes it, or the nodes' env, restarts the
- * container on each instance in place, staggered by `rolloutInterval`,
- * giving each node `stopTimeout` seconds to stop.
+ * container on each instance in place, one node at a time: a node restarts
+ * once the one before it runs the new program and the control plane lists
+ * every node connected, and gets `stopTimeout` seconds to stop.
  *
  * Nodes only connect out to the control plane, so no inbound traffic
  * reaches them, and the pool works with any control plane it can reach —
@@ -294,8 +343,27 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
         role: "roles/storage.objectViewer",
         member,
       });
+      // Nodes write a marker per rollout once they run its program; a
+      // creator can't overwrite the program.
+      const markerGrant = yield* IAM.Member(`${id}RolloutGrant`, {
+        kind: "storage.bucket",
+        name: bucket.bucketName,
+        role: "roles/storage.objectCreator",
+        member,
+      });
+      // The control plane's token reaches the nodes from Secret Manager,
+      // never metadata, unless the pool names a secret of its own for it.
+      const token =
+        options.secrets?.RIVET_TOKEN === undefined
+          ? (yield* SecretManager.Secret(`${id}Token`, {
+              value: nodes.environment.RIVET_TOKEN,
+            })).version.pipe(Output.map((version) => version ?? ""))
+          : undefined;
       // Nodes read each secret themselves: grant the secret, not the project.
-      const secrets = Object.entries(options.secrets ?? {});
+      const secrets = Object.entries({
+        ...(token === undefined ? {} : { RIVET_TOKEN: token }),
+        ...options.secrets,
+      });
       const secretGrants: Array<Output.Output<string>> = [];
       for (const [name, version] of secrets) {
         const secretGrant = yield* IAM.Member(`${id}Secret${name}`, {
@@ -337,32 +405,45 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
             .join("\n"),
         ),
       );
-      const metadata = (index: number) =>
-        Output.all(
-          bucket.bucketName,
-          program.md5Hash,
-          envFile,
-          secretVersions,
-          grant.role,
-          // Nodes read their secrets once the grants exist.
-          Output.all(...secretGrants),
-        ).pipe(
-          Output.map(([bucketName, programHash, env, versions]) => ({
+      const replicas = options.replicas ?? 1;
+      // What every node runs, the same on each; its hash names the rollout.
+      const shared = Output.all(
+        bucket.bucketName,
+        program.md5Hash,
+        envFile,
+        secretVersions,
+        grant.role,
+        markerGrant.role,
+        // Nodes read their secrets once the grants exist.
+        Output.all(...secretGrants),
+      ).pipe(
+        Output.map(([bucketName, programHash, env, versions]) => {
+          const values = {
             "startup-script": startupScript({
               bucket: bucketName,
               image,
               stopTimeout: options.stopTimeout ?? 30,
-              rolloutInterval: options.rolloutInterval ?? 60,
+              rolloutTimeout: options.rolloutTimeout ?? 600,
               rivetkitVersion: options.rivetkitVersion,
             }),
             [HASH_KEY]: programHash ?? "",
             [ENV_KEY]: env,
             [SECRETS_KEY]: versions,
-            [INDEX_KEY]: String(index),
-          })),
-        );
+            [REPLICAS_KEY]: String(replicas),
+          };
+          return {
+            ...values,
+            [ROLLOUT_KEY]: createHash("sha256")
+              .update(JSON.stringify(values))
+              .digest("hex")
+              .slice(0, 16),
+          };
+        }),
+      );
+      const metadata = (index: number) =>
+        shared.pipe(Output.map((values) => ({ ...values, [INDEX_KEY]: String(index) })));
 
-      for (let i = 0; i < (options.replicas ?? 1); i++) {
+      for (let i = 0; i < replicas; i++) {
         yield* Compute.Instance(`${id}Node${i}`, {
           zone: zones[i % zones.length]!,
           machineType,

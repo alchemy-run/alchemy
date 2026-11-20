@@ -1,6 +1,6 @@
 import { nodeTemplate, plainEnvironment, secretGrants } from "@alchemy.run/rivet/GCP/CloudRunPool";
 import { startupScript } from "@alchemy.run/rivet/GCP/ComputeEnginePool";
-import { nodeDockerfile, NODE_DOCKERFILE } from "@alchemy.run/rivet/internal/PoolHost";
+import { nodeDockerfile } from "@alchemy.run/rivet/internal/PoolHost";
 import { describe, expect, test } from "@alchemy.run/test";
 
 describe("RivetGCP.CloudRunPool worker pool", { tags: ["unit"] }, () => {
@@ -62,14 +62,16 @@ describe("RivetGCP.CloudRunPool worker pool", { tags: ["unit"] }, () => {
 
 describe("Rivet node RivetKit release", { tags: ["unit"] }, () => {
   test("nodes install RivetKit 3.0.0 unless the pool names another release", () => {
-    expect(NODE_DOCKERFILE).toBe("FROM oven/bun:1\nWORKDIR /app\nRUN bun add rivetkit@3.0.0\n");
+    expect(nodeDockerfile("3.0.0")).toBe(
+      "FROM oven/bun:1\nWORKDIR /app\nRUN bun add rivetkit@3.0.0\n",
+    );
     expect(nodeDockerfile("3.0.7")).toContain("RUN bun add rivetkit@3.0.7\n");
     const script = (rivetkitVersion?: string) =>
       startupScript({
         bucket: "b",
         image: false,
         stopTimeout: 30,
-        rolloutInterval: 60,
+        rolloutTimeout: 600,
         rivetkitVersion,
       });
     expect(script()).toContain("npm install --no-save --no-fund --no-audit rivetkit@3.0.0 ");
