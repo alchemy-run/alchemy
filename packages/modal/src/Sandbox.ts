@@ -12,10 +12,10 @@ import {
   type HostRuntimeContext,
   type ServerHost,
 } from "alchemy/Runtime/Process";
+import { envString } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import type { App } from "./App.ts";
 import { buildImage, ImageBuildOps } from "./ImageBuild.ts";
 import { checkCommands, lowerPlan, MODAL_CAPABILITIES } from "./ImagePlan.ts";
@@ -279,12 +279,7 @@ const appOf = (value: unknown) => {
 };
 
 /** An env value as a string, as the program's `process.env` sees it. */
-const envText = (value: unknown): string =>
-  typeof value === "string"
-    ? value
-    : Redacted.isRedacted(value)
-      ? String(Redacted.value(value))
-      : JSON.stringify(value ?? null);
+const envText = (value: unknown): string => envString(value) ?? "";
 
 export const SandboxProvider = () =>
   Provider.effect(

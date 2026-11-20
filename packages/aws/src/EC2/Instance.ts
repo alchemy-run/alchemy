@@ -29,6 +29,7 @@ import {
   type Ec2HostedProps,
   type InstanceEnclaveOptions,
   type InstanceMetadataOptions,
+  CONTAINER_UNIT_VERSION,
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
   type Ec2HostRuntimeContext,
@@ -155,7 +156,9 @@ export interface InstanceProps extends PlatformProps {
    */
   port?: number;
   /**
-   * Additional environment variables for the hosted process.
+   * Additional environment variables for the hosted process. systemd loads
+   * them, so keys must be shell-style names (`[A-Za-z_][A-Za-z0-9_]*`);
+   * another fails the deploy.
    */
   env?: Record<string, any>;
   /**
@@ -306,6 +309,10 @@ export interface Instance extends Resource<
      */
     code?: {
       hash: string;
+      /**
+       * Version of the systemd unit a container instance was launched with.
+       */
+      unit?: number;
     };
   },
   {
@@ -788,8 +795,14 @@ export const InstanceProvider = () =>
             !isResolved(raw.userData) || !deepEqual(raw.userData, olds.userData);
           const hostModeChanged =
             Boolean(olds.main || olds.context) !== Boolean(raw.main || raw.context);
+          // User data installs the unit once, so a different container unit
+          // (or a switch between program and container) needs a new instance.
+          const containerUnitChanged =
+            output?.code !== undefined &&
+            output.code.unit !== (raw.context !== undefined ? CONTAINER_UNIT_VERSION : undefined);
           if (
             hostModeChanged ||
+            containerUnitChanged ||
             launchConfigChanged(raw.imageId, olds.imageId) ||
             launchConfigChanged(raw.subnetId, olds.subnetId) ||
             launchConfigChanged(raw.keyName, olds.keyName) ||
