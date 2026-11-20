@@ -189,6 +189,10 @@ Moving Domain objects to Billing.Domain: 1,200/4,096 (42s) ...
 
 A key called during the move moves first, so nothing is read from an empty object. The same deploy deletes each old class whose objects have all moved. A saga's runs were listed nowhere before, and Cloudflare lists an object a few minutes after it is written, so a saga's old class waits for a deploy at least 15 minutes later, which moves any run the first one didn't see.
 
+:::caution
+Don't schedule a command on a new aggregate in the ten minutes before the upgrade deploy. An aggregate with no events and only a scheduled command, written by the old code that recently, is in neither the model's directory nor Cloudflare's listing, so the deploy can delete its class with the command in it. Aggregates with an event, and anything written once the deploy has started, move as usual.
+:::
+
 Models deployed before Domain version 0 named classes after the definition alone, like `AccountAggregate`. The upgrade renames each to its version 0 name with the Durable Object's [`renamedFrom`](/providers/cloudflare/workers/durableobject) first, then moves its objects the same way.
 
 If two models in one Worker listed the same aggregate, they shared that class and its data, and only one can keep it. The deploy fails with `DurableObjectRenameConflict` until the others set `legacyData: false`:
