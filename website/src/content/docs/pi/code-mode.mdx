@@ -59,6 +59,39 @@ console.log(first.sum + second.sum);
 
 A tool's `success` schema is the type a script sees, which is why every tool declares one. A script reads `first.sum` as a number, not as text.
 
+## Failures a script can catch
+
+A tool's `failure` schema is in its declaration too. A call that fails with it rejects with an `Error` carrying the failure's `_tag` and fields, so a script handles it by tag:
+
+```javascript
+const outcome = await tools.withdraw({ account: "frozen", amount: 5 }).then(
+  () => "withdrawn",
+  (error) => (error._tag === "AccountFrozen" ? `frozen: ${error.account}` : Promise.reject(error)),
+);
+console.log(outcome);
+```
+
+Any other rejection is a defect of the tool.
+
+## Write programs as Effects
+
+`Pi.CodeModeEffect` has the model write an Effect instead. A script is the body of `Effect.gen(function* () { ... })`, each tool is an `Effect<A, E>` whose error channel is its `failure` schema, and effect's modules are in scope:
+
+```typescript
+const CodeModeLive = Pi.CodeModeEffect.pipe(Layer.provide(PiCloudflare.EvalInline()));
+```
+
+```javascript
+const added = yield* tools.add({ a: 2, b: 3 });
+const balance = yield* tools.withdraw({ account: "checking", amount: 500 }).pipe(
+  Effect.map(() => -1),
+  Effect.catchTag("InsufficientFunds", (error) => Effect.succeed(error.balance)),
+);
+console.log(added.sum, balance);
+```
+
+Effect runs inside the sandbox with the script, so it works with every place scripts run and replays after a crash like an async script. The sandbox has no timers: `Effect.sleep`, `Effect.timeout`, and timed schedules fail.
+
 ## Add it to one conversation
 
 Like any extension, code mode can be added to a conversation while it lives:
@@ -79,6 +112,12 @@ A script runs deterministically, and each tool call it finishes is stored. A scr
 const CodeModeLive = Pi.CodeModeAsync.pipe(
   Layer.provide(PiCloudflare.EvalInline({ timeoutMs: 30_000 })),
 );
+```
+
+`PiCloudflare.EvalWorkerLoader()` runs them in an isolate of their own instead, loaded through a `worker_loader` binding. The isolate has no network, no bindings, and no state. Each tool call comes back to the Durable Object over RPC, and the object keeps the deadline and the journal a script replays from:
+
+```typescript
+const CodeModeLive = Pi.CodeModeEffect.pipe(Layer.provide(PiCloudflare.EvalWorkerLoader()));
 ```
 
 On a machine with Node.js or Bun, `Pi.EvalQuickJS()` runs scripts on a worker thread. See [Other hosts](/pi/other-hosts).
