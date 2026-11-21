@@ -357,16 +357,14 @@ export const ServiceLbPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsServiceLbPolicies({
+            description: news.description,
+            labels: desiredLabels,
+            loadBalancingAlgorithm: news.loadBalancingAlgorithm,
+            autoCapacityDrain: desiredDrain,
+            failoverConfig: desiredFailover,
+            isolationConfig: desiredIsolation,
             parent: parentOf(env.project, location),
             serviceLbPolicyId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              loadBalancingAlgorithm: news.loadBalancingAlgorithm,
-              autoCapacityDrain: desiredDrain,
-              failoverConfig: desiredFailover,
-              isolationConfig: desiredIsolation,
-            },
           })
           .pipe(
             Effect.retry({
@@ -399,17 +397,14 @@ export const ServiceLbPolicyProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsServiceLbPolicies({
+          labels: desiredLabels,
+          description: news.description,
+          loadBalancingAlgorithm: news.loadBalancingAlgorithm,
+          autoCapacityDrain: desiredDrain,
+          failoverConfig: desiredFailover,
+          isolationConfig: desiredIsolation,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            loadBalancingAlgorithm: news.loadBalancingAlgorithm,
-            autoCapacityDrain: desiredDrain,
-            failoverConfig: desiredFailover,
-            isolationConfig: desiredIsolation,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

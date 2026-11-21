@@ -3,6 +3,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
+import { partitionOf } from "../Partition.ts";
 import { RegisterApiGatewayBinding } from "./BindingHttp.ts";
 import { GetUsage, type GetUsageRequest } from "./GetUsage.ts";
 import type { UsagePlan } from "./UsagePlan.ts";
@@ -24,7 +25,7 @@ export const GetUsageHttp = Layer.effect(
         target: usagePlan,
         verb: "GET",
         paths: (region) => [
-          Output.interpolate`arn:aws:apigateway:${region}::/usageplans/${usagePlan.id}/usage`,
+          Output.interpolate`arn:${partitionOf(region)}:apigateway:${region}::/usageplans/${usagePlan.id}/usage`,
         ],
       });
       return Effect.fn(`AWS.ApiGateway.GetUsage(${usagePlan.LogicalId})`)(function* (

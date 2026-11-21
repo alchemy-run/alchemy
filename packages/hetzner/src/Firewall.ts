@@ -1,4 +1,5 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as FirewallActions from "@distilled.cloud/hetzner/firewall_actions";
+import * as Firewalls from "@distilled.cloud/hetzner/firewalls";
 import type {
   CreateFirewallRequestApplyToItem,
   CreateFirewallRequestRulesItem,
@@ -379,21 +380,21 @@ const toAttrs = (firewall: ObservedFirewall): FirewallAttributes => ({
 });
 
 const getById = (id: number) =>
-  Hetzner.firewalls.getFirewall({ id }).pipe(
+  Firewalls.getFirewall({ id }).pipe(
     Effect.map(({ firewall }) => firewall),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
   Effect.gen(function* () {
-    const { firewalls } = yield* Hetzner.firewalls.listFirewalls({ name, per_page: 50 });
+    const { firewalls } = yield* Firewalls.listFirewalls({ name, per_page: 50 });
     return firewalls.find((item) => item.name === name);
   });
 
 const findByLabels = (id: string) =>
   Effect.gen(function* () {
     const selector = labelSelector(yield* createInternalLabels(id));
-    const { firewalls } = yield* Hetzner.firewalls.listFirewalls({
+    const { firewalls } = yield* Firewalls.listFirewalls({
       label_selector: selector,
       per_page: 50,
     });
@@ -420,26 +421,24 @@ const ensureFirewall = Effect.fn(function* (input: {
   rules: FirewallRule[];
   serverIds: number[];
 }) {
-  const created = yield* Hetzner.firewalls
-    .createFirewall({
-      name: input.name,
-      labels: input.labels,
-      ...(input.rules.length > 0 ? { rules: input.rules.map(toWireRule) } : {}),
-      ...(input.serverIds.length > 0 ? { apply_to: toServerApplyItems(input.serverIds) } : {}),
-    })
-    .pipe(
-      Effect.catchTag("Conflict", () =>
-        findByName(input.name).pipe(
-          Effect.flatMap((existing) =>
-            existing !== undefined
-              ? Effect.succeed({ firewall: existing, actions: [] })
-              : Hetzner.firewalls
-                  .listFirewalls({ name: input.name, per_page: 1 })
-                  .pipe(Effect.map(({ firewalls }) => ({ firewall: firewalls[0], actions: [] }))),
-          ),
+  const created = yield* Firewalls.createFirewall({
+    name: input.name,
+    labels: input.labels,
+    ...(input.rules.length > 0 ? { rules: input.rules.map(toWireRule) } : {}),
+    ...(input.serverIds.length > 0 ? { apply_to: toServerApplyItems(input.serverIds) } : {}),
+  }).pipe(
+    Effect.catchTag("Conflict", () =>
+      findByName(input.name).pipe(
+        Effect.flatMap((existing) =>
+          existing !== undefined
+            ? Effect.succeed({ firewall: existing, actions: [] })
+            : Firewalls.listFirewalls({ name: input.name, per_page: 1 }).pipe(
+                Effect.map(({ firewalls }) => ({ firewall: firewalls[0], actions: [] })),
+              ),
         ),
       ),
-    );
+    ),
+  );
   yield* waitActions(created.actions ?? []);
   return created.firewall ?? (yield* findByName(input.name));
 });
@@ -455,7 +454,7 @@ const syncNameAndLabels = Effect.fn(function* (input: {
   const { upsert, removed } = diffLabels(input.observedLabels, input.desiredLabels);
   const labelsChanged = upsert.length > 0 || removed.length > 0;
   if (!nameChanged && !labelsChanged) return;
-  yield* Hetzner.firewalls.updateFirewall({
+  yield* Firewalls.updateFirewall({
     id: input.firewallId,
     ...(nameChanged ? { name: input.desiredName } : {}),
     ...(labelsChanged ? { labels: input.desiredLabels } : {}),
@@ -468,7 +467,7 @@ const syncRules = Effect.fn(function* (input: {
   desired: FirewallRule[];
 }) {
   if (rulesEqual(input.observed, input.desired)) return;
-  const { actions } = yield* Hetzner.firewallActions.setFirewallRules({
+  const { actions } = yield* FirewallActions.setFirewallRules({
     id: input.firewallId,
     rules: input.desired.map(toWireRule),
   });
@@ -485,14 +484,14 @@ const syncApplyTo = Effect.fn(function* (input: {
   const toAdd = [...desiredIds].filter((id) => !observedIds.has(id));
   const toRemove = [...observedIds].filter((id) => !desiredIds.has(id));
   if (toAdd.length > 0) {
-    const { actions } = yield* Hetzner.firewallActions.applyFirewallToResources({
+    const { actions } = yield* FirewallActions.applyFirewallToResources({
       id: input.firewallId,
       apply_to: toServerApplyItems(toAdd),
     });
     yield* waitActions(actions);
   }
   if (toRemove.length > 0) {
-    const { actions } = yield* Hetzner.firewallActions.removeFirewallFromResources({
+    const { actions } = yield* FirewallActions.removeFirewallFromResources({
       id: input.firewallId,
       remove_from: toServerApplyItems(toRemove),
     });
@@ -506,11 +505,12 @@ const detachAll = Effect.fn(function* (
 ) {
   const removeFrom = detachItems(appliedTo);
   if (removeFrom.length === 0) return;
-  const result = yield* Hetzner.firewallActions
-    .removeFirewallFromResources({ id: firewallId, remove_from: removeFrom })
-    .pipe(
-      Effect.catchTag(["NotFound", "UnprocessableEntity"], () => Effect.succeed({ actions: [] })),
-    );
+  const result = yield* FirewallActions.removeFirewallFromResources({
+    id: firewallId,
+    remove_from: removeFrom,
+  }).pipe(
+    Effect.catchTag(["NotFound", "UnprocessableEntity"], () => Effect.succeed({ actions: [] })),
+  );
   yield* waitActions(result.actions);
 });
 
@@ -518,7 +518,7 @@ export const FirewallProvider = () =>
   Provider.succeed(Firewall, {
     stables: ["id", "created"],
     list: Effect.fn(function* () {
-      const rows = yield* Hetzner.firewalls.listFirewalls
+      const rows = yield* Firewalls.listFirewalls
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(Stream.runCollect);
       return Array.from(rows, toAttrs);
@@ -642,7 +642,7 @@ export const FirewallProvider = () =>
       if (observed !== undefined) {
         yield* detachAll(id, observed.applied_to);
       }
-      yield* Hetzner.firewalls.deleteFirewall({ id }).pipe(
+      yield* Firewalls.deleteFirewall({ id }).pipe(
         Effect.catchTags({
           NotFound: () => Effect.void,
           UnprocessableEntity: () =>
@@ -650,9 +650,9 @@ export const FirewallProvider = () =>
               const again = yield* getById(id);
               if (again === undefined) return;
               yield* detachAll(id, again.applied_to);
-              yield* Hetzner.firewalls
-                .deleteFirewall({ id })
-                .pipe(Effect.catchTag("NotFound", () => Effect.void));
+              yield* Firewalls.deleteFirewall({ id }).pipe(
+                Effect.catchTag("NotFound", () => Effect.void),
+              );
             }),
         }),
       );

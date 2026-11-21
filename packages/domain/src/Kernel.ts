@@ -60,6 +60,7 @@ import type {
   Json,
   PolicyKit,
   ReceiptJson,
+  Root,
   StoredEvent,
   StreamEntry,
   ViewEntry,
@@ -102,9 +103,13 @@ export const InputMeta = Symbol.for("alchemy/Domain/Projection/InputMeta");
 export interface InputMetaValue {
   readonly projection: string;
   readonly key: string;
+  /** The projection's generation: its input log starts over at each one. */
+  readonly generation: number;
   readonly position: number;
   readonly source: string;
   readonly sourceSeq: number;
+  /** The aggregate event the input derives from, through any views. */
+  readonly root: Root;
   readonly at: number;
   readonly commandId: string;
   /** Appends made for this input so far in this run. */
@@ -151,6 +156,10 @@ export const decodeEnvelope = (json: EnvelopeJson): Aggregate.Envelope => ({
   commandId: json.commandId,
   correlationId: json.correlationId ?? json.commandId,
 });
+
+/** The aggregate event a delivery derives from: its own, unless a view passed it on. @internal */
+export const rootOf = (delivery: Delivery): Root =>
+  delivery.root ?? { source: delivery.source, seq: delivery.seq };
 
 /** The structural attributes of a delivery a reaction handles. */
 const deliveryAttributes = (delivery: Delivery): Record<string, unknown> => ({
@@ -284,7 +293,8 @@ export interface Kernel {
 
 /**
  * Build the kernel for a set of definitions. Validates tags and routing, and
- * dies with a {@link DefinitionError} for the first problem.
+ * dies with a {@link DefinitionError} for every problem, in definition order:
+ * each one is a defect of the Cause.
  */
 export const make = (
   definitions: Definitions,
@@ -292,15 +302,10 @@ export const make = (
 ): Effect.Effect<Kernel> =>
   Effect.suspend(() => {
     const { kernel, problems } = collect(definitions, telemetry);
-    return problems.length > 0 ? Effect.die(problems[0]) : Effect.succeed(kernel);
+    return problems.length > 0
+      ? Effect.failCause(Cause.fromReasons(problems.map(Cause.makeDieReason)))
+      : Effect.succeed(kernel);
   });
-
-/**
- * Every problem {@link make} would die with, without building anything.
- * Empty when the definitions are valid.
- */
-export const verify = (definitions: Definitions): ReadonlyArray<DefinitionError> =>
-  collect(definitions, Telemetry.resolve(undefined)).problems;
 
 /**
  * Why an `initial` state does not come back the same from JSON text, if it
@@ -339,7 +344,7 @@ const collect = (definitions: Definitions, telemetry: Telemetry.Resolved) => {
 
 /**
  * Build the kernel. Each definition problem goes to `report`, and the build
- * goes on past it, so {@link verify} sees every problem.
+ * goes on past it, so {@link make} reports every problem.
  */
 const build = (
   definitions: Definitions,
@@ -1087,6 +1092,7 @@ const build = (
       history: boolean,
       correlationId: string = commandId,
       trace?: Telemetry.TraceJson,
+      at?: ReadonlyArray<number | null>,
     ) {
       const stream = `${aggregate.aggregateName}/${id}`;
       const events: Array<StoredEvent> = [];
@@ -1108,7 +1114,7 @@ const build = (
           id,
           stream,
           seq: version + index + 1,
-          at: now,
+          at: typeof at?.[index] === "number" ? DateTime.makeUnsafe(at[index]) : now,
           commandId,
           correlationId,
         };
@@ -1229,6 +1235,9 @@ const build = (
           DateTime.makeUnsafe(input.now),
           input.commandId,
           true,
+          undefined,
+          undefined,
+          input.at,
         );
         return {
           state: codecs.state.encode(result.next),
@@ -1684,6 +1693,7 @@ const build = (
                   event: row.event,
                   envelope: row.envelope,
                   state: row.state,
+                  ...(row.root ? { root: row.root } : {}),
                   history: true,
                 },
                 only,
@@ -1798,6 +1808,7 @@ const build = (
                 event: yield* encodeEvent(out),
                 envelope: encodeEnvelope(outEnvelope, delivery.envelope.trace),
                 state: encodeState(current),
+                root: rootOf(delivery),
               };
               entries.push(entry);
               downstream.push(
@@ -1811,6 +1822,7 @@ const build = (
                     event: entry.event,
                     envelope: entry.envelope,
                     state: entry.state,
+                    root: entry.root,
                     ...(delivery.history ? { history: true } : {}),
                   },
                 ),
@@ -1904,6 +1916,7 @@ const build = (
   ): Effect.Effect<ReadonlyArray<unknown>> =>
     Effect.gen(function* () {
       const keyRef = Key.refOf(projection.definition.key, key);
+      const generation = generationOf("projection", projection.projectionName);
       const inputs: Array<unknown> = [];
       for (const { delivery, position } of batch) {
         const upstream = sources.get(delivery.origin)!;
@@ -1915,9 +1928,11 @@ const build = (
         const meta: InputMetaValue = {
           projection: projection.projectionName,
           key,
+          generation,
           position,
           source: delivery.source,
           sourceSeq: delivery.seq,
+          root: rootOf(delivery),
           at: delivery.envelope.at,
           commandId: delivery.envelope.commandId,
           appends: 0,

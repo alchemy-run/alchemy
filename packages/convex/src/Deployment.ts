@@ -204,13 +204,13 @@ export type Deployment = Resource<
  * **Example:** Run a query in a Worker
  * ```typescript
  * Effect.gen(function* () {
- *   const list = yield* Convex.Query(Backend);
+ *   const list = yield* Convex.RunQuery(Backend);
  *   return {
  *     fetch: Effect.gen(function* () {
  *       return yield* HttpServerResponse.json(yield* list("messages:list"));
  *     }),
  *   };
- * }).pipe(Effect.provide(Convex.QueryHttp));
+ * }).pipe(Effect.provide(Convex.RunQueryHttp));
  * ```
  *
  * @resource

@@ -47,13 +47,11 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         jobs.createProjectsTenantsJobs({
+          company: `projects/${project}/tenants/alchemy-missing/companies/alchemy-missing`,
+          title: "Alchemy Probe",
+          description: "probe",
+          requisitionId: "alchemy-job-probe",
           parent: `projects/${project}/tenants/alchemy-missing`,
-          body: {
-            company: `projects/${project}/tenants/alchemy-missing/companies/alchemy-missing`,
-            title: "Alchemy Probe",
-            description: "probe",
-            requisitionId: "alchemy-job-probe",
-          },
         }),
       );
       expect(error._tag).toEqual("TalentDataPermissionRequired");

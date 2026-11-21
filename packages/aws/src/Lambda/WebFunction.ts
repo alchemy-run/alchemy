@@ -30,6 +30,7 @@ import * as Stream from "effect/Stream";
 import { Assets, ensureLambdaWebCodeAccess } from "../Assets.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyDocument, PolicyStatement } from "../IAM/Policy.ts";
+import { managedPolicyArn, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import {
   LambdaLiveTailError,
@@ -684,9 +685,10 @@ export const WebFunctionProvider = () =>
                 iam.getRole({ RoleName: roleName }),
               ),
             ));
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam.attachRolePolicy({
           RoleName: roleName,
-          PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+          PolicyArn: managedPolicyArn(partition, "service-role/AWSLambdaBasicExecutionRole"),
         });
         return role.Role.Arn;
       });
@@ -783,6 +785,7 @@ export const WebFunctionProvider = () =>
                 iam.getRole({ RoleName: roleName }),
               ),
             ));
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam.putRolePolicy({
           RoleName: roleName,
           PolicyName: EGRESS_POLICY,
@@ -793,15 +796,15 @@ export const WebFunctionProvider = () =>
                 Effect: "Allow",
                 Action: ["ec2:CreateNetworkInterface"],
                 Resource: [
-                  "arn:aws:ec2:*:*:network-interface/*",
-                  "arn:aws:ec2:*:*:subnet/*",
-                  "arn:aws:ec2:*:*:security-group/*",
+                  `arn:${partition}:ec2:*:*:network-interface/*`,
+                  `arn:${partition}:ec2:*:*:subnet/*`,
+                  `arn:${partition}:ec2:*:*:security-group/*`,
                 ],
               },
               {
                 Effect: "Allow",
                 Action: ["ec2:CreateTags"],
-                Resource: "arn:aws:ec2:*:*:network-interface/*",
+                Resource: `arn:${partition}:ec2:*:*:network-interface/*`,
                 Condition: {
                   StringEquals: {
                     "ec2:ManagedResourceOperator": "network-connectors.lambda.amazonaws.com",
@@ -1087,7 +1090,8 @@ export const WebFunctionProvider = () =>
               Effect: "Deny",
               Action: "logs:CreateLogGroup",
               Resource: logGroupNames(functionName).map(
-                (name) => `arn:aws:logs:${region}:${accountId}:log-group:${name}:*`,
+                (name) =>
+                  `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:${name}:*`,
               ),
             },
           ],
@@ -1160,9 +1164,9 @@ export const WebFunctionProvider = () =>
             if (output !== undefined || role === undefined) return undefined;
             const attrs = {
               functionName,
-              functionArn: `arn:aws:lambda:${region}:${accountId}:web-function/${functionName}`,
+              functionArn: `arn:${partitionOf(region)}:lambda:${region}:${accountId}:web-function/${functionName}`,
               endpointName,
-              endpointArn: `arn:aws:lambda:${region}:${accountId}:web-function/${functionName}/endpoint/${endpointName}`,
+              endpointArn: `arn:${partitionOf(region)}:lambda:${region}:${accountId}:web-function/${functionName}/endpoint/${endpointName}`,
               domainName: "",
               url: "",
               authType: olds?.authType ?? "IamAuth",
@@ -1202,7 +1206,8 @@ export const WebFunctionProvider = () =>
             revisionId: endpoint ? latestRevisionId(endpoint, output?.revisionId) : "",
             revisionWeights: endpoint ? servedRevisions(endpoint) : [],
             roleName,
-            roleArn: output?.roleArn ?? `arn:aws:iam::${accountId}:role/${roleName}`,
+            roleArn:
+              output?.roleArn ?? `arn:${partitionOf(region)}:iam::${accountId}:role/${roleName}`,
             code: output?.code ?? { hash: "" },
             ...(endpoint
               ? endpointLimits(endpoint)
@@ -1477,7 +1482,7 @@ export const WebFunctionProvider = () =>
             const { accountId, region } = yield* AWSEnvironment.current;
             const response = yield* logs.startLiveTail({
               logGroupIdentifiers: [
-                `arn:aws:logs:${region}:${accountId}:log-group:${logGroupNames(output.functionName)[0]}`,
+                `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:${logGroupNames(output.functionName)[0]}`,
               ],
             });
             if (!response.responseStream) {

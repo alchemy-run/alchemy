@@ -193,9 +193,7 @@ export default class OracleBindingsHost extends GCP.Function<OracleBindingsHost>
         getOdbNetwork: getNetwork(),
         getOdbNetworksOdbSubnet: getSubnet(),
         getAutonomousDatabase: getDb(),
-        generateWallet: generateWallet({
-          body: { password: WALLET_PASSWORD, type: "SINGLE" },
-        }),
+        generateWallet: generateWallet({ password: WALLET_PASSWORD, type: "SINGLE" }),
         stopAutonomousDatabase: stop(),
         startAutonomousDatabase: start(),
         restartAutonomousDatabase: restart(),

@@ -16,6 +16,7 @@ import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
+import { definitionProblems } from "./definition-problems.ts";
 
 // ---------------------------------------------------------------- a wallet domain
 
@@ -586,31 +587,43 @@ describe("Domain Query", { tags: ["unit", "local"] }, () => {
     expect(String(exit)).toContain("Two entities are named 'Deposit'");
   });
 
-  it("verify reports every query problem without hosting the model", () => {
-    class Pages extends Domain.Query("Pages", { paged: true }) {}
-    class Named extends Domain.Query("WalletOwner", { success: Schema.Number }) {}
-    // A view the model does not hold: there is nothing to wait for.
-    class Elsewhere extends Domain.View("Elsewhere", {
-      from: [Wallet],
-      key: Wallet,
-      state: Schema.Struct({ owner: Schema.String }),
-      initial: { owner: "" },
-      evolve: { Opened: (_, e) => ({ owner: e.owner }) },
-    }) {}
-    class Unheld extends Domain.Query("Unheld", { waitsFor: [Elsewhere] }) {}
-    class Broken extends Domain.Model("QueryBroken", {
-      aggregates: [Wallet],
-      views: [WalletOwner],
-      queries: [Pages, Named, Total, Unheld, Total],
-    }) {}
-    expect(Domain.verify(Broken).map((problem) => problem.message)).toEqual([
-      "Query 'Pages' is `paged` but declares no `success`: name the schema of one entry",
-      "Two entities are named 'WalletOwner'",
-      "Total waits for Ledger, which is not in the Domain",
-      "Unheld waits for Elsewhere, which is not in the Domain",
-      "Duplicate query 'Total'",
-    ]);
-  });
+  it("refuses a model with every query problem at once", () =>
+    Effect.gen(function* () {
+      class Pages extends Domain.Query("Pages", { paged: true }) {}
+      class Named extends Domain.Query("WalletOwner", { success: Schema.Number }) {}
+      // A view the model does not hold: there is nothing to wait for.
+      class Elsewhere extends Domain.View("Elsewhere", {
+        from: [Wallet],
+        key: Wallet,
+        state: Schema.Struct({ owner: Schema.String }),
+        initial: { owner: "" },
+        evolve: { Opened: (_, e) => ({ owner: e.owner }) },
+      }) {}
+      class Unheld extends Domain.Query("Unheld", { waitsFor: [Elsewhere] }) {}
+      class Broken extends Domain.Model("QueryBroken", {
+        aggregates: [Wallet],
+        views: [WalletOwner],
+        queries: [Pages, Named, Total, Unheld, Total],
+      }) {}
+      const layer = Broken.layer(
+        Layer.mergeAll(
+          Pages.toLayer(Effect.succeed(() => Effect.succeed([]))),
+          Named.toLayer(Effect.succeed(() => Effect.succeed(0))),
+          Unheld.toLayer(Effect.succeed(() => Effect.void)),
+          Layer.provide(TotalLive, Movements.memory),
+        ),
+      );
+      expect(yield* definitionProblems(layer)).toMatchObject([
+        {
+          message:
+            "Query 'Pages' is `paged` but declares no `success`: name the schema of one entry",
+        },
+        { message: "Two entities are named 'WalletOwner'" },
+        { message: "Total waits for Ledger, which is not in the Domain" },
+        { message: "Unheld waits for Elsewhere, which is not in the Domain" },
+        { message: "Duplicate query 'Total'" },
+      ]);
+    }).pipe(Effect.runPromise));
 });
 
 // ---------------------------------------------------------------- Foldkit Commands for queries

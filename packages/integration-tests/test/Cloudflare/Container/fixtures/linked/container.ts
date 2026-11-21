@@ -12,11 +12,14 @@ export class LinkedContainer extends Cloudflare.Container<
 /**
  * A generated-Dockerfile container whose bundle bytes change with `marker`,
  * so each entrypoint publishes a new image over the same base layers, with
- * a registry layer cache.
+ * a registry layer cache. Fleet-scheduled, so the application carries the
+ * image.
  */
 export const linkedContainer = (main: string, marker: string) =>
   LinkedContainer.make(
     {
+      // The publication tests read the fleet application's image.
+      schedulingPolicy: "default",
       main,
       image: "oven/bun:latest",
       build: {

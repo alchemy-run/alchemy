@@ -54,29 +54,27 @@ test.provider(
 
       const error = yield* Effect.flip(
         networkservices.createProjectsLocationsLbRouteExtensions({
+          loadBalancingScheme: "INTERNAL_MANAGED",
+          forwardingRules: [
+            `//compute.googleapis.com/projects/${project}/regions/us-central1/forwardingRules/alchemy-missing-fr`,
+          ],
+          extensionChains: [
+            {
+              name: "chain1",
+              matchCondition: { celExpression: "true" },
+              extensions: [
+                {
+                  name: "ext1",
+                  authority: "ext1.example.com",
+                  service: `https://www.googleapis.com/compute/v1/projects/${project}/regions/us-central1/backendServices/alchemy-missing-be`,
+                  timeout: "0.1s",
+                  supportedEvents: ["REQUEST_HEADERS"],
+                },
+              ],
+            },
+          ],
           parent: `projects/${project}/locations/us-central1`,
           lbRouteExtensionId: "alchemy-missing-lb-route",
-          body: {
-            loadBalancingScheme: "INTERNAL_MANAGED",
-            forwardingRules: [
-              `//compute.googleapis.com/projects/${project}/regions/us-central1/forwardingRules/alchemy-missing-fr`,
-            ],
-            extensionChains: [
-              {
-                name: "chain1",
-                matchCondition: { celExpression: "true" },
-                extensions: [
-                  {
-                    name: "ext1",
-                    authority: "ext1.example.com",
-                    service: `https://www.googleapis.com/compute/v1/projects/${project}/regions/us-central1/backendServices/alchemy-missing-be`,
-                    timeout: "0.1s",
-                    supportedEvents: ["REQUEST_HEADERS"],
-                  },
-                ],
-              },
-            ],
-          },
         }),
       );
       expect(error._tag).toBe("BadRequest");

@@ -280,13 +280,11 @@ export const KmsConfigProvider = () =>
       if (current === undefined) {
         const created = yield* netapp
           .createProjectsLocationsKmsConfigs({
+            cryptoKeyName: news.cryptoKeyName,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             kmsConfigId,
-            body: {
-              cryptoKeyName: news.cryptoKeyName,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -315,13 +313,10 @@ export const KmsConfigProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* netapp.patchProjectsLocationsKmsConfigs({
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

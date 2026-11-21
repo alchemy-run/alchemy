@@ -559,14 +559,12 @@ export const RegionAutoscalerProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertRegionAutoscalers({
+            name: autoscalerName,
+            target,
+            description,
+            autoscalingPolicy: policy,
             project: env.project,
             region,
-            body: {
-              name: autoscalerName,
-              target,
-              description,
-              autoscalingPolicy: policy,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.undefined),
@@ -596,15 +594,13 @@ export const RegionAutoscalerProvider = () =>
       if (descriptionChanged || policyChanged || targetChanged) {
         yield* compute
           .patchRegionAutoscalers({
+            name: autoscalerName,
+            target,
+            description,
+            autoscalingPolicy: policy,
             project: env.project,
             region,
             autoscaler: autoscalerName,
-            body: {
-              name: autoscalerName,
-              target,
-              description,
-              autoscalingPolicy: policy,
-            },
           })
           .pipe(
             Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),

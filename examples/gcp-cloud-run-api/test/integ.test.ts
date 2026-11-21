@@ -33,10 +33,7 @@ describe("gcp-cloud-run-api", () => {
       // The secret is created empty on purpose — the value is an operator
       // step. Add the version the service will read.
       yield* secretmanager
-        .addVersionProjectsSecrets({
-          parent: outputs.secretName,
-          body: { payload: { data: btoa(API_KEY) } },
-        })
+        .addVersionProjectsSecrets({ payload: { data: btoa(API_KEY) }, parent: outputs.secretName })
         .pipe(Effect.orDie, Effect.provide(GcpHttp));
       return outputs;
     }),

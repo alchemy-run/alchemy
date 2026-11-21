@@ -277,18 +277,16 @@ export const TuningJobProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsTuningJobs({
+            description: news.description,
+            tunedModelDisplayName,
+            baseModel: news.baseModel,
+            supervisedTuningSpec: news.supervisedTuningSpec,
+            preferenceOptimizationSpec: news.preferenceOptimizationSpec,
+            preTunedModel: news.preTunedModel,
+            serviceAccount: news.serviceAccount,
+            labels: desiredLabels,
+            encryptionSpec: news.encryptionSpec,
             parent: parentOf(env.project, location),
-            body: {
-              description: news.description,
-              tunedModelDisplayName,
-              baseModel: news.baseModel,
-              supervisedTuningSpec: news.supervisedTuningSpec,
-              preferenceOptimizationSpec: news.preferenceOptimizationSpec,
-              preTunedModel: news.preTunedModel,
-              serviceAccount: news.serviceAccount,
-              labels: desiredLabels,
-              encryptionSpec: news.encryptionSpec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, env.region)));
         current = created ?? undefined;

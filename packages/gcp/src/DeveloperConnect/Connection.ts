@@ -954,9 +954,9 @@ export const ConnectionProvider = () =>
       if (current === undefined) {
         const created = yield* developerconnect
           .createProjectsLocationsConnections({
+            ...body,
             parent: parentOf(env.project, location),
             connectionId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -1007,21 +1007,21 @@ export const ConnectionProvider = () =>
       if (mask.length > 0) {
         const operation = yield* developerconnect
           .patchProjectsLocationsConnections({
-            name: current.name ?? name,
-            updateMask: mask,
-            body: compact({
+            ...compact({
               etag: current.etag,
               ...body,
               disabled: desiredDisabled,
             }),
+            name: current.name ?? name,
+            updateMask: mask,
           })
           .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation === undefined) {
           const created = yield* developerconnect
             .createProjectsLocationsConnections({
+              ...body,
               parent: parentOf(env.project, location),
               connectionId,
-              body,
             })
             .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {

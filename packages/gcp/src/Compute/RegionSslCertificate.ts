@@ -508,11 +508,7 @@ export const RegionSslCertificateProvider = () =>
 
       if (current === undefined) {
         const created = yield* compute
-          .insertRegionSslCertificates({
-            project: env.project,
-            region,
-            body: desired,
-          })
+          .insertRegionSslCertificates({ ...desired, project: env.project, region })
           .pipe(
             Effect.flatMap((operation) =>
               waitRegionOperation(env.project, region, operation, {

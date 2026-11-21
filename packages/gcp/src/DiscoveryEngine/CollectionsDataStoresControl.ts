@@ -301,9 +301,9 @@ export const CollectionsDataStoresControlProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsDataStoresControls({
+            ...body,
             parent: news.dataStore,
             controlId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -323,6 +323,7 @@ export const CollectionsDataStoresControlProvider = () =>
 
       if (displayNameChanged || conditionsChanged || useCasesChanged) {
         current = yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresControls({
+          ...body,
           name: resource,
           updateMask: [
             displayNameChanged ? "display_name" : undefined,
@@ -331,7 +332,6 @@ export const CollectionsDataStoresControlProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: { ...body, name: resource },
         });
       }
 

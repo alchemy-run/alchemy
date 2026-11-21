@@ -393,13 +393,11 @@ export const BackupProvider = () =>
       if (current === undefined) {
         const created = yield* sqladmin
           .createBackupBackups({
+            instance,
+            description: desiredDescription,
+            location: news.location,
+            ttlDays: ttlDaysOf(news.ttlDays),
             parent: `projects/${env.project}`,
-            body: {
-              instance,
-              description: desiredDescription,
-              location: news.location,
-              ttlDays: ttlDaysOf(news.ttlDays),
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", (error) =>
@@ -459,6 +457,8 @@ export const BackupProvider = () =>
 
       if (isFinal && (descriptionChanged || expiryChanged)) {
         const patched = yield* sqladmin.updateBackupBackups({
+          description: desiredDescription,
+          expiryTime: news.expiryTime,
           name: currentName,
           updateMask: [
             descriptionChanged ? "description" : undefined,
@@ -466,10 +466,6 @@ export const BackupProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            description: desiredDescription,
-            expiryTime: news.expiryTime,
-          },
         });
         yield* waitForOperation(env.project, patched);
         current = yield* waitUntilExists(currentName);

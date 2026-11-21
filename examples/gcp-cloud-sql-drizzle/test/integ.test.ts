@@ -94,14 +94,12 @@ describe("gcp-cloud-sql-drizzle", () => {
   ) =>
     sqladmin
       .executeSqlInstances({
+        database: outputs.databaseName,
+        user: outputs.userName,
+        passwordSecretVersion: `${outputs.passwordSecretName}/versions/latest`,
+        sqlStatement,
         project: outputs.connectionName?.split(":")[0] ?? "",
         instance: outputs.instanceName,
-        body: {
-          database: outputs.databaseName,
-          user: outputs.userName,
-          passwordSecretVersion: `${outputs.passwordSecretName}/versions/latest`,
-          sqlStatement,
-        },
       })
       .pipe(
         Effect.map((response) => {

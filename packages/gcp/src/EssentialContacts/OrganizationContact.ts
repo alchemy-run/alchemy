@@ -257,7 +257,7 @@ export const OrganizationContactProvider = () =>
 
       if (current === undefined) {
         const created = yield* essentialcontacts
-          .createOrganizationsContacts({ parent, body })
+          .createOrganizationsContacts({ ...body, parent })
           .pipe(
             Effect.catchTag("Conflict", () =>
               listAt(parent).pipe(
@@ -284,12 +284,10 @@ export const OrganizationContactProvider = () =>
       );
       if (languageChanged || categoriesChanged) {
         current = yield* essentialcontacts.patchOrganizationsContacts({
+          languageTag,
+          notificationCategorySubscriptions: categories,
           name: current.name ?? "",
           updateMask: UPDATE_MASK,
-          body: {
-            languageTag,
-            notificationCategorySubscriptions: categories,
-          },
         });
       }
 

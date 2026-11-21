@@ -334,9 +334,9 @@ export const ExascaleDbStorageVaultProvider = () =>
       if (current === undefined) {
         const created = yield* oracle
           .createProjectsLocationsExascaleDbStorageVaults({
+            ...toCreateBody(news, desiredLabels),
             parent: parentOf(env.project, location),
             exascaleDbStorageVaultId,
-            body: toCreateBody(news, desiredLabels),
           })
           .pipe(
             retryQuota,

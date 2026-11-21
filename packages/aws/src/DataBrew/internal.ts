@@ -2,9 +2,7 @@ import * as databrew from "@distilled.cloud/aws/databrew";
 import { diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-
-/** ARN partition — the testing account is on the standard AWS partition. */
-const PARTITION = "aws";
+import { partitionOf } from "../Partition.ts";
 
 /** `arn:aws:databrew:{region}:{account}:{type}/{name}` */
 export const databrewArn = (
@@ -12,7 +10,7 @@ export const databrewArn = (
   accountId: string,
   type: "dataset" | "recipe" | "project" | "job" | "ruleset" | "schedule",
   name: string,
-) => `arn:${PARTITION}:databrew:${region}:${accountId}:${type}/${name}`;
+) => `arn:${partitionOf(region)}:databrew:${region}:${accountId}:${type}/${name}`;
 
 /**
  * Fetch the observed DataBrew tags for a resource ARN as a plain record.

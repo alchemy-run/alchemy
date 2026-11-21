@@ -95,6 +95,20 @@ export interface Delivery {
    * event (see `CatchUp`). Views and projections apply it, policies ignore it.
    */
   readonly history?: boolean;
+  /**
+   * For an event from a view: the aggregate event it derives from. Absent,
+   * the delivery's own `source` and `seq` are its root.
+   */
+  readonly root?: Root;
+}
+
+/**
+ * The aggregate event a delivery derives from, through any views: its stream
+ * and seq. A rebuilt view numbers its entries afresh, but its roots stay.
+ */
+export interface Root {
+  readonly source: string;
+  readonly seq: number;
 }
 
 /**
@@ -117,8 +131,25 @@ export const Subscription = Schema.Struct({
   refused: Schema.optionalKey(Schema.Unknown),
   /** `events` only: set once the `CaughtUp` frame after the read's history was sent. */
   caughtUpSent: Schema.optionalKey(Schema.Boolean),
+  /**
+   * Epoch milliseconds until which the read's middleware vouched for the
+   * caller (see `Domain.setExpiry`). Once it passes, the platform closes the
+   * connection with {@link REAUTHORIZE_CLOSE_CODE} instead of sending more.
+   */
+  validUntil: Schema.optionalKey(Schema.Number),
 });
 export type Subscription = typeof Subscription.Type;
+
+/**
+ * The close code of a live read's connection whose middleware must run again.
+ * The client reconnects at once and resumes from its cursor, so the read's
+ * middleware judges the caller afresh.
+ */
+export const REAUTHORIZE_CLOSE_CODE = 4000;
+
+/** Whether a subscription must be judged again before anything more is sent. */
+export const mustReauthorize = (subscription: Subscription, now: number): boolean =>
+  subscription.validUntil !== undefined && now >= subscription.validUntil;
 
 /**
  * What to send a subscriber, from a kit's `push`.
@@ -191,7 +222,16 @@ export type SendResult =
  */
 export type ImportResult =
   | { readonly _tag: "Imported"; readonly receipt: ReceiptJson }
-  | { readonly _tag: "UnexpectedVersion"; readonly version: number };
+  | { readonly _tag: "UnexpectedVersion"; readonly version: number }
+  | {
+      readonly _tag: "OutOfOrder";
+      /** The position of the first event out of order. */
+      readonly index: number;
+      /** Its commit time, in epoch milliseconds. */
+      readonly at: number;
+      /** The commit time it may not precede (or the clock it may not pass), in epoch milliseconds. */
+      readonly after: number;
+    };
 
 /**
  * What {@link AggregateStore.import} receives with the events.
@@ -199,6 +239,11 @@ export type ImportResult =
 export interface ImportMeta {
   readonly commandId: string;
   readonly expectedVersion: number;
+  /**
+   * Each event's original commit time, in epoch milliseconds, by position;
+   * `null` (or no list) for the platform's current time.
+   */
+  readonly at?: ReadonlyArray<number | null>;
 }
 
 /**
@@ -241,6 +286,8 @@ export interface SeedInput {
   readonly events: ReadonlyArray<Json>;
   readonly commandId: string;
   readonly now: number;
+  /** Each event's commit time by position, overriding `now` where it isn't `null`. */
+  readonly at?: ReadonlyArray<number | null>;
 }
 
 /**
@@ -489,6 +536,8 @@ export interface ViewEntry {
   readonly event: Json;
   readonly envelope: EnvelopeJson;
   readonly state: Json;
+  /** The aggregate event the entry derives from; absent on entries written before roots were. */
+  readonly root?: Root;
 }
 
 /**
@@ -579,6 +628,29 @@ export interface ListRange {
   /** At most this many entries. */
   readonly limit?: number;
 }
+
+/**
+ * The first imported event whose commit time comes before the event ahead of
+ * it (`latest` for the first: the instance's last commit time, `0` if it has
+ * none) or after `now`, or `undefined` when they are in order. An event
+ * without a time (`null`) commits at `now`. Views are rebuilt in commit-time
+ * order, so a history out of order would replay out of order.
+ */
+export const outOfOrder = (
+  at: ReadonlyArray<number | null> | undefined,
+  count: number,
+  latest: number,
+  now: number,
+): Extract<ImportResult, { readonly _tag: "OutOfOrder" }> | undefined => {
+  let after = latest;
+  for (let index = 0; index < count; index++) {
+    const time = at?.[index] ?? now;
+    if (time < after) return { _tag: "OutOfOrder", index, at: time, after };
+    if (time > now) return { _tag: "OutOfOrder", index, at: time, after: now };
+    after = time;
+  }
+  return undefined;
+};
 
 /** The entries of `entries` (sorted by `seq`) in `range`, for platforms that hold them in memory. */
 export const inRange = <A extends { readonly seq: number }>(
@@ -716,6 +788,15 @@ export interface StreamMeta {
   readonly checkpoints: Readonly<Record<string, number>>;
   /** The last write applied: the writer's input-log position and its append index there. */
   readonly origin: readonly [number, number];
+  /** The writer generation `origin` belongs to (see `Kernel.generationOf`); 0 when absent. */
+  readonly generation?: number;
+  /** The last root seq the writer has handled, per aggregate stream, over every generation. */
+  readonly roots?: Readonly<Record<string, number>>;
+  /**
+   * `roots` as of when this generation started writing: a rebuilt writer's
+   * replay of these appends nothing again.
+   */
+  readonly inherited?: Readonly<Record<string, number>>;
 }
 
 /** The meta of a stream key nothing has written. */
@@ -725,14 +806,29 @@ export const emptyStreamMeta: StreamMeta = { seq: 0, checkpoints: {}, origin: [0
  * One append to a stream key, made by its writer while handling an input.
  */
 export interface StreamWrite {
+  /** The writer's generation: its input log starts over at each one. */
+  readonly generation: number;
   /** Where the write comes from: the writer's input-log position and the append's index there. */
   readonly origin: readonly [number, number];
+  /** The aggregate event the input being handled derives from. */
+  readonly root: Root;
   /** The source event being handled. */
   readonly source: string;
   readonly sourceSeq: number;
   readonly at: number;
   readonly commandId: string;
   readonly events: ReadonlyArray<Json>;
+}
+
+/**
+ * What a writer's run handled, appends or not.
+ */
+export interface StreamHandled {
+  readonly generation: number;
+  /** The last source `seq` handled, per source stream. */
+  readonly checkpoints: Readonly<Record<string, number>>;
+  /** The last root seq handled, per aggregate stream. */
+  readonly roots: Readonly<Record<string, number>>;
 }
 
 /**
@@ -758,15 +854,13 @@ export interface StreamKit {
  */
 export interface StreamStore {
   /**
-   * Append a write to one key (single writer per key). A write whose origin is
-   * not after the last applied one is a repeat and is dropped.
+   * Append a write to one key (single writer per key), as the platform's
+   * stream rules decide: a repeat, a write from an older generation, or a rebuilt
+   * writer's replay of a root an earlier generation handled is dropped.
    */
   readonly append: (key: string, write: StreamWrite) => Effect.Effect<void>;
   /** Record that the writer handled source events without appending. */
-  readonly advance: (
-    key: string,
-    checkpoints: Readonly<Record<string, number>>,
-  ) => Effect.Effect<void>;
+  readonly advance: (key: string, handled: StreamHandled) => Effect.Effect<void>;
   readonly read: (key: string) => Effect.Effect<StreamMeta>;
   /** The current meta, then every new one. */
   readonly changes: (key: string) => Stream.Stream<StreamMeta>;

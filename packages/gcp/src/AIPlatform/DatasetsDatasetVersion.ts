@@ -307,10 +307,7 @@ export const DatasetsDatasetVersionProvider = () =>
 
       if (current === undefined) {
         const created = yield* aiplatform
-          .createDatasetsDatasetVersions({
-            parent: news.dataset,
-            body: { displayName: desiredDisplayName },
-          })
+          .createDatasetsDatasetVersions({ displayName: desiredDisplayName, parent: news.dataset })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
@@ -334,9 +331,9 @@ export const DatasetsDatasetVersionProvider = () =>
       const name = current.name ?? "";
       if ((current.displayName ?? "") !== desiredDisplayName) {
         current = yield* aiplatform.patchProjectsLocationsDatasetsDatasetVersions({
+          displayName: desiredDisplayName,
           name,
           updateMask: "display_name",
-          body: { name, displayName: desiredDisplayName },
         });
       }
 

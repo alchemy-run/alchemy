@@ -447,6 +447,25 @@ type HandledBy<
  * );
  * ```
  *
+ * ### Checking the declaration
+ * Building the Layer checks the definitions first: a view consuming a source
+ * keyed by another aggregate without `keyOf`, a view with `state` but no
+ * `initial`, a policy listening for an event no source emits, a stream with
+ * two writers, a schema with no JSON form. It dies with a
+ * `Domain.DefinitionError` for each problem, all in one Cause, so a test
+ * that builds the Layer reports every one. Problems that depend on what a
+ * handler returns, such as `decide` returning an event its command does not
+ * declare, surface when the handler runs.
+ *
+ * **Example:** A unit test for the whole Model
+ * ```typescript
+ * import { it } from "@effect/vitest";
+ * import * as Layer from "effect/Layer";
+ * import { BankInMemory } from "./Bank.ts";
+ *
+ * it.effect("the model is well defined", () => Layer.build(BankInMemory));
+ * ```
+ *
  * ### Deciding across aggregates
  * List each `Domain.Decision` in `decisions`. Every command has one
  * implementation, an aggregate or a decision: a second is a type error on
@@ -562,30 +581,6 @@ export const make = <
     ServableBy<A, V, S, Q, D>
   >;
 };
-
-/**
- * Check a Model's definitions without hosting it: every problem that would
- * otherwise fail its Layer's build, such as a view consuming a source keyed
- * by another aggregate without `keyOf`, a view with `state` but no
- * `initial`, a policy listening for an event no source emits, a stream
- * with two writers, or a schema with no JSON form. Returns all of them, in
- * definition order; an empty array means the Model is valid. Problems that
- * depend on what a handler returns, such as `decide` returning an event its command does not
- * declare, still surface when the handler runs.
- *
- * **Example:** A unit test for the whole Model
- * ```typescript
- * import * as Domain from "@alchemy.run/domain";
- * import { expect, it } from "vitest";
- * import { Bank } from "./Bank.model.ts";
- *
- * it("the model is well defined", () => {
- *   expect(Domain.verify(Bank)).toEqual([]);
- * });
- * ```
- */
-export const verify = (model: Any): ReadonlyArray<Kernel.DefinitionError> =>
-  Kernel.verify(model.definitions);
 
 /**
  * Trace one projection batch. A batch merges events from many commits, so it
@@ -883,12 +878,13 @@ const build = <A, E, R>(
       const writes = (projection.definition.writes ?? []).map((stream) =>
         streamStores.get(stream.streamName)!,
       );
+      const generation = kernel.generationOf("projection", projection.projectionName);
       projectionStores.set(
         projection.projectionName,
         yield* platform.projection(projection, {
           name: projection.projectionName,
           options: { batch: Projection.batchMillis(implementation.options) },
-          generation: kernel.generationOf("projection", projection.projectionName),
+          generation,
           singleSource: kernel.singleSource(`projection:${projection.projectionName}`),
           history: kernel.history,
           run: (key, batch) =>
@@ -900,13 +896,17 @@ const build = <A, E, R>(
               // What this run handled, so stream reads `atLeast` a receipt see it.
               if (writes.length === 0) return;
               const checkpoints: Record<string, number> = {};
+              const roots: Record<string, number> = {};
               for (const { delivery } of batch) {
                 checkpoints[delivery.source] = Math.max(
                   checkpoints[delivery.source] ?? 0,
                   delivery.seq,
                 );
+                const root = Kernel.rootOf(delivery);
+                roots[root.source] = Math.max(roots[root.source] ?? 0, root.seq);
               }
-              yield* Effect.forEach(writes, (store) => store.advance(key, checkpoints), {
+              const handled = { generation, checkpoints, roots };
+              yield* Effect.forEach(writes, (store) => store.advance(key, handled), {
                 discard: true,
               });
             }).pipe(observeProjection(projection.projectionName, key, batch)),
@@ -1111,10 +1111,21 @@ const aggregateClient = (
           );
         }
         const expected = options.expectedVersion ?? 0;
-        const result = yield* store.import(id, yield* Effect.forEach(events, kernel.encodeEvent), {
-          commandId: options.commandId,
-          expectedVersion: expected,
-        });
+        const rows = events.map((row) =>
+          "_tag" in row
+            ? { event: row, at: null }
+            : { event: row.event, at: DateTime.toEpochMillis(row.at) },
+        );
+        const at = rows.map((row) => row.at);
+        const result = yield* store.import(
+          id,
+          yield* Effect.forEach(rows, (row) => kernel.encodeEvent(row.event)),
+          {
+            commandId: options.commandId,
+            expectedVersion: expected,
+            ...(at.some((ms) => ms !== null) ? { at } : {}),
+          },
+        );
         if (result._tag === "UnexpectedVersion") {
           return yield* new Aggregate.UnexpectedVersion({
             aggregate: aggregate.aggregateName,
@@ -1122,6 +1133,16 @@ const aggregateClient = (
             commandId: options.commandId,
             expected,
             version: result.version,
+          });
+        }
+        if (result._tag === "OutOfOrder") {
+          return yield* new Aggregate.ImportOutOfOrder({
+            aggregate: aggregate.aggregateName,
+            id,
+            commandId: options.commandId,
+            index: result.index,
+            at: DateTime.makeUnsafe(result.at),
+            after: DateTime.makeUnsafe(result.after),
           });
         }
         return {
@@ -1485,13 +1506,14 @@ const streamHost = (
           );
         }
         meta.appends += 1;
-        const position: [number, number] = [meta.position, meta.appends];
         return Effect.forEach(events, (event) =>
           kernel.encodeEvent(event as { readonly _tag: string }),
         ).pipe(
           Effect.flatMap((encoded) =>
             store.append(meta.key, {
-              origin: position,
+              generation: meta.generation,
+              origin: [meta.position, meta.appends],
+              root: meta.root,
               source: meta.source,
               sourceSeq: meta.sourceSeq,
               at: meta.at,

@@ -577,19 +577,17 @@ export const InstanceProvider = () =>
       if (current === undefined) {
         const created = yield* spanner
           .createProjectsInstances({
+            instanceId,
+            instance: toCreateInstance(
+              name,
+              news,
+              env.project,
+              env.region,
+              desiredLabels,
+              instanceType,
+              displayName,
+            ),
             parent: `projects/${env.project}`,
-            body: {
-              instanceId,
-              instance: toCreateInstance(
-                name,
-                news,
-                env.project,
-                env.region,
-                desiredLabels,
-                instanceType,
-                displayName,
-              ),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -675,11 +673,9 @@ export const InstanceProvider = () =>
 
         const patched = yield* retryConcurrentChanges(
           spanner.patchProjectsInstances({
+            instance: patchBody,
+            fieldMask: fieldMask.join(","),
             name,
-            body: {
-              instance: patchBody,
-              fieldMask: fieldMask.join(","),
-            },
           }),
         );
         yield* waitForOperation(patched);

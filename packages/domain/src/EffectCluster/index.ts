@@ -23,6 +23,7 @@ import type { HttpEffect } from "alchemy/Http";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeInputGate } from "alchemy/Workers/InputGate";
+import { storageCallbacks } from "alchemy/Workers/StorageCallbacks";
 import {
   CurrentActivity,
   decodeResult,
@@ -59,7 +60,6 @@ import { SqlClient } from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 import { type Activity, DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
 import {
-  alarmCallbacks,
   type Attachment,
   className,
   type Host,
@@ -71,6 +71,7 @@ import {
   type ObjectStorage,
   type ObjectStateShape,
   parseMultiplexedName,
+  runtimeClaim,
   SUBSCRIPTION_HEADER,
 } from "../DurableObjects.ts";
 import type { Platform, Subscription } from "../Platform.ts";
@@ -213,14 +214,6 @@ export class DomainClassNotHosted extends Data.TaggedError("Cluster.DomainClassN
 export class DomainEngineNotStarted extends Data.TaggedError("Cluster.DomainEngineNotStarted")<{
   readonly message: string;
 }> {}
-
-/** The class names each host entity claims, by type. */
-const claims = new Map<string, object>();
-const claimOf = (type: string) => {
-  let claim = claims.get(type);
-  if (claim === undefined) claims.set(type, (claim = {}));
-  return claim;
-};
 
 /** The object of every saga's runs, reached from outside the cluster. */
 const WORKFLOWS = "~workflows";
@@ -460,7 +453,9 @@ export interface EntitiesOptions<PoolReq> {
    * How long the host keeps rows that only dedupe needs: command receipts,
    * policy delivery marks, cancelled scheduled commands, and Effect
    * Cluster's processed messages to the entity. Every runner sweeps them
-   * each `interval`.
+   * each `interval`. Only pools with a cluster database sweep: on
+   * `ClusterCloudflare.DurableObjectPool`, each instance keeps these rows in
+   * its own storage, and they are kept.
    *
    * @default { receipts: "30 days", deliveries: "7 days", cancelled: "7 days", messages: "7 days", interval: "1 hour" }
    */
@@ -585,11 +580,19 @@ export const layerEntities = <PoolReq>(
           : parseMultiplexedName(id);
         const build = parsed === undefined ? undefined : classes.get(parsed.className);
         if (build === undefined) {
-          return yield* Effect.die(
-            new DomainClassNotHosted({
-              message: `Cluster.Entity '${name}' hosts no Domain class for '${id}'.`,
-            }),
-          );
+          // A class this code no longer hosts, like a consumer's earlier
+          // generation after a version bump. Its persisted wake-ups are
+          // dropped: dying here would redeliver them forever. Only older
+          // code calls it, and those calls fail.
+          const notHosted = new DomainClassNotHosted({
+            message: `Cluster.Entity '${name}' hosts no Domain class for '${id}'.`,
+          });
+          return objects.of({
+            Call: () => Effect.die(notHosted),
+            Live: () =>
+              Stream.make({ _tag: "Close", code: 1011, reason: notHosted.message } as const),
+            Wake: () => Effect.void,
+          });
         }
         const gate = yield* makeInputGate;
         // The instance's own object where the pool gives it one; otherwise
@@ -603,7 +606,7 @@ export const layerEntities = <PoolReq>(
           : objectStorage(yield* sql, `${name}/${id}`, gate);
         const instanceScope = yield* Scope.Scope;
         const wakes = yield* objects.client;
-        const callbacks = alarmCallbacks(storage, {
+        const callbacks = storageCallbacks(storage, {
           set: (at) =>
             Effect.gen(function* () {
               yield* storage.put("~alarm", at);
@@ -754,19 +757,27 @@ export const layerEntities = <PoolReq>(
             for (const [workflow, execute] of yield* Ref.get(registrations))
               yield* sagas.register(workflow as never, execute as never);
             yield* Deferred.succeed(engine, clusterEngine);
-            // Each runner sweeps on its own; a sweep that fails runs at the next interval.
-            yield* Effect.forkScoped(
-              Effect.flatMap(sql, (client) => sweep(client, name, options.retention)).pipe(
-                Effect.catchCause((cause) =>
-                  Effect.logWarning(`Cluster.Entity '${name}': retention sweep failed`, cause),
-                ),
-                Effect.repeat(
-                  Schedule.spaced(
-                    Duration.fromInputUnsafe(options.retention?.interval ?? "1 hour"),
+            // Retention sweeps the rows of the cluster's database. A pool with
+            // none (the Durable Object pool) keeps them in each instance's own
+            // storage, and its runners have nothing to sweep.
+            const database = yield* Config.option(Config.Redacted("CLUSTER_DATABASE_URL")).pipe(
+              Effect.orDie,
+            );
+            if (Option.isSome(database)) {
+              // Each runner sweeps on its own; a sweep that fails runs at the next interval.
+              yield* Effect.forkScoped(
+                Effect.flatMap(sql, (client) => sweep(client, name, options.retention)).pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning(`Cluster.Entity '${name}': retention sweep failed`, cause),
+                  ),
+                  Effect.repeat(
+                    Schedule.spaced(
+                      Duration.fromInputUnsafe(options.retention?.interval ?? "1 hour"),
+                    ),
                   ),
                 ),
-              ),
-            );
+              );
+            }
           }).pipe(Layer.effectDiscard),
         );
         const deferredEngine = WorkflowEngine.WorkflowEngine.of({
@@ -811,7 +822,7 @@ export const layerEntities = <PoolReq>(
             }),
           lookup: ({ modelName }, cls) => self(className(modelName, cls)),
           connect: connectTo,
-          claimKey: Effect.succeed(claimOf(name)),
+          claimKey: runtimeClaim(name),
         };
         return Layer.merge(
           makePlatform(host),
@@ -825,7 +836,7 @@ export const layerEntities = <PoolReq>(
         declare: ({ modelName }, cls) => Effect.succeed(self(className(modelName, cls))),
         lookup: ({ modelName }, cls) => self(className(modelName, cls)),
         connect: connectTo,
-        claimKey: Effect.succeed(claimOf(name)),
+        claimKey: runtimeClaim(name),
       };
       return Layer.merge(
         makePlatform(host),

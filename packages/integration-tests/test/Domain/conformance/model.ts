@@ -3,13 +3,17 @@
  * aggregate that rejects, a view, a projection fed by that view, a policy
  * that starts a saga, a saga that writes to another aggregate, a policy that
  * schedules and cancels a command, and a decision that commits across two
- * instances, plus a view that refuses every reader and a command that dies.
+ * instances, plus a view that refuses every reader, a view behind a
+ * middleware whose verdict runs out, and a command that dies.
  * Between them the platform hosts every kind of object, runs its workflow
  * engine and its durable timers, and commits atomically across instances.
  */
 import * as Domain from "@alchemy.run/domain";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import { Activity } from "effect/workflow";
 import { latencyAggregates, latencyViews } from "./latency-model.ts";
@@ -114,6 +118,20 @@ export class CounterTotal extends Domain.View("CounterTotal", {
   },
 }) {}
 
+/** When a counter's first and latest events were committed, in epoch milliseconds. */
+export class CounterTimes extends Domain.View("CounterTimes", {
+  from: [Counter],
+  key: Counter,
+  state: Schema.Struct({ first: Schema.Number, last: Schema.Number }),
+  initial: { first: 0, last: 0 },
+  evolve: {
+    Incremented: (view, _, { at }) => ({
+      first: view.first === 0 ? DateTime.toEpochMillis(at) : view.first,
+      last: DateTime.toEpochMillis(at),
+    }),
+  },
+}) {}
+
 export class Hidden extends Domain.Rejection("Hidden") {}
 
 /** A counter's total no caller may read: `validate` refuses everyone. */
@@ -135,6 +153,44 @@ const HiddenTotalLive = HiddenTotal.toLayer(
     }),
   ),
 );
+
+export class Expired extends Domain.Rejection("Expired") {}
+
+/**
+ * A caller's ticket, as a session middleware checks its token: the
+ * `x-ticket` header says how long it holds. `until:<epoch ms>` expires then
+ * (a token's own expiry), and `for:<ms>` holds that long from each check (a
+ * session still signed in, checked again on every connect).
+ */
+export class Ticket extends RpcMiddleware.Service<Ticket>()("Conformance/Ticket", {
+  error: Expired,
+}) {}
+
+export const TicketLive = Layer.succeed(
+  Ticket,
+  Effect.fn(function* (effect, { headers }) {
+    const now = yield* Clock.currentTimeMillis;
+    const [kind, value] = (headers["x-ticket"] ?? "").split(":");
+    const until = kind === "until" ? Number(value) : kind === "for" ? now + Number(value) : NaN;
+    if (!(until > now)) return yield* new Expired();
+    // After the read is judged, as `Effect.tap`: the expiry counts wherever it is set.
+    return yield* effect.pipe(Effect.tap(Domain.setExpiry(until)));
+  }),
+);
+
+/** A counter's total for callers with a ticket. */
+export class TicketedTotal extends Domain.View("TicketedTotal", {
+  from: [Counter],
+  key: Counter,
+  middleware: [Ticket],
+  state: Schema.Struct({ total: Schema.Int }),
+  initial: { total: 0 },
+  evolve: {
+    Incremented: (view, event) => ({ total: view.total + event.by }),
+  },
+}) {}
+
+const TicketedTotalLive = TicketedTotal.toLayer(Effect.succeed(() => Effect.void));
 
 export class TotalRecorded extends Domain.Event("TotalRecorded", { total: Schema.Int }) {}
 
@@ -165,6 +221,65 @@ const TotalWriterLive = TotalWriter.toLayer(
       }
     });
   }),
+);
+
+export class Tallied extends Domain.Event("Tallied", { by: Schema.Int }) {}
+
+/** A run's tally key, for a counter of the rebuild case (`<run>~<counter>`); other counters have none. */
+export const tallyKey = (counter: string): string | undefined =>
+  counter.includes("~") ? counter.split("~")[0] : undefined;
+
+/** Every change to the counters of one run, keyed by the run (see {@link tallyKey}). */
+export class Tallies extends Domain.Stream("Tallies", {
+  key: Schema.String,
+  entries: [Tallied],
+}) {}
+
+/** Tallies increments and what a decision takes, through the view. */
+export class TallyWriter extends Domain.Projection("TallyWriter", {
+  from: [CounterTotal],
+  key: Schema.String,
+  keyOf: {
+    Incremented: ({ source }) => tallyKey(source.id),
+    Taken: ({ source }) => tallyKey(source.id),
+  },
+  on: [Incremented, Taken],
+  writes: [Tallies],
+}) {}
+
+/**
+ * The next version of {@link TallyWriter}: increments only. Bumped to 1, it
+ * is rebuilt from the history, which now gives each run fewer inputs than
+ * the version before it handled.
+ */
+export class TallyWriterV1 extends Domain.Projection("TallyWriter", {
+  from: [CounterTotal],
+  key: Schema.String,
+  keyOf: { Incremented: ({ source }) => tallyKey(source.id) },
+  on: [Incremented],
+  writes: [Tallies],
+}) {}
+
+const TallyWriterLive = TallyWriter.toLayer(
+  Effect.gen(function* () {
+    const tallies = yield* Tallies;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) {
+        const by = input.event._tag === "Taken" ? -input.event.by : input.event.by;
+        yield* tallies.append(input, new Tallied({ by }));
+      }
+    });
+  }),
+);
+
+const TallyWriterV1Live = TallyWriterV1.toLayer(
+  Effect.gen(function* () {
+    const tallies = yield* Tallies;
+    return Effect.fn(function* (batch) {
+      for (const input of batch) yield* tallies.append(input, new Tallied({ by: input.event.by }));
+    });
+  }),
+  { version: 1 },
 );
 
 /**
@@ -282,18 +397,29 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
 export class Conformance extends Domain.Model("Conformance", {
   aggregates: [Counter, Echo, Hold, ...latencyAggregates],
   decisions: [Giving],
-  views: [CounterTotal, HiddenTotal, ...latencyViews],
-  projections: [TotalWriter],
-  streams: [Recorded],
+  views: [CounterTotal, CounterTimes, HiddenTotal, TicketedTotal, ...latencyViews],
+  projections: [TotalWriter, TallyWriter],
+  streams: [Recorded, Tallies],
   policies: [StartMirror, HoldDeadline],
   sagas: [MirrorFirst],
 }) {}
 
-/** The model's Api: its counter and view, served at the front's `/api`. */
+/** The model's next version: {@link TallyWriterV1} in place of {@link TallyWriter}. */
+export class ConformanceV1 extends Domain.Model("Conformance", {
+  aggregates: [Counter, Echo, Hold, ...latencyAggregates],
+  decisions: [Giving],
+  views: [CounterTotal, CounterTimes, HiddenTotal, TicketedTotal, ...latencyViews],
+  projections: [TotalWriter, TallyWriterV1],
+  streams: [Recorded, Tallies],
+  policies: [StartMirror, HoldDeadline],
+  sagas: [MirrorFirst],
+}) {}
+
+/** The model's Api: its counter and views, served at the front's `/api` (with {@link TicketLive}). */
 export class ConformanceApi extends Domain.Api("ConformanceApi", {
   model: Conformance,
   commands: ["Increment", "Explode", "Give"],
-  views: ["CounterTotal", "HiddenTotal"],
+  views: ["CounterTotal", "HiddenTotal", "TicketedTotal"],
 }) {}
 
 /** What the latency benchmark sends and reads: see `latency-model.ts`. */
@@ -303,13 +429,17 @@ export class LatencyApi extends Domain.Api("LatencyApi", {
   views: ["CounterTotal", "OneView", "ChainSecond", "SharedByGroup"],
 }) {}
 
-/** The model's Layer, given the platform it runs on. */
-export const ConformanceLive = Conformance.layer(
-  Layer.mergeAll(
-    StartMirrorLive,
-    MirrorFirstLive,
-    HoldDeadlineLive,
-    HiddenTotalLive,
-    TotalWriterLive,
-  ),
+const handlers = Layer.mergeAll(
+  StartMirrorLive,
+  MirrorFirstLive,
+  HoldDeadlineLive,
+  HiddenTotalLive,
+  TicketedTotalLive,
+  TotalWriterLive,
 );
+
+/** The model's Layer, given the platform it runs on. */
+export const ConformanceLive = Conformance.layer(Layer.merge(handlers, TallyWriterLive));
+
+/** The next version's Layer: deployed over {@link ConformanceLive}, it rebuilds the tallies. */
+export const ConformanceLiveV1 = ConformanceV1.layer(Layer.merge(handlers, TallyWriterV1Live));

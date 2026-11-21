@@ -5,12 +5,7 @@ import * as Effect from "effect/Effect";
 import type * as Layer from "effect/Layer";
 import type { Cluster } from "../Cluster.ts";
 import type { PoolHost } from "../Host.ts";
-import {
-  isImageProgram,
-  makePoolLayer,
-  RIVETKIT_VERSION,
-  type PoolSettings,
-} from "../internal/PoolHost.ts";
+import { isImageProgram, makePoolLayer, type PoolSettings } from "../internal/PoolHost.ts";
 import type { Providers as RivetProviders } from "../Providers.ts";
 
 export interface SwarmPoolOptions extends PoolSettings {
@@ -57,7 +52,7 @@ export const SwarmPool = (
     settings: options,
     expected: "a Docker network (RivetDocker.SwarmControlPlane)",
     network: (cluster) => (cluster.network?.kind === "docker" ? cluster.network : undefined),
-    nodes: ({ network, pool, program, environment }) =>
+    nodes: ({ network, pool, program, rivetkitVersion, environment }) =>
       isImageProgram(program)
         ? // A Rust program is its own image, built from its staged crate.
           Docker.Image(`${id}NodeImage`, {
@@ -79,7 +74,7 @@ export const SwarmPool = (
             // One node image per stack; every pool builds FROM it.
             build: {
               context: fileURLToPath(new URL("../../images/node", import.meta.url)),
-              args: { RIVETKIT_VERSION },
+              args: { RIVETKIT_VERSION: options.rivetkitVersion ?? rivetkitVersion },
             },
           }).pipe(
             Effect.flatMap((image) =>

@@ -314,24 +314,28 @@ export class Bank extends Domain.Model(
 
 ## Check the declaration
 
-Some mistakes in a declaration only show when the model is hosted: a view that reads a source keyed by another aggregate without `keyOf`, a view with `state` but no `initial`, a policy that waits for an event no source emits, a stream with two writers, a command implemented twice. Building the model's Layer fails on the first one. `Domain.verify` finds all of them without hosting anything, so one unit test covers the whole model:
+Some mistakes in a declaration only show when the model is hosted: a view that reads a source keyed by another aggregate without `keyOf`, a view with `state` but no `initial`, a policy that waits for an event no source emits, a stream with two writers, a command implemented twice. Building the model's Layer checks for all of them first, and dies with every one it finds, so one unit test that builds it covers the whole model:
 
 ```typescript
 // packages/domain/test/Bank.model.test.ts
-import * as Domain from "@alchemy.run/domain";
-import { expect, it } from "@effect/vitest";
-import { Bank } from "../src/Bank.model.ts";
+import { InMemory } from "@alchemy.run/domain/InMemory";
+import { it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Bank, BankHandlers } from "../src/Bank.model.ts";
 
-it("the model is well defined", () => {
-  expect(Domain.verify(Bank)).toEqual([]);
-});
+it.effect("the model is well defined", () =>
+  Layer.build(Bank.layer(BankHandlers)).pipe(Effect.provide(InMemory)),
+);
 ```
+
+Every story builds the same Layer, so a model with stories already has this test.
 
 A host stores and sends every value as JSON, so every schema in a state, command, event, reply or rejection needs a JSON form. One that has none, such as `Schema.instanceOf(Blob)`, fails the Layer build with `NoJsonForm` and its path (`Shelf.state.bySku[key]`), and an `initial` that doesn't come back the same from JSON fails it with `InitialNotJson`. `Schema.Unknown` and `Schema.Any` pass, because only a value can tell. To store a class of your own, annotate its schema with `toCodecJson`.
 
-Each problem is a `Domain.DefinitionError`. Its `reason` is a tagged error that says which problem it is, such as `MissingKeyOf` or `TwoWriters`, with the names involved as fields, and its message names the block and the fix. Mistakes that depend on what a handler returns, like `decide` returning an event its command doesn't declare, still fail when the handler runs.
+Each problem is a `Domain.DefinitionError`, a defect of the Layer's Cause. Its `reason` is a tagged error that says which problem it is, such as `MissingKeyOf` or `TwoWriters`, with the names involved as fields, and its message names the block and the fix. Mistakes that depend on what a handler returns, like `decide` returning an event its command doesn't declare, still fail when the handler runs.
 
-`Domain.verify` checks how the model is declared, not what it does. To check that it keeps its rules, whatever commands arrive, see [Verifying a model](/domain/verifying-models).
+This checks how the model is declared, not what it does. To check that it keeps its rules, whatever commands arrive, see [Verifying a model](/domain/verifying-models).
 
 ## Run it
 

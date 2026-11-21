@@ -340,13 +340,11 @@ export const ApiHubInstanceProvider = () =>
       if (current === undefined) {
         const created = yield* apihub
           .createProjectsLocationsApiHubInstances({
+            description,
+            labels: desiredLabels,
+            config,
             parent,
             apiHubInstanceId,
-            body: {
-              description,
-              labels: desiredLabels,
-              config,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -369,16 +367,13 @@ export const ApiHubInstanceProvider = () =>
 
       if (disableChanged || vertexChanged || syncChanged) {
         const operation = yield* apihub.patchProjectsLocationsApiHubInstances({
+          config,
           name: currentName,
           updateMask: updateMaskOf(
             disableChanged ? "config.disable_search" : undefined,
             vertexChanged ? "config.vertex_location" : undefined,
             syncChanged ? "config.agent_registry_sync_config" : undefined,
           ),
-          body: {
-            name: currentName,
-            config,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(currentName), currentName);

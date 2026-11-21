@@ -367,14 +367,7 @@ export const ProjectProvider = () =>
 
       if (current === undefined) {
         const created = yield* resourcemanager
-          .createProjects({
-            body: {
-              projectId,
-              parent,
-              displayName,
-              labels: desiredLabels,
-            },
-          })
+          .createProjects({ projectId, parent, displayName, labels: desiredLabels })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const settled = yield* waitForCreate(created);
@@ -408,8 +401,10 @@ export const ProjectProvider = () =>
         const id = current.projectId ?? projectId;
         const observed = yield* resourcemanagerV1.getProjects({ projectId: id });
         yield* resourcemanagerV1.updateProjects({
+          ...observed,
+          name: displayName,
+          labels: desiredLabels,
           projectId: id,
-          body: { ...observed, name: displayName, labels: desiredLabels },
         });
         current = yield* waitUntilExists(current.name ?? name, projectId);
       }
@@ -420,8 +415,8 @@ export const ProjectProvider = () =>
         !sameHierarchyParent(current.parent, parent)
       ) {
         const operation = yield* resourcemanager.moveProjects({
+          destinationParent: parent,
           name: current.name ?? name,
-          body: { destinationParent: parent },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name, projectId);
