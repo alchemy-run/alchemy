@@ -172,6 +172,8 @@ export interface WebsiteStaticConfig {
 
 /** Per-framework wiring for {@link makeFrameworkSite}. */
 export interface FrameworkSiteConfig {
+  /** The framework's default JS runtime for its dev server; `dev.runtime` overrides it. @default the engine's runtime */
+  runtime?: "node" | "bun";
   /** Display name used in error messages (e.g. `"SvelteKit"`). */
   name: string;
   /** Framework-integration module specifier. */
@@ -269,6 +271,7 @@ const runFrameworkSite = Effect.fn("Railway.Website.FrameworkSite")(function* (
   const build = yield* FrameworkServer("Build", {
     framework: config.framework,
     target: config.target,
+    runtime: config.runtime,
     root: props.rootDir,
     env: envRecord(props.env),
     options: config.options,

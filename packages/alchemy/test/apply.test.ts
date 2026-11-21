@@ -375,6 +375,92 @@ describe("Action output convergence", { tags: ["unit", "local"] }, () => {
       }),
   );
 
+  // A pool collects env from what it hosts and hands it to its host as a
+  // prop, and what it hosts binds the host's address: Pool and Host are in a
+  // cycle, and a change to the bound env alone has to reach the Host.
+  test.provider(
+    "a binding-only change to a cycle member reaches the consumers of its attributes",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = (generation: string) =>
+          Effect.gen(function* () {
+            const pool = yield* BindingTarget("Pool", { name: "pool" });
+            const host = yield* Function("Host", { name: "host", env: { GEN: pool.env.GEN } });
+            yield* pool.bind("Entity", { env: { GEN: generation, HOST: host.functionArn } });
+            return host.env.GEN;
+          });
+        expect(yield* stack.deploy(program("1"))).toBe("1");
+        expect(actionOfPlan(yield* stack.plan(program("1")), "Host")).toBe("noop");
+        const changed = yield* stack.plan(program("2"));
+        expect(changed.resources.Pool.action).toBe("update");
+        expect(changed.resources.Host.action).toBe("update");
+        expect(yield* stack.deploy(program("2"))).toBe("2");
+        const settled = yield* stack.plan(program("2"));
+        expect(settled.resources.Pool.action).toBe("noop");
+        expect(settled.resources.Host.action).toBe("noop");
+      }),
+  );
+
+  test.provider(
+    "a changed cycle member reaches the consumers of the member it is bound to",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = (generation: string) =>
+          Effect.gen(function* () {
+            const pool = yield* BindingTarget("Pool", { name: "pool" });
+            const host = yield* Function("Host", { name: "host", env: { GEN: pool.env.GEN } });
+            const entity = yield* Function("Entity", {
+              name: "entity",
+              env: { GEN: generation, HOST: host.functionArn },
+            });
+            yield* pool.bind("Entity", { env: { GEN: entity.env.GEN } });
+            return host.env.GEN;
+          });
+        expect(yield* stack.deploy(program("1"))).toBe("1");
+        const unchanged = yield* stack.plan(program("1"));
+        expect(unchanged.resources.Pool.action).toBe("noop");
+        expect(unchanged.resources.Host.action).toBe("noop");
+        const changed = yield* stack.plan(program("2"));
+        expect(changed.resources.Entity.action).toBe("update");
+        expect(changed.resources.Pool.action).toBe("update");
+        expect(changed.resources.Host.action).toBe("update");
+        expect(yield* stack.deploy(program("2"))).toBe("2");
+        const settled = yield* stack.plan(program("2"));
+        expect(settled.resources.Pool.action).toBe("noop");
+        expect(settled.resources.Host.action).toBe("noop");
+      }),
+  );
+
+  test.provider(
+    "a binding-only change crosses every binding of a cycle before the next deploy",
+    (stack) =>
+      Effect.gen(function* () {
+        const program = (generation: string) =>
+          Effect.gen(function* () {
+            const outer = yield* BindingTarget("Outer", { name: "outer" });
+            const inner = yield* BindingTarget("Inner", { name: "inner" });
+            const host = yield* Function("Host", { name: "host", env: { GEN: outer.env.GEN } });
+            yield* inner.bind("Entity", { env: { GEN: generation, HOST: host.functionArn } });
+            yield* outer.bind("Relay", { env: { GEN: inner.env.GEN } });
+            return host.env.GEN;
+          });
+        expect(yield* stack.deploy(program("1"))).toBe("1");
+        const unchanged = yield* stack.plan(program("1"));
+        expect(unchanged.resources.Inner.action).toBe("noop");
+        expect(unchanged.resources.Outer.action).toBe("noop");
+        expect(unchanged.resources.Host.action).toBe("noop");
+        const changed = yield* stack.plan(program("2"));
+        expect(changed.resources.Inner.action).toBe("update");
+        expect(changed.resources.Outer.action).toBe("update");
+        expect(changed.resources.Host.action).toBe("update");
+        expect(yield* stack.deploy(program("2"))).toBe("2");
+        const settled = yield* stack.plan(program("2"));
+        expect(settled.resources.Inner.action).toBe("noop");
+        expect(settled.resources.Outer.action).toBe("noop");
+        expect(settled.resources.Host.action).toBe("noop");
+      }),
+  );
+
   test.provider(
     "an Action planned to run skips its body when upstream resolves to the same input",
     (stack) =>
@@ -3203,12 +3289,18 @@ describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
         const row = (yield* state.get({ stack: stk.name, stage: stk.stage, fqn })) as
           | ResourceState
           | undefined;
-        if (row?.removalPolicy === "protect") {
+        const old =
+          row?.status === "updating" ? (row.old as { removalPolicy?: string }) : undefined;
+        if (row?.removalPolicy === "protect" || old?.removalPolicy === "protect") {
           yield* state.set({
             stack: stk.name,
             stage: stk.stage,
             fqn,
-            value: { ...row, removalPolicy: "destroy" },
+            value: {
+              ...row,
+              removalPolicy: "destroy",
+              ...(old ? { old: { ...old, removalPolicy: "destroy" } } : {}),
+            } as ResourceState,
           });
         }
       }
@@ -3292,6 +3384,55 @@ describe("RemovalPolicy.protect()", { tags: ["unit", "local"] }, () => {
 
       yield* Effect.gen(function* () {
         yield* TestResource("A", { replaceString: "v2" });
+      }).pipe(stack.deploy);
+      expect((yield* getState("A"))?.props).toMatchObject({ replaceString: "v2" });
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("a failed unprotect update keeps the resource protected", (stack) =>
+    Effect.gen(function* () {
+      yield* reset(stack);
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1", string: "a" }).pipe(
+          RemovalPolicy.protect(),
+        );
+      }).pipe(stack.deploy);
+
+      // Drop protect() in an update that fails, twice. The row is left
+      // `updating` with the newly declared policy on top.
+      const unprotect = Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v1", string: "b" });
+      });
+      for (let attempt = 0; attempt < 2; attempt++) {
+        yield* unprotect.pipe(stack.deploy, hook(failOn("A", "update")));
+        const row = yield* getState("A");
+        expect(row?.status).toEqual("updating");
+        expect(row?.removalPolicy).toEqual("destroy");
+      }
+
+      // The last successful deploy still protects it.
+      const replaced = yield* refusal(
+        Effect.gen(function* () {
+          yield* TestResource("A", { replaceString: "v2", string: "b" });
+        }).pipe(stack.deploy),
+      );
+      expect(replaced).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "replace" }],
+      });
+      const orphaned = yield* refusal(Effect.void.pipe(stack.deploy));
+      expect(orphaned).toMatchObject({
+        _tag: "ProtectedResource",
+        resources: [{ fqn: "A", action: "delete" }],
+      });
+      expect(yield* getState("A")).toBeDefined();
+
+      // Once the unprotect update succeeds, the replacement is allowed.
+      yield* unprotect.pipe(stack.deploy);
+      expect((yield* getState("A"))?.removalPolicy).toEqual("destroy");
+      yield* Effect.gen(function* () {
+        yield* TestResource("A", { replaceString: "v2", string: "b" });
       }).pipe(stack.deploy);
       expect((yield* getState("A"))?.props).toMatchObject({ replaceString: "v2" });
       yield* stack.destroy();

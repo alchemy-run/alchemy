@@ -82,12 +82,16 @@ export const DOCS_TABS: DocsTab[] = [
   hub("Hetzner", "hetzner", "Clouds", "servers · networks · volumes", ["/providers/hetzner"]),
   hub("Fly", "fly", "Clouds", "apps · machines · volumes", ["/providers/fly"]),
   hub("Railway", "railway", "Clouds", "services · environments · volumes", ["/providers/railway"]),
+  hub("DigitalOcean", "digitalocean", "Clouds", "droplets · ssh keys · firewalls", [
+    "/providers/digitalocean",
+  ]),
 
   hub("PlanetScale", "planetscale", "Databases", "MySQL · Postgres · branches", [
     "/providers/planetscale",
   ]),
   hub("Neon", "neon", "Databases", "serverless Postgres · branches", ["/providers/neon"]),
   hub("Turso", "turso", "Databases", "libSQL · groups · tokens", ["/providers/turso"]),
+  hub("Convex", "convex", "Databases", "projects · deployments · functions", ["/providers/convex"]),
   hub("Prisma", "prisma", "Databases", "Prisma Postgres · client", ["/providers/prisma"]),
   hub("SQL", "sql", "Databases", "effect-sql · drizzle · migrations", [
     "/drizzle",

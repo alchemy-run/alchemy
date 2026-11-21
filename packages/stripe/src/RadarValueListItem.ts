@@ -1,4 +1,3 @@
-import { withRequestOptions } from "@distilled.cloud/stripe";
 import {
   DeleteRadarValueListItem,
   GetRadarValueListItems,
@@ -263,10 +262,8 @@ export const RadarValueListItemProvider = () =>
         current = yield* CreateRadarValueListItem({
           value_list: news.valueList,
           value: news.value,
+          idempotencyKey: `alchemy-radar-value-list-item-${instanceId}`,
         }).pipe(
-          withRequestOptions({
-            idempotencyKey: `alchemy-radar-value-list-item-${instanceId}`,
-          }),
           Effect.catchIf(
             (e) => e._tag === "InvalidRequestError" || e._tag === "Conflict",
             (e) =>

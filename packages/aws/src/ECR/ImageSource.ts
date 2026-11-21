@@ -1,8 +1,10 @@
 import {
+  computeStaticSourceHash,
+  imageSourceKind,
   makeContainerImageSource,
   type ImageAgent,
-  type ImageRegistryTarget,
   type ImageSourceLike,
+  type RegistryImageSource,
 } from "@alchemy.run/docker/ImageSource";
 import * as ecr from "@distilled.cloud/aws/ecr";
 import * as Data from "effect/Data";
@@ -40,6 +42,24 @@ export {
   type ImageSourceProps,
   type RegistryImageSource,
 } from "@alchemy.run/docker/ImageSource";
+
+/**
+ * A pre-built registry image on ECS or EKS. By default it is mirrored into
+ * the resource's own ECR repository; `mirror: false` runs it from its
+ * registry instead.
+ */
+export interface EcrRegistryImageSource extends RegistryImageSource {
+  /**
+   * Copy the image into the resource's ECR repository before running it.
+   * Turn it off to have the task pull `image` from its registry, as for a
+   * public image such as `ghcr.io/convex/convex-backend`. Nothing is pulled or
+   * pushed from the deploying machine then, and no repository is created. The
+   * tasks need a route to the registry (a public IP or a NAT gateway), and
+   * each task start depends on that registry.
+   * @default true
+   */
+  mirror?: boolean;
+}
 
 /** The resolved (built/mirrored + pushed) image. */
 export interface ResolvedImage {
@@ -107,7 +127,7 @@ export interface ResolveImageOptions {
    * The props bag carrying the image source fields (`main` / `context` /
    * `image` plus their modifiers).
    */
-  source: ImageSourceLike;
+  source: ImageSourceLike & { mirror?: boolean };
   /** Name of the ECR repository to (auto-create and) push into. */
   repositoryName: string;
   /**
@@ -357,6 +377,21 @@ export const makeImageSource = Effect.gen(function* () {
    * tag is not already in ECR (crash-safe convergence).
    */
   const resolve = Effect.fn(function* (options: ResolveImageOptions) {
+    // `mirror: false`: the task pulls the image from its own registry.
+    if (
+      imageSourceKind(options.source) === "image" &&
+      options.source.mirror === false &&
+      options.agent === undefined
+    ) {
+      const codeHash = (yield* computeStaticSourceHash(options.source, options.platform))!;
+      return {
+        imageUri: options.source.image!,
+        repositoryName: options.repositoryName,
+        repositoryUri: options.repositoryUri ?? "",
+        codeHash,
+        agent: undefined,
+      } satisfies ResolvedImage;
+    }
     const target = {
       repositoryUri:
         options.repositoryUri !== undefined
@@ -364,7 +399,7 @@ export const makeImageSource = Effect.gen(function* () {
           : ensureRepository({ repositoryName: options.repositoryName, tags: options.tags }),
       hasTag: hasTag(options.repositoryName),
       credentials: getEcrRegistryCredentials,
-    } satisfies ImageRegistryTarget<any>;
+    };
     const resolved = yield* images.resolve(
       { ...options, source: onRoleHost(options.source) },
       target,

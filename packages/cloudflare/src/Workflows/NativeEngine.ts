@@ -9,6 +9,7 @@ import {
 } from "alchemy/WorkflowEncoding";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -132,6 +133,12 @@ const SUSPENDED = "alchemy-suspended";
 const SIGNAL_TIMEOUT = "365 days";
 
 /**
+ * A Workflows binding defect carried through a retry; it dies again as the
+ * original defect once retries run out.
+ */
+class BindingDefect extends Data.TaggedError("BindingDefect")<{ readonly defect: unknown }> {}
+
+/**
  * Retry a Workflows binding call while the Workflow class is still
  * propagating after a deploy, which Cloudflare reports as "Worker not found",
  * for about a minute.
@@ -139,14 +146,16 @@ const SIGNAL_TIMEOUT = "365 days";
 const inTransit = <A>(call: Effect.Effect<A>): Effect.Effect<A> =>
   call.pipe(
     Effect.catchDefect((defect) =>
-      String(defect).includes("Worker not found") ? Effect.fail(defect) : Effect.die(defect),
+      String(defect).includes("Worker not found")
+        ? Effect.fail(new BindingDefect({ defect }))
+        : Effect.die(defect),
     ),
     Effect.retry({
       schedule: Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("2 seconds")]),
       times: 35,
     }),
-    Effect.orDie,
-  ) as Effect.Effect<A>;
+    Effect.catchTag("BindingDefect", (error) => Effect.die(error.defect)),
+  );
 
 /**
  * Send an event to an instance, retrying any failure for about a minute: a run
@@ -160,7 +169,7 @@ const sendEvent = (
 ) =>
   handle.get(id).pipe(
     Effect.flatMap((instance) => instance.sendEvent(event)),
-    Effect.catchDefect((defect) => Effect.fail(defect)),
+    Effect.catchDefect((defect) => Effect.fail(new BindingDefect({ defect }))),
     Effect.catch((error) =>
       Effect.flatMap(statusOf(handle, id), (status) =>
         status?.status === "complete" ||
@@ -174,8 +183,8 @@ const sendEvent = (
       schedule: Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("2 seconds")]),
       times: 35,
     }),
-    Effect.orDie,
-  ) as Effect.Effect<void>;
+    Effect.catchTag("BindingDefect", (error) => Effect.die(error.defect)),
+  );
 
 /** An instance's status, or undefined if there's no such instance. */
 const statusOf = (handle: WorkflowHandle, id: string) =>

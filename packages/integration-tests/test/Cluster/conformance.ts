@@ -4,6 +4,7 @@
  */
 import { expect } from "@alchemy.run/test";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
@@ -47,12 +48,18 @@ export const conformanceTests = (
     baseUrl,
     kind,
     external = true,
+    deliverWithinMillis = 15_000,
   }: {
     baseUrl: () => string;
     /** Whether the host under test runs in a real cloud or on this machine. */
     kind: "live" | "local";
     /** Whether the host runs an existing Effect Cluster program (not on Workers). */
     external?: boolean;
+    /**
+     * How late a `DeliverAt` message may run on an entity nothing else is
+     * calling. Runners find it on their next poll of the message store.
+     */
+    deliverWithinMillis?: number;
   },
 ) => {
   const options = { timeout: 120_000, tags: [kind] };
@@ -184,6 +191,8 @@ export const conformanceTests = (
     "interrupting a caller interrupts its handler",
     Effect.gen(function* () {
       const id = `conf-hang-${Date.now()}`;
+      // Started first: a message interrupted before its instance is up never runs.
+      expect((yield* get(`${baseUrl()}/get/${id}`)).value).toBe(0);
       expect((yield* get(`${baseUrl()}/hang/${id}`)).value).toBe("timed out");
       const interrupted = yield* get(`${baseUrl()}/interrupted/${id}`).pipe(
         Effect.map((body) => body.value as boolean),
@@ -248,6 +257,99 @@ export const conformanceTests = (
       yield* Effect.sleep("20 seconds");
       expect((yield* get(`${baseUrl()}/recall/${id}-held`)).value).toBe(7);
       expect((yield* get(`${baseUrl()}/recall/${id}-idle`)).value).toBe(0);
+    }),
+    options,
+  );
+
+  test(
+    "a DeliverAt message wakes an entity nothing is calling",
+    Effect.gen(function* () {
+      const id = `conf-wake-${Date.now()}`;
+      const { at }: { at: number } = yield* get(`${baseUrl()}/later/${id}/20000`);
+      // No calls until its time has passed: only the host can run it.
+      yield* Effect.sleep(Duration.millis(20_000 + deliverWithinMillis));
+      const ranAt: number = (yield* get(`${baseUrl()}/ran-at/${id}`)).value;
+      expect(ranAt).toBeGreaterThanOrEqual(at - 1_000);
+      expect(ranAt - at).toBeLessThanOrEqual(deliverWithinMillis);
+      expect((yield* get(`${baseUrl()}/get/${id}`)).value).toBe(5);
+    }),
+    options,
+  );
+
+  test(
+    "an ask with DeliverAt answers every caller at its time, having run once",
+    Effect.gen(function* () {
+      const id = `conf-later-ask-${Date.now()}`;
+      const body = yield* get(`${baseUrl()}/later-ask/${id}/3000`);
+      expect(body.values).toEqual([5, 5]);
+      expect(body.elapsed).toBeGreaterThanOrEqual(2_500);
+      expect((yield* get(`${baseUrl()}/get/${id}`)).value).toBe(5);
+    }),
+    options,
+  );
+
+  test(
+    "Rpc.uninterruptible finishes after its caller is interrupted",
+    Effect.gen(function* () {
+      const id = `conf-settle-${Date.now()}`;
+      expect((yield* get(`${baseUrl()}/settle/${id}`)).value).toBe("timed out");
+      const settled = yield* get(`${baseUrl()}/settled/${id}`).pipe(
+        Effect.map((body) => body.value as boolean),
+        Effect.repeat({ schedule: Schedule.spaced("500 millis"), until: (b) => b, times: 20 }),
+      );
+      expect(settled).toBe(true);
+    }),
+    options,
+  );
+
+  test(
+    "a message interrupted while it waits its turn never runs",
+    Effect.gen(function* () {
+      const body = yield* get(`${baseUrl()}/queued-interrupt/conf-queued-${Date.now()}`);
+      expect(body).toEqual({ waited: "released", abandoned: "timed out", marked: false });
+    }),
+    options,
+  );
+
+  test(
+    "messages arriving while an instance is built share that one build",
+    Effect.gen(function* () {
+      expect((yield* get(`${baseUrl()}/builds/conf-builds-${Date.now()}`)).value).toBe(1);
+    }),
+    options,
+  );
+
+  test(
+    "a persisted stream with a primary key runs once",
+    Effect.gen(function* () {
+      const id = `conf-countdown-${Date.now()}`;
+      const first = yield* get(`${baseUrl()}/countdown/${id}/op-1`);
+      expect(first.values).toEqual([1, 2, 3, 4, 5]);
+      expect(first.runs).toBe(1);
+      // A duplicate sent after it finished ends without running it again.
+      expect((yield* get(`${baseUrl()}/countdown/${id}/op-1`)).runs).toBe(1);
+      const second = yield* get(`${baseUrl()}/countdown/${id}/op-2`);
+      expect(second.values).toEqual([1, 2, 3, 4, 5]);
+      expect(second.runs).toBe(2);
+    }),
+    options,
+  );
+
+  test(
+    "a full mailbox turns a volatile message away",
+    Effect.gen(function* () {
+      const body = yield* get(`${baseUrl()}/pass-race/conf-full-${Date.now()}`);
+      expect([...(body.results as string[])].sort()).toEqual(["full", "full", "passed", "passed"]);
+    }),
+    options,
+  );
+
+  test(
+    "a persisted message waits for room in a full mailbox",
+    Effect.gen(function* () {
+      const body = yield* get(`${baseUrl()}/pass-once-race/conf-room-${Date.now()}`);
+      expect([...(body.values as number[])].sort()).toEqual([1, 2, 3, 4, 5]);
+      expect(body.passed).toBe(5);
     }),
     options,
   );

@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { existsSync } from "node:fs";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -7,6 +8,7 @@ import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import pathe from "pathe";
 import type * as rolldown from "rolldown";
 import { dotAlchemyDirectory } from "../AlchemyContext.ts";
 import { encodeFqn } from "../FQN.ts";
@@ -229,6 +231,50 @@ const withDceDefault = (outputOptions?: rolldown.OutputOptions): rolldown.Output
   minify: outputOptions?.minify ?? "dce-only",
 });
 
+/** Where pnpm and bun keep their one copy of each installed package. */
+const PACKAGE_STORES = ["/node_modules/.pnpm/", "/node_modules/.bun/"];
+
+/**
+ * Makes a source map path the same on every machine, so the bundle hash
+ * (which covers the map) doesn't change between CI jobs.
+ *
+ * - A dependency in a pnpm/bun store is written as if the store were inside
+ *   `cwd`, wherever the store really is.
+ * - A plugin's virtual module (`builtin:…`) keeps just its id. Rolldown puts
+ *   the process directory in front of it; a path that exists on disk is a
+ *   real file and is left alone.
+ *
+ * Every other path is kept as rolldown wrote it.
+ */
+const stableSourcePath =
+  (cwd: string) =>
+  (source: string, sourcemapPath: string): string => {
+    const directory = pathe.dirname(sourcemapPath);
+    const file = pathe.resolve(directory, source);
+    const store = Math.max(...PACKAGE_STORES.map((marker) => file.lastIndexOf(marker)));
+    if (store !== -1) {
+      return pathe.relative(directory, pathe.join(pathe.resolve(cwd), file.slice(store + 1)));
+    }
+    const id = pathe.relative(pathe.resolve(process.cwd()), file);
+    const isId = !id.startsWith("../") && /^[a-z][a-z0-9+.-]+:/i.test(id) && !existsSync(file);
+    return isId ? id : source;
+  };
+
+/**
+ * Default `sourcemapPathTransform` to {@link stableSourcePath} for a one-shot
+ * build, so its source map, and with it the bundle hash, is the same wherever
+ * it is built. `watch` keeps rolldown's paths: they lead from the map to the
+ * files on disk, which a debugger attached to a dev session needs.
+ */
+const withStableSourcePaths = (
+  inputOptions: rolldown.InputOptions,
+  outputOptions?: rolldown.OutputOptions,
+): rolldown.OutputOptions => ({
+  ...outputOptions,
+  sourcemapPathTransform:
+    outputOptions?.sourcemapPathTransform ?? stableSourcePath(inputOptions.cwd ?? process.cwd()),
+});
+
 /** Whether the caller chose where the bundle is written (`dir` or `file`). */
 export const hasOutputLocation = (outputOptions?: Partial<rolldown.OutputOptions>): boolean =>
   outputOptions?.dir !== undefined || outputOptions?.file !== undefined;
@@ -340,7 +386,10 @@ export const build = (
   outputOptions?: rolldown.OutputOptions,
   extra?: BundleExtraOptions,
 ): Effect.Effect<BundleOutput, BundleError> =>
-  Effect.zip(resolveOutputOptions(outputOptions), Effect.context<never>()).pipe(
+  Effect.zip(
+    resolveOutputOptions(withStableSourcePaths(inputOptions, outputOptions)),
+    Effect.context<never>(),
+  ).pipe(
     Effect.flatMap(([options, context]) =>
       Effect.tryPromise({
         try: async () => {

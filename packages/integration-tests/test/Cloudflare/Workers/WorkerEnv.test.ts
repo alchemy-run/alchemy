@@ -5,6 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
+import { jsonStrings } from "../../JsonStrings.ts";
 import { expectUrlContains } from "../Utils/Http.ts";
 import Stack from "./fixtures/env/stack.ts";
 
@@ -12,6 +13,7 @@ import Stack from "./fixtures/env/stack.ts";
 // `Config.xxx(...)` reads resolve at deploy time (default provider).
 const CONFIG_STR_VALUE = (process.env.CONFIG_STR = "config-string-value");
 const CONFIG_NUM_VALUE = (process.env.CONFIG_NUM = "1234");
+process.env.CONFIG_JSON_LONG = "12345678901.12345678901234";
 const CONFIG_REDACTED_VALUE = (process.env.CONFIG_REDACTED = "config-redacted-value");
 const CONFIG_REDACTED_INIT_VALUE = (process.env.CONFIG_REDACTED_INIT =
   "config-redacted-init-value");
@@ -111,7 +113,7 @@ describe.concurrent(
     );
 
     test(
-      "effect worker reads env strings that parse as JSON as strings (#2847)",
+      "effect worker reads env strings that parse as JSON unchanged (#2847, #3497)",
       Effect.gen(function* () {
         const { effectUrl } = yield* stack;
 
@@ -119,17 +121,11 @@ describe.concurrent(
           timeout: "60 seconds",
           label: "effect env-worker /json-strings",
         });
-        const strings = {
-          JSON_FALSE: "false",
-          JSON_NUM: "42",
-          JSON_NULL: "null",
-          JSON_OBJ: '{"a":1}',
-          PLAIN: "my-queue",
-        };
         expect(JSON.parse(body)).toEqual({
-          init: { ...strings, JSON_FALSE_BOOL: false },
-          runtime: { ...strings, JSON_FALSE_BOOL: false },
-          env: strings,
+          init: { ...jsonStrings, JSON_FALSE_BOOL: false, JSON_NUM_NUMBER: 42 },
+          runtime: { ...jsonStrings, JSON_FALSE_BOOL: false, JSON_NUM_NUMBER: 42 },
+          env: jsonStrings,
+          bound: { init: "12345678901.12345678901234", runtime: "12345678901.12345678901234" },
         });
       }).pipe(logLevel),
     );

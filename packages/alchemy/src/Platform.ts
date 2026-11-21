@@ -280,6 +280,13 @@ export const Platform = <
       }
     | undefined
   >,
+  // Requirements and errors of the hooks below. They run in the
+  // resource-construction context, which carries the Stack's providers,
+  // so whatever they need is discharged there.
+  OnCreateE = never,
+  OnCreateR = never,
+  TransformE = never,
+  TransformR = never,
 >(
   type: R["Type"],
   hooks: {
@@ -294,9 +301,9 @@ export const Platform = <
     // `onCreate` runs inside the resource-construction context, which already
     // carries the Stack's providers — so the hook may yield child resources
     // (e.g. an async Worker registering a `WorkflowResource` for a bound
-    // Workflow). Allow an ambient requirement (`any`) rather than forcing
-    // `never`; it is discharged by the surrounding provider context.
-    onCreate?: (resource: R, props: any) => Effect.Effect<void, never, any>;
+    // Workflow). Its requirements are discharged by the surrounding
+    // provider context.
+    onCreate?: (resource: R, props: any) => Effect.Effect<void, OnCreateE, OnCreateR>;
     /**
      * Transform the user-supplied props before the underlying resource is
      * declared. Runs in the resource-construction context (Stack, Namespace,
@@ -306,7 +313,7 @@ export const Platform = <
      * (guard on `globalThis.__ALCHEMY_RUNTIME__`) — the hook is evaluated
      * wherever the props effect is, including inside deployed bundles.
      */
-    transformProps?: (id: string, props: any) => Effect.Effect<any, any, any>;
+    transformProps?: (id: string, props: any) => Effect.Effect<any, TransformE, TransformR>;
   },
   methods?: { [key: string]: any },
 ): any => {
@@ -563,36 +570,23 @@ export const Platform = <
                       const configProvider = yield* ConfigProvider.ConfigProvider;
                       const phase = yield* ALCHEMY_PHASE;
 
+                      // At runtime the ambient provider is `runtimeConfigProvider`;
+                      // reads pass straight through.
+                      if (phase !== "plan") {
+                        return configProvider;
+                      }
                       return ConfigProvider.make(
                         Effect.fnUntraced(function* (path) {
                           const ctx = yield* CurrentRuntimeContext;
                           // `set`/`get` store keys verbatim, so canonicalize the
                           // logical config path here (the caller's job) before
                           // handing it to the RuntimeContext.
-                          const key = sanitizeKey(path.map((p) => p.toString()).join("_"));
+                          const key = sanitizeKey(path.join("_"));
                           const node = yield* configProvider.load(path);
-                          if (phase === "plan" && node) {
-                            // bind it to the RuntimeContext if running in plan phase
+                          if (node) {
                             const output = Output.literal(Redacted.make(node.value));
                             yield* ctx?.set(key, output) ?? Effect.void;
-                            return node;
-                          } else if (phase === "runtime" && ctx) {
-                            // retrieve from the RuntimeContext if running in runtime phase
-                            const value = yield* ctx.get<unknown>(key);
-                            if (value) {
-                              // `get` JSON-decodes unbound env values (`"true"` →
-                              // `true`), but a `Value` node holds the raw string the
-                              // `Config` schema parses.
-                              return ConfigProvider.makeValue(
-                                Redacted.isRedacted(value)
-                                  ? String(Redacted.value(value))
-                                  : typeof value === "string"
-                                    ? value
-                                    : JSON.stringify(value),
-                              );
-                            }
                           }
-                          // fallback to the config provider otherwise
                           return node;
                         }),
                       );

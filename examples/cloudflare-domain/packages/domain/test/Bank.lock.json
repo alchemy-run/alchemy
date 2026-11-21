@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "rules": {
+    "Bank": {
+      "UsernameClaim.AClaimedNameStaysWithItsHolder": {
+        "kind": "transition",
+        "source": "({ before, after }) =>\n      before._tag === \"Free\" ||\n      (after._tag === \"Claimed\" && after.customerId === before.customerId)"
+      },
+      "Account.NeverOverdrawn": {
+        "kind": "invariant",
+        "source": "(account) => account._tag !== \"Open\" || account.balance >= 0"
+      },
+      "Account.WithinDailyLimit": {
+        "kind": "invariant",
+        "source": "(account) =>\n      account._tag !== \"Open\" || account.today.withdrawn <= DAILY_LIMIT"
+      },
+      "Account.AClosedAccountStaysClosed": {
+        "kind": "transition",
+        "source": "({ before, after }) =>\n      before._tag !== \"Closed\" || after._tag === \"Closed\""
+      },
+      "Account.MoneyLeavesOnlyByWithdrawalOrTransfer": {
+        "kind": "transition",
+        "source": "({ before, after, command }) =>\n      before._tag !== \"Open\" ||\n      after._tag !== \"Open\" ||\n      after.balance >= before.balance ||\n      command._tag === \"WithdrawMoney\" ||\n      command._tag === \"DebitTransfer\""
+      },
+      "Account.OnlyAnAgentChangesTheOwner": {
+        "kind": "transition",
+        "source": "Effect.fn(function* ({ before, after }) {\n      if (before._tag !== \"Open\" || after._tag !== \"Open\") return true;\n      if (before.customerId === after.customerId) return true;\n      return (yield* CurrentActor)._tag === \"Agent\";\n    })"
+      },
+      "RegisterCustomer.TheNameGoesToWhoRegistered": {
+        "kind": "transition",
+        "source": "({ after, command }) =>\n      after.customer._tag === \"Registered\" &&\n      after.customer.username === command.username &&\n      after.claim._tag === \"Claimed\" &&\n      after.claim.customerId === command.customerId"
+      },
+      "RegisterCustomer.OnlyAFreeNameIsClaimed": {
+        "kind": "transition",
+        "source": "({ before }) => before.claim._tag === \"Free\""
+      },
+      "Bank.TransfersLoseNoMoney": {
+        "kind": "model invariant",
+        "source": "(bank) => {\n      const events = bank.Account.flatMap((account) => account.events);\n      const sum = (amounts: ReadonlyArray<number>) =>\n        amounts.reduce((total, amount) => total + amount, 0);\n      const taken = sum(\n        events.flatMap((event) => (event._tag === \"TransferDebited\" ? [event.amount] : [])),\n      );\n      const given = sum(\n        events.flatMap((event) =>\n          event._tag === \"TransferCredited\" ||\n          event._tag === \"TransferRefunded\" ||\n          event._tag === \"RefundStranded\"\n            ? [event.amount]\n            : [],\n        ),\n      );\n      return taken === given;\n    }"
+      },
+      "Bank.NoTransferLeftPending": {
+        "kind": "model invariant",
+        "source": "(bank) =>\n      bank.Transfer.every((transfer) => transfer.state._tag !== \"Pending\")"
+      },
+      "Bank.LedgerIsGivenEveryDeposit": {
+        "kind": "model invariant",
+        "source": "(bank) =>\n      bank.Ledger.filter((row) => row.event._tag === \"MoneyDeposited\").length ===\n      bank.Account.flatMap((account) => account.events).filter(\n        (event) => event._tag === \"MoneyDeposited\",\n      ).length"
+      },
+      "Bank.EveryTransferEnds": {
+        "kind": "eventually",
+        "source": "(bank) =>\n      bank.Transfer.every(\n        (transfer) => transfer.state._tag === \"Completed\" || transfer.state._tag === \"Failed\",\n      )"
+      },
+      "Bank.AnAccountHoldsMoney": {
+        "kind": "sometimes",
+        "source": "(bank) =>\n      bank.Account.some((account) => account.state._tag === \"Open\" && account.state.balance > 0)"
+      },
+      "Bank.AClaimedNameBelongsToItsCustomer": {
+        "kind": "relation",
+        "source": "({ customer, claim }) =>\n        claim.state._tag !== \"Claimed\" ||\n        claim.state.customerId !== customer.id ||\n        (customer.state._tag === \"Registered\" && customer.state.username === claim.id)"
+      },
+      "Bank.ARegisteredCustomerHoldsTheirName": {
+        "kind": "relation",
+        "source": "({ customer, claim }) =>\n        customer.state._tag !== \"Registered\" ||\n        customer.state.username !== claim.id ||\n        (claim.state._tag === \"Claimed\" && claim.state.customerId === customer.id)"
+      }
+    },
+    "Account": {
+      "NeverOverdrawn": {
+        "kind": "invariant",
+        "source": "(account) => account._tag !== \"Open\" || account.balance >= 0"
+      },
+      "WithinDailyLimit": {
+        "kind": "invariant",
+        "source": "(account) =>\n      account._tag !== \"Open\" || account.today.withdrawn <= DAILY_LIMIT"
+      },
+      "AClosedAccountStaysClosed": {
+        "kind": "transition",
+        "source": "({ before, after }) =>\n      before._tag !== \"Closed\" || after._tag === \"Closed\""
+      },
+      "MoneyLeavesOnlyByWithdrawalOrTransfer": {
+        "kind": "transition",
+        "source": "({ before, after, command }) =>\n      before._tag !== \"Open\" ||\n      after._tag !== \"Open\" ||\n      after.balance >= before.balance ||\n      command._tag === \"WithdrawMoney\" ||\n      command._tag === \"DebitTransfer\""
+      },
+      "OnlyAnAgentChangesTheOwner": {
+        "kind": "transition",
+        "source": "Effect.fn(function* ({ before, after }) {\n      if (before._tag !== \"Open\" || after._tag !== \"Open\") return true;\n      if (before.customerId === after.customerId) return true;\n      return (yield* CurrentActor)._tag === \"Agent\";\n    })"
+      }
+    }
+  }
+}

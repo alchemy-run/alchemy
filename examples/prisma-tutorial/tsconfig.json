@@ -12,6 +12,7 @@
   "references": [
     { "path": "../../packages/alchemy/tsconfig.json" },
     { "path": "../../packages/sql/tsconfig.json" },
-    { "path": "../../packages/prisma/tsconfig.json" }
+    { "path": "../../packages/prisma/tsconfig.json" },
+    { "path": "../../packages/alchemy-test/tsconfig.json" }
   ]
 }

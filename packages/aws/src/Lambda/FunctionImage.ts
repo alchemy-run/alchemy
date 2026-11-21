@@ -12,6 +12,7 @@ import * as Schema from "effect/Schema";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { normalizePolicyDocument } from "../IAM/Policy.ts";
+import { partitionOf } from "../Partition.ts";
 import type { FunctionImageConfig } from "./Function.ts";
 
 export class FunctionImageInvalidProps extends Data.TaggedError("FunctionImageInvalidProps")<{
@@ -298,10 +299,10 @@ export const decodeFunctionImageSource = Effect.fn("AWS.Lambda.decodeFunctionIma
       });
     }
     const decodeError = (error: unknown) =>
-      new Error(
-        `Function(${id}): image source values must be literal and valid before Lambda pre-create`,
-        { cause: error },
-      );
+      new FunctionImageInvalidProps({
+        message: `Function(${id}): image source values must be literal and valid before Lambda pre-create`,
+        cause: error,
+      });
     if (hasUri) {
       return yield* Schema.decodeUnknownEffect(FunctionEcrImageSourceSchema)(source).pipe(
         Effect.map((decoded): FunctionEcrImageSource => decoded),
@@ -345,7 +346,7 @@ export const makeFunctionImage = Effect.gen(function* () {
           Action: ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"],
           Condition: {
             StringLike: {
-              "aws:sourceArn": `arn:aws:lambda:${region}:${accountId}:function:*`,
+              "aws:sourceArn": `arn:${partitionOf(region)}:lambda:${region}:${accountId}:function:*`,
             },
           },
         },
@@ -615,20 +616,18 @@ export const makeFunctionImage = Effect.gen(function* () {
       return false;
     }
 
+    const readTags = ecr
+      .listTagsForResource({ resourceArn: repository.repositoryArn })
+      .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined));
+    const readPolicy = ecr.getRepositoryPolicy({ repositoryName }).pipe(
+      Effect.map((response) => response.policyText),
+      Effect.catchTag(
+        ["RepositoryNotFoundException", "RepositoryPolicyNotFoundException"],
+        () => Effect.undefined,
+      ),
+    );
     const [tags, observedPolicy, image] = yield* Effect.all(
-      [
-        ecr
-          .listTagsForResource({ resourceArn: repository.repositoryArn })
-          .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined)),
-        ecr.getRepositoryPolicy({ repositoryName }).pipe(
-          Effect.map((response) => response.policyText),
-          Effect.catchTag(
-            ["RepositoryNotFoundException", "RepositoryPolicyNotFoundException"],
-            () => Effect.undefined,
-          ),
-        ),
-        describeImage(repositoryName, imageTag),
-      ] as const,
+      [readTags, readPolicy, describeImage(repositoryName, imageTag)] as const,
       { concurrency: 3 },
     );
     if (tags === undefined || !(yield* hasAlchemyTags(id, tags.tags))) {

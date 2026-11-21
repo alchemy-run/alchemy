@@ -1,5 +1,8 @@
+import * as NodeCrypto from "node:crypto";
 import * as NodeHttp from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import * as NodeOs from "node:os";
+import * as NodePath from "node:path";
 import { finished } from "node:stream";
 import { URL as NodeURL } from "node:url";
 import type * as vite from "vite";
@@ -34,6 +37,21 @@ export function workerRequestUrl(
 }
 
 /**
+ * A fresh path for the Worker runtime's Unix socket (`entrySocketPath`), or
+ * `undefined` where the proxy must use TCP: workerd listens on no Unix socket
+ * on Windows, and a path past the platform limit (104 bytes on macOS) can't be
+ * bound.
+ */
+export function workerSocketPath(): string | undefined {
+  if (process.platform === "win32") return undefined;
+  const path = NodePath.join(
+    NodeOs.tmpdir(),
+    `alchemy-${NodeCrypto.randomBytes(6).toString("hex")}.sock`,
+  );
+  return Buffer.byteLength(path) < 100 ? path : undefined;
+}
+
+/**
  * Forwards a dev or preview server request to the Worker runtime at `target`
  * and relays the Worker's response.
  *
@@ -45,6 +63,8 @@ export function forwardWorkerRequest(
   request: IncomingMessage,
   response: ServerResponse,
   target: NodeURL,
+  /** The runtime's Unix socket, which replaces `target`'s host and port. */
+  socketPath: string | undefined,
   proxySharedSecret: string,
   logger: vite.Logger,
   /** Receives the Worker's uncaught error, for Vite's error page. */
@@ -55,11 +75,9 @@ export function forwardWorkerRequest(
   if (client.destroyed) {
     return;
   }
-  // A connection per request, as a defense: with a pooled connection, requests
-  // were reported to fail with a 502 under load after workerd cut a stream
-  // short (#1869). We couldn't reproduce that against workerd, but a fresh
-  // loopback connection costs next to nothing. See
-  // https://github.com/alchemy-run/alchemy/pull/2242.
+  // A connection per request, since pooled ones race workerd's 5 s idle close
+  // (#1869). Over TCP each one holds an ephemeral port in TIME_WAIT, which
+  // runs out under load (#3194), so the runtime's Unix socket is preferred.
   //
   // A request with a body asks workerd for `100 Continue` first, and the body
   // is only forwarded once workerd sends it, which it does when the Worker
@@ -71,6 +89,7 @@ export function forwardWorkerRequest(
     request.headers["transfer-encoding"] !== undefined ||
     Number(request.headers["content-length"] ?? 0) > 0;
   const upstream = NodeHttp.request(target, {
+    socketPath,
     agent: false,
     method: request.method,
     headers: {
