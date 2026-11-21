@@ -1,0 +1,69 @@
+---
+title: Sessions & prompts
+description: Name a nanocode session, prompt it with a request id, choose its model, give it instructions, and read its log.
+---
+
+A session is one conversation with nanocode. A prompt starts a turn, and the turn runs until the agent has its final message.
+
+## Prompt a session
+
+```typescript
+const session = harness.session("ticket-7");
+
+const message = yield* session.prompt("Where is order A-1042?", { requestId: "msg-1" });
+```
+
+`prompt` returns the agent's final message.
+
+## Continue it
+
+Prompt the same name again. The model sees the earlier turns:
+
+```typescript
+yield* harness.session("ticket-7").prompt("And when will it arrive?", { requestId: "msg-2" });
+```
+
+## The same prompt twice
+
+`requestId` identifies a turn. Sending a prompt again under the same id does not start a second turn: the first turn's message is returned, and no tool runs twice. Use the id of the message or event that caused the prompt.
+
+```typescript
+const first = yield* session.prompt("Where is order A-1042?", { requestId: "msg-1" });
+const again = yield* session.prompt("Where is order A-1042?", { requestId: "msg-1" });
+// again === first
+```
+
+Without a `requestId`, each call is a new turn.
+
+## Choose the model
+
+A session runs on the first model the harness lists. Name another when you open the session:
+
+```typescript
+const harness = yield* Nanocode.Harness({ models: [Fast, Smart] });
+
+yield* harness.session("ticket-7", { model: Smart }).prompt("Summarise this ticket.");
+```
+
+## Instructions
+
+`instructions` on the harness is given to every session:
+
+```typescript
+const harness = yield* Nanocode.Harness({
+  models: [Fast],
+  instructions: "Answer questions about orders. Look an order up before you answer.",
+});
+```
+
+## Read the log
+
+`events` is the session's log as nanocode records it: every event of every turn, oldest first.
+
+```typescript
+const events = yield* session.events;
+```
+
+## Where sessions live
+
+A session belongs to the Durable Object that ran it, in that object's SQLite. Route a person or a ticket to one object by name, and name its sessions within it.
