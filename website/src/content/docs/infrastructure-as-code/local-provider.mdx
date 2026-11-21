@@ -197,6 +197,115 @@ local Queue is an entry in `LocalRuntimeState`, reconciled with three
 idempotent map operations — skip `LocalProvider.make` and write a plain
 provider registered via `dual`.
 
+## Route the URL through ingress
+
+A local resource that listens on a port advertises `http://localhost:<port>`.
+A user who routes dev traffic through a router (a local HTTPS proxy, a
+tunnel) wants the resource's `url` to be the router's address instead. The
+resource takes an `ingress` in its `dev` props:
+
+```typescript
+dev?: { ingress?: Ingress.Ingress };
+```
+
+An `Ingress` is plain data: the `module` that routes it, an optional route
+`name`, and any settings the router reads. It crosses the sidecar's RPC
+boundary and persists in state, and none of the router is bundled into the
+resource.
+
+```typescript
+dev: { ingress: { module: "@alchemy.run/portless/IngressLive", name: "api" } }
+```
+
+### Attach the listener
+
+```typescript
+import * as Ingress from "alchemy/Local/Ingress";
+
+start: Effect.fn(function* ({ id, fqn, news }) {
+  const listener = yield* startServer(news);
+  const ingress = news.dev?.ingress;
+  const url = ingress
+    ? yield* Ingress.attach(ingress, { stack: stack.name, stage: stack.stage, fqn, id, type }, listener)
+    : listener.href;
+  return { url, localUrl: listener.href };
+}),
+```
+
+`attach` imports `ingress.module` inside the sidecar, builds its
+default-export Layer once per process, and asks the router to route the
+target to the listener. The route lasts until the ambient `Scope` closes,
+which for `start` is the instance scope. Keep the raw listener in an
+attribute (`localUrl`) for everything that dials the resource from inside
+the dev session, such as service bindings and emulated routers.
+
+`attach` fails with `IngressError` when the module can't be loaded or the
+router can't make the route. Let it fail `start`, so the resource never
+advertises an address nothing routes.
+
+:::note[Typed errors across the sidecar]
+A failure inside the sidecar reaches the engine as a defect that keeps its
+message, not its class. Put what the user needs in the message, as
+`IngressError` does.
+:::
+
+### Write a router
+
+A router is a module whose default export is a Layer providing
+`Ingress.Router`. Its Layer is built with the services the sidecar gives
+every local provider: `FileSystem`, `Path`, `ChildProcessSpawner` and
+`HttpClient`.
+
+```typescript
+// src/IngressLive.ts
+import * as Ingress from "alchemy/Local/Ingress";
+
+export default Layer.effect(
+  Ingress.Router,
+  Effect.gen(function* () {
+    const table = yield* openRouteTable;
+    return {
+      attach: (ingress, target, listener) =>
+        Effect.acquireRelease(
+          table.add(hostFor(ingress, target), listener),
+          () => table.remove(hostFor(ingress, target)),
+        ),
+    };
+  }),
+);
+```
+
+The package also exports the constructor users call to get the `Ingress`
+for `dev.ingress`, carrying the settings its router reads:
+
+```typescript
+export const Ingress = (options: { domain: string; name?: string }) => ({
+  module: "@alchemy.run/acme-router/IngressLive",
+  name: options.name,
+  domain: options.domain,
+});
+```
+
+`attach` returns the origin it answers at. A target is its stack, stage
+and `fqn` together, because one router serves every stack in the process.
+`attach` follows three rules:
+
+- Attaching the same target and listener again changes nothing.
+- Attaching a target to a new listener replaces its route.
+- Closing the `Scope` removes the route that call added, unless a later
+  attach for the same target took it over.
+
+Key anything the router keeps by the whole target, and name the route from
+`ingress.name`, else `target.id`. The stage is the CLI's name for it
+(`dev_alice`), which isn't a valid host label, so slugify it in hostnames.
+
+A test points `module` at a router of its own, such as the loopback
+forwarder in `@alchemy.run/test`:
+
+```typescript
+dev: { ingress: { module: "@alchemy.run/test/IngressForwarder" } }
+```
+
 ## Testing
 
 ```typescript

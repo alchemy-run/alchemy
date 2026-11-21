@@ -87,7 +87,12 @@ const program = Effect.scoped(
         devRemote,
         devAccess,
       },
-      { accountId: config.accountId, selfUrl: config.publicUrl, stack: config.stack },
+      {
+        accountId: config.accountId,
+        selfUrl: config.publicUrl,
+        listenerUrl: config.listenerUrl,
+        stack: config.stack,
+      },
     );
     const selfEntrypoints = bindingDescriptors.flatMap((binding) =>
       binding.type === "self_service" && binding.entrypoint ? [binding.entrypoint] : [],
