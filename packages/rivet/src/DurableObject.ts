@@ -101,7 +101,7 @@ export const actorOptionsOf = (
     if (!Number.isFinite(millis) || millis <= 0) {
       return Effect.die(
         new InvalidActorOptions({
-          message: `Rivet.DurableObject '${id}' sets ${name} to ${String(value)}: it must be a duration above 0, such as "30 seconds".`,
+          message: `Rivet.DurableObject '${id}' sets ${name} to ${JSON.stringify(value)}: it must be a duration above 0, such as "30 seconds".`,
         }),
       );
     }
