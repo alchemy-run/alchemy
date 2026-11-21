@@ -25,6 +25,13 @@ export class Providers extends Provider.ProviderCollection<Providers>()("Kuberne
  *   state: AWS.state(),
  * });
  * ```
+ *
+ * Bundled Deployments and Jobs use Bun by default. To use Node.js, provide
+ * `ContainerRuntime.node` from `@alchemy.run/docker`.
+ *
+ * ```ts
+ * Kubernetes.providers().pipe(Layer.provide(ContainerRuntime.node));
+ * ```
  */
 export const providers = () =>
   Layer.effect(

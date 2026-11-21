@@ -158,15 +158,15 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
           return yield* respond(
             Effect.gen(function* () {
               const sandbox = yield* pool.connect(param("taskArn"));
-              // The image has Python and no Bun.
-              const file = image ? "/work/hello.py" : "/work/hello.ts";
+              // The image has Python and no Node.js.
+              const file = image ? "/work/hello.py" : "/work/hello.mjs";
               yield* sandbox.files.write(
                 file,
                 image
                   ? `import sys; print("hi " + sys.argv[1])`
-                  : `console.log("hi " + Bun.argv[2])`,
+                  : `console.log("hi " + process.argv[2])`,
               );
-              const run = yield* sandbox.exec(image ? "python3 hello.py sam" : "bun hello.ts sam", {
+              const run = yield* sandbox.exec(image ? "python3 hello.py sam" : "node hello.mjs sam", {
                 cwd: "/work",
               });
               const failed = yield* sandbox.exec(["sh", "-c", "echo oops >&2; exit 3"]);
@@ -240,9 +240,9 @@ export default class SandboxHost extends AWS.Lambda.Function<SandboxHost>()(
               // A port the task definition never mapped: a server the host
               // starts inside the sandbox.
               const server = yield* sandbox.start([
-                "bun",
+                "node",
                 "-e",
-                `Bun.serve({ port: 8080, fetch: (request) => new Response("from 8080 " + new URL(request.url).pathname) })`,
+                `require("node:http").createServer((request, response) => response.end("from 8080 " + new URL(request.url, "http://localhost").pathname)).listen(8080)`,
               ]);
               const other = yield* sandbox.getTcpPort(8080);
               const started = yield* other.fetch(HttpClientRequest.get("/started")).pipe(

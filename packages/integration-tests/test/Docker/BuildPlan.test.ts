@@ -1,4 +1,5 @@
 import * as BuildPlan from "@alchemy.run/docker/BuildPlan";
+import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import { DockerLive } from "@alchemy.run/docker/Docker";
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import * as DockerfileParser from "@alchemy.run/docker/DockerfileParser";
@@ -354,12 +355,12 @@ CMD ["ignored"]`,
         const plan = yield* BuildPlan.plan(
           {
             main: path.join(root, "main.ts"),
-            dockerfile: Dockerfile.inline`FROM oven/bun:1
+            dockerfile: Dockerfile.inline`FROM node:26-slim
 RUN apt-get update && apt-get install -y git`,
           },
           { capabilities: e2b, port: 3000 },
         );
-        expect(plan.base).toBe("oven/bun:1");
+        expect(plan.base).toBe("node:26-slim");
         expect(
           plan.instructions.map((instruction) => [instruction._tag, instruction.line]),
         ).toEqual([
@@ -374,8 +375,27 @@ RUN apt-get update && apt-get install -y git`,
         expect(BuildPlan.filesFor(plan, copy).map((file) => file.path)).toContain(
           `${BuildPlan.BUNDLE_DIR}/index.mjs`,
         );
-        expect(BuildPlan.startCommand(plan)).toEqual(["bun", "/app/index.mjs"]);
+        expect(BuildPlan.startCommand(plan)).toEqual(["node", "/app/index.mjs"]);
         expect(BuildPlan.render(plan)).toContain(`COPY ${BuildPlan.BUNDLE_DIR}/ /app/`);
+      }),
+    { tags },
+  );
+
+  test.effect(
+    "a bundled main runs on Node.js 26 by default, and on Bun when ContainerRuntime.bun is provided",
+    () =>
+      Effect.gen(function* () {
+        const { root, path } = yield* makeContext({
+          "package.json": '{"name":"runtime-test","type":"module"}',
+          "main.ts": "export default 'hello';\n",
+        });
+        const plan = BuildPlan.plan({ main: path.join(root, "main.ts") }, { capabilities: docker });
+        const node = yield* plan;
+        expect(node.base).toBe("node:26-slim");
+        expect(BuildPlan.startCommand(node)).toEqual(["node", "/app/index.mjs"]);
+        const bun = yield* plan.pipe(Effect.provide(ContainerRuntime.bun));
+        expect(bun.base).toBe("oven/bun:1");
+        expect(BuildPlan.startCommand(bun)).toEqual(["bun", "/app/index.mjs"]);
       }),
     { tags },
   );

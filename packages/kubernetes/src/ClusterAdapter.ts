@@ -1,3 +1,4 @@
+import type { ContainerRuntimeSettings } from "@alchemy.run/docker/ContainerRuntime";
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import type { DockerfileBuild } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
@@ -240,6 +241,7 @@ export interface ImageRegistryResolveOptions {
   isExternal?: boolean;
   /** The generated-entry bootstrap wrapped around `main`. */
   bootstrap: (importPath: string) => string;
+  runtime?: ContainerRuntimeSettings;
   /** Tags for registry-owned cloud resources. */
   tags: Record<string, string>;
   /**
@@ -267,6 +269,7 @@ export interface ImageRegistryHashOptions {
   port?: number;
   isExternal?: boolean;
   bootstrap: (importPath: string) => string;
+  runtime?: ContainerRuntimeSettings;
 }
 
 export interface ImageRegistryDeleteOptions {
@@ -310,9 +313,12 @@ export interface ClusterAdapterService {
       options: ImageRegistryDeleteOptions,
     ) => Effect.Effect<void, ProviderError, AdapterLifecycleServices>;
   };
+  /** Bootstrap module for the shared runtime path, including adapter-specific workload identity. */
+  readonly runtimeBootstrap?: string;
   /**
-   * Platform-specific generated container entries for Effect-native
-   * workloads. Defaults to the platform-neutral bootstraps when omitted.
+   * Temporary Bun bootstrap templates for Effect-native workloads. Omit to
+   * use the built-in Bun templates. New bootstrap integrations should use
+   * `runtimeBootstrap` for the shared path.
    */
   readonly bootstrap?: {
     readonly server?: (handler: string) => (importPath: string) => string;

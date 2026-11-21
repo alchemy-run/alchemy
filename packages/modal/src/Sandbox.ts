@@ -47,8 +47,9 @@ export interface SandboxProps extends PlatformProps {
   /** The App sandboxes run in. */
   app: Ref<App>;
   /**
-   * Base image the bundle runs on. It needs Bun on the `PATH`.
-   * @default "oven/bun:1"
+   * Base image the bundle runs on. It needs the `ContainerRuntime`'s
+   * executable (`node` by default) on the `PATH`.
+   * @default "node:26-slim" (the `ContainerRuntime` base image)
    */
   image?: string;
   /** Dockerfile lines run on the base before the bundle is added. */
@@ -147,7 +148,7 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  * ```
  *
  * ### Async program
- * **Example:** A plain HTTP server, no Effect (it runs on Bun)
+ * **Example:** A plain HTTP server, no Effect
  * ```typescript
  * // src/Agent.ts
  * import * as Modal from "@alchemy.run/modal";

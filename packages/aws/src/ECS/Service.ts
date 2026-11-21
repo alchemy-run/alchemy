@@ -35,7 +35,6 @@ import {
 import type { SubnetId } from "../EC2/Subnet.ts";
 import type { VpcId } from "../EC2/Vpc.ts";
 import {
-  makeBunBootstrap,
   makeImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
@@ -2768,7 +2767,6 @@ export const serviceImageInput = (props: ServiceProps) => {
     platform: taskImagePlatform(imageProps.runtimePlatform),
     port: imageProps.port,
     isExternal: imageProps.isExternal,
-    bootstrap: makeBunBootstrap(source.handler ?? "default"),
   };
 };
 

@@ -109,7 +109,7 @@ export interface ImageServiceProps extends ServicePropsBase {
 /**
  * Bundle an inline Effect program (`main`) into a generated image built
  * against the service's Docker context. The optional `image` is the
- * environment base (`FROM`) and must be able to run the bun runtime.
+ * environment base (`FROM`) and must support the selected container runtime.
  */
 export interface BundledServiceProps extends ServicePropsBase {
   /**
@@ -120,9 +120,9 @@ export interface BundledServiceProps extends ServicePropsBase {
   main: string;
   /**
    * Environment image used as the generated Dockerfile's `FROM`. Must be
-   * able to run the bun runtime.
+   * able to run the selected container runtime.
    *
-   * @default "oven/bun:1"
+   * @default "node:26-slim" (the `ContainerRuntime` base image)
    */
   image?: string;
   /**

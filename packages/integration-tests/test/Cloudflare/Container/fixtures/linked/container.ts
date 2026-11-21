@@ -21,7 +21,6 @@ export const linkedContainer = (main: string, marker: string) =>
       // The publication tests read the fleet application's image.
       schedulingPolicy: "default",
       main,
-      image: "oven/bun:latest",
       build: {
         input: { transform: { define: { BUNDLE_MARKER: JSON.stringify(marker) } } },
         // A fresh builder imports the base layers' cache instead of pulling them.

@@ -1,4 +1,5 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
@@ -41,7 +42,6 @@ import {
   connectionOfOutput,
   deepMerge,
   imagePlatformOf,
-  makeJobBootstrap,
   resolveWorkloadImage,
   tryConnectionOf,
   workloadImageHash,
@@ -165,8 +165,8 @@ export interface BundledJobProps extends JobPropsBase {
   main: string;
   /**
    * Environment image used as the generated Dockerfile's `FROM`; must be
-   * able to run the bun runtime.
-   * @default "oven/bun:1"
+   * able to run the selected container runtime.
+   * @default "node:26-slim" (the `ContainerRuntime` base image)
    */
   image?: string;
   /** Named export to load from `main`. @default "default" */
@@ -474,6 +474,7 @@ export const JobProvider = () =>
     Effect.gen(function* () {
       const stack = yield* Stack;
       const connectionRegistry = yield* makeConnectionRegistry;
+      const runtime = yield* ContainerRuntime;
 
       const alchemyEnv = {
         ALCHEMY_STACK_NAME: stack.name,
@@ -528,7 +529,8 @@ export const JobProvider = () =>
               source,
               platform: imagePlatformOf(news.architecture, connection),
               isExternal: news.isExternal,
-              bootstrap: (adapter.bootstrap?.job ?? makeJobBootstrap)(source.handler ?? "default"),
+              mode: "job",
+              runtime,
             });
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
@@ -601,7 +603,8 @@ export const JobProvider = () =>
             source,
             platform: imagePlatformOf(news.architecture, connection),
             isExternal: news.isExternal,
-            bootstrap: (adapter.bootstrap?.job ?? makeJobBootstrap)(source.handler ?? "default"),
+            mode: "job",
+            runtime,
             tags,
             state:
               (output?.registry as Record<string, unknown> | undefined) ??

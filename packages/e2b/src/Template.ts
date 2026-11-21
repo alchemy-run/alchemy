@@ -1,3 +1,8 @@
+import {
+  ContainerRuntime,
+  makeContainerBootstrap,
+  type ContainerRuntimeSettings,
+} from "@alchemy.run/docker/ContainerRuntime";
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import type { DockerfileBuild } from "@alchemy.run/docker/ImageSource";
 import * as templates from "@distilled.cloud/e2b/templates";
@@ -57,10 +62,11 @@ export interface TemplateProps extends Omit<TemplateSteps, "env">, PlatformProps
   /**
    * A program to run in every sandbox: a module entrypoint, typically
    * `import.meta.url` in the class form. Alchemy bundles it, copies it into
-   * the template under `/app`, and starts it with Bun as the template's start
-   * command, so every sandbox boots with it already serving on {@link port}.
-   * `image` / `dockerfile` are then the program's environment, which must
-   * have Bun; the default is `oven/bun:1`.
+   * the template under `/app`, and starts it with the `ContainerRuntime` as
+   * the template's start command, so every sandbox boots with it already
+   * serving on {@link port}. `image` / `dockerfile` are then the program's
+   * environment, which must have that runtime: Node.js 26 on `node:26-slim`
+   * by default.
    * @default no program
    */
   main?: string;
@@ -240,8 +246,8 @@ export interface Template extends Resource<
  * Give the template a `main` and an Effect, and every sandbox from it boots
  * with the program already serving HTTP on `port`. Alchemy bundles `main`,
  * copies it into the template, and E2B snapshots the template once the
- * program answers. The program runs with Bun; the image defaults to
- * `oven/bun:1`.
+ * program answers. The program runs on the `ContainerRuntime` provided to
+ * the providers: Node.js 26 on `node:26-slim` by default.
  *
  * **Example:** A program in every sandbox
  * ```typescript
@@ -265,7 +271,7 @@ export interface Template extends Resource<
  * ```
  *
  * ### Async program
- * A `main` without an Effect is bundled and run with Bun as-is. It must
+ * A `main` without an Effect is bundled and run as-is. It must
  * listen on `PORT`. `E2B.InferEnv` types its `env`.
  *
  * **Example:** A plain server
@@ -404,6 +410,7 @@ const planOf = Effect.fn(function* (
   name: string,
   news: TemplateProps,
   bindings: ReadonlyArray<ResourceBinding<TemplateBinding>> | undefined,
+  runtime: ContainerRuntimeSettings,
 ) {
   const { main, handler, port, build, env, dockerfile, context, image, ...steps } = news;
   const programPort = port ?? DEFAULT_PORT;
@@ -425,11 +432,23 @@ const planOf = Effect.fn(function* (
       },
       {
         port: programPort,
+        runtime,
         ...(args !== undefined ? { args } : {}),
         install: mountInstallLines(capabilities),
         ...((news as { isExternal?: boolean }).isExternal
           ? {}
-          : { bootstrap: makeBootstrap(handler ?? "default") }),
+          : {
+              bootstrap:
+                runtime.preset === "bun"
+                  ? makeBootstrap(handler ?? "default")
+                  : makeContainerBootstrap(
+                      runtime.platformModule,
+                      "alchemy/Runtime/ContainerProcess",
+                      handler ?? "default",
+                      "server",
+                      { deferEntrypointImport: true },
+                    ),
+            }),
       },
     );
   } else if (dockerfile !== undefined || context !== undefined) {
@@ -455,7 +474,9 @@ const planOf = Effect.fn(function* (
       main === undefined
         ? yield* plainEnv(env)
         : yield* programEnv(programPort, { ...mountEnv(capabilities), ...boundEnv(bindings) }, env),
-    ...(main !== undefined ? { readyCmd: steps.readyCmd ?? programReadyCmd(programPort) } : {}),
+    ...(main !== undefined
+      ? { readyCmd: steps.readyCmd ?? programReadyCmd(programPort, runtime.command) }
+      : {}),
   } satisfies TemplateBuildSpec;
   return { spec, plan: yield* planTemplateBuild(spec, lowered) };
 });
@@ -468,6 +489,7 @@ export const TemplateProvider = () =>
   Provider.effect(
     Template,
     Effect.gen(function* () {
+      const runtime = yield* ContainerRuntime;
       return {
         stables: ["templateId", "name"],
         diff: Effect.fn(function* ({ id, olds, news, output }) {
@@ -479,7 +501,7 @@ export const TemplateProvider = () =>
           // unchanged `context` path still rebuilds.
           // Bindings may be unresolved here; the engine reconciles when they
           // change. Diff compares the hash of everything else.
-          const { plan } = yield* planOf(name, news, undefined);
+          const { plan } = yield* planOf(name, news, undefined, runtime);
           if (plan.hash !== output.sourceHash || news.force) return { action: "update" } as const;
           if ((news.public ?? false) !== output.public) return { action: "update" } as const;
           return undefined;
@@ -529,14 +551,14 @@ export const TemplateProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
           const name = output?.name ?? (yield* e2bName(id, news.name));
-          const { spec, plan } = yield* planOf(name, news, bindings);
+          const { spec, plan } = yield* planOf(name, news, bindings, runtime);
 
           // Observe
           const observed = yield* observeTemplate(output?.templateId, name);
           const sourceHash =
             bindings === undefined || bindings.length === 0
               ? plan.hash
-              : (yield* planOf(name, news, undefined)).plan.hash;
+              : (yield* planOf(name, news, undefined, runtime)).plan.hash;
 
           // Ensure — build when there is no ready build of these exact inputs.
           let attrs: TemplateAttributes;

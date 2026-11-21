@@ -1,4 +1,5 @@
 import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
+import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
@@ -46,7 +47,6 @@ import {
   connectionOfOutput,
   deepMerge,
   imagePlatformOf,
-  makeServerBootstrap,
   resolveWorkloadImage,
   tryConnectionOf,
   workloadImageHash,
@@ -186,8 +186,8 @@ export interface BundledDeploymentProps extends DeploymentPropsBase {
   main: string;
   /**
    * Environment image used as the generated Dockerfile's `FROM`; must be
-   * able to run the bun runtime.
-   * @default "oven/bun:1"
+   * able to run the selected container runtime.
+   * @default "node:26-slim" (the `ContainerRuntime` base image)
    */
   image?: string;
   /** Named export to load from `main`. @default "default" */
@@ -596,6 +596,7 @@ export const DeploymentProvider = () =>
     Effect.gen(function* () {
       const stack = yield* Stack;
       const connectionRegistry = yield* makeConnectionRegistry;
+      const runtime = yield* ContainerRuntime;
 
       const alchemyEnv = {
         ALCHEMY_STACK_NAME: stack.name,
@@ -682,9 +683,8 @@ export const DeploymentProvider = () =>
               platform: imagePlatformOf(news.architecture, connection),
               port: news.port ?? 3000,
               isExternal: news.isExternal,
-              bootstrap: (adapter.bootstrap?.server ?? makeServerBootstrap)(
-                source.handler ?? "default",
-              ),
+              mode: "server",
+              runtime,
             });
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
@@ -763,9 +763,8 @@ export const DeploymentProvider = () =>
             platform: imagePlatformOf(news.architecture, connection),
             port,
             isExternal: news.isExternal,
-            bootstrap: (adapter.bootstrap?.server ?? makeServerBootstrap)(
-              source.handler ?? "default",
-            ),
+            mode: "server",
+            runtime,
             tags,
             state:
               (output?.registry as Record<string, unknown> | undefined) ??
