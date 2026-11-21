@@ -1,9 +1,13 @@
 import * as Discord from "@alchemy.run/discord";
 import { expect } from "@alchemy.run/test";
 import * as discord from "@distilled.cloud/discord/discord";
+import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
+import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
 
@@ -11,8 +15,14 @@ import * as Schedule from "effect/Schedule";
  * Run distilled Discord calls with the testing profile's bot token, outside a
  * provider (out-of-band setup and verification).
  */
+const credentials = Layer.mergeAll(Discord.fromAuthProvider(), FetchHttpClient.layer).pipe(
+  Layer.provideMerge(Discord.DiscordAuth),
+  Layer.provideMerge(ProfileStoreLive),
+  Layer.provideMerge(CredentialsStoreLive),
+);
+
 export const dc = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.provide(Discord.providers()));
+  effect.pipe(Effect.provide(credentials));
 
 export class TestGuildMissing extends Data.TaggedError("TestGuildMissing")<{
   readonly message: string;
@@ -26,7 +36,7 @@ export class TestGuildMissing extends Data.TaggedError("TestGuildMissing")<{
  * and name it `alchemy-test`.
  */
 export const testGuildId = Effect.gen(function* () {
-  const name = yield* Config.string("DISCORD_TEST_GUILD").pipe(Config.withDefault("alchemy-test"));
+  const name = yield* Config.String("DISCORD_TEST_GUILD").pipe(Config.withDefault("alchemy-test"));
   const guilds = (yield* dc(discord.listMyGuilds({ limit: 200 }))) ?? [];
   const guild =
     guilds.find((g) => g.name === name) ?? (guilds.length === 1 ? guilds[0] : undefined);
