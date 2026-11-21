@@ -1,0 +1,85 @@
+---
+title: Tools
+description: clanka's own functions run in the sandbox. An AI.Tool listed on the harness is a function scripts call the same way, with its handler in your Durable Object.
+---
+
+A clanka script calls functions. Some are clanka's own and run in the sandbox. The rest are yours and run in your Durable Object, where your bindings are.
+
+## clanka's own functions
+
+The executor gives every script these, among others: `readFile`, `writeFile`, `applyPatch`, `removeFile`, `renameFile`, `ls`, `rg`, `bash`, `gh`, `webSearch`, `fetchMarkdown`, `subagent` and `taskComplete`. They work on the sandbox's files and run its commands.
+
+## Leave some out
+
+`excludeTools` removes functions from every script and from what the model is told:
+
+```typescript
+const harness = yield* Clanka.Harness({
+  models: [Smart],
+  excludeTools: ["fetch", "webSearch", "subagent"],
+});
+```
+
+`"fetch"` removes the global `fetch` from scripts.
+
+## Add your own
+
+Declare a tool with `AI.Tool`. See [Tools](/ai/tools).
+
+```typescript title="src/tools.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Schema from "effect/Schema";
+
+export class LookupOrder extends AI.Tool<LookupOrder>()("lookupOrder", {
+  description: "Look up an order by its number.",
+  parameters: Schema.Struct({ number: Schema.String }),
+  success: Schema.Struct({ status: Schema.String }),
+}) {}
+
+export const LookupOrderLive = LookupOrder.make(({ number }) => ({
+  status: number.startsWith("A") ? "shipped" : "processing",
+}));
+```
+
+The tool's name is the function's name in a script, so name it as you would a JavaScript function.
+
+## List it on the harness
+
+```typescript
+const harness = yield* Clanka.Harness({ models: [Smart], tools: [LookupOrder] });
+```
+
+Provide `LookupOrderLive` where the harness is yielded. A script then calls it like any other function:
+
+```typescript
+const order = await lookupOrder({ number: "A-1042" });
+await writeFile({ path: "order.txt", content: order.status });
+```
+
+The script runs in the sandbox. The call to `lookupOrder` is sent to the Durable Object, the handler runs there, and the result goes back to the script.
+
+## Use the sandbox from your tool
+
+A handler can use `AI.Sandbox` to reach the conversation's sandbox directly, without going through a script:
+
+```typescript title="src/tools.ts"
+export const CountLinesLive = CountLines.make(
+  Effect.fn(function* ({ path }) {
+    const sandbox = yield* AI.Sandbox;
+    const text = yield* sandbox.readTextFile(path).pipe(Effect.orDie);
+    return { lines: text.split("\n").length };
+  }),
+);
+```
+
+The handler then needs `AI.Sandboxes`, so provide the sandbox Layer under the tool's Layer as well as the harness:
+
+```typescript
+const HarnessLive = Layer.mergeAll(
+  SmartLive,
+  CountLinesLive,
+  ClankaCloudflare.DurableObjectStore,
+).pipe(Layer.provideMerge(Sandbox), Layer.provideMerge(Boat.CreateSandboxHttp));
+```
+
+Tool tags such as `AI.Bash` are not used here: clanka's coding functions are always on unless you exclude them.

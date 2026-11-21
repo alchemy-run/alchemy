@@ -231,6 +231,7 @@ export default defineConfig({
         "packages/opencode/src/**",
         "packages/pi/src/**",
         "packages/yielded-agent/src/**",
+        "packages/clanka/src/**",
         "packages/domain/src/**",
         "packages/effect-cluster/src/**",
         "packages/gcp/src/GCPBindings.ts",

@@ -163,6 +163,9 @@
       "path": "./packages/yielded-agent/tsconfig.json"
     },
     {
+      "path": "./packages/clanka/tsconfig.json"
+    },
+    {
       "path": "./packages/rivet/tsconfig.json"
     },
     {
