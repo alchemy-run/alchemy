@@ -547,6 +547,14 @@ export const BINDINGS: Row[] = [
     `{}`,
   ),
   B(
+    "ReorderChannels",
+    "bulkUpdateGuildChannels",
+    "Guild",
+    "Channel",
+    "Move channels of the bound guild (positions, parents, permission sync) in one call.",
+    `{ body: [{ id: channelId, position: 0 }] }`,
+  ),
+  B(
     "ListActiveThreads",
     "getActiveGuildThreads",
     "Guild",

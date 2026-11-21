@@ -302,6 +302,8 @@ export * from "./RemoveThreadMember.ts";
 export * from "./RemoveThreadMemberHttp.ts";
 export * from "./RemoveUserReaction.ts";
 export * from "./RemoveUserReactionHttp.ts";
+export * from "./ReorderChannels.ts";
+export * from "./ReorderChannelsHttp.ts";
 export * from "./RevokeInvite.ts";
 export * from "./RevokeInviteHttp.ts";
 export * from "./Role.ts";

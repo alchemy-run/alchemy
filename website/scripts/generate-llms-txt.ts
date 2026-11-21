@@ -969,6 +969,14 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Discord",
+    intro:
+      "Discord guild channels, roles, webhooks, slash commands and AutoMod rules as Stack resources, bot bindings for runtimes, and verified interactions on Workers.",
+    pages: {
+      slugs: ["discord/index", "discord/what-is-discord", "discord/setup"],
+    },
+  },
+  {
     heading: "GitHub",
     intro:
       "Repos, secrets, variables, and repository event sources as Stack resources; the CI/CD guides live under Guides and each cloud's tutorial part 5.",

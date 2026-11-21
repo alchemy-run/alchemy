@@ -328,6 +328,7 @@ export const cases: Record<string, Case> = {
     () => ({}),
     (data, c) => expect(data.some((ch: { id: string }) => ch.id === c.channelId)).toBe(true),
   ),
+  ReorderChannels: ok((c) => ({ body: [{ id: c.channelId, position: 0 }] })),
   ListRoles: ok(
     () => ({}),
     (data, c) => expect(data.some((r: { id: string }) => r.id === c.guildId)).toBe(true),

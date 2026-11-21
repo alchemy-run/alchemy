@@ -414,6 +414,12 @@
     "product": "Channel"
   },
   {
+    "name": "ReorderChannels",
+    "op": "bulkUpdateGuildChannels",
+    "target": "Guild",
+    "product": "Channel"
+  },
+  {
     "name": "ListActiveThreads",
     "op": "getActiveGuildThreads",
     "target": "Guild",

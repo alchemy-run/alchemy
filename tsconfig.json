@@ -572,6 +572,9 @@
       "path": "./examples/stripe-billing/tsconfig.json"
     },
     {
+      "path": "./examples/discord-bot/tsconfig.json"
+    },
+    {
       "path": "./examples/stripe-connect/tsconfig.json"
     },
     {
