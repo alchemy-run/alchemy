@@ -324,12 +324,8 @@ const makeHost = <Network, Req>(options: {
 const output = <T>(value: Input<T>): Output.Output<T> =>
   (Output.isOutput(value) ? value : Output.literal(value)) as Output.Output<T>;
 
-/**
- * Every value a node needs, as plain strings, for hosts whose environments
- * hold no `Redacted` (AWS task and instance environments, Kubernetes env).
- * `endpoint` overrides the control plane URL nodes connect to.
- */
-export const nodeEnvironment = (
+/** Every value a node needs, its token left `Redacted`. */
+const nodeValues = (
   { pool, environment }: PoolNodes<unknown>,
   endpoint: Input<string> = environment.RIVET_ENDPOINT,
 ) =>
@@ -343,11 +339,30 @@ export const nodeEnvironment = (
     Output.map(([env, url, token, namespace, poolName]) => ({
       ...env,
       RIVET_ENDPOINT: url,
-      RIVET_TOKEN: Redacted.value(token),
+      RIVET_TOKEN: token,
       RIVET_NAMESPACE: namespace,
       RIVET_POOL: poolName,
     })),
   );
+
+/**
+ * Every value a node needs, as plain strings, for hosts whose environments
+ * hold no `Redacted` (AWS task and instance environments).
+ * `endpoint` overrides the control plane URL nodes connect to.
+ */
+export const nodeEnvironment = (nodes: PoolNodes<unknown>, endpoint?: Input<string>) =>
+  nodeValues(nodes, endpoint).pipe(
+    Output.map(({ RIVET_TOKEN, ...rest }) => ({
+      ...rest,
+      RIVET_TOKEN: Redacted.value(RIVET_TOKEN),
+    })),
+  );
+
+/**
+ * Every value a node needs, the token still `Redacted`, for hosts that keep
+ * secrets apart (`Kubernetes.Deployment` reads it from a Secret).
+ */
+export const secretNodeEnvironment = nodeValues;
 
 /**
  * The node entry, which imports the pool's classes from {@link VIRTUAL}.
