@@ -424,7 +424,7 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
               image,
               stopTimeout: options.stopTimeout ?? 30,
               rolloutTimeout: options.rolloutTimeout ?? 600,
-              rivetkitVersion: options.rivetkitVersion,
+              rivetkitVersion: options.rivetkitVersion ?? nodes.rivetkitVersion,
             }),
             [HASH_KEY]: programHash ?? "",
             [ENV_KEY]: env,

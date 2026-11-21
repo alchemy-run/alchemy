@@ -7,6 +7,7 @@
  * @internal
  */
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
@@ -32,8 +33,42 @@ import { Pool, type PoolDurableObject, type PoolProps } from "../Pool.ts";
 import type { Providers } from "../Providers.ts";
 import { stageRustProgram } from "./RustProgram.ts";
 
-/** The RivetKit release node images install. */
+/**
+ * The RivetKit release `@alchemy.run/rivet` depends on: what node images
+ * install when no `rivetkit` resolves from the program or from this package.
+ */
 export const RIVETKIT_VERSION = "3.1.1";
+
+/** The version of the `rivetkit` that resolves from `from`, a file or `file:` URL. */
+const resolvedRivetKit = (from: string) =>
+  Effect.try(() => {
+    const path = from.startsWith("file:") ? fileURLToPath(from) : from;
+    // A relative entry is relative to where the deploy runs.
+    const file = /^(\/|[A-Za-z]:[\\/])/.test(path) ? path : `${process.cwd()}/${path}`;
+    const entry = createRequire(file).resolve("rivetkit").replaceAll("\\", "/");
+    const root = entry.slice(
+      0,
+      entry.lastIndexOf("/node_modules/rivetkit/") + "/node_modules/rivetkit".length,
+    );
+    const { version } = createRequire(file)(`${root}/package.json`) as { version?: unknown };
+    return typeof version === "string" ? version : undefined;
+  }).pipe(Effect.orElseSucceed(() => undefined));
+
+/**
+ * The RivetKit release a pool's nodes install for a program whose entry is
+ * `main`: the `rivetkit` the program resolves, so the nodes run the release
+ * the program was built and tested against. A program that installs none
+ * gets the one `@alchemy.run/rivet` depends on, and failing that
+ * {@link RIVETKIT_VERSION}.
+ */
+export const resolveRivetKitVersion = (main: string) =>
+  Effect.gen(function* () {
+    return (
+      (yield* resolvedRivetKit(main)) ??
+      (yield* resolvedRivetKit(import.meta.url)) ??
+      RIVETKIT_VERSION
+    );
+  });
 
 /** A node image environment: bun with RivetKit `version` installed. */
 export const nodeDockerfile = (version: string) => `FROM oven/bun:1
@@ -115,7 +150,7 @@ export interface PoolSettings extends Pick<
    * the control plane protocol of their release: a 3.0 node works with a
    * 3.0 or 3.1 control plane, a 3.1 node needs a 3.1 one. A Rust program
    * brings its own.
-   * @default "3.1.1"
+   * @default the `rivetkit` the program resolves, else the one `@alchemy.run/rivet` depends on
    */
   rivetkitVersion?: string;
 }
@@ -152,6 +187,11 @@ export interface PoolNodes<Network> {
   readonly pool: Pool;
   /** The node program: a JavaScript bundle, or an image of its own. */
   readonly program: NodeProgram;
+  /**
+   * The RivetKit release a JavaScript program runs with: the `rivetkit` it
+   * resolves (see {@link resolveRivetKitVersion}).
+   */
+  readonly rivetkitVersion: string;
   /** Environment every node needs: the control plane, the pool, and the classes' env. */
   readonly environment: {
     readonly RIVET_ENDPOINT: ClusterShape["endpoint"];
@@ -222,6 +262,8 @@ const makeHost = <Network, Req>(options: {
       env: Record<string, unknown>,
       bindCaller: Effect.Effect<void, never, any>,
       program: (pool: Pool) => NodeProgram,
+      // The file the program's own code starts from, which its `rivetkit` resolves from.
+      source: string,
     ) {
       const pool = yield* Pool(options.id, {
         endpoint: cluster.endpoint,
@@ -240,6 +282,7 @@ const makeHost = <Network, Req>(options: {
         network,
         pool,
         program: program(pool),
+        rivetkitVersion: yield* resolveRivetKitVersion(source),
         environment: {
           RIVET_ENDPOINT: endpoint,
           RIVET_TOKEN: cluster.token,
@@ -282,6 +325,7 @@ const makeHost = <Network, Req>(options: {
               },
             },
           }),
+          object.Props.main,
         ),
       );
     }
@@ -304,6 +348,7 @@ const makeHost = <Network, Req>(options: {
               },
             },
           }),
+          main,
         ).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
       deployCrate: ({ id, crate, build, resource }) =>
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
@@ -315,6 +360,8 @@ const makeHost = <Network, Req>(options: {
             {},
             resource.bind`Pool`(caller),
             () => image,
+            // A Rust program brings its own RivetKit.
+            crate,
           );
         }).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
     } satisfies PoolHost["Service"];
