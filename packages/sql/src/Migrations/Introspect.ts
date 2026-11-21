@@ -95,7 +95,9 @@ export const tableColumns = (
  * versioning trick drizzle uses (there is deliberately no version column):
  *
  * - `absent`         — no table
- * - `drizzle-shaped` — has `hash` (drizzle v1 / alchemy current)
+ * - `drizzle-shaped` — has `hash` and `name` (drizzle v1 / alchemy current)
+ * - `drizzle-v0`     — drizzle-orm 0.x's `id`, `hash`, `created_at`, no
+ *   `name`
  * - `legacy-alchemy` — `name` + `applied_at`, no `hash` (pre-registry Alchemy)
  * - `legacy-2col`    — two columns, no `name`/`hash` (oldest Alchemy shape,
  *   where the primary column carried the migration name)
@@ -106,6 +108,7 @@ export const tableColumns = (
 export type TableShape =
   | "absent"
   | "drizzle-shaped"
+  | "drizzle-v0"
   | "legacy-alchemy"
   | "legacy-2col"
   | "wrangler"
@@ -114,7 +117,10 @@ export type TableShape =
 export const classifyTable = (columns: TableColumn[]): TableShape => {
   if (columns.length === 0) return "absent";
   const names = new Set(columns.map((c) => c.name));
-  if (names.has("hash")) return "drizzle-shaped";
+  if (names.has("hash") && names.has("name")) return "drizzle-shaped";
+  if (names.has("hash")) {
+    return names.has("id") && names.has("created_at") ? "drizzle-v0" : "unknown";
+  }
   if (names.has("name") && names.has("applied_at")) {
     const id = columns.find((c) => c.name === "id");
     return id && /INT/.test(id.type) ? "wrangler" : "legacy-alchemy";

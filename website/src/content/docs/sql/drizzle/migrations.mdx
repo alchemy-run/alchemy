@@ -221,6 +221,11 @@ git add drizzle
 git commit -m "Upgrade Drizzle migration layout"
 ```
 
+A database drizzle-orm 0.x migrated keeps its old `__drizzle_migrations`
+table, which records no migration names. The first deploy converts it,
+matching each row to a migration by its timestamp and then its hash, as
+drizzle-orm 1.0 does.
+
 See the [complete Worker example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-durable-object-sql) for named-object POST and GET routes.
 
 ## Existing migration history

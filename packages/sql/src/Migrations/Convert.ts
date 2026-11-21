@@ -60,7 +60,9 @@ const qualify = (table: string, dialect: SqlExecutor["dialect"], schema?: string
  *
  * Sources probed, most-specific first:
  * - drizzle: `__drizzle_migrations` (in the `drizzle` schema on Postgres) —
- *   drizzle's columns are Alchemy's columns, so rows copy verbatim.
+ *   drizzle's columns are Alchemy's columns, so rows copy verbatim. A
+ *   drizzle-orm 0.x table records no name: each row is matched to a local
+ *   record as drizzle-orm 1.0 upgrades that table (see `readDrizzleV0Rows`).
  * - prisma: `_prisma_migrations` — `migration_name`/`checksum` map to
  *   `name`/`hash` (both are sha256 of `migration.sql`). A failed migration
  *   (`finished_at IS NULL`, not rolled back) aborts the conversion: it must
@@ -73,16 +75,33 @@ export const findForeignHistory = (options: {
   executor: SqlExecutor;
   /** The resolved Alchemy table — a source with this name is not foreign. */
   table: string;
+  /** The local records, which name a drizzle-orm 0.x table's rows. */
+  records: ReadonlyArray<MigrationRecord>;
 }): Effect.Effect<ForeignHistory | undefined, MigrationError> =>
   Effect.gen(function* () {
-    const { executor, table } = options;
+    const { executor, table, records } = options;
     const dialect = executor.dialect;
 
     // drizzle
     const drizzleSchema = dialect === "postgres" ? "drizzle" : undefined;
     if (table !== "__drizzle_migrations") {
       const columns = yield* tableColumns(executor, "__drizzle_migrations", drizzleSchema);
-      if (classifyTable(columns) === "drizzle-shaped") {
+      const drizzleShape = classifyTable(columns);
+      if (drizzleShape === "drizzle-v0") {
+        const source = drizzleSchema
+          ? `${drizzleSchema}.__drizzle_migrations`
+          : "__drizzle_migrations";
+        return {
+          tool: "drizzle" as const,
+          source,
+          rows: yield* readDrizzleV0Rows({
+            executor,
+            from: qualify("__drizzle_migrations", dialect, drizzleSchema),
+            records,
+          }),
+        };
+      }
+      if (drizzleShape === "drizzle-shaped") {
         const rows = yield* executor.query(
           `SELECT hash, created_at, name, applied_at FROM ${qualify("__drizzle_migrations", dialect, drizzleSchema)} ORDER BY id;`,
         );
@@ -177,11 +196,62 @@ export const findForeignHistory = (options: {
   });
 
 /**
+ * Read a drizzle-orm 0.x history table (`id`, `hash`, `created_at`, no
+ * name) and name each row by the rule drizzle-orm 1.0 uses when it upgrades
+ * that table (`up-migrations/sqlite.ts`, `upToV1`): `created_at` truncated
+ * to the second picks the local record with that timestamp; several share
+ * it, the hash decides; none has it, the hash alone does. A row nothing
+ * matches is labelled `[id: <id>, created_at: <created_at>]`, so `matchForeignRows`
+ * reports it as history this checkout doesn't have.
+ */
+export const readDrizzleV0Rows = (options: {
+  executor: SqlExecutor;
+  /** The table, already quoted (and schema-qualified where relevant). */
+  from: string;
+  records: ReadonlyArray<MigrationRecord>;
+}): Effect.Effect<ConvertedRow[], MigrationError> =>
+  Effect.gen(function* () {
+    const { executor, from, records } = options;
+    const rows = yield* executor.query(`SELECT id, hash, created_at FROM ${from} ORDER BY id;`);
+    const bySecond = new Map<number, MigrationRecord[]>();
+    for (const record of records) {
+      if (record.createdAtMillis === undefined) continue;
+      bySecond.set(record.createdAtMillis, [
+        ...(bySecond.get(record.createdAtMillis) ?? []),
+        record,
+      ]);
+    }
+    return rows.map((row) => {
+      const hash = row.hash === null || row.hash === undefined ? undefined : scalarText(row.hash);
+      const createdAt =
+        row.created_at === null || row.created_at === undefined
+          ? undefined
+          : Number(scalarText(row.created_at));
+      const candidates =
+        createdAt === undefined ? undefined : bySecond.get(Math.floor(createdAt / 1000) * 1000);
+      const record =
+        candidates?.length === 1
+          ? candidates[0]
+          : (candidates ?? records).find((r) => hash !== undefined && r.hash === hash);
+      return {
+        name: record?.name ?? `[id: ${scalarText(row.id)}, created_at: ${createdAt ?? "null"}]`,
+        hash,
+        createdAtMillis: createdAt,
+        appliedAt: undefined,
+      };
+    });
+  });
+
+/**
  * Validate foreign history against the local migrations directory and fill
  * in missing hashes. Every foreign row must match a local record by name
  * (or by the `<dir>/migration.sql` ⇄ `<dir>` aliasing between flat and
  * directory layouts) — an unmatched row means migrations were applied that
  * this checkout does not have.
+ *
+ * A row that names a file (wrangler's, or pre-registry Alchemy's) also
+ * matches the record `drizzle-kit up` made of that file (see
+ * {@link renamedByDrizzleKitUp}), taking that record's name.
  */
 export const matchForeignRows = (options: {
   history: ForeignHistory;
@@ -196,19 +266,35 @@ export const matchForeignRows = (options: {
         [r.name.replace(/\/migration\.sql$/, ""), r] as const,
       ]),
     );
+    const direct = history.rows.map((row) => byName.get(row.name) ?? byAlias.get(row.name));
+    const renamed =
+      history.tool === "wrangler" || history.tool === "legacy-alchemy"
+        ? renamedByDrizzleKitUp(
+            history.rows.filter((_, i) => direct[i] === undefined),
+            records.filter((record) => !direct.includes(record)),
+          )
+        : new Map<ConvertedRow, MigrationRecord>();
     const matched: ConvertedRow[] = [];
     const unmatched: string[] = [];
-    for (const row of history.rows) {
-      const record = byName.get(row.name) ?? byAlias.get(row.name);
-      if (!record) {
+    for (const [i, row] of history.rows.entries()) {
+      const record = direct[i];
+      const renamedTo = renamed.get(row);
+      if (record) {
+        matched.push({
+          ...row,
+          hash: row.hash ?? record.hash,
+          createdAtMillis: row.createdAtMillis ?? record.createdAtMillis,
+        });
+      } else if (renamedTo) {
+        matched.push({
+          ...row,
+          name: renamedTo.name,
+          hash: renamedTo.hash,
+          createdAtMillis: row.createdAtMillis ?? renamedTo.createdAtMillis,
+        });
+      } else {
         unmatched.push(row.name);
-        continue;
       }
-      matched.push({
-        ...row,
-        hash: row.hash ?? record.hash,
-        createdAtMillis: row.createdAtMillis ?? record.createdAtMillis,
-      });
     }
     if (unmatched.length > 0) {
       return yield* new MigrationHistoryConflictError({
@@ -223,6 +309,39 @@ export const matchForeignRows = (options: {
     }
     return matched;
   });
+
+/**
+ * Pair rows that name files with the records `drizzle-kit up` made of them.
+ * drizzle-kit 1.0 moves a flat `<idx>_<rest>.sql` to
+ * `<when>_<rest>/migration.sql`, its contents byte for byte and in the same
+ * order (`planFoldersV3` and `applyFoldersV3` in drizzle-kit's CLI), while
+ * wrangler's `d1_migrations` (and pre-registry Alchemy's) keeps the old file
+ * names, applied in name order. So the unmatched rows, in the order they
+ * were applied, pair with the unmatched renamed records, in timestamp
+ * order, one for one: the n-th row with the n-th record, which must share
+ * its `<rest>`. The records after the last pair are pending. Any pair that
+ * disagrees pairs nothing, so a row is never matched by a guess.
+ */
+const renamedByDrizzleKitUp = (
+  rows: ReadonlyArray<ConvertedRow>,
+  records: ReadonlyArray<MigrationRecord>,
+): Map<ConvertedRow, MigrationRecord> => {
+  const restOfRow = (row: ConvertedRow) => /^\d+_(.+)\.sql$/.exec(row.name)?.[1];
+  const restOfRecord = (record: MigrationRecord) => /^\d{14}_(.+)$/.exec(record.name)?.[1];
+  const renamed = records
+    .filter((record) => restOfRecord(record) !== undefined)
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const paired = new Map<ConvertedRow, MigrationRecord>();
+  for (const [i, row] of rows.entries()) {
+    const record = renamed[i];
+    const rest = restOfRow(row);
+    if (record === undefined || rest === undefined || rest !== restOfRecord(record)) {
+      return new Map();
+    }
+    paired.set(row, record);
+  }
+  return paired;
+};
 
 /** Render an INSERT for a converted history row into Alchemy's table. */
 export const convertedRowInsertSql = (
