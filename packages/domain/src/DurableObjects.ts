@@ -1433,6 +1433,17 @@ const aggregateObject = (
           // The same arming again (a policy or step ran again): leave it as it is.
           const armed = yield* state.storage.get<Armed>(`armed:${name}`);
           if (armed?.commandId === meta.commandId) return { at: armed.at };
+          // Before arming records (2.0.0-beta.85 and earlier) a name was its
+          // arming's command id, so a receipt under a name with no arming
+          // record is that arming's command, already run: this is the same
+          // arming again (a policy redelivered after an upgrade). Record it
+          // as this arming, so it stays a no-op and a later trigger arms the
+          // name again.
+          if (armed === undefined && (yield* executed(name))) {
+            const at = yield* Clock.currentTimeMillis;
+            yield* state.storage.put(`armed:${name}`, { commandId: meta.commandId, at });
+            return { at };
+          }
           const token = yield* random.uuidV4();
           const at = "at" in due ? due.at : (yield* Clock.currentTimeMillis) + due.afterMillis;
           yield* state.storage.put(`armed:${name}`, { commandId: meta.commandId, at });

@@ -9,6 +9,7 @@ import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { conformance, rebuild, waitForReady } from "../Domain/conformance/conformance.ts";
 import { latency } from "../Domain/conformance/latency.ts";
 import { DOMAIN_FRONT_PORT } from "./fixtures/domain/cluster.ts";
+import { connections } from "./fixtures/domain/connections.ts";
 import { crash } from "./fixtures/domain/crash.ts";
 import DomainFrontV1 from "./fixtures/domain/front-v1.ts";
 import DomainFront from "./fixtures/domain/front.ts";
@@ -53,6 +54,7 @@ describe.skipIf(!!process.env.FAST)(
     afterAll.skipIf(!!process.env.NO_DESTROY)(stack.destroy(), { timeout: 300_000 });
 
     conformance({ test, url: Effect.succeed(url), kind: "local" });
+    connections({ test, url, stack });
     latency({
       kind: "local",
       test,

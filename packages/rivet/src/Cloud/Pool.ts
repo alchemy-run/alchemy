@@ -7,7 +7,6 @@ import {
   isImageProgram,
   makePoolLayer,
   nodeEnvironment,
-  RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 import { RunnerPool, type RunnerMachineType } from "./RunnerPool.ts";
@@ -96,7 +95,7 @@ export const Pool = (id: string, options: PoolOptions = {}) =>
           ? { context: nodes.program.context }
           : {
               main: (yield* bundleNodes("rivet-cloud", id, nodes.program)) as unknown as string,
-              rivetkitVersion: options.rivetkitVersion ?? RIVETKIT_VERSION,
+              rivetkitVersion: options.rivetkitVersion ?? nodes.rivetkitVersion,
             }),
         env: env as unknown as Record<string, string>,
         machineType: options.machineType,

@@ -180,6 +180,38 @@ export default class Front extends Docker.Service<Front>()(
             yield* instance.sleepNow();
             return yield* HttpServerResponse.json({ ok: true });
           }
+          // A call still writing when the instance sleeps past its grace
+          // period, answered as a call that never arrived.
+          if (step === "late") {
+            const late = yield* Effect.forkChild(
+              Effect.exit(instance.writeLate(Number(url.searchParams.get("ms") ?? "20000"))),
+            );
+            yield* Effect.sleep("1 second");
+            yield* instance.sleepNow();
+            const exit = yield* Fiber.join(late);
+            if (Exit.isSuccess(exit)) return yield* HttpServerResponse.json({ late: "ran" });
+            const error = Cause.squash(exit.cause) as { _tag?: unknown; status?: unknown };
+            return yield* HttpServerResponse.json({
+              late: `${String(error?._tag)} ${String(error?.status)}`,
+            });
+          }
+          // A call writing storage when the instance sleeps past its grace
+          // period, which reports the failure as data.
+          if (step === "busy") {
+            const busy = yield* Effect.forkChild(Effect.exit(instance.writeUntilStopped()));
+            yield* Effect.sleep("1 second");
+            yield* instance.sleepNow();
+            const exit = yield* Fiber.join(busy);
+            if (Exit.isSuccess(exit)) {
+              return yield* HttpServerResponse.json({
+                busy: exit.value.failed === null ? "ran" : `data: ${exit.value.failed}`,
+              });
+            }
+            const error = Cause.squash(exit.cause) as { _tag?: unknown; status?: unknown };
+            return yield* HttpServerResponse.json({
+              busy: `${String(error?._tag)} ${String(error?.status)}`,
+            });
+          }
           if (step === "destroy") {
             yield* instance.destroyNow();
             return yield* HttpServerResponse.json({ ok: true });
@@ -206,13 +238,35 @@ export default class Front extends Docker.Service<Front>()(
           });
         }
         // `/abandoned-alarm/<name>/<step>`: `arm` sets an alarm whose first
-        // run hangs; `state` reads its runs, finished runs and alarm.
+        // run hangs, `arm-held` one that comes due inside a transaction, `node` names the node running the instance, `busy`
+        // writes until storage fails, and `state` reads its runs, finished
+        // runs and alarm.
         if (group === "abandoned-alarm" && name !== undefined) {
           const step = url.pathname.split("/").filter((segment) => segment.length > 0)[2];
           const instance = abandonedAlarms.getByName(name);
           if (step === "arm") {
             yield* instance.arm();
             return yield* HttpServerResponse.json({ ok: true });
+          }
+          if (step === "arm-held") {
+            yield* instance.armHeld();
+            return yield* HttpServerResponse.json({ ok: true });
+          }
+          if (step === "node") {
+            return yield* HttpServerResponse.json({ node: yield* instance.node() });
+          }
+          // Writes until its storage fails; reports how the call ended.
+          if (step === "busy") {
+            const exit = yield* Effect.exit(instance.writeUntilStopped());
+            if (Exit.isSuccess(exit)) {
+              return yield* HttpServerResponse.json({
+                busy: exit.value.failed === null ? "ran" : `data: ${exit.value.failed}`,
+              });
+            }
+            const error = Cause.squash(exit.cause) as { _tag?: unknown; status?: unknown };
+            return yield* HttpServerResponse.json({
+              busy: `${String(error?._tag)} ${String(error?.status)}`,
+            });
           }
           return yield* HttpServerResponse.json(yield* instance.alarmState());
         }

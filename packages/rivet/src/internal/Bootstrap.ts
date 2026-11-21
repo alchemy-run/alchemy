@@ -68,7 +68,7 @@ export const bootstrap = (entrypoints: ReadonlyArray<unknown>): Promise<void> =>
         (entrypoint as { [PlatformDeclaration]?: unknown } | undefined)?.[PlatformDeclaration] ??
         entrypoint;
       const context = yield* Layer.build(entrypointLayer(declaration)).pipe(
-        Effect.provideService(NodeHost, NodeHost.of({ host })),
+        Effect.provideService(NodeHost, NodeHost.of({ host, entrypoint })),
       );
       // A Layer that hosts its classes itself (a Domain model's) provides
       // none: it handed them to `NodeHost`.

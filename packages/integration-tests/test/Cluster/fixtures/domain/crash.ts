@@ -34,7 +34,7 @@ class CrashCaseFailed extends Data.TaggedError("CrashCaseFailed")<{
   readonly message: string;
 }> {}
 
-const docker = (args: ReadonlyArray<string>) =>
+export const docker = (args: ReadonlyArray<string>) =>
   Effect.suspend(() => {
     const result = NodeChildProcess.spawnSync("docker", args, { encoding: "utf8" });
     return result.status === 0

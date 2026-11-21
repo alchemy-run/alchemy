@@ -3,6 +3,7 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type { Providers } from "./Providers.ts";
 import { ShardGroups } from "./ShardGroups.ts";
@@ -111,6 +112,26 @@ export const fromUrl = (
       return { url, shardGroups: yield* clusterShardGroups("Database") };
     }),
   );
+
+/**
+ * The variable a runner reads the size of its database pools from: a pool's
+ * `databaseConnections`, set on every runner it starts.
+ *
+ * @internal
+ */
+export const DATABASE_MAX_CONNECTIONS = "CLUSTER_DATABASE_MAX_CONNECTIONS";
+
+/**
+ * At most how many connections each of a runner's pools to the cluster's
+ * database holds (`DATABASE_MAX_CONNECTIONS`), or `undefined` for the
+ * client's default. A runner holds two such pools: the cluster's own (its
+ * shards and messages) and, when it hosts a Domain model, the models' storage.
+ *
+ * @internal
+ */
+export const databaseMaxConnections: Effect.Effect<number | undefined> = Config.Int(
+  DATABASE_MAX_CONNECTIONS,
+).pipe(Config.option, Effect.map(Option.getOrUndefined), Effect.orDie);
 
 /** The shard groups resource every database Layer declares for its cluster. @internal */
 export const clusterShardGroups = (id: string) => ShardGroups(`${id}ShardGroups`, {});

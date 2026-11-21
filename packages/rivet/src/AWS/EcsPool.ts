@@ -4,7 +4,6 @@ import {
   isImageProgram,
   makePoolLayer,
   nodeDockerfile,
-  RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 import { nodeEnvironment, poolNetworkOf, resolvePoolNetwork } from "./internal/Pool.ts";
@@ -90,7 +89,7 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
             : {
                 ...program,
                 dockerfile: {
-                  content: nodeDockerfile(options.rivetkitVersion ?? RIVETKIT_VERSION),
+                  content: nodeDockerfile(options.rivetkitVersion ?? nodes.rivetkitVersion),
                 },
               }),
           cluster,
