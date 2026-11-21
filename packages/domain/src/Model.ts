@@ -878,12 +878,13 @@ const build = <A, E, R>(
       const writes = (projection.definition.writes ?? []).map((stream) =>
         streamStores.get(stream.streamName)!,
       );
+      const generation = kernel.generationOf("projection", projection.projectionName);
       projectionStores.set(
         projection.projectionName,
         yield* platform.projection(projection, {
           name: projection.projectionName,
           options: { batch: Projection.batchMillis(implementation.options) },
-          generation: kernel.generationOf("projection", projection.projectionName),
+          generation,
           singleSource: kernel.singleSource(`projection:${projection.projectionName}`),
           history: kernel.history,
           run: (key, batch) =>
@@ -895,13 +896,17 @@ const build = <A, E, R>(
               // What this run handled, so stream reads `atLeast` a receipt see it.
               if (writes.length === 0) return;
               const checkpoints: Record<string, number> = {};
+              const roots: Record<string, number> = {};
               for (const { delivery } of batch) {
                 checkpoints[delivery.source] = Math.max(
                   checkpoints[delivery.source] ?? 0,
                   delivery.seq,
                 );
+                const root = Kernel.rootOf(delivery);
+                roots[root.source] = Math.max(roots[root.source] ?? 0, root.seq);
               }
-              yield* Effect.forEach(writes, (store) => store.advance(key, checkpoints), {
+              const handled = { generation, checkpoints, roots };
+              yield* Effect.forEach(writes, (store) => store.advance(key, handled), {
                 discard: true,
               });
             }).pipe(observeProjection(projection.projectionName, key, batch)),
@@ -1501,13 +1506,14 @@ const streamHost = (
           );
         }
         meta.appends += 1;
-        const position: [number, number] = [meta.position, meta.appends];
         return Effect.forEach(events, (event) =>
           kernel.encodeEvent(event as { readonly _tag: string }),
         ).pipe(
           Effect.flatMap((encoded) =>
             store.append(meta.key, {
-              origin: position,
+              generation: meta.generation,
+              origin: [meta.position, meta.appends],
+              root: meta.root,
               source: meta.source,
               sourceSeq: meta.sourceSeq,
               at: meta.at,

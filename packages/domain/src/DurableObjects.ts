@@ -35,7 +35,7 @@ import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts"
 import * as Backfill from "./Backfill.ts";
 import { type Routed, targetId } from "./CatchUp.ts";
 import { DecisionsUnsupported, DefinitionError } from "./DefinitionError.ts";
-import { isAfter, mergeCheckpoints } from "./InMemory.ts";
+import { admitStreamWrite, advanceStreamMeta, mergeCheckpoints } from "./InMemory.ts";
 import {
   type Accepted,
   type AggregateKit,
@@ -64,6 +64,7 @@ import {
   type SendResult,
   type StoredEvent,
   type StreamEntry,
+  type StreamHandled,
   type StreamKit,
   type StreamMeta,
   type StreamWrite,
@@ -2075,8 +2076,13 @@ const streamObject = (kit: StreamKit) =>
     return {
       append: (key: string, write: StreamWrite) =>
         Effect.gen(function* () {
-          const meta = yield* readMeta;
-          if (!isAfter(write.origin, meta.origin)) return;
+          const before = yield* readMeta;
+          const { meta, appends } = admitStreamWrite(before, write);
+          if (!appends) {
+            // A rebuilt writer's first write still starts its generation.
+            if (meta !== before) yield* state.storage.put("meta", meta);
+            return;
+          }
           const added: Array<StreamEntry> = write.events.map((event, index) => {
             const seq = meta.seq + index + 1;
             return {
@@ -2091,13 +2097,7 @@ const streamObject = (kit: StreamKit) =>
               },
             };
           });
-          const next: StreamMeta = {
-            seq: meta.seq + added.length,
-            origin: write.origin,
-            checkpoints: mergeCheckpoints(meta.checkpoints, {
-              [write.source]: write.sourceSeq,
-            }),
-          };
+          const next: StreamMeta = { ...meta, seq: meta.seq + added.length };
           yield* state.storage.transaction(
             Effect.gen(function* () {
               const rows: Record<string, StreamEntry> = {};
@@ -2118,13 +2118,9 @@ const streamObject = (kit: StreamKit) =>
             }),
           );
         }).pipe(exclusively, reportDefects),
-      advance: (checkpoints: Readonly<Record<string, number>>) =>
+      advance: (handled: StreamHandled) =>
         Effect.gen(function* () {
-          const meta = yield* readMeta;
-          yield* state.storage.put("meta", {
-            ...meta,
-            checkpoints: mergeCheckpoints(meta.checkpoints, checkpoints),
-          } satisfies StreamMeta);
+          yield* state.storage.put("meta", advanceStreamMeta(yield* readMeta, handled));
         }).pipe(exclusively, reportDefects),
       read: () => reportDefects(readMeta),
       after: (after: number) => reportDefects(entriesAfter(after)),
@@ -2193,6 +2189,29 @@ const bindState = (impl: ObjectImpl): ObjectImpl =>
             : value;
     }
     return bound;
+  });
+
+/** Every runtime's claims, by host name; a process outside any runtime has one of its own. */
+const runtimeClaims = new WeakMap<object, Map<string, object>>();
+const noRuntime = {};
+
+/**
+ * The claim key of a host named `name` (a pool, or a class of objects) in
+ * the runtime building the model. Two models with one name fail in one
+ * runtime; a redeploy builds a new runtime, so the model it hosts replaces
+ * the old one even when both are built in one process (a test, or a reload
+ * in dev).
+ *
+ * @internal
+ */
+export const runtimeClaim = (name: string): Effect.Effect<object> =>
+  Effect.map(Effect.serviceOption(RuntimeContext), (context) => {
+    const runtime = Option.getOrElse(context, () => noRuntime);
+    let byName = runtimeClaims.get(runtime);
+    if (byName === undefined) runtimeClaims.set(runtime, (byName = new Map()));
+    let claim = byName.get(name);
+    if (claim === undefined) byName.set(name, (claim = {}));
+    return claim;
   });
 
 /** The models each host hosts, by name. */
@@ -2721,8 +2740,8 @@ export const makePlatform = <R>(
                   return {
                     append: (key, write) =>
                       unwrapDefects(namespace.getByName(key).append(key, write)),
-                    advance: (key, checkpoints) =>
-                      unwrapDefects(namespace.getByName(key).advance(checkpoints)),
+                    advance: (key, handled) =>
+                      unwrapDefects(namespace.getByName(key).advance(handled)),
                     read,
                     // Streamed responses poll; WebSocket reads (`connect`) are pushed on append.
                     changes: (key) =>
