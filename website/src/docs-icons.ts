@@ -60,8 +60,8 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Archil: b("archil"),
   Boat: b("boat"),
   AI: l("sparkles"),
-  Pi: l("pi"),
-  OpenCode: l("square-code"),
+  Pi: b("pi"),
+  OpenCode: b("opencode"),
   // The Sandboxes dropdown's link to the AWS hub's Nitro Sandboxes page.
   "AWS Nitro": b("aws"),
   Prisma: b("prisma"),
