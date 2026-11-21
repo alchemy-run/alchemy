@@ -34,6 +34,7 @@ import * as DNS from "alchemy/DNS/Adapter";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -73,6 +74,7 @@ import {
   failureOf as failuresOf,
   forgetState,
   pollUntilActive,
+  waitForAuthoritativeCnames,
 } from "./fixtures/Live.ts";
 import {
   AppRef,
@@ -80,6 +82,7 @@ import {
   makeUrlCloud,
   recordsFor,
   routingUrl,
+  looksOnWrite,
   type PrismaEvent,
   published,
   served,
@@ -140,6 +143,9 @@ testFor(withDns).test.provider(
         { type: "TXT", name: `_prisma-verification.${HOSTNAME}`, value: TXT.value },
       ]);
       expect(withDns.state.txtAttempts).toEqual(["until-seen"]);
+      expect(withDns.state.txtOptions.map((options) => options.waitFor)).toEqual([
+        Duration.minutes(3),
+      ]);
       expect(
         withDns.state.checked.map(([expected, options]) => [expected.name, options.attempts]),
       ).toEqual([[HOSTNAME, "until-seen"]]);
@@ -350,7 +356,7 @@ testFor(recordsNotSeen).test.provider(
       expect(error?.records).toEqual([
         { type: "TXT", name: `_prisma-verification.${HOSTNAME}`, value: TXT.value },
       ]);
-      expect(error?.message).toContain("Nothing was saved in Prisma");
+      expect(error?.message).toContain("Prisma was not changed: the RoutingUrl was not created");
       expect(recordsNotSeen.routes().some((route) => route.startsWith("POST"))).toBe(false);
 
       recordsNotSeen.state.txt = "unknown";
@@ -385,8 +391,9 @@ testFor(neverServes).test.provider(
       );
       expect(error?.firstUnmetCondition).toBe("certificateActive");
       expect(error?.customDomainSyncError).toBe("Foundry did not answer");
+      expect(error?.reason).toBe("timedOut");
       expect(error?.heldBy).toBe(null);
-      expect(error?.certificateFailure).toBe(null);
+      expect(error?.certificateFailureReason).toBe(null);
       expect(error?.message).toContain(
         "did not become active within 6 minutes: its first unmet condition is certificateActive",
       );
@@ -460,7 +467,10 @@ testFor(failedCertificate).test.provider(
         ),
         Result.getOrUndefined,
       );
-      expect(error?.certificateFailure).toBe("CAA record forbids the issuer");
+      expect(error?.reason).toBe("certificateFailed");
+      expect(error?.certificateFailureReason).toBe("CAA record forbids the issuer");
+      expect(error?.heldBy).toBe(null);
+      expect(error?.message).toContain("POST /v1/urls/url-1/check");
       expect(error?.message).toContain("CAA record forbids the issuer");
       expect(error?.message).toContain("A redeploy does not retry it");
       expect(error?.message).toContain("https://console.prisma.test/urls/url-1");
@@ -546,13 +556,249 @@ testFor(heldElsewhere).test.provider(
         ),
         Result.getOrUndefined,
       );
+      expect(error?.reason).toBe("held");
       expect(error?.heldBy).toEqual(heldBy);
+      expect(error?.certificateFailureReason).toBe(null);
       expect(error?.message).toContain("is held by another workspace");
       expect(URL_READS(heldElsewhere)).toEqual([]);
       expect(CHECKS(heldElsewhere)).toEqual([]);
 
       yield* stack.destroy();
       yield* expectDestroyed(heldElsewhere);
+    }),
+  { tags },
+);
+
+const failedCertificateAfter = (row: WireRoutingUrl): WireRoutingUrl => {
+  const ordered = issuing(row);
+  return {
+    ...ordered,
+    state: "certificate_failed",
+    customDomain: { ...ordered.customDomain, status: "failed", failureReason: null },
+  };
+};
+
+const checkThrottled = makeUrlCloud();
+testFor(checkThrottled).test.provider(
+  "with dns, sends the single /check once even when Prisma answers 429, and reads the row instead",
+  (stack) =>
+    Effect.gen(function* () {
+      checkThrottled.reset({
+        fromZone: true,
+        progress: (row, _zone, event) => (event === "read" ? failedCertificateAfter(row) : row),
+        throttle: [{ route: "POST /v1/urls/url-1/check", retryAfter: 40 }],
+      });
+      yield* stack.destroy();
+
+      const result = yield* onTestClock(failuresOf(stack.deploy(dnsStack())));
+
+      const error = result.pipe(
+        Result.map(({ errors }) =>
+          errors.find((each): each is RoutingUrlNotActive => each instanceof RoutingUrlNotActive),
+        ),
+        Result.getOrUndefined,
+      );
+      expect(CHECKS(checkThrottled)).toEqual(["POST /v1/urls/url-1/check"]);
+      expect(error?.reason).toBe("certificateFailed");
+      expect(error?.certificateFailureReason).toBe(null);
+      expect(error?.message).toContain("Prisma gave no reason");
+
+      yield* stack.destroy();
+      yield* expectDestroyed(checkThrottled);
+    }),
+  { tags },
+);
+
+const checkLost = makeUrlCloud();
+testFor(checkLost).test.provider(
+  "with dns, does not resend the single /check after a 502, and keeps waiting with reads",
+  (stack) =>
+    Effect.gen(function* () {
+      const progress = certificateAfterReads(2);
+      let looks = 0;
+      checkLost.reset({
+        fromZone: true,
+        progress: (row, zone, event) =>
+          event === "write" && looks++ === 0
+            ? row
+            : event === "read" && row.customDomain === null
+              ? progress(row, zone, "check")
+              : progress(row, zone, event),
+        throttle: [{ route: "POST /v1/urls/url-1/check", retryAfter: 0, status: 502 }],
+      });
+      yield* stack.destroy();
+
+      const deployed = yield* onTestClock(stack.deploy(dnsStack()));
+
+      expect(Result.isSuccess(deployed) && deployed.success.status).toBe("active");
+      expect(CHECKS(checkLost)).toEqual(["POST /v1/urls/url-1/check"]);
+      expect(URL_READS(checkLost).length).toBeGreaterThan(1);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const existingRowRecordsAbsent = makeUrlCloud();
+testFor(existingRowRecordsAbsent).test.provider(
+  "with dns added to a saved pending RoutingUrl, refuses to check it while a published record is absent",
+  (stack) =>
+    Effect.gen(function* () {
+      existingRowRecordsAbsent.reset({
+        dns: { visibility: "absent", cname: "absent" },
+        txt: "seen",
+      });
+      yield* stack.destroy();
+      const before = yield* stack.deploy(urlStack());
+
+      const result = yield* onTestClock(failuresOf(stack.deploy(dnsStack())));
+
+      const error = result.pipe(
+        Result.map(({ errors }) =>
+          errors.find(
+            (each): each is RoutingUrlRecordsNotSeen => each instanceof RoutingUrlRecordsNotSeen,
+          ),
+        ),
+        Result.getOrUndefined,
+      );
+      expect(error?.records.map((record) => record.type)).toEqual(["CNAME"]);
+      expect(error?.message).toContain("The RoutingUrl is saved in Prisma");
+      expect(error?.message).toContain("delegated to this DNS host");
+      expect(CHECKS(existingRowRecordsAbsent)).toEqual([]);
+      expect([...existingRowRecordsAbsent.rows.keys()]).toEqual([before.routingUrlId]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+/** The row after Foundry refused to register its custom domain because the CNAME was not visible. */
+const dnsRefusedByFoundry = (row: WireRoutingUrl): WireRoutingUrl => ({
+  ...row,
+  state: "waiting_for_dns",
+  conditions: { ...row.conditions, ownershipVerified: "met", dnsPointsAtSwitchboard: "unmet" },
+  firstUnmetCondition: "dnsPointsAtSwitchboard",
+  records: row.records.filter((record) => record.condition === "dnsPointsAtSwitchboard"),
+});
+
+const waitingForDns = makeUrlCloud();
+testFor(waitingForDns).test.provider(
+  "with dns, checks once when Foundry refused the CNAME at the create",
+  (stack) =>
+    Effect.gen(function* () {
+      waitingForDns.reset({
+        fromZone: true,
+        progress: (row, zone, event) =>
+          event === "write" ? dnsRefusedByFoundry(row) : looksOnWrite(row, zone, event),
+      });
+      yield* stack.destroy();
+
+      const deployed = yield* onTestClock(stack.deploy(dnsStack()));
+
+      expect(Result.isSuccess(deployed) && deployed.success.status).toBe("active");
+      expect(CHECKS(waitingForDns)).toEqual(["POST /v1/urls/url-1/check"]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const dnsNeverSeen = makeUrlCloud();
+testFor(dnsNeverSeen).test.provider(
+  "with dns, a wait that runs out with Prisma missing the CNAME names it and says a redeploy asks Prisma to check",
+  (stack) =>
+    Effect.gen(function* () {
+      dnsNeverSeen.reset({ fromZone: true, progress: (row) => dnsRefusedByFoundry(row) });
+      yield* stack.destroy();
+
+      const result = yield* onTestClock(failuresOf(stack.deploy(dnsStack())));
+
+      const error = result.pipe(
+        Result.map(({ errors }) =>
+          errors.find((each): each is RoutingUrlNotActive => each instanceof RoutingUrlNotActive),
+        ),
+        Result.getOrUndefined,
+      );
+      expect(error?.reason).toBe("timedOut");
+      expect(error?.message).toContain(
+        `Prisma has not seen CNAME ${HOSTNAME} = switchboard.us-east-1.prisma.build`,
+      );
+      expect(error?.message).toContain("a redeploy asks it to check once");
+      expect(error?.message).not.toContain("keeps working");
+      expect(CHECKS(dnsNeverSeen)).toEqual(["POST /v1/urls/url-1/check"]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const dnsWithCustomDomain = makeUrlCloud();
+testFor(dnsWithCustomDomain).test.provider(
+  "with dns, does not check a row waiting for DNS that holds a custom domain",
+  (stack) =>
+    Effect.gen(function* () {
+      dnsWithCustomDomain.reset({
+        fromZone: true,
+        progress: (row) => ({
+          ...dnsRefusedByFoundry(row),
+          customDomain: issuing(row).customDomain,
+        }),
+      });
+      yield* stack.destroy();
+
+      yield* onTestClock(failuresOf(stack.deploy(dnsStack())));
+
+      expect(CHECKS(dnsWithCustomDomain)).toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const quotaResend = makeUrlCloud();
+testFor(quotaResend).test.provider(
+  "with dns, a resent create refused by the service's quota continues with the row the first one made",
+  (stack) =>
+    Effect.gen(function* () {
+      quotaResend.reset(
+        { fromZone: true, loseCreateReply: true },
+        routingUrl("url-a", { hostname: "a.example.com", logicalId: "A", status: "active" }),
+        routingUrl("url-b", { hostname: "b.example.com", logicalId: "B", status: "active" }),
+      );
+      yield* stack.destroy();
+
+      const url = yield* stack.deploy(dnsStack());
+
+      expect(url.status).toBe("active");
+      expect(quotaResend.rows.size).toBe(3);
+      expect(url.hostname).toBe(HOSTNAME);
+      expect(
+        quotaResend.routes().filter((route) => route.startsWith("POST /v1/services")),
+      ).toHaveLength(2);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const otherHostname = makeUrlCloud();
+testFor(otherHostname).test.provider(
+  "a create refused for a logicalId whose row has another hostname keeps the refusal",
+  (stack) =>
+    Effect.gen(function* () {
+      otherHostname.reset({ fromZone: true, loseCreateReply: true });
+      yield* stack.destroy();
+      otherHostname.state.progress = (row, zone, event) =>
+        event === "write"
+          ? { ...row, hostname: "racer.example.com" }
+          : looksOnWrite(row, zone, event);
+
+      const { errors } = yield* failuresOf(stack.deploy(dnsStack()));
+
+      expect(errors.some((error) => error instanceof RoutingUrlLogicalIdTaken)).toBe(true);
+
+      otherHostname.reset();
+      yield* stack.destroy();
     }),
   { tags },
 );
@@ -586,7 +832,7 @@ testFor(pendingChange).test.provider(
 
 const servedThenPending = makeUrlCloud();
 testFor(servedThenPending).test.provider(
-  "with dns, a hostname that served once and reads pending later does not wait or fail a redeploy",
+  "with dns, a hostname that served once and reads pending later does not wait or fail any later redeploy",
   (stack) =>
     Effect.gen(function* () {
       servedThenPending.reset({ fromZone: true });
@@ -596,23 +842,20 @@ testFor(servedThenPending).test.provider(
 
       servedThenPending.rows.set(served.routingUrlId, routingUrl(served.routingUrlId));
       servedThenPending.state.progress = (row) => row;
-      servedThenPending.fake.captured.length = 0;
-      const redeployed = yield* onTestClock(
-        stack.deploy(
-          RoutingUrl("Url", {
-            app: "svc-1",
-            hostname: HOSTNAME,
-            logicalId: "Renamed",
-            dns: TEST_DNS,
-          }),
-        ),
-      );
-      const url = Result.getOrThrow(redeployed);
+      for (const logicalId of ["Renamed", "RenamedAgain", "RenamedOnceMore"]) {
+        servedThenPending.fake.captured.length = 0;
+        const redeployed = yield* onTestClock(
+          stack.deploy(
+            RoutingUrl("Url", { app: "svc-1", hostname: HOSTNAME, logicalId, dns: TEST_DNS }),
+          ),
+        );
+        const url = Result.getOrThrow(redeployed);
 
-      expect(PATCHES(servedThenPending)).toEqual([`PATCH /v1/urls/${served.routingUrlId}`]);
-      expect(url.status).toBe("pending");
-      expect(URL_READS(servedThenPending)).toEqual([`GET /v1/urls/${served.routingUrlId}`]);
-      expect(CHECKS(servedThenPending)).toEqual([]);
+        expect(PATCHES(servedThenPending)).toEqual([`PATCH /v1/urls/${served.routingUrlId}`]);
+        expect(url.status).toBe("pending");
+        expect(URL_READS(servedThenPending)).toEqual([`GET /v1/urls/${served.routingUrlId}`]);
+        expect(CHECKS(servedThenPending)).toEqual([]);
+      }
 
       yield* stack.destroy();
     }),
@@ -729,7 +972,7 @@ testFor(addDns).test.provider(
   "adding dns to a deployed pending RoutingUrl keeps its row, checks it once and waits for it",
   (stack) =>
     Effect.gen(function* () {
-      addDns.reset();
+      addDns.reset({ fromZone: true });
       yield* stack.destroy();
       const before = yield* stack.deploy(urlStack());
 
@@ -744,6 +987,11 @@ testFor(addDns).test.provider(
       ]);
       expect(after.status).toBe("active");
       expect(addDns.zone.records).toEqual(recordsFor(HOSTNAME));
+      expect(addDns.state.txtChecked).toEqual([
+        { type: "TXT", name: `_prisma-verification.${HOSTNAME}`, value: TXT.value },
+      ]);
+      expect(addDns.state.checked.map(([expected]) => expected.name)).toEqual([HOSTNAME]);
+      expect(addDns.state.txtCheckedAtCheck).toBe(1);
 
       yield* stack.destroy();
     }),
@@ -1549,6 +1797,9 @@ liveDns.test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true
 
       const { site, url } = yield* stack.deploy(urlStack(first));
       // The CNAME is published in the same deploy, possibly after Prisma first looked.
+      yield* waitForAuthoritativeCnames(ZONE, [
+        { name: first, value: switchboardTarget(site.compute!.appEndpointDomain) },
+      ]);
       expect((yield* checkOnceThenPollUntilActive(url.routingUrlId)).status).toBe("active");
 
       const refused = yield* refusalOf(stack.deploy(urlStack(second)));

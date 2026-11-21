@@ -1,5 +1,6 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Schedule from "effect/Schedule";
@@ -50,6 +51,8 @@ export interface CheckOptions {
   readonly nameservers: NameserverSearch;
   /** `once` checks without waiting for the records to appear. */
   readonly attempts?: "until-seen" | "once";
+  /** How long `until-seen` waits for an absent record. @default about a minute */
+  readonly waitFor?: Duration.Duration;
   /** Find the nameservers of this name instead of the record's own name. */
   readonly serversOf?: string;
 }
@@ -221,11 +224,14 @@ const authoritativeServers = (dns: DnsLookups, name: string, search: NameserverS
  * the authoritative nameservers answer without the record, then add a margin
  * for anycast edges we cannot see once every one returns it.
  */
+const RECHECK_INTERVAL = Duration.seconds(3);
+
 const waitUntilVisible = <A>(
   check: Effect.Effect<A>,
   visibilityOf: (answer: A) => RecordVisibility,
   margin: CheckOptions["margin"],
   attempts: SwitchboardCheckOptions["attempts"] = "until-seen",
+  waitFor: Duration.Duration = Duration.minutes(1),
 ) =>
   Effect.gen(function* () {
     const first = yield* check;
@@ -235,9 +241,9 @@ const waitUntilVisible = <A>(
       visibilityOf(first) === "absent"
         ? yield* check.pipe(
             Effect.repeat({
-              schedule: Schedule.spaced("3 seconds"),
+              schedule: Schedule.spaced(RECHECK_INTERVAL),
               until: (answer) => visibilityOf(answer) !== "absent",
-              times: 20,
+              times: Math.ceil(Duration.toMillis(waitFor) / Duration.toMillis(RECHECK_INTERVAL)),
             }),
           )
         : first;
@@ -279,6 +285,7 @@ export const checkAuthoritativeRecord = (
       (visibility) => visibility,
       options.margin,
       options.attempts,
+      options.waitFor,
     );
   });
 
@@ -346,6 +353,7 @@ export const checkSwitchboardDns = (
       (answer) => answer.visibility,
       options.margin,
       options.attempts,
+      options.waitFor,
     );
   });
 

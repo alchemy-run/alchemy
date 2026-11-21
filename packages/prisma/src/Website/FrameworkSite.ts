@@ -82,7 +82,7 @@ export interface FrameworkSiteProps {
    * `domain.records` lists the `TXT` and `CNAME` to publish until Prisma
    * finds them. Set `dns` (e.g.
    * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`) to publish
-   * them through the DNS host; the deploy then waits up to about 7 minutes
+   * them through the DNS host; the deploy then waits up to about 9 minutes
    * for the hostname to serve. See
    * [DNS Adapters](/infrastructure-as-code/dns-adapters).
    */

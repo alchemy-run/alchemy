@@ -1,4 +1,3 @@
-import { resolve4, resolveNs, Resolver } from "node:dns/promises";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
@@ -40,7 +39,7 @@ import {
   websiteDomain,
 } from "../../../../prisma/src/internal/WebsiteDomain.ts";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
-import { checkOnceThenPollUntilActive } from "../fixtures/Live.ts";
+import { checkOnceThenPollUntilActive, waitForAuthoritativeCnames } from "../fixtures/Live.ts";
 import {
   AppRef,
   makeUrlCloud,
@@ -317,11 +316,6 @@ const fixtureDir = pathe.resolve(
 );
 const tempRoot = pathe.resolve(import.meta.dirname, "../../../.tmp");
 
-class CnameNotPublished extends Data.TaggedError("CnameNotPublished")<{
-  readonly server: string;
-  readonly name: string;
-}> {}
-
 class SiteNotServing extends Data.TaggedError("SiteNotServing")<{
   readonly status: number;
 }> {}
@@ -348,32 +342,6 @@ const recordsUnder = (zoneId: string, hostname: string) =>
       ),
     ),
   );
-
-/** Wait until every authoritative nameserver of the zone answers each CNAME. */
-const waitForAuthoritativeCnames = (records: ReadonlyArray<{ name: string; value: string }>) =>
-  Effect.gen(function* () {
-    const nameServers = yield* Effect.tryPromise(() => resolveNs(ZONE)).pipe(Effect.orDie);
-    const servers = (yield* Effect.forEach(nameServers, (ns) =>
-      Effect.tryPromise(() => resolve4(ns)).pipe(Effect.orDie),
-    )).flat();
-    yield* Effect.forEach(servers, (server) =>
-      Effect.forEach(records, (record) =>
-        Effect.gen(function* () {
-          const resolver = yield* Effect.sync(() => {
-            const r = new Resolver();
-            r.setServers([server]);
-            return r;
-          });
-          const answers = yield* Effect.tryPromise(() => resolver.resolveCname(record.name)).pipe(
-            Effect.orElseSucceed(() => [] as string[]),
-          );
-          if (!answers.some((answer) => trimDot(answer) === trimDot(record.value))) {
-            return yield* Effect.fail(new CnameNotPublished({ server, name: record.name }));
-          }
-        }).pipe(Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 20 })),
-      ),
-    );
-  });
 
 const routingUrlGone = (id: string) =>
   getUrl({ id }).pipe(
@@ -536,7 +504,10 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       expect(app.data.branchId).toBe(pending.branch.branchId);
 
       yield* stack.deploy(siteStack(domain.records));
-      yield* waitForAuthoritativeCnames(domain.records.filter((record) => record.type === "CNAME"));
+      yield* waitForAuthoritativeCnames(
+        ZONE,
+        domain.records.filter((record) => record.type === "CNAME"),
+      );
       expect((yield* checkOnceThenPollUntilActive(domain.routingUrlId)).status).toBe("active");
 
       yield* stack.destroy();

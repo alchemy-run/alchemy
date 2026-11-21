@@ -195,8 +195,13 @@ export interface CloudState {
   loseCreateReply: boolean;
   /** How many TXT checks had run when Prisma received a PATCH. */
   txtCheckedAtPatch: number | undefined;
-  /** Requests, as `METHOD /path`, that Prisma answers once with 429 and `Retry-After` seconds. */
-  throttle: Array<{ route: string; retryAfter: number }>;
+  /**
+   * Requests, as `METHOD /path`, that Prisma answers once with `status`
+   * (429 by default) and `Retry-After` seconds.
+   */
+  throttle: Array<{ route: string; retryAfter: number; status?: number }>;
+  /** How many TXT checks had run when Prisma received a `/check`. */
+  txtCheckedAtCheck: number | undefined;
 }
 
 /** One DNS host's records, as the test DNS adapter publishes them. */
@@ -258,6 +263,7 @@ export const makeUrlCloud = () => {
     throttle: [],
     loseCreateReply: false,
     txtCheckedAtPatch: undefined,
+    txtCheckedAtCheck: undefined,
   };
   let next = 0;
   const progressed = (row: WireRoutingUrl, event: PrismaEvent) => {
@@ -274,7 +280,7 @@ export const makeUrlCloud = () => {
       return new Response(
         JSON.stringify({ error: { code: "rate-limited", message: "Too many requests" } }),
         {
-          status: 429,
+          status: throttled.status ?? 429,
           headers: {
             "content-type": "application/json",
             "retry-after": String(throttled.retryAfter),
@@ -328,6 +334,10 @@ export const makeUrlCloud = () => {
     if (serviceMatch?.[2] && request.method === "POST") {
       if (state.refusal) return state.refusal;
       const logicalId = (body?.logicalId as string | undefined) ?? null;
+      const onService = [...rows.values()].filter((row) => row.serviceId === serviceMatch[1]);
+      if (onService.length >= 3) {
+        return failure(409, "quota-exceeded", "The service has reached its hostname quota.");
+      }
       if (logicalId !== null && [...rows.values()].some((row) => row.logicalId === logicalId)) {
         return failure(409, "logical-id-taken", "Another live RoutingUrl has this logicalId.");
       }
@@ -388,6 +398,7 @@ export const makeUrlCloud = () => {
     const checkMatch = /^\/v1\/urls\/([^/]+)\/check$/.exec(path);
     if (checkMatch && request.method === "POST") {
       const row = rows.get(checkMatch[1]!);
+      state.txtCheckedAtCheck = state.txtChecked.length;
       return row === undefined ? notFound("RoutingUrl not found") : data(progressed(row, "check"));
     }
     const urlMatch = /^\/v1\/urls\/([^/]+)$/.exec(path);
@@ -444,6 +455,7 @@ export const makeUrlCloud = () => {
         throttle: [],
         loseCreateReply: false,
         txtCheckedAtPatch: undefined,
+        txtCheckedAtCheck: undefined,
       },
       options,
     );

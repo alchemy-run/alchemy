@@ -19,6 +19,7 @@ import {
   getWorkspaceDomainOwnershipsVerification,
   updateUrl,
 } from "@distilled.cloud/prisma/management";
+import * as Retry from "@distilled.cloud/prisma/Retry";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as DNS from "alchemy/DNS/Adapter";
@@ -138,30 +139,33 @@ export class RoutingUrlHostnameChangeRefused extends Data.TaggedError(
 }> {}
 
 /**
- * With `dns`, the hostname does not serve, for one of three causes:
- * another RoutingUrl holds it (`heldBy`), which waiting does not change; its
- * certificate failed (`certificateFailure`), which only a retry from the
- * Console fixes; or it did not become `active` within 6 minutes, stopped on
- * `firstUnmetCondition`, and a redeploy waits again.
+ * With `dns`, the hostname does not serve. `reason` says why: `held`, another
+ * RoutingUrl holds it (`heldBy`), which waiting does not change;
+ * `certificateFailed`, its certificate failed, which a redeploy does not
+ * retry; or `timedOut`, it did not become `active` within the wait, stopped
+ * on `firstUnmetCondition`, and a redeploy waits again.
  */
 export class RoutingUrlNotActive extends Data.TaggedError("RoutingUrlNotActive")<{
   readonly message: string;
   readonly routingUrlId: string;
   readonly hostname: string;
+  readonly reason: "held" | "certificateFailed" | "timedOut";
   /** The first condition not met, or null when Prisma has not yet marked a met RoutingUrl `active`. */
   readonly firstUnmetCondition: ApiRoutingUrl["firstUnmetCondition"];
   /** The error from Prisma's last sync with its custom domain, if any. */
   readonly customDomainSyncError: string | null;
-  /** The RoutingUrl that holds the hostname, if another one does. */
+  /** The RoutingUrl that holds the hostname, when `reason` is `held`. */
   readonly heldBy: ApiRoutingUrl["heldBy"];
-  /** Why the certificate failed, when it did; null otherwise. */
-  readonly certificateFailure: string | null;
+  /** Prisma's reason for the failed certificate, when `reason` is `certificateFailed` and Prisma gave one. */
+  readonly certificateFailureReason: string | null;
 }> {}
 
 /**
- * With `dns`, the hostname's published records did not appear at every
- * authoritative nameserver within about a minute, so the RoutingUrl was not
- * saved and no certificate was ordered. Redeploy once they appear.
+ * With `dns`, a record this deploy published was still missing at an
+ * authoritative nameserver after about 3 minutes, so Prisma was not asked to
+ * look at it and no certificate was ordered. A nameserver this machine cannot
+ * query does not raise this error. Redeploy once the records appear; if they
+ * never do, the DNS host may not be the one the domain is delegated to.
  */
 export class RoutingUrlRecordsNotSeen extends Data.TaggedError("RoutingUrlRecordsNotSeen")<{
   readonly message: string;
@@ -248,9 +252,17 @@ export interface RoutingUrl extends Resource<
     hostname: string;
     /** Identity of the RoutingUrl on its Branch. */
     logicalId: string | null;
-    /** `pending` until every condition is met, then `active`. As last read. */
+    /**
+     * `active` once the hostname has gone live. It goes back to `pending` only
+     * when the hostname changes, the service is deleted, or the workspace's
+     * ownership lapses, so it does not say whether the hostname serves now;
+     * `state` does. As last read.
+     */
     status: ApiRoutingUrl["status"];
-    /** What the hostname is doing now, such as `waiting_for_dns` or `certificate_failed`. As last read. */
+    /**
+     * What the hostname is doing now, such as `waiting_for_dns`,
+     * `certificate_failed`, or `active` when it serves. As last read.
+     */
     state: ApiRoutingUrl["state"];
     /** What the hostname needs to serve, each `met`, `unmet` or `unknown`. As last read. */
     conditions: ApiRoutingUrl["conditions"];
@@ -319,29 +331,36 @@ export interface RoutingUrl extends Resource<
  * DNS host that flattens a `CNAME` at the apex; at any other host, omit `dns`
  * and publish an ALIAS or ANAME yourself.
  *
- * With `dns`, the deploy waits until the hostname has served once: when the
- * RoutingUrl is created, when its hostname changes, and while it has never
- * been `active`. It waits up to about a minute for the new records to appear
- * at the hostname's authoritative nameservers, and fails with
- * `RoutingUrlRecordsNotSeen`, saving nothing, while one is still absent.
- * After saving, it asks Prisma to check once when Prisma has not seen the
- * records and holds no certificate for the hostname, then reads the
- * RoutingUrl every 10 seconds until it is `active`, for up to 6 minutes:
- * about 7 minutes in all. A certificate normally takes about 20 seconds, and
- * Prisma reads it again 3 minutes after ordering it. A RoutingUrl that served
- * and later reads `pending` reports it in `status` without failing a deploy.
+ * With `dns`, the deploy waits for the hostname to serve when it creates the
+ * RoutingUrl, changes its hostname, or adds `dns` to it, and again after a
+ * deploy whose wait failed. Once a deploy with `dns` has finished, later
+ * deploys do not wait: a RoutingUrl that served and later reads `pending`
+ * reports it in `status` and `state` without failing a deploy.
  *
- * The wait fails with `RoutingUrlNotActive` when the 6 minutes run out,
- * naming the first unmet condition and Prisma's last sync error, and a
- * redeploy waits again. It fails at once with `RoutingUrlNotActive` when
- * another RoutingUrl holds the hostname (`heldBy`), and when the certificate
- * failed (`certificateFailure`): a redeploy does not retry it; retry it from
- * `setupUrl` in the Console, which orders a new certificate. It fails at once
- * with `RoutingUrlCertificateLimitReached` when the workspace has reached its
- * hourly limit of new certificates; Prisma continues on its own when the
- * limit resets, and a redeploy after then waits again. After each of these
- * failures the RoutingUrl is saved, and the next deploy finds it instead of
- * creating another.
+ * Before Prisma looks at the hostname, the deploy waits up to 3 minutes for
+ * the records to appear at its authoritative nameservers. This applies to a
+ * create, a hostname change of a RoutingUrl that is not yet `active`, and the
+ * single check below; a hostname change of an `active` one is checked as
+ * described above. While a record is still absent it fails with
+ * `RoutingUrlRecordsNotSeen`. After saving, it asks Prisma to check once when
+ * Prisma has not seen a record and holds no certificate for the hostname,
+ * then reads the RoutingUrl every 10 seconds until it is `active`, for up to
+ * 6 minutes: about 9 minutes in all. A certificate normally takes about 20
+ * seconds, and Prisma reads it again 3 minutes after ordering it.
+ *
+ * The wait fails with `RoutingUrlNotActive` and `reason: "timedOut"` when the
+ * 6 minutes run out, naming the first unmet condition and Prisma's last sync
+ * error; a redeploy waits again, and asks Prisma to check once more when it
+ * has not seen a record. It fails at once with `reason: "held"` when another
+ * RoutingUrl holds the hostname (`heldBy`), and with
+ * `reason: "certificateFailed"` when the certificate failed: a redeploy does
+ * not retry it; retry it from `setupUrl` in the Console or with one
+ * `POST /v1/urls/{id}/check`, which orders a new certificate. It fails at
+ * once with `RoutingUrlCertificateLimitReached` when the workspace has
+ * reached its hourly limit of new certificates; Prisma continues on its own
+ * when the limit resets, and a redeploy after then waits again. After each of
+ * these failures the RoutingUrl is saved, and the next deploy finds it
+ * instead of creating another.
  *
  * Prisma orders a certificate for each new hostname once its records are
  * published, for each hostname change, and again when an order fails or is
@@ -531,6 +550,9 @@ const ACTIVE_WAIT = Duration.minutes(6);
 const ACTIVE_POLL_INTERVAL = Duration.seconds(10);
 const ACTIVE_POLLS = Duration.toMillis(ACTIVE_WAIT) / Duration.toMillis(ACTIVE_POLL_INTERVAL);
 
+/** How long a deploy with `dns` waits for its published records to reach every authoritative nameserver. */
+const RECORDS_WAIT = Duration.minutes(3);
+
 /**
  * Prisma reports its hourly certificate limit only as this
  * `customDomainSyncError` text, written by the control plane's
@@ -544,35 +566,56 @@ const certificateLimitOf = (url: ApiRoutingUrl) => {
   return match ? { limit: Number(match[1]), resetAt: match[2]! } : undefined;
 };
 
+/** Prisma's `state` shows `certificate_failed` only when no earlier state applies, so read the custom domain itself. */
+const certificateFailed = (url: ApiRoutingUrl) => url.customDomain?.status === "failed";
+
+const isHeld = (url: ApiRoutingUrl) => url.state === "in_use_elsewhere";
+
+const missesDns = (url: ApiRoutingUrl) =>
+  url.state === "not_verified" || url.state === "waiting_for_dns";
+
 const holderOf = (heldBy: ApiRoutingUrl["heldBy"]) =>
   heldBy?.serviceId
     ? `held by Prisma service '${heldBy.serviceId}'`
     : (heldBy?.message ?? "held by another RoutingUrl");
 
+const unseenRecordsOf = (url: ApiRoutingUrl) => {
+  const condition = url.state === "not_verified" ? "ownershipVerified" : "dnsPointsAtSwitchboard";
+  const records = url.records.filter((record) => record.condition === condition);
+  const detail =
+    condition === "dnsPointsAtSwitchboard" && url.switchboardDns?.detail
+      ? ` (Prisma's last answer: "${url.switchboardDns.detail}")`
+      : "";
+  return records.length === 0
+    ? `its ${condition === "ownershipVerified" ? "TXT" : "CNAME"} record${detail}`
+    : `${records.map((record) => `${record.type} ${record.name} = ${record.value}`).join(" and ")}${detail}`;
+};
+
 const notActive = (url: ApiRoutingUrl) => {
   const reported =
     url.customDomainSyncError === null ? "" : ` Prisma reports: "${url.customDomainSyncError}".`;
-  const certificateFailed = url.customDomain?.status === "failed";
+  const reason = isHeld(url) ? "held" : certificateFailed(url) ? "certificateFailed" : "timedOut";
+  const failureReason = url.customDomain?.failureReason ?? null;
   const unmet =
     url.firstUnmetCondition === null
       ? "every condition is met, but Prisma has not marked it active yet"
       : `its first unmet condition is ${url.firstUnmetCondition}`;
-  const reason =
-    url.state === "in_use_elsewhere"
-      ? `is ${holderOf(url.heldBy)}, so it cannot become active until that RoutingUrl gives it up.${reported}`
-      : certificateFailed
-        ? `has a failed certificate: ${url.customDomain?.failureReason ?? "Prisma gave no reason"}.${reported} A redeploy does not retry it. Retry it in the Console${url.setupUrl === null ? "" : ` at ${url.setupUrl}`}; a retry orders a new certificate, which counts toward the workspace's hourly limit.`
-        : `did not become active within ${Duration.toMinutes(ACTIVE_WAIT)} minutes: ${unmet}.${reported} Prisma keeps working on it; redeploy to wait again.`;
+  const explanation = {
+    held: `is ${holderOf(url.heldBy)}, so it cannot become active until that RoutingUrl gives it up.${reported}`,
+    certificateFailed: `has a failed certificate: ${failureReason ?? "Prisma gave no reason"}.${reported} A redeploy does not retry it. Retry it in the Console${url.setupUrl === null ? "" : ` at ${url.setupUrl}`}, or with one POST /v1/urls/${url.id}/check; a retry orders a new certificate, which counts toward the workspace's hourly limit.`,
+    timedOut: missesDns(url)
+      ? `did not become active within ${Duration.toMinutes(ACTIVE_WAIT)} minutes: Prisma has not seen ${unseenRecordsOf(url)}.${reported} Prisma does not look again on its own; a redeploy asks it to check once.`
+      : `did not become active within ${Duration.toMinutes(ACTIVE_WAIT)} minutes: ${unmet}.${reported} Prisma keeps working on it; redeploy to wait again.`,
+  }[reason];
   return new RoutingUrlNotActive({
     routingUrlId: url.id,
     hostname: url.hostname,
+    reason,
     firstUnmetCondition: url.firstUnmetCondition,
     customDomainSyncError: url.customDomainSyncError,
-    heldBy: url.heldBy,
-    certificateFailure: certificateFailed
-      ? (url.customDomain?.failureReason ?? "Prisma gave no reason")
-      : null,
-    message: `Prisma RoutingUrl '${url.hostname}' ${reason}`,
+    heldBy: reason === "held" ? url.heldBy : null,
+    certificateFailureReason: reason === "certificateFailed" ? failureReason : null,
+    message: `Prisma RoutingUrl '${url.hostname}' ${explanation}`,
   });
 };
 
@@ -601,13 +644,7 @@ const untilActive = (
         message: `Prisma RoutingUrl '${url.hostname}' cannot get its certificate yet: the workspace reached its hourly limit of ${limited.limit} new certificates, which resets at ${limited.resetAt}. Prisma continues on its own at that time; a redeploy after then waits for the hostname to serve.`,
       });
     }
-    if (
-      url.state === "in_use_elsewhere" ||
-      url.customDomain?.status === "failed" ||
-      pollsLeft <= 0
-    ) {
-      return yield* notActive(url);
-    }
+    if (isHeld(url) || certificateFailed(url) || pollsLeft <= 0) return yield* notActive(url);
     yield* Effect.sleep(ACTIVE_POLL_INTERVAL);
     return yield* untilActive((yield* getUrl({ id: url.id })).data, pollsLeft - 1);
   });
@@ -618,16 +655,34 @@ const untilActive = (
  * registering the first one, which the write would have made anyway. With no
  * custom domain there is nothing to retry, so one check per deploy is safe.
  */
-const checkedOnceIfDnsMissed = (url: ApiRoutingUrl) =>
-  url.customDomain === null && (url.state === "not_verified" || url.state === "waiting_for_dns")
-    ? createUrlCheck({ id: url.id }).pipe(Effect.map((response): ApiRoutingUrl => response.data))
-    : Effect.succeed(url);
+const needsCheck = (url: ApiRoutingUrl) => url.customDomain === null && missesDns(url);
 
-/** Whether this reconcile waits: the hostname has not served under this state yet. */
-const waitsForActive = (news: RoutingUrl["Props"], output: RoutingUrl["Attributes"] | undefined) =>
+/**
+ * One `/check`, never resent: a resend after a lost reply or a 429 can find
+ * the certificate the first one ordered failed, and retry it. When the check
+ * fails, the wait reads the row instead.
+ */
+const checkOnce = (url: ApiRoutingUrl) =>
+  createUrlCheck({ id: url.id }).pipe(
+    Retry.none,
+    Effect.map((response): ApiRoutingUrl => response.data),
+    Effect.option,
+    Effect.flatMap((checked) =>
+      Option.isSome(checked)
+        ? Effect.succeed(checked.value)
+        : getUrl({ id: url.id }).pipe(Effect.map((response) => response.data)),
+    ),
+  );
+
+/**
+ * Whether this reconcile waits: when this resource has not yet completed a
+ * deploy that published this hostname's records. A failed wait commits no
+ * props, so the deploy after it waits again.
+ */
+const waitsForActive = (news: RoutingUrl["Props"], olds: RoutingUrl["Props"] | undefined) =>
   news.publishesRecords === true &&
-  (output?.status !== "active" ||
-    normalizeHostname(output.hostname) !== normalizeHostname(news.hostname));
+  (olds?.publishesRecords !== true ||
+    normalizeHostname(olds.hostname) !== normalizeHostname(news.hostname));
 
 const ProviderLive = () =>
   Provider.effect(
@@ -707,11 +762,15 @@ const ProviderLive = () =>
         });
 
       /**
-       * Before Prisma checks a hostname whose records this deploy published,
-       * wait up to about a minute for them to appear at its authoritative
-       * nameservers, and refuse the write while one is still absent.
+       * Before Prisma looks at a hostname whose records this deploy published,
+       * wait for them to appear at its authoritative nameservers, and refuse
+       * while one is still absent.
        */
-      const awaitPublishedRecords = (service: Service, hostname: string) =>
+      const awaitPublishedRecords = (
+        service: Service,
+        hostname: string,
+        before: "create" | "hostnameChange" | "check",
+      ) =>
         Effect.gen(function* () {
           const workspaceId = (yield* getProject({ id: service.projectId })).data.workspace.id;
           const verification = (yield* getWorkspaceDomainOwnershipsVerification({
@@ -728,6 +787,7 @@ const ProviderLive = () =>
             margin: "if-unseen",
             nameservers: "name",
             attempts: "until-seen",
+            waitFor: RECORDS_WAIT,
           } as const;
           const [ownership, dns] = yield* Effect.all(
             [
@@ -741,14 +801,43 @@ const ProviderLive = () =>
             ...(dns.visibility === "absent" ? [cname] : []),
           ];
           if (missing.length === 0) return;
+          const untouched = {
+            create:
+              "Prisma was not changed: the RoutingUrl was not created, and no certificate was ordered.",
+            hostnameChange:
+              "Prisma was not changed: the RoutingUrl's hostname was not changed, and no certificate was ordered.",
+            check:
+              "The RoutingUrl is saved in Prisma, but Prisma was not asked to look at its DNS, so no certificate was ordered.",
+          }[before];
           return yield* new RoutingUrlRecordsNotSeen({
             hostname,
             records: missing,
-            message: `Not every authoritative nameserver for '${hostname}' answers with ${missing.map((record) => `${record.type} ${record.name} = ${record.value}`).join(" and ")} yet, though the DNS host published ${missing.length === 1 ? "it" : "them"}. Nothing was saved in Prisma and no certificate was ordered; redeploy once ${missing.length === 1 ? "it appears" : "they appear"}.`,
+            message: `After ${Duration.toMinutes(RECORDS_WAIT)} minutes, not every authoritative nameserver for '${hostname}' answers with ${missing.map((record) => `${record.type} ${record.name} = ${record.value}`).join(" and ")}, though the DNS host published ${missing.length === 1 ? "it" : "them"}. ${untouched} Redeploy once ${missing.length === 1 ? "it appears" : "they appear"}; if ${missing.length === 1 ? "it never does" : "they never do"}, check that the domain is delegated to this DNS host at its registrar.`,
           });
         });
 
-      /** Create or update the row `news` describes, and return it as Prisma answered. */
+      /** The row a create resent after a lost reply made: same service, `logicalId` and hostname. */
+      const rowMadeByResentCreate = (
+        service: Service,
+        serviceId: string,
+        hostname: string,
+        logicalId: string,
+      ) =>
+        branchUrls(service).pipe(
+          Effect.map((urls) =>
+            urls.find(
+              (url) =>
+                url.serviceId === serviceId &&
+                url.logicalId === logicalId &&
+                normalizeHostname(url.hostname) === hostname,
+            ),
+          ),
+        );
+
+      /**
+       * Create or update the row `news` describes, and return it as Prisma
+       * answered, with whether this deploy already saw its published records.
+       */
       const save = (
         fqn: string,
         news: RoutingUrl["Props"],
@@ -758,6 +847,7 @@ const ProviderLive = () =>
           const serviceId = yield* resolveServiceId(news.app);
           const hostname = normalizeHostname(news.hostname);
           const logicalId = news.logicalId ?? fqn;
+          const publishes = news.publishesRecords === true;
           const service = yield* serviceOf(serviceId);
           const urls = yield* branchUrls(service);
           const routingUrlId = concreteIdOf(output?.routingUrlId);
@@ -774,40 +864,39 @@ const ProviderLive = () =>
             });
           }
           if (!observed) {
-            if (news.publishesRecords === true) yield* awaitPublishedRecords(service, hostname);
-            const rowMadeByResentCreate = branchUrls(service).pipe(
-              Effect.map((again) => ownRow(again, serviceId, hostname, logicalId)),
-            );
-            return yield* createServiceUrl({ serviceId, hostname, logicalId }).pipe(
+            if (publishes) yield* awaitPublishedRecords(service, hostname, "create");
+            const url = yield* createServiceUrl({ serviceId, hostname, logicalId }).pipe(
               Effect.map((created) => created.data),
               Effect.catchTags(createRefusals(hostname, logicalId, serviceId)),
-              Effect.catchTag("RoutingUrlLogicalIdTaken", (taken) =>
-                rowMadeByResentCreate.pipe(
-                  Effect.flatMap((own) => (own ? Effect.succeed(own) : Effect.fail(taken))),
+              Effect.catchTag(["RoutingUrlLogicalIdTaken", "RoutingUrlQuotaExceeded"], (refused) =>
+                rowMadeByResentCreate(service, serviceId, hostname, logicalId).pipe(
+                  Effect.flatMap((own) => (own ? Effect.succeed(own) : Effect.fail(refused))),
                 ),
               ),
             );
+            return { url, service, recordsSeen: publishes };
           }
           const change = {
             ...(normalizeHostname(observed.hostname) === hostname ? {} : { hostname }),
             ...(observed.serviceId === serviceId ? {} : { serviceId }),
             ...(observed.logicalId === logicalId ? {} : { logicalId }),
           };
-          if (Object.keys(change).length === 0) return observed;
+          if (Object.keys(change).length === 0) {
+            return { url: observed, service, recordsSeen: false };
+          }
           if (change.hostname !== undefined && observed.status === "active") {
-            yield* ensureCanServe(
-              service,
-              observed.hostname,
-              hostname,
-              news.publishesRecords === true,
-            );
-          } else if (change.hostname !== undefined && news.publishesRecords === true) {
-            yield* awaitPublishedRecords(service, hostname);
+            yield* ensureCanServe(service, observed.hostname, hostname, publishes);
+          } else if (change.hostname !== undefined && publishes) {
+            yield* awaitPublishedRecords(service, hostname, "hostnameChange");
           }
           const updated = yield* updateUrl({ id: observed.id, ...change }).pipe(
             Effect.catchTags(updateRefusals(hostname, logicalId, serviceId)),
           );
-          return updated.data;
+          return {
+            url: updated.data,
+            service,
+            recordsSeen: publishes && change.hostname !== undefined,
+          };
         });
 
       return {
@@ -835,10 +924,14 @@ const ProviderLive = () =>
           const [claimed] = yield* branchUrls(service, logicalId);
           return claimed ? Unowned(attrsFrom(claimed)) : undefined;
         }),
-        reconcile: Effect.fn(function* ({ fqn, news, output }) {
-          const saved = yield* save(fqn, news, output);
-          if (!waitsForActive(news, output)) return attrsFrom(saved);
-          return attrsFrom(yield* untilActive(yield* checkedOnceIfDnsMissed(saved)));
+        reconcile: Effect.fn(function* ({ fqn, news, olds, output }) {
+          const { url, service, recordsSeen } = yield* save(fqn, news, output);
+          if (!waitsForActive(news, olds)) return attrsFrom(url);
+          if (!needsCheck(url)) return attrsFrom(yield* untilActive(url));
+          if (!recordsSeen) {
+            yield* awaitPublishedRecords(service, normalizeHostname(news.hostname), "check");
+          }
+          return attrsFrom(yield* untilActive(yield* checkOnce(url)));
         }),
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.routingUrlId)) return;

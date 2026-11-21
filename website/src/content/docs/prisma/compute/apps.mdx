@@ -121,8 +121,10 @@ const url = yield* Prisma.RoutingUrl("api", {
   app,
   hostname: "api.example.com",
 });
-// url.status: "pending"
-// url.state: what the hostname is doing now, such as "not_verified" or "waiting_for_dns"
+// url.status: "pending"; "active" once the hostname has gone live, and back to "pending"
+//   only when the hostname changes, the service is deleted, or ownership lapses
+// url.state: what the hostname is doing now, such as "not_verified", "waiting_for_dns",
+//   "certificate_failed", or "active" when it serves
 // url.records: the TXT record that proves ownership and the CNAME to the switchboard
 // url.setupUrl: the Console page that shows what to do next
 ```
@@ -155,14 +157,14 @@ Prisma records a custom domain as a RoutingUrl, and has done so for every custom
 
 ### Waiting for the hostname to serve
 
-With `dns`, the deploy waits until the hostname has served once, so `url.status` is `active` when it finishes. First it waits up to about a minute for the `TXT` and `CNAME` to appear at the hostname's authoritative nameservers, then it saves the RoutingUrl, then it waits up to 6 minutes for it to become `active`: up to about 7 minutes in all. A certificate normally takes about 20 seconds, and Prisma looks at it again 3 minutes after ordering it. Prisma looks the hostname's DNS up only when the RoutingUrl is saved or checked, so when it has not seen the records yet and holds no certificate for the hostname, the deploy asks it to check once.
+With `dns`, the deploy waits for the hostname to serve when it creates the RoutingUrl, changes its hostname, or adds `dns` to it, and again after a deploy whose wait failed. Then `url.status` is `active` when it finishes. Once a deploy with `dns` has finished, later deploys do not wait: a RoutingUrl that served and later reads `pending` reports that in `status` and `state` and does not fail them.
 
-The deploy waits only until the hostname has served: when the RoutingUrl is created, when its hostname changes, and while it has never been `active`. A RoutingUrl that served and later reads `pending` reports that in `status` and does not fail later deploys.
+Before Prisma looks at the hostname, the deploy waits up to 3 minutes for the `TXT` and `CNAME` to appear at the hostname's authoritative nameservers. Prisma looks the hostname's DNS up only when the RoutingUrl is saved or checked, so when it has not seen a record and holds no certificate for the hostname, the deploy asks it to check once. Then the deploy waits up to 6 minutes for the RoutingUrl to become `active`: about 9 minutes in all. A certificate normally takes about 20 seconds, and Prisma looks at it again 3 minutes after ordering it.
 
-- When a published record has not appeared at every nameserver after about a minute, the deploy fails with `RoutingUrlRecordsNotSeen`, which names the record. Nothing was saved in Prisma and no certificate was ordered; redeploy once it appears.
-- When the 6 minutes run out, the deploy fails with `RoutingUrlNotActive`. Its message names the first condition not met and quotes Prisma's last sync error. Prisma keeps working on the hostname; redeploy to wait again.
-- When the certificate failed, the deploy fails at once with `RoutingUrlNotActive`, which quotes the failure reason in `certificateFailure`. A redeploy does not retry it. Retry it from the RoutingUrl's `setupUrl` in the Console; a retry orders a new certificate, which counts toward the workspace's hourly limit.
-- When another RoutingUrl holds the hostname, the deploy fails at once with `RoutingUrlNotActive`, which names the holder in `heldBy`. The hostname serves once that RoutingUrl gives it up.
+- When a published record has not appeared at every nameserver after 3 minutes, the deploy fails with `RoutingUrlRecordsNotSeen`, which names the record. Prisma was not asked to look at it, so no certificate was ordered: for a create, no RoutingUrl was created; for a hostname change of a RoutingUrl that is not yet `active`, the hostname was not changed. A nameserver your machine cannot query does not raise it. Redeploy once the record appears; if it never does, check that the domain is delegated to this DNS host at its registrar. A hostname change of an `active` RoutingUrl is checked as described below.
+- When the 6 minutes run out, the deploy fails with `RoutingUrlNotActive` and `reason: "timedOut"`. Its message names the first condition not met and quotes Prisma's last sync error. When Prisma has not seen a record, the message names it: Prisma does not look again on its own, and a redeploy asks it to check once. Otherwise Prisma keeps working on the hostname; redeploy to wait again.
+- When the certificate failed, the deploy fails at once with `RoutingUrlNotActive`, `reason: "certificateFailed"` and Prisma's reason in `certificateFailureReason`. A redeploy does not retry it. Retry it from the RoutingUrl's `setupUrl` in the Console or with one `POST /v1/urls/{id}/check`; a retry orders a new certificate, which counts toward the workspace's hourly limit.
+- When another RoutingUrl holds the hostname, the deploy fails at once with `RoutingUrlNotActive`, `reason: "held"` and the holder in `heldBy`. The hostname serves once that RoutingUrl gives it up.
 - When the workspace has reached its hourly limit of new certificates, the deploy fails at once with `RoutingUrlCertificateLimitReached`, which says when the limit resets. Prisma continues on its own at that time, and a redeploy after then waits for the hostname.
 - A deploy that failed while waiting has saved the RoutingUrl. The next deploy finds it and does not create another.
 
