@@ -1,0 +1,938 @@
+[
+  {
+    "name": "SendMessage",
+    "op": "createMessage",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "GetMessage",
+    "op": "getMessage",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "ListMessages",
+    "op": "listMessages",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "EditMessage",
+    "op": "updateMessage",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "DeleteMessage",
+    "op": "deleteMessage",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "BulkDeleteMessages",
+    "op": "bulkDeleteMessages",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "CrosspostMessage",
+    "op": "crosspostMessage",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "TriggerTyping",
+    "op": "triggerTypingIndicator",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "EndPoll",
+    "op": "pollExpire",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "GetPollVoters",
+    "op": "getAnswerVoters",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "AddReaction",
+    "op": "addMyMessageReaction",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "RemoveReaction",
+    "op": "deleteMyMessageReaction",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "RemoveUserReaction",
+    "op": "deleteUserMessageReaction",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "RemoveAllReactions",
+    "op": "deleteAllMessageReactions",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "RemoveEmojiReactions",
+    "op": "deleteAllMessageReactionsByEmoji",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "ListReactions",
+    "op": "listMessageReactionsByEmoji",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "PinMessage",
+    "op": "createPin",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "UnpinMessage",
+    "op": "deletePin",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "ListPins",
+    "op": "listPins",
+    "target": "Channel",
+    "product": "Message"
+  },
+  {
+    "name": "CreateThread",
+    "op": "createThread",
+    "target": "Channel",
+    "product": "Thread"
+  },
+  {
+    "name": "StartThreadFromMessage",
+    "op": "createThreadFromMessage",
+    "target": "Channel",
+    "product": "Thread"
+  },
+  {
+    "name": "ListPublicArchivedThreads",
+    "op": "listPublicArchivedThreads",
+    "target": "Channel",
+    "product": "Thread"
+  },
+  {
+    "name": "ListPrivateArchivedThreads",
+    "op": "listPrivateArchivedThreads",
+    "target": "Channel",
+    "product": "Thread"
+  },
+  {
+    "name": "ListJoinedPrivateArchivedThreads",
+    "op": "listMyPrivateArchivedThreads",
+    "target": "Channel",
+    "product": "Thread"
+  },
+  {
+    "name": "SearchThreads",
+    "op": "searchThread",
+    "target": "Channel",
+    "product": "Thread"
+  },
+  {
+    "name": "JoinThread",
+    "op": "joinThread",
+    "target": "Application",
+    "product": "Thread"
+  },
+  {
+    "name": "LeaveThread",
+    "op": "leaveThread",
+    "target": "Application",
+    "product": "Thread"
+  },
+  {
+    "name": "AddThreadMember",
+    "op": "addThreadMember",
+    "target": "Application",
+    "product": "Thread"
+  },
+  {
+    "name": "RemoveThreadMember",
+    "op": "deleteThreadMember",
+    "target": "Application",
+    "product": "Thread"
+  },
+  {
+    "name": "GetThreadMember",
+    "op": "getThreadMember",
+    "target": "Application",
+    "product": "Thread"
+  },
+  {
+    "name": "ListThreadMembers",
+    "op": "listThreadMembers",
+    "target": "Application",
+    "product": "Thread"
+  },
+  {
+    "name": "EditThread",
+    "op": "updateChannel",
+    "target": "Application",
+    "product": "Thread"
+  },
+  {
+    "name": "DeleteThread",
+    "op": "deleteChannel",
+    "target": "Application",
+    "product": "Thread"
+  },
+  {
+    "name": "GetChannel",
+    "op": "getChannel",
+    "target": "Channel",
+    "product": "Channel"
+  },
+  {
+    "name": "CreateInvite",
+    "op": "createChannelInvite",
+    "target": "Channel",
+    "product": "Invite"
+  },
+  {
+    "name": "ListChannelInvites",
+    "op": "listChannelInvites",
+    "target": "Channel",
+    "product": "Invite"
+  },
+  {
+    "name": "ListChannelWebhooks",
+    "op": "listChannelWebhooks",
+    "target": "Channel",
+    "product": "Webhook"
+  },
+  {
+    "name": "GetChannelMemberPermissions",
+    "op": "getChannelMemberPermissions",
+    "target": "Channel",
+    "product": "Channel"
+  },
+  {
+    "name": "GetChannelRolePermissions",
+    "op": "getChannelRolePermissions",
+    "target": "Channel",
+    "product": "Channel"
+  },
+  {
+    "name": "SendSoundboardSound",
+    "op": "sendSoundboardSound",
+    "target": "Channel",
+    "product": "Voice"
+  },
+  {
+    "name": "SetVoiceChannelStatus",
+    "op": "updateVoiceChannelStatus",
+    "target": "Channel",
+    "product": "Voice"
+  },
+  {
+    "name": "GetMember",
+    "op": "getGuildMember",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "ListMembers",
+    "op": "listGuildMembers",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "SearchMembers",
+    "op": "searchGuildMembers",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "AddMember",
+    "op": "addGuildMember",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "EditMember",
+    "op": "updateGuildMember",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "KickMember",
+    "op": "deleteGuildMember",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "AddMemberRole",
+    "op": "addGuildMemberRole",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "RemoveMemberRole",
+    "op": "deleteGuildMemberRole",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "GetMemberPermissions",
+    "op": "getGuildMemberPermissions",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "GetBotMember",
+    "op": "getMyGuildMember",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "EditBotMember",
+    "op": "updateMyGuildMember",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "LeaveGuild",
+    "op": "leaveGuild",
+    "target": "Guild",
+    "product": "Guild"
+  },
+  {
+    "name": "PreviewPrune",
+    "op": "previewPruneGuild",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "PruneMembers",
+    "op": "pruneGuild",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "ListJoinRequests",
+    "op": "getGuildJoinRequests",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "ActOnJoinRequest",
+    "op": "joinActionGuildRequest",
+    "target": "Guild",
+    "product": "Member"
+  },
+  {
+    "name": "BanMember",
+    "op": "banUserFromGuild",
+    "target": "Guild",
+    "product": "Moderation"
+  },
+  {
+    "name": "BulkBanMembers",
+    "op": "bulkBanUsersFromGuild",
+    "target": "Guild",
+    "product": "Moderation"
+  },
+  {
+    "name": "UnbanMember",
+    "op": "unbanUserFromGuild",
+    "target": "Guild",
+    "product": "Moderation"
+  },
+  {
+    "name": "GetBan",
+    "op": "getGuildBan",
+    "target": "Guild",
+    "product": "Moderation"
+  },
+  {
+    "name": "ListBans",
+    "op": "listGuildBans",
+    "target": "Guild",
+    "product": "Moderation"
+  },
+  {
+    "name": "ListAuditLog",
+    "op": "listGuildAuditLogEntries",
+    "target": "Guild",
+    "product": "Moderation"
+  },
+  {
+    "name": "UpdateIncidentActions",
+    "op": "updateGuildIncidentActions",
+    "target": "Guild",
+    "product": "Moderation"
+  },
+  {
+    "name": "ListAutoModerationRules",
+    "op": "listAutoModerationRules",
+    "target": "Guild",
+    "product": "Moderation"
+  },
+  {
+    "name": "SearchMessages",
+    "op": "searchGuild",
+    "target": "Guild",
+    "product": "Message"
+  },
+  {
+    "name": "GetGuild",
+    "op": "getGuild",
+    "target": "Guild",
+    "product": "Guild"
+  },
+  {
+    "name": "GetGuildPreview",
+    "op": "getGuildPreview",
+    "target": "Guild",
+    "product": "Guild"
+  },
+  {
+    "name": "ListChannels",
+    "op": "listGuildChannels",
+    "target": "Guild",
+    "product": "Channel"
+  },
+  {
+    "name": "ListActiveThreads",
+    "op": "getActiveGuildThreads",
+    "target": "Guild",
+    "product": "Thread"
+  },
+  {
+    "name": "ListRoles",
+    "op": "listGuildRoles",
+    "target": "Guild",
+    "product": "Role"
+  },
+  {
+    "name": "GetRole",
+    "op": "getGuildRole",
+    "target": "Guild",
+    "product": "Role"
+  },
+  {
+    "name": "GetRoleMemberCounts",
+    "op": "guildRoleMemberCounts",
+    "target": "Guild",
+    "product": "Role"
+  },
+  {
+    "name": "GetRolePermissions",
+    "op": "getGuildRolePermissions",
+    "target": "Guild",
+    "product": "Role"
+  },
+  {
+    "name": "ListGuildInvites",
+    "op": "listGuildInvites",
+    "target": "Guild",
+    "product": "Invite"
+  },
+  {
+    "name": "ListGuildWebhooks",
+    "op": "getGuildWebhooks",
+    "target": "Guild",
+    "product": "Webhook"
+  },
+  {
+    "name": "ListIntegrations",
+    "op": "listGuildIntegrations",
+    "target": "Guild",
+    "product": "Guild"
+  },
+  {
+    "name": "DeleteIntegration",
+    "op": "deleteGuildIntegration",
+    "target": "Guild",
+    "product": "Guild"
+  },
+  {
+    "name": "ListGuildVoiceRegions",
+    "op": "listGuildVoiceRegions",
+    "target": "Guild",
+    "product": "Voice"
+  },
+  {
+    "name": "GetVanityUrl",
+    "op": "getGuildVanityUrl",
+    "target": "Guild",
+    "product": "Guild"
+  },
+  {
+    "name": "GetWidget",
+    "op": "getGuildWidget",
+    "target": "Guild",
+    "product": "Guild"
+  },
+  {
+    "name": "GetWidgetImage",
+    "op": "getGuildWidgetPng",
+    "target": "Guild",
+    "product": "Guild"
+  },
+  {
+    "name": "GetWelcomeScreen",
+    "op": "getGuildWelcomeScreen",
+    "target": "Guild",
+    "product": "Guild"
+  },
+  {
+    "name": "GetOnboarding",
+    "op": "getGuildsOnboarding",
+    "target": "Guild",
+    "product": "Guild"
+  },
+  {
+    "name": "GetNewMemberWelcome",
+    "op": "getGuildNewMemberWelcome",
+    "target": "Guild",
+    "product": "Guild"
+  },
+  {
+    "name": "ListEmojis",
+    "op": "listGuildEmojis",
+    "target": "Guild",
+    "product": "Expression"
+  },
+  {
+    "name": "ListStickers",
+    "op": "listGuildStickers",
+    "target": "Guild",
+    "product": "Expression"
+  },
+  {
+    "name": "ListSoundboardSounds",
+    "op": "listGuildSoundboardSounds",
+    "target": "Guild",
+    "product": "Expression"
+  },
+  {
+    "name": "ListGuildTemplates",
+    "op": "listGuildTemplates",
+    "target": "Guild",
+    "product": "Guild"
+  },
+  {
+    "name": "ListScheduledEvents",
+    "op": "listGuildScheduledEvents",
+    "target": "Guild",
+    "product": "Event"
+  },
+  {
+    "name": "GetScheduledEvent",
+    "op": "getGuildScheduledEvent",
+    "target": "Guild",
+    "product": "Event"
+  },
+  {
+    "name": "ListScheduledEventUsers",
+    "op": "listGuildScheduledEventUsers",
+    "target": "Guild",
+    "product": "Event"
+  },
+  {
+    "name": "CountScheduledEventUsers",
+    "op": "countGuildScheduledEventUsers",
+    "target": "Guild",
+    "product": "Event"
+  },
+  {
+    "name": "ListScheduledEventExceptionUsers",
+    "op": "listGuildScheduledEventExceptionUsers",
+    "target": "Guild",
+    "product": "Event"
+  },
+  {
+    "name": "GetVoiceState",
+    "op": "getVoiceState",
+    "target": "Guild",
+    "product": "Voice"
+  },
+  {
+    "name": "GetBotVoiceState",
+    "op": "getSelfVoiceState",
+    "target": "Guild",
+    "product": "Voice"
+  },
+  {
+    "name": "EditVoiceState",
+    "op": "updateVoiceState",
+    "target": "Guild",
+    "product": "Voice"
+  },
+  {
+    "name": "EditBotVoiceState",
+    "op": "updateSelfVoiceState",
+    "target": "Guild",
+    "product": "Voice"
+  },
+  {
+    "name": "ListGuildCommands",
+    "op": "listGuildApplicationCommands",
+    "target": "Guild",
+    "product": "Command"
+  },
+  {
+    "name": "GetCommandPermissions",
+    "op": "getGuildApplicationCommandPermissions",
+    "target": "Guild",
+    "product": "Command"
+  },
+  {
+    "name": "ListCommandPermissions",
+    "op": "listGuildApplicationCommandPermissions",
+    "target": "Guild",
+    "product": "Command"
+  },
+  {
+    "name": "ExecuteWebhook",
+    "op": "executeWebhook",
+    "target": "Webhook",
+    "product": "Webhook"
+  },
+  {
+    "name": "ExecuteSlackWebhook",
+    "op": "executeSlackCompatibleWebhook",
+    "target": "Webhook",
+    "product": "Webhook"
+  },
+  {
+    "name": "ExecuteGitHubWebhook",
+    "op": "executeGithubCompatibleWebhook",
+    "target": "Webhook",
+    "product": "Webhook"
+  },
+  {
+    "name": "GetWebhookMessage",
+    "op": "getWebhookMessage",
+    "target": "Webhook",
+    "product": "Webhook"
+  },
+  {
+    "name": "EditWebhookMessage",
+    "op": "updateWebhookMessage",
+    "target": "Webhook",
+    "product": "Webhook"
+  },
+  {
+    "name": "DeleteWebhookMessage",
+    "op": "deleteWebhookMessage",
+    "target": "Webhook",
+    "product": "Webhook"
+  },
+  {
+    "name": "GetWebhookWithToken",
+    "op": "getWebhookByToken",
+    "target": "Webhook",
+    "product": "Webhook"
+  },
+  {
+    "name": "GetApplication",
+    "op": "getApplication",
+    "target": "Application",
+    "product": "Application"
+  },
+  {
+    "name": "GetUser",
+    "op": "getUser",
+    "target": "Application",
+    "product": "User"
+  },
+  {
+    "name": "GetBotUser",
+    "op": "getMyUser",
+    "target": "Application",
+    "product": "User"
+  },
+  {
+    "name": "ListBotGuilds",
+    "op": "listMyGuilds",
+    "target": "Application",
+    "product": "Guild"
+  },
+  {
+    "name": "CreateDm",
+    "op": "createDm",
+    "target": "Application",
+    "product": "Message"
+  },
+  {
+    "name": "GetInvite",
+    "op": "inviteResolve",
+    "target": "Application",
+    "product": "Invite"
+  },
+  {
+    "name": "RevokeInvite",
+    "op": "revokeInvite",
+    "target": "Application",
+    "product": "Invite"
+  },
+  {
+    "name": "GetInviteTargetUsers",
+    "op": "getInviteTargetUsers",
+    "target": "Application",
+    "product": "Invite"
+  },
+  {
+    "name": "SetInviteTargetUsers",
+    "op": "updateInviteTargetUsers",
+    "target": "Application",
+    "product": "Invite"
+  },
+  {
+    "name": "AddInviteTargetUser",
+    "op": "addInviteTargetUser",
+    "target": "Application",
+    "product": "Invite"
+  },
+  {
+    "name": "RemoveInviteTargetUser",
+    "op": "removeInviteTargetUser",
+    "target": "Application",
+    "product": "Invite"
+  },
+  {
+    "name": "BulkAddInviteTargetUsers",
+    "op": "bulkAddInviteTargetUsers",
+    "target": "Application",
+    "product": "Invite"
+  },
+  {
+    "name": "BulkRemoveInviteTargetUsers",
+    "op": "bulkRemoveInviteTargetUsers",
+    "target": "Application",
+    "product": "Invite"
+  },
+  {
+    "name": "GetInviteTargetUsersJobStatus",
+    "op": "getInviteTargetUsersJobStatus",
+    "target": "Application",
+    "product": "Invite"
+  },
+  {
+    "name": "GetTemplate",
+    "op": "getGuildTemplate",
+    "target": "Application",
+    "product": "Guild"
+  },
+  {
+    "name": "GetSticker",
+    "op": "getSticker",
+    "target": "Application",
+    "product": "Expression"
+  },
+  {
+    "name": "GetStickerPack",
+    "op": "getStickerPack",
+    "target": "Application",
+    "product": "Expression"
+  },
+  {
+    "name": "ListStickerPacks",
+    "op": "listStickerPacks",
+    "target": "Application",
+    "product": "Expression"
+  },
+  {
+    "name": "ListDefaultSoundboardSounds",
+    "op": "getSoundboardDefaultSounds",
+    "target": "Application",
+    "product": "Expression"
+  },
+  {
+    "name": "ListVoiceRegions",
+    "op": "listVoiceRegions",
+    "target": "Application",
+    "product": "Voice"
+  },
+  {
+    "name": "GetGateway",
+    "op": "getGateway",
+    "target": "Application",
+    "product": "Gateway"
+  },
+  {
+    "name": "GetBotGateway",
+    "op": "getBotGateway",
+    "target": "Application",
+    "product": "Gateway"
+  },
+  {
+    "name": "ListCommands",
+    "op": "listApplicationCommands",
+    "target": "Application",
+    "product": "Command"
+  },
+  {
+    "name": "GetCommand",
+    "op": "getApplicationCommand",
+    "target": "Application",
+    "product": "Command"
+  },
+  {
+    "name": "GetActivityInstance",
+    "op": "getApplicationActivityInstance",
+    "target": "Application",
+    "product": "Activity"
+  },
+  {
+    "name": "UploadAttachment",
+    "op": "uploadApplicationAttachment",
+    "target": "Application",
+    "product": "Activity"
+  },
+  {
+    "name": "ListEntitlements",
+    "op": "getEntitlements",
+    "target": "Application",
+    "product": "Monetization"
+  },
+  {
+    "name": "GetEntitlement",
+    "op": "getEntitlement",
+    "target": "Application",
+    "product": "Monetization"
+  },
+  {
+    "name": "ConsumeEntitlement",
+    "op": "consumeEntitlement",
+    "target": "Application",
+    "product": "Monetization"
+  },
+  {
+    "name": "CreateTestEntitlement",
+    "op": "createEntitlement",
+    "target": "Application",
+    "product": "Monetization"
+  },
+  {
+    "name": "DeleteTestEntitlement",
+    "op": "deleteEntitlement",
+    "target": "Application",
+    "product": "Monetization"
+  },
+  {
+    "name": "ListSkuSubscriptions",
+    "op": "getSkuSubscriptions",
+    "target": "Application",
+    "product": "Monetization"
+  },
+  {
+    "name": "GetSkuSubscription",
+    "op": "getSkuSubscription",
+    "target": "Application",
+    "product": "Monetization"
+  },
+  {
+    "name": "CreateLobby",
+    "op": "createLobby",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "GetLobby",
+    "op": "getLobby",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "EditLobby",
+    "op": "editLobby",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "DeleteLobby",
+    "op": "deleteLobby",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "AddLobbyMember",
+    "op": "addLobbyMember",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "RemoveLobbyMember",
+    "op": "deleteLobbyMember",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "BulkUpdateLobbyMembers",
+    "op": "bulkUpdateLobbyMembers",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "LinkLobbyChannel",
+    "op": "editLobbyChannelLink",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "SendLobbyMessage",
+    "op": "createLobbyMessage",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "ListLobbyMessages",
+    "op": "getLobbyMessages",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "CreateLobbyGuildInvite",
+    "op": "createLinkedLobbyGuildInviteForUser",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "ModerateLobbyMessage",
+    "op": "updateLobbyMessageExternalModerationMetadata",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "ModerateUserMessage",
+    "op": "updateUserMessageExternalModerationMetadata",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "CreateProvisionalToken",
+    "op": "botPartnerSdkToken",
+    "target": "Application",
+    "product": "Lobby"
+  },
+  {
+    "name": "UnmergeProvisionalAccount",
+    "op": "botPartnerSdkUnmergeProvisionalAccount",
+    "target": "Application",
+    "product": "Lobby"
+  }
+]
