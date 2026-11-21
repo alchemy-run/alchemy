@@ -42,3 +42,14 @@ export const WithdrawLive = Withdraw.make(
     return { balance: 137 - amount };
   }),
 );
+
+/** `AI.Glob` implemented here instead of by Pi: a fixed listing that needs no sandbox. */
+export const GlobLive = AI.Glob.make(
+  {
+    description: "List the files matching a glob pattern. Always use this tool to list files.",
+    parameters: Schema.Struct({ pattern: Schema.String }),
+    success: Schema.Struct({ matches: Schema.Array(Schema.String) }),
+    replay: "safe",
+  },
+  ({ pattern }) => ({ matches: [`OWN-GLOB-4711/${pattern}`] }),
+);

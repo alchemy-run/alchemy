@@ -3,12 +3,15 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import PiApi from "./fixtures/Api.ts";
+import PiWrongHarnessApi from "./fixtures/WrongHarness.ts";
 
 const providers = Layer.mergeAll(Cloudflare.providers(), Boat.providers());
 
@@ -141,6 +144,44 @@ test(
     expect(failures).toContain('{"_tag":"InsufficientFunds","balance":137}');
     expect(failures).toContain('{"_tag":"AccountFrozen","account":"frozen"}');
   }),
+  { tags, timeout: 180_000 },
+);
+
+test(
+  "a coding tool's tag runs the implementation the harness was given",
+  Effect.gen(function* () {
+    const user = `user-${Date.now()}`;
+    yield* call(`/${user}/files/create`, { tools: ["glob"] });
+    expect(yield* call(`/${user}/files/tools`)).toEqual(["glob"]);
+    yield* call(`/${user}/files/prompt`, {
+      text: 'List the files matching the pattern "*.md" with the glob tool.',
+      requestId: "glob-1",
+    });
+    const results = (yield* call(`/${user}/files/results`)) as ReadonlyArray<{
+      tool: string;
+      isError: boolean;
+      text: string;
+    }>;
+    const listed = results.find((result) => result.tool === "glob");
+    expect(listed?.isError).toBe(false);
+    // The listing is the fixture's own, not Pi's glob in a sandbox.
+    expect(listed?.text).toContain("OWN-GLOB-4711/*.md");
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test.provider(
+  "a harness given another harness's tool fails its deploy and says which Layer to provide",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const exit = yield* stack.deploy(PiWrongHarnessApi).pipe(Effect.exit);
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "").toContain(
+        "AI.Tool/bash was given opencode's tool, which only runs on that harness. Provide a Pi Layer for it (Pi.CodingTools) or your own.",
+      );
+      yield* stack.destroy();
+    }),
   { tags, timeout: 180_000 },
 );
 
@@ -311,7 +352,8 @@ test(
     yield* call(`/${user}/script/create`, { tools: ["add"] });
     yield* call(`/${user}/script/codemode`, {});
     yield* call(`/${user}/script/prompt`, {
-      text: "Use the codemode tool once: write a script that calls tools.add({ a: 2, b: 3 }) and tools.add({ a: 10, b: 20 }) and prints both results with console.log.",
+      // The script is given whole: left to write it, the model sometimes prints nothing.
+      text: "Run exactly this script with the codemode tool, unchanged:\n\nconsole.log(JSON.stringify([await tools.add({ a: 2, b: 3 }), await tools.add({ a: 10, b: 20 })]));",
       requestId: "script-1",
     });
     const results = (yield* call(`/${user}/script/results`)) as ReadonlyArray<{
@@ -319,7 +361,6 @@ test(
       isError: boolean;
       text: string;
     }>;
-    // The model may need a second try to write a script that prints.
     const scripts = results.filter((result) => result.tool === "codemode" && !result.isError);
     const printed = scripts.map((script) => script.text).join("\n---\n");
     expect(printed).toContain("1005");
