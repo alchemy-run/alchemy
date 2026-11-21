@@ -2,6 +2,7 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
+import type { BindingNameOptions } from "../Workers/WorkerBinding.ts";
 import type { Bucket } from "./Bucket.ts";
 import type {
   R2Error,
@@ -13,6 +14,22 @@ import type {
 } from "./BucketTypes.ts";
 
 /**
+ * Read R2 objects from an Effect-native Worker.
+ *
+ * Without options, {@link ReadBucketBinding} registers a Worker binding
+ * named after the bucket's logical id. With `{ binding: "MEDIA" }`, it uses
+ * the existing `env: { MEDIA: bucket }` binding instead, without adding a
+ * duplicate logical-id binding. HTTP/local implementations do not use
+ * Worker env names.
+ *
+ * ### Using a declared Worker binding
+ * **Example:** Read from a named R2 binding
+ * ```typescript
+ * // The host Worker declares env: { MEDIA: MyBucket }.
+ * const media = yield* Cloudflare.R2.ReadBucket(MyBucket, { binding: "MEDIA" });
+ * const object = yield* media.get("image.png");
+ * ```
+ *
  * @binding
  * @product R2
  * @category Storage & Databases
@@ -20,7 +37,7 @@ import type {
 export interface ReadBucket extends Binding.Service<
   ReadBucket,
   "Cloudflare.R2.ReadBucket",
-  (bucket: Bucket) => Effect.Effect<ReadBucketClient>
+  (bucket: Bucket, options?: BindingNameOptions) => Effect.Effect<ReadBucketClient>
 > {}
 
 export const ReadBucket = Binding.Service<ReadBucket>("Cloudflare.R2.ReadBucket");

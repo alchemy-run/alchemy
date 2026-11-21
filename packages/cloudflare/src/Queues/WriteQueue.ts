@@ -2,6 +2,7 @@ import type * as runtime from "@cloudflare/workers-types";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
+import type { BindingNameOptions } from "../Workers/WorkerBinding.ts";
 import type { Queue } from "./Queue.ts";
 import type { SendError, SendMessage, SendOptions } from "./QueueTypes.ts";
 
@@ -42,6 +43,19 @@ import type { SendError, SendMessage, SendOptions } from "./QueueTypes.ts";
  * Context tag, its type, and the callable —
  * `yield* Cloudflare.Queues.WriteQueue(queue)`.
  *
+ * ### Using an existing binding name
+ * By default the native Worker implementation registers a producer binding
+ * using the queue's logical id. Pass `{ binding: "EVENTS" }` to use an
+ * already declared `env: { EVENTS: Queue }` without creating another
+ * binding. HTTP/local implementations do not resolve Worker env bindings.
+ *
+ * **Example:** Send through a named producer binding
+ * ```typescript
+ * // The Worker props contain env: { EVENTS: MyQueue }.
+ * const producer = yield* Cloudflare.Queues.WriteQueue(MyQueue, { binding: "EVENTS" });
+ * yield* producer.send({ event: "signup" });
+ * ```
+ *
  * @binding
  * @product Queues
  * @category Storage & Databases
@@ -49,7 +63,7 @@ import type { SendError, SendMessage, SendOptions } from "./QueueTypes.ts";
 export interface WriteQueue extends Binding.Service<
   WriteQueue,
   "Cloudflare.Queues.WriteQueue",
-  (queue: Queue) => Effect.Effect<WriteQueueClient>
+  (queue: Queue, options?: BindingNameOptions) => Effect.Effect<WriteQueueClient>
 > {}
 
 export const WriteQueue = Binding.Service<WriteQueue>("Cloudflare.Queues.WriteQueue");
