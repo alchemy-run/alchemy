@@ -20,7 +20,8 @@ import * as Stream from "effect/Stream";
 export const CLANKA_VERSION = "0.28.3";
 const EFFECT_VERSION = "4.1.4";
 
-const DIR = `/tmp/alchemy-clanka-${CLANKA_VERSION}`;
+/** In the user's home, so a snapshot keeps it; `$HOME` is expanded by the sandbox's shell. */
+const DIR = `"$HOME"/.alchemy-clanka-${CLANKA_VERSION}`;
 
 /**
  * Serves clanka's executor over stdin and stdout. Nothing else may write
@@ -48,12 +49,21 @@ AgentExecutor.layerRpcServer({ directory, excludeTools }).pipe(
 
 /**
  * Install clanka once per sandbox; a snapshot that already holds the
- * directory skips it. The server is written every time, so a snapshot
- * built by an older release of this package serves the current one.
+ * directory skips it. One install runs at a time: a prompt started again
+ * after an eviction can arrive while the first one's install is still
+ * running. The server is written every time, so a snapshot built by an
+ * older release of this package serves the current one.
  */
 const INSTALL = `set -e
 mkdir -p ${DIR}
 cd ${DIR}
+waited=0
+while ! mkdir lock 2>/dev/null; do
+  [ $waited -lt 180 ] || break
+  sleep 1
+  waited=$((waited + 1))
+done
+trap 'rmdir lock 2>/dev/null || true' EXIT
 if [ ! -f ready ]; then
   printf '%s' '{"name":"alchemy-clanka","private":true,"type":"module"}' >package.json
   npm install --no-audit --no-fund --omit=optional --loglevel=error \\
@@ -113,8 +123,15 @@ export const layerSandbox = (
           }
           yield* sandbox.exec(["mkdir", "-p", options.directory]).pipe(Effect.ignore);
           const process = yield* openProcess(sandbox, {
-            fifo: `${DIR}/in.${options.id}`,
-            command: ["node", `${DIR}/server.mjs`, options.directory, ...options.excludeTools],
+            fifo: `/tmp/alchemy-clanka-in.${options.id}`,
+            command: [
+              "sh",
+              "-c",
+              `exec node ${DIR}/server.mjs "$@"`,
+              "clanka",
+              options.directory,
+              ...options.excludeTools,
+            ],
           });
           const run = Effect.runPromiseWith(yield* Effect.context<never>());
           return yield* Socket.fromTransformStream(

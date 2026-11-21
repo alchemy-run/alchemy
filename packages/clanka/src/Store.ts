@@ -1,3 +1,4 @@
+import type { Callbacks } from "alchemy/Callback";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -14,6 +15,12 @@ export interface InstanceStore {
   readonly get: (key: string) => Effect.Effect<string | undefined, ClankaError, RuntimeContext>;
   readonly put: (key: string, value: string) => Effect.Effect<void, ClankaError, RuntimeContext>;
   readonly delete: (key: string) => Effect.Effect<void, ClankaError, RuntimeContext>;
+  /**
+   * The durable callbacks of an instance that can be evicted: what the
+   * harness registers its wake-up with, so a submitted prompt an instance
+   * did not live to finish is run again.
+   */
+  readonly callbacks?: Layer.Layer<Callbacks>;
 }
 
 /**
