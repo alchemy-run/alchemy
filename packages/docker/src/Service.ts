@@ -1,5 +1,5 @@
 import { Unowned } from "alchemy/AdoptPolicy";
-import { deepEqual, isResolved } from "alchemy/Diff";
+import { deepEqual, isResolved, stripEffects } from "alchemy/Diff";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
@@ -650,7 +650,16 @@ export const ServiceProvider = () =>
           const owned = yield* hasAlchemyTags(id, live.Spec.Labels ?? undefined);
           return owned ? attrs : Unowned(attrs);
         }),
-        diff: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
+        diff: Effect.fn(function* ({ id, instanceId, news: desired, olds, output }) {
+          // A bundled program's runtime exports stay unevaluated while
+          // planning. The content hash below stands for them, so they must
+          // not stop a code change from reaching it.
+          const news =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? (Object.assign({}, desired, {
+                  exports: stripEffects(desired.exports),
+                }) as typeof desired)
+              : desired;
           if (!isResolved(news)) return undefined;
 
           const oldDesired = yield* normalizeDesired(id, olds, instanceId);
