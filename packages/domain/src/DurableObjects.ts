@@ -349,13 +349,16 @@ const LEASE_MS = 60_000;
  * Run it exclusively.
  */
 const acquireLease = (state: ObjectStateShape, lease: string) =>
-  Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
-    const held = yield* state.storage.get<number>(lease);
-    if (held !== undefined && held > now) return held;
-    yield* state.storage.put(lease, now + LEASE_MS);
-    return undefined;
-  });
+  // One transaction: two copies of an instance never both take it.
+  state.storage.transaction(
+    Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const held = yield* state.storage.get<number>(lease);
+      if (held !== undefined && held > now) return held;
+      yield* state.storage.put(lease, now + LEASE_MS);
+      return undefined;
+    }),
+  );
 
 /**
  * A durable, ordered work queue in the instance's storage. Rows are written
@@ -920,6 +923,22 @@ class InstanceHeld extends Data.TaggedError("InstanceHeld")<{}> {
   }
 }
 
+/**
+ * What a write's transaction returns when another copy of the instance
+ * committed since the write read its state: it wrote nothing.
+ */
+const STALE = "~stale" as const;
+
+/** How many times a write is decided again after another copy committed first. */
+const STALE_RETRIES = 20;
+
+/** A write lost to another copy of the instance every time it was decided again. */
+class StaleWrite extends Data.TaggedError("StaleWrite")<{}> {
+  override get message() {
+    return "another copy of the instance kept committing first; the write was decided again until it gave up";
+  }
+}
+
 /** How long a command waits for an instance a decision holds: about 13 seconds. */
 const HELD = {
   schedule: Schedule.min([Schedule.exponential("10 millis"), Schedule.spaced("250 millis")]),
@@ -1010,8 +1029,27 @@ const aggregateObject = (
           ),
       }));
 
+    /**
+     * Whether the instance is still at the version a write was decided from.
+     * Read first in the write's transaction: it is the write's fencing token.
+     * A host can run two copies of one instance for a while (an Effect
+     * Cluster runner that stalled past its shard lock, then resumed), and
+     * each copy decides from what it read before its transaction. The host
+     * runs one instance's transactions one at a time, so only the first of
+     * two writes from one version commits; the other writes nothing and is
+     * decided again from the version that won.
+     */
+    const stillAt = (version: number) =>
+      Effect.map(storedMeta, (now) => now.version === version && !now.held);
     // Callers run it `exclusively`.
     const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
+      Effect.suspend(() => commitOnce(id, command, meta)).pipe(
+        Effect.repeat({ until: (done) => done !== STALE, times: STALE_RETRIES }),
+        Effect.flatMap((done) =>
+          done === STALE ? Effect.die(new StaleWrite()) : Effect.succeed(done),
+        ),
+      );
+    const commitOnce = (id: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
         const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
         // A resend may follow an instance that died before delivering what the
@@ -1043,14 +1081,23 @@ const aggregateObject = (
         };
         const kick = yield* state.storage.transaction(
           Effect.gen(function* () {
+            if (!(yield* stillAt(current.version))) return STALE;
             yield* state.storage.put(`receipt:${meta.commandId}`, sent);
             return yield* persist(id, current.version, result);
           }),
         );
+        if (kick === STALE) return STALE;
         return { sent, kick };
       });
     // Callers run it through `whenFree`: an import never lands under a decision's intent.
     const importEvents = (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
+      Effect.suspend(() => importOnce(id, events, meta)).pipe(
+        Effect.repeat({ until: (done) => done !== STALE, times: STALE_RETRIES }),
+        Effect.flatMap((done) =>
+          done === STALE ? Effect.die(new StaleWrite()) : Effect.succeed(done),
+        ),
+      );
+    const importOnce = (id: string, events: ReadonlyArray<Json>, meta: ImportMeta) =>
       Effect.gen(function* () {
         const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
         if (duplicate?._tag === "Accepted") {
@@ -1089,6 +1136,7 @@ const aggregateObject = (
         };
         const kick = yield* state.storage.transaction(
           Effect.gen(function* () {
+            if (!(yield* stillAt(current.version))) return STALE;
             yield* state.storage.put<SendResult>(`receipt:${meta.commandId}`, {
               _tag: "Accepted",
               receipt,
@@ -1096,6 +1144,7 @@ const aggregateObject = (
             return yield* persist(id, current.version, result);
           }),
         );
+        if (kick === STALE) return STALE;
         const imported: ImportResult = { _tag: "Imported", receipt };
         return { imported, kick };
       });
@@ -1148,6 +1197,13 @@ const aggregateObject = (
      * Callers run it `exclusively`.
      */
     const applyIntent = (id: string, txId: string) =>
+      Effect.suspend(() => applyIntentOnce(id, txId)).pipe(
+        Effect.repeat({ until: (done) => done !== STALE, times: STALE_RETRIES }),
+        Effect.flatMap((done) =>
+          done === STALE ? Effect.die(new StaleWrite()) : Effect.succeed(done),
+        ),
+      );
+    const applyIntentOnce = (id: string, txId: string) =>
       Effect.gen(function* () {
         const intent = yield* intentOf;
         if (intent === undefined || intent.txId !== txId) return { applied: false, kick: false };
@@ -1167,6 +1223,13 @@ const aggregateObject = (
               });
         const kick = yield* state.storage.transaction(
           Effect.gen(function* () {
+            // Another copy applied it first (see `stillAt`).
+            if (
+              (yield* intentOf)?.txId !== txId ||
+              (yield* currentMeta).version !== current.version
+            ) {
+              return STALE;
+            }
             yield* release;
             if (isPlan(intent)) {
               yield* state.storage.put(`decided:${intent.commandId}`, intent.receipt);
@@ -1180,16 +1243,21 @@ const aggregateObject = (
             return result === undefined ? false : yield* persist(id, current.version, result);
           }),
         );
+        if (kick === STALE) return STALE;
         yield* Effect.suspend(() => rest);
         return { applied: true, kick };
       }).pipe(Effect.orDie);
     /** Drop the intent, as an instance told its attempt aborted. Callers run it `exclusively`. */
     const dropIntent = (txId: string) =>
       Effect.gen(function* () {
-        const intent = yield* intentOf;
-        if (intent?.txId !== txId) return;
-        yield* state.storage.transaction(release);
-        yield* Effect.suspend(() => rest);
+        const dropped = yield* state.storage.transaction(
+          Effect.gen(function* () {
+            if ((yield* intentOf)?.txId !== txId) return false;
+            yield* release;
+            return true;
+          }),
+        );
+        if (dropped) yield* Effect.suspend(() => rest);
       });
     /** Another instance, as the primary calls it. A call that fails is `Unreachable`. */
     const participant = (address: TwoPhase.Address): TwoPhase.Participant => {
@@ -1225,19 +1293,24 @@ const aggregateObject = (
       hold: (plan) =>
         exclusively(
           Effect.gen(function* () {
-            const receipt = yield* decidedOf(plan.commandId);
-            if (receipt !== undefined) return { _tag: "Decided", receipt } as const;
-            if ((yield* intentOf) !== undefined) return { _tag: "Busy" } as const;
-            if ((yield* currentMeta).version !== plan.version) return { _tag: "Conflict" } as const;
-            yield* state.storage.transaction(
+            // Checked in the transaction that holds it, so another copy of the
+            // instance can't commit in between (see `stillAt`).
+            const checked = yield* state.storage.transaction(
               Effect.gen(function* () {
+                const receipt = yield* decidedOf(plan.commandId);
+                if (receipt !== undefined) return { _tag: "Decided", receipt } as const;
+                if ((yield* intentOf) !== undefined) return { _tag: "Busy" } as const;
+                const current = yield* currentMeta;
+                if (current.version !== plan.version) return { _tag: "Conflict" } as const;
                 yield* state.storage.put<Intent>("intent", {
                   ...plan,
                   at: yield* Clock.currentTimeMillis,
                 });
-                yield* state.storage.put("meta", { ...(yield* currentMeta), held: true });
+                yield* state.storage.put("meta", { ...current, held: true });
+                return undefined;
               }),
             );
+            if (checked !== undefined) return checked;
             // Should this call die, the wake-up finishes the plan from storage.
             yield* wake(id);
             return { _tag: "Held" } as const;
@@ -1254,14 +1327,17 @@ const aggregateObject = (
       abort: (txId) =>
         exclusively(
           Effect.gen(function* () {
-            const intent = yield* intentOf;
-            if (intent?.txId !== txId || !isPlan(intent)) {
-              // Not held: it ended already. An attempt nobody remembers aborted,
-              // or every instance has its outcome, so whoever asks holds a stray copy.
-              return (yield* state.storage.get<Recorded>(outcomeKey(txId)))?.outcome ?? "Aborted";
-            }
-            yield* state.storage.transaction(
+            // Checked in the transaction that releases it (see `stillAt`).
+            const ended = yield* state.storage.transaction(
               Effect.gen(function* () {
+                const intent = yield* intentOf;
+                if (intent?.txId !== txId || !isPlan(intent)) {
+                  // Not held: it ended already. An attempt nobody remembers aborted,
+                  // or every instance has its outcome, so whoever asks holds a stray copy.
+                  return (
+                    (yield* state.storage.get<Recorded>(outcomeKey(txId)))?.outcome ?? "Aborted"
+                  );
+                }
                 yield* release;
                 if (intent.others.length > 0) {
                   yield* state.storage.put<Recorded>(outcomeKey(txId), {
@@ -1269,8 +1345,10 @@ const aggregateObject = (
                     waiting: intent.others.map(({ aggregate, id }) => ({ aggregate, id })),
                   });
                 }
+                return undefined;
               }),
             );
+            if (ended !== undefined) return ended;
             yield* Effect.suspend(() => rest);
             return "Aborted" as const;
           }),
@@ -1517,20 +1595,24 @@ const aggregateObject = (
           yield* settle(id);
           return yield* exclusively(
             Effect.gen(function* (): Generator<any, TwoPhase.PrepareResult> {
-              const held = yield* intentOf;
-              if (held !== undefined) {
-                return held.txId === prepare.txId ? { _tag: "Prepared" } : { _tag: "Busy" };
-              }
-              if ((yield* currentMeta).version !== prepare.version) return { _tag: "Conflict" };
-              yield* state.storage.transaction(
-                Effect.gen(function* () {
+              // Checked in the transaction that holds it (see `stillAt`).
+              const checked = yield* state.storage.transaction(
+                Effect.gen(function* (): Generator<any, TwoPhase.PrepareResult | undefined> {
+                  const held = yield* intentOf;
+                  if (held !== undefined) {
+                    return held.txId === prepare.txId ? { _tag: "Prepared" } : { _tag: "Busy" };
+                  }
+                  const current = yield* currentMeta;
+                  if (current.version !== prepare.version) return { _tag: "Conflict" };
                   yield* state.storage.put<Intent>("intent", {
                     ...prepare,
                     at: yield* Clock.currentTimeMillis,
                   });
-                  yield* state.storage.put("meta", { ...(yield* currentMeta), held: true });
+                  yield* state.storage.put("meta", { ...current, held: true });
+                  return undefined;
                 }),
               );
+              if (checked !== undefined) return checked;
               // Should the outcome never arrive, it wakes and asks the primary.
               yield* wake(id);
               return { _tag: "Prepared" };
@@ -1936,19 +2018,26 @@ const projectionObject = (
               return yield* wake(run[0]!.at + waitMillis);
             }
             yield* kit.run(meta.key, run);
+            // Read and written in one transaction: another copy of the instance
+            // may have accepted more inputs since (see `stillAt`).
             yield* exclusively(
-              Effect.gen(function* () {
-                const current = yield* readMeta;
-                const handled: Record<string, number> = {};
-                for (const { delivery } of run) {
-                  handled[delivery.source] = Math.max(handled[delivery.source] ?? 0, delivery.seq);
-                }
-                yield* state.storage.put("meta", {
-                  ...current,
-                  processed: run[run.length - 1]!.position,
-                  checkpoints: mergeCheckpoints(current.checkpoints, handled),
-                } satisfies ProjectionMeta);
-              }),
+              state.storage.transaction(
+                Effect.gen(function* () {
+                  const current = yield* readMeta;
+                  const handled: Record<string, number> = {};
+                  for (const { delivery } of run) {
+                    handled[delivery.source] = Math.max(
+                      handled[delivery.source] ?? 0,
+                      delivery.seq,
+                    );
+                  }
+                  yield* state.storage.put("meta", {
+                    ...current,
+                    processed: Math.max(current.processed, run[run.length - 1]!.position),
+                    checkpoints: mergeCheckpoints(current.checkpoints, handled),
+                  } satisfies ProjectionMeta);
+                }),
+              ),
             );
           }
         }),

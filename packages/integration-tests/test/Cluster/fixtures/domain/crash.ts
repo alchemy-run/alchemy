@@ -6,6 +6,7 @@ import * as NodeChildProcess from "node:child_process";
  */
 import { expect } from "@alchemy.run/test";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
@@ -79,6 +80,32 @@ const killOne = Effect.fn(function* (stack: CrashOptions["stack"]) {
   yield* docker(["kill", "--signal", "KILL", victim]);
   return victim;
 });
+
+/**
+ * Freeze one runner with `docker pause` and run `during` while it is
+ * frozen; the runner is resumed however `during` ends. A frozen process
+ * keeps its Postgres sessions open, so its shard locks end only when the
+ * lock session idles out (`shardLockExpiration`, 35 s), and the other
+ * runner then takes its shards.
+ */
+const frozen = <A, E, R>(
+  stack: CrashOptions["stack"],
+  during: (resume: Effect.Effect<void, DockerCommandFailed>) => Effect.Effect<A, E, R>,
+) =>
+  Effect.gen(function* () {
+    const [victim] = yield* runners(stack);
+    if (victim === undefined) {
+      return yield* new CrashCaseFailed({ message: "the pool has no running runner" });
+    }
+    yield* docker(["pause", victim]);
+    let paused = true;
+    const resume = Effect.suspend(() =>
+      paused
+        ? docker(["unpause", victim]).pipe(Effect.tap(() => Effect.sync(() => (paused = false))))
+        : Effect.void,
+    ).pipe(Effect.asVoid);
+    return yield* during(resume).pipe(Effect.ensuring(Effect.ignore(resume)));
+  });
 
 /** Wait until the pool runs two runners again, neither of them `killed`. */
 const bothRunning = (stack: CrashOptions["stack"], killed: string) =>
@@ -170,6 +197,93 @@ export const crash = ({ test, url, stack }: CrashOptions) => {
         ).toEqual({ total: 1 });
       }
       yield* bothRunning(stack, killed);
+    }),
+    options,
+  );
+
+  test(
+    "a runner frozen past its shard lock commits no command another runner decided from the same version",
+    Effect.gen(function* () {
+      const counters = Array.from({ length: 8 }, (_, i) => fresh(`freeze${i}`));
+      // Every command id a caller saw accepted, per counter.
+      const accepted = new Map(counters.map((id) => [id, new Set<string>()]));
+      // Sent and not yet answered: sent again at the end, under the same id.
+      const unanswered = new Map<string, string>();
+      // No timeout of its own: a call in flight to the frozen runner waits out the freeze.
+      const send = (id: string, command: string) =>
+        Effect.gen(function* () {
+          unanswered.set(command, id);
+          const client = yield* HttpClient.HttpClient;
+          const response = yield* client.get(`${url}/increment/${id}?by=1&command=${command}`);
+          const body = (yield* response.json) as { accepted?: number };
+          if (response.status === 200 && body.accepted !== undefined) {
+            accepted.get(id)!.add(command);
+            unanswered.delete(command);
+          }
+        }).pipe(Effect.timeout("120 seconds"), Effect.ignore);
+      /**
+       * Callers per counter, each sending one command after another for
+       * `sending`. A caller then stops sending, but a call it has in flight
+       * runs to its answer: those are the commands the frozen runner holds.
+       */
+      const load = (callers: number, gap: Duration.Input, sending: Duration.Input) =>
+        Effect.gen(function* () {
+          let stopped = false;
+          yield* Effect.forkChild(
+            Effect.sleep(sending).pipe(Effect.andThen(Effect.sync(() => (stopped = true)))),
+          );
+          yield* Effect.forEach(
+            counters.flatMap((id) => Array.from({ length: callers }, () => id)),
+            (id) =>
+              Effect.andThen(
+                Effect.suspend(() => send(id, fresh("cmd"))),
+                Effect.sleep(gap),
+              ).pipe(Effect.repeat({ while: () => !stopped })),
+            { concurrency: "unbounded", discard: true },
+          );
+        });
+      // Every counter exists, so its runner owns it, before the freeze.
+      for (const id of counters) yield* send(id, fresh("cmd"));
+      yield* Effect.all(
+        [
+          // The first callers leave commands in flight on the frozen runner.
+          load(2, "10 millis", "8 seconds"),
+          Effect.sleep("6 seconds").pipe(
+            Effect.andThen(
+              frozen(stack, (resume) =>
+                Effect.all(
+                  [
+                    // Once the other runner has the shards: new commands to the same counters.
+                    Effect.sleep("44 seconds").pipe(
+                      Effect.andThen(load(3, "100 millis", "25 seconds")),
+                    ),
+                    // Resumed while those callers still send.
+                    Effect.sleep("56 seconds").pipe(Effect.andThen(resume)),
+                  ],
+                  { concurrency: "unbounded", discard: true },
+                ),
+              ),
+            ),
+          ),
+        ],
+        { concurrency: "unbounded", discard: true },
+      );
+      // A send without an answer may have committed: sent again under its id, it counts once.
+      for (const [command, id] of [...unanswered]) {
+        yield* untilAnswered<{ accepted: number }>(`/increment/${id}?by=1&command=${command}`);
+        accepted.get(id)!.add(command);
+      }
+      for (const id of counters) {
+        const sent = accepted.get(id)!.size;
+        // One event per accepted command: none lost to another accepted at the same version.
+        expect(yield* untilAnswered(`/counter/${id}`)).toEqual({ total: sent });
+        expect(
+          yield* eventually<{ total: number; increments: number }>(
+            `/total/${id}`,
+            (view) => view.increments >= sent,
+          ),
+        ).toEqual({ total: sent, increments: sent });
+      }
     }),
     options,
   );
