@@ -47,7 +47,6 @@
         "worker": "./src/Cloudflare/index.ts",
         "default": "./lib/Cloudflare/index.js"
       },
-      "./internal/*": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",
