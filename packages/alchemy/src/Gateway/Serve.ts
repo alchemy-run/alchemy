@@ -141,8 +141,12 @@ const forward = async (request: Request, url: URL, services: Context.Context<nev
 export const serve = (
   entrypoint: unknown,
   options?: {
-    /** Platform services the program's Construction may use (a Node host's file system, …). */
-    readonly services?: Layer.Layer<any>;
+    /**
+     * Platform services the program's Construction may use (a Node host's
+     * file system, …), or a function of the gateway's environment that
+     * builds them.
+     */
+    readonly services?: Layer.Layer<any> | ((env: Record<string, unknown>) => Layer.Layer<any>);
     /** The gateway's public URL, when the request's own URL is not it. */
     readonly url?: (request: Request) => string;
   },
@@ -159,7 +163,11 @@ export const serve = (
     const layer = entrypointLayer(entrypoint).pipe(
       Layer.provideMerge(stackFromEnv),
       Layer.provideMerge(FetchHttpClient.layer),
-      Layer.provideMerge(options?.services ?? Layer.empty),
+      Layer.provideMerge(
+        typeof options?.services === "function"
+          ? options.services(env)
+          : (options?.services ?? Layer.empty),
+      ),
       Layer.provideMerge(Layer.succeed(ConfigProvider.ConfigProvider, runtimeConfigProvider())),
     ) as unknown as Layer.Layer<never>;
     // The scope lives as long as the gateway instance.
