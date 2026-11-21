@@ -119,11 +119,11 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
         const cluster = yield* ECS.Cluster(`${id}Cluster`, {});
         // ECS reads them into each task as it starts.
         const databaseUrl = yield* runnerSecret(
-          `${id}DatabaseUrl`,
+          `${id}DatabaseUrlSecret`,
           secrets.pipe(Output.map((s) => s.CLUSTER_DATABASE_URL)),
         );
         const gatewayToken = yield* runnerSecret(
-          `${id}GatewayToken`,
+          `${id}GatewayTokenSecret`,
           secrets.pipe(Output.map((s) => s.CLUSTER_GATEWAY_TOKEN)),
         );
         const secretEnv = yield* runnerSecret(
