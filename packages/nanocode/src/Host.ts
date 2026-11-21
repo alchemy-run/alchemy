@@ -1,3 +1,5 @@
+import { memoryRunStore, type RunStore } from "@alchemy.run/ai/Runs";
+import type { Callbacks } from "alchemy/Callback";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -15,6 +17,14 @@ export interface InstanceHost {
   readonly module: Effect.Effect<WebAssembly.Module, NanocodeError, RuntimeContext>;
   /** The SQL database nanocode journals every session into. */
   readonly sql: Effect.Effect<Contracts.SqlHost, NanocodeError, RuntimeContext>;
+  /** Where submitted prompts are recorded until they end. */
+  readonly runs: RunStore;
+  /**
+   * The durable callbacks of an instance that can be evicted: what the
+   * harness registers its wake-up with, so a submitted prompt an instance
+   * did not live to finish is continued.
+   */
+  readonly callbacks?: Layer.Layer<Callbacks>;
 }
 
 /**
@@ -40,5 +50,6 @@ export const unavailable = (message: string): Layer.Layer<Host> =>
       id: "",
       module: Effect.fail(new NanocodeError({ message })),
       sql: Effect.fail(new NanocodeError({ message })),
+      runs: memoryRunStore(),
     }),
   });

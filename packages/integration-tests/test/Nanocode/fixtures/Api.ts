@@ -28,6 +28,13 @@ export default class NanocodeApi extends Cloudflare.Worker<NanocodeApi>()(
             return yield* HttpServerResponse.json(
               yield* sessions.prompt(name, body.text, body.requestId),
             );
+          case "submit":
+            yield* sessions.submit(name, body.text, body.requestId);
+            return yield* HttpServerResponse.json({ ok: true });
+          case "submitted":
+            return yield* HttpServerResponse.json({
+              run: yield* sessions.submitted(name, body.requestId),
+            });
           case "events":
             return yield* HttpServerResponse.json(yield* sessions.events(name));
           case "file":

@@ -4,6 +4,8 @@
  *
  * @module
  */
+import { durableObjectRuns } from "@alchemy.run/ai/Cloudflare/Runs";
+import { memoryRunStore } from "@alchemy.run/ai/Runs";
 import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -27,7 +29,9 @@ const outside = "NanocodeCloudflare.DurableObjectHost is only available inside a
 /**
  * nanocode in a Durable Object. Every model call and tool call of a
  * session is journaled in the object's own SQLite, so a session continues
- * after the instance is evicted or redeployed. The WebAssembly module
+ * after the instance is evicted or redeployed, and a submitted prompt
+ * (`session.submit`) that an instance did not live to finish is continued
+ * from the object's alarm. The WebAssembly module
  * (about 8 MB compressed) is uploaded with the Worker.
  *
  * **Example:** A harness in a Durable Object
@@ -53,6 +57,12 @@ export const DurableObjectHost: Layer.Layer<Host> = Layer.succeed(Host, {
       catch: (cause) =>
         new NanocodeError({ message: "nanocode's WebAssembly module could not be loaded", cause }),
     }),
+    ...(Option.isSome(state)
+      ? {
+          runs: durableObjectRuns(state.value, "nanocode").store,
+          callbacks: durableObjectRuns(state.value, "nanocode").callbacks,
+        }
+      : { runs: memoryRunStore() }),
     sql: Option.isNone(state)
       ? Effect.fail(new NanocodeError({ message: outside }))
       : Effect.sync((): Contracts.SqlHost => {

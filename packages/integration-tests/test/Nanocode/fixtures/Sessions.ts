@@ -34,9 +34,25 @@ const LookupCodeLive = LookupCode.make(({ word }) => ({
   code: `CODE-${word.toUpperCase()}-7391`,
 }));
 
+/** A tool that takes a while: long enough for a test to kill the instance while it runs. */
+class SlowCode extends AI.Tool<SlowCode>()("slow_code", {
+  description: "Look up the slow secret code for a word. The only way to learn a word's slow code.",
+  parameters: Schema.Struct({ word: Schema.String }),
+  success: Schema.Struct({ code: Schema.String }),
+  replay: "safe",
+}) {}
+
+const SlowCodeLive = SlowCode.make(
+  Effect.fn(function* ({ word }) {
+    yield* Effect.sleep("8 seconds");
+    return { code: `SLOW-${word.toUpperCase()}-4242` };
+  }),
+);
+
 const HarnessLive = Layer.mergeAll(
   FastLive,
   LookupCodeLive,
+  SlowCodeLive,
   NanocodeCloudflare.DurableObjectHost,
   AIBoat.Sandboxes(Base),
 ).pipe(Layer.provideMerge(Boat.CreateSandboxHttp));
@@ -47,7 +63,7 @@ export default class NanocodeSessions extends Cloudflare.DurableObject<NanocodeS
     const sandboxes = yield* Boat.CreateSandbox(yield* Base);
     const harness = yield* Nanocode.Harness({
       models: [Fast],
-      tools: [LookupCode],
+      tools: [LookupCode, SlowCode],
       instructions:
         "You are terse. Use your tools whenever they apply, then answer in one sentence.",
     });
@@ -69,6 +85,13 @@ export default class NanocodeSessions extends Cloudflare.DurableObject<NanocodeS
               .session(name)
               .prompt(text, requestId === undefined ? {} : { requestId }),
           };
+        }, Effect.orDie),
+        /** Accept a prompt and return at once. */
+        submit: Effect.fn(function* (name: string, text: string, requestId: string) {
+          yield* harness.session(name).submit(text, { requestId });
+        }, Effect.orDie),
+        submitted: Effect.fn(function* (name: string, requestId: string) {
+          return (yield* harness.session(name).submitted(requestId)) ?? null;
         }, Effect.orDie),
         /** The session's log, as the types of its agent events and the tools they name. */
         events: Effect.fn(function* (name: string) {

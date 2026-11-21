@@ -1,5 +1,6 @@
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
 import { complete, toEventStream, type ChatRequest } from "@alchemy.run/ai/OpenAiChat";
+import { makeRuns } from "@alchemy.run/ai/Runs";
 import { Sandbox, Sandboxes, sandboxOf } from "@alchemy.run/ai/Sandbox";
 import {
   callTool,
@@ -64,6 +65,12 @@ export interface PromptOptions {
   readonly requestId?: string;
 }
 
+/** Where a submitted prompt stands. */
+export type SubmittedPrompt =
+  | { readonly status: "running" }
+  | { readonly status: "done"; readonly message: string }
+  | { readonly status: "failed"; readonly message: string };
+
 /** A named nanocode session: its journal, and its sandbox. */
 export interface Session {
   readonly name: string;
@@ -81,6 +88,21 @@ export interface Session {
     text: string,
     options?: PromptOptions,
   ) => Effect.Effect<string, NanocodeError, RuntimeContext>;
+  /**
+   * Accept a prompt and return: it runs in the background and survives the
+   * instance. If the instance is evicted or redeployed before the turn
+   * ends, the next one continues it from nanocode's journal: model calls
+   * and tool calls that finished are not made again. `requestId`
+   * identifies the prompt: submitting it again is the same turn.
+   */
+  readonly submit: (
+    text: string,
+    options: { readonly requestId: string },
+  ) => Effect.Effect<void, NanocodeError, RuntimeContext>;
+  /** Where a submitted prompt stands, or `undefined` when nothing was submitted under that id. */
+  readonly submitted: (
+    requestId: string,
+  ) => Effect.Effect<SubmittedPrompt | undefined, NanocodeError, RuntimeContext>;
   /** The session's log, as nanocode records it: every event of every turn, oldest first. */
   readonly events: Effect.Effect<
     ReadonlyArray<Contracts.LoggedEvent>,
@@ -224,6 +246,27 @@ export const Harness = <
     // One turn at a time per instance: a session's runtime is not shared.
     const turns = yield* Semaphore.make(1);
     let requests = 0;
+
+    /** Submitted prompts: recorded before they start, and continued by the instance's callback. */
+    const submitted = yield* makeRuns<
+      {
+        readonly session: string;
+        readonly text: string;
+        readonly requestId: string;
+        readonly model?: string;
+      },
+      string
+    >({
+      name: "nanocode",
+      store: host.runs,
+      ...(host.callbacks === undefined ? {} : { callbacks: host.callbacks }),
+      execute: (payload) => {
+        const model = models.find(({ model }) => model.modelName === payload.model)?.model;
+        return session(payload.session, model === undefined ? {} : { model }).prompt(payload.text, {
+          requestId: payload.requestId,
+        });
+      },
+    });
 
     const session = (name: string, opened: SessionOptions<Models> = {}): Session => {
       const key = sandboxKey(host.id, name);
@@ -472,6 +515,24 @@ export const Harness = <
               }
               return String(report.ok?.message ?? "");
             }),
+          ),
+        submit: (text, submit) =>
+          submitted
+            .submit(`${name}:${submit.requestId}`, {
+              session: name,
+              text,
+              requestId: submit.requestId,
+              ...(opened.model === undefined ? {} : { model: opened.model.modelName }),
+            })
+            .pipe(Effect.mapError(failed)),
+        submitted: (requestId) =>
+          submitted.status(`${name}:${requestId}`).pipe(
+            Effect.map((status) =>
+              status === undefined || status.status !== "done"
+                ? status
+                : { status: "done" as const, message: status.value },
+            ),
+            Effect.mapError(failed),
           ),
         events: withRuntime((runtime) =>
           Effect.gen(function* () {

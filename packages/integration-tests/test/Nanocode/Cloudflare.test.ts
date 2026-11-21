@@ -122,3 +122,42 @@ test(
   }),
   { tags: [...tags, "provider:boat"], timeout: 300_000 },
 );
+
+test(
+  "a submitted prompt cut off by a crashed instance is continued from the alarm",
+  Effect.gen(function* () {
+    const object = `user-${Date.now()}`;
+    const submit = {
+      text: 'Look up the slow secret code for the word "teal" with the slow_code tool, then reply with the code.',
+      requestId: "slow-1",
+    };
+    yield* call(`/${object}/slow/submit`, submit);
+    // Submitting again is the same turn.
+    yield* call(`/${object}/slow/submit`, submit);
+    expect((yield* call(`/${object}/slow/submitted`, { requestId: "slow-1" })).run.status).toBe(
+      "running",
+    );
+
+    // Kill the instance while the slow tool is running. Nothing calls it again but its alarm.
+    yield* Effect.sleep("5 seconds");
+    yield* call(`/${object}/slow/crash`, {}).pipe(Effect.ignore);
+
+    const { run } = yield* call(`/${object}/slow/submitted`, { requestId: "slow-1" }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("5 seconds"),
+        until: (result: { run: { status: string } }) => result.run.status !== "running",
+        times: 24,
+      }),
+    );
+    // The turn ended with an answer, with nothing but the alarm to finish it.
+    expect(run.status).toBe("done");
+    expect(run.message.length).toBeGreaterThan(0);
+    // nanocode tells the model the interrupted call was lost; whether it calls
+    // the tool again is the model's choice. The journal holds the first call either way.
+    const events = (yield* call(`/${object}/slow/events`)) as ReadonlyArray<Logged>;
+    expect(
+      events.filter((event) => event.type === "tool.call" && event.tool === "slow_code").length,
+    ).toBeGreaterThanOrEqual(1);
+  }),
+  { tags, timeout: 240_000 },
+);

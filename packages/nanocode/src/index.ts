@@ -5,5 +5,6 @@ export {
   type PromptOptions,
   type Session,
   type SessionOptions,
+  type SubmittedPrompt,
 } from "./Harness.ts";
 export { Host, type InstanceHost } from "./Host.ts";
