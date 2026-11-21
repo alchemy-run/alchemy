@@ -13,6 +13,7 @@ import {
 } from "alchemy/Workers/DurableObjectBridge";
 import { EventLifetime } from "alchemy/Workers/EventLifetime";
 import type { WorkerBuild } from "alchemy/Workers/Worker";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -79,9 +80,6 @@ export interface NodeConnectionSettings {
   /** Runs once the node is registered with the control plane. */
   readonly connected?: Effect.Effect<void>;
 }
-
-/** Read a RivetKit setting the pool put in the node's environment. */
-const env = (name: string): string | undefined => process.env[name];
 
 const deadlock = (message: string) => new Response(message, { status: DEADLOCK_STATUS });
 
@@ -400,13 +398,20 @@ export const runDurableObjects = (
     const { setup } = yield* Effect.promise(() => import("rivetkit"));
     const use = yield* durableObjectActors(durableObjects, (name) => connection?.options?.[name]);
 
+    // A node Alchemy built has its connection in the environment its pool set.
+    const fromEnvironment = yield* Config.all({
+      endpoint: Config.option(Config.String("RIVET_ENDPOINT")),
+      token: Config.option(Config.String("RIVET_TOKEN")),
+      namespace: Config.option(Config.String("RIVET_NAMESPACE")),
+      pool: Config.option(Config.String("RIVET_POOL")),
+    }).pipe(Effect.orDie);
     const registry = setup({
       ...connection?.registry,
       use,
-      endpoint: connection?.endpoint ?? env("RIVET_ENDPOINT"),
-      token: connection?.token ?? env("RIVET_TOKEN"),
-      namespace: connection?.namespace ?? env("RIVET_NAMESPACE"),
-      node: { poolName: connection?.pool ?? env("RIVET_POOL") },
+      endpoint: connection?.endpoint ?? Option.getOrUndefined(fromEnvironment.endpoint),
+      token: connection?.token ?? Option.getOrUndefined(fromEnvironment.token),
+      namespace: connection?.namespace ?? Option.getOrUndefined(fromEnvironment.namespace),
+      node: { poolName: connection?.pool ?? Option.getOrUndefined(fromEnvironment.pool) },
       // A process given its connection owns its signals, and stops the node
       // by interrupting it.
       ...(connection === undefined
