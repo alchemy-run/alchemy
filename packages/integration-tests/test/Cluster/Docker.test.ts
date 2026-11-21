@@ -60,6 +60,24 @@ describe.skipIf(!!process.env.FAST)(
       { timeout: 120_000 },
     );
 
+    // Last: it redeploys the stack. Every redeploy bundles the pool's program
+    // again, once for each resource that reads it, all in one plan.
+    test(
+      "a pool redeployed again and again bundles its program each time",
+      Effect.gen(function* () {
+        for (let i = 0; i < 3; i++) {
+          yield* sharedStack.deploy(
+            Effect.gen(function* () {
+              const front = yield* Front;
+              return { front: front.name };
+            }).pipe(Effect.provide(Lives)),
+          );
+        }
+        expect((yield* get(`${baseUrl}/echo/again`)).value).toBe("echo again");
+      }),
+      { timeout: 600_000, exclusive: true },
+    );
+
     test(
       "a workflow declared inline runs",
       Effect.gen(function* () {
