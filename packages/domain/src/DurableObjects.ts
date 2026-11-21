@@ -2470,7 +2470,8 @@ export const makePlatform = <R>(
                 Effect.timeout("5 seconds"),
                 Effect.catchCause(() => retry),
               );
-              if (host.background === undefined) return Effect.asVoid(Effect.forkDetach(begin));
+              if (host.background === undefined)
+                return begin.pipe(Effect.forkDetach, Effect.asVoid);
               return host
                 .background(begin)
                 .pipe(Effect.flatMap((handed) => (handed ? Effect.void : begin)));
