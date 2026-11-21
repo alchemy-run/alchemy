@@ -1188,6 +1188,65 @@ describe.concurrent(
       { tags: ["live"], timeout: 120_000 },
     );
 
+    // #3590: precreate reused an adopted Worker that hosted no Durable
+    // Objects, then waited (for hours) for namespaces nothing would create.
+    test.provider(
+      "cyclic precreate adopts a Worker without Durable Objects into one hosting them",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          yield* stack.destroy();
+          const original = yield* stack.deploy(
+            Cloudflare.Worker("CyclicDoOriginal", {
+              script: `export default { fetch() { return new Response("original"); } };\n`,
+              workersDev: false,
+            }),
+          );
+          yield* Effect.gen(function* () {
+            const state = yield* yield* State;
+            yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "CyclicDoOriginal" });
+          }).pipe(Effect.provide(stack.state));
+
+          const program = Effect.gen(function* () {
+            const kv = yield* Cloudflare.KV.Namespace("CyclicDoKv");
+            const worker = yield* Cloudflare.Worker("CyclicDoAdopt", {
+              script: `import { DurableObject } from "cloudflare:workers";
+export class Counter extends DurableObject {}
+export default { fetch() { return new Response("adopted"); } };
+`,
+              name: original.workerName,
+              workersDev: false,
+              env: {
+                KV: kv,
+                Counter: Cloudflare.DurableObject("Counter", { className: "Counter" }),
+              },
+            }).pipe(adopt(true));
+            yield* worker.bind`SELF_NAME`({
+              bindings: [{ type: "plain_text", name: "SELF_NAME", text: worker.workerName }],
+            });
+            return worker;
+          });
+          const adopted = yield* stack.deploy(program);
+          expect(adopted.workerName).toBe(original.workerName);
+          expect(adopted.durableObjectNamespaces.Counter).toBeTruthy();
+          const settings = yield* workers.getScriptScriptAndVersionSetting({
+            accountId,
+            scriptName: adopted.workerName,
+          });
+          expect(settings.bindings).toContainEqual(
+            expect.objectContaining({
+              type: "durable_object_namespace",
+              name: "Counter",
+              className: "Counter",
+              namespaceId: adopted.durableObjectNamespaces.Counter,
+            }),
+          );
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(adopted.workerName, accountId);
+        }).pipe(adopt(false), logLevel),
+      { tags: ["live"], timeout: 120_000 },
+    );
+
     /**
      * A cyclic Worker named `name` in `namespace`. A KV namespace created in
      * the same deploy keeps its props unresolved, so `read` cannot run before

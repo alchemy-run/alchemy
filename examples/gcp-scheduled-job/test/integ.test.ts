@@ -123,10 +123,10 @@ describe("gcp-scheduled-job", () => {
       // A just-created table can briefly 404 on the streaming path.
       const inserted = yield* bigquery
         .insertAllTabledata({
+          rows: seed.map((json) => ({ insertId: json.id, json })),
           projectId: project,
           datasetId,
           tableId,
-          body: { rows: seed.map((json) => ({ insertId: json.id, json })) },
         })
         .pipe(
           Effect.retry({

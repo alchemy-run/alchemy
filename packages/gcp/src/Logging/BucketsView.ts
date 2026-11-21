@@ -365,12 +365,10 @@ export const BucketsViewProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createProjectsLocationsBucketsViews({
+            filter: news.filter,
+            description: desiredDescription,
             parent: parent.name,
             viewId,
-            body: {
-              filter: news.filter,
-              description: desiredDescription,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -389,12 +387,10 @@ export const BucketsViewProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* logging.patchProjectsLocationsBucketsViews({
+          filter: news.filter ?? "",
+          description: desiredDescription,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            filter: news.filter ?? "",
-            description: desiredDescription,
-          },
         });
       }
 

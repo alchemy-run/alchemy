@@ -145,7 +145,7 @@ export const cardReads = Effect.fn(function* (bank: CustomerClient, accountId: A
 });
 ```
 
-Over `Domain.protocolWebSocket`, `watch` and `events` are WebSockets to the Durable Object that owns the key, which pushes each new entry as it's appended.
+Over `Domain.protocolWebSocket`, `watch` and `events` are WebSockets to the instance that owns the key (on Cloudflare, its Durable Object), which pushes each new entry as it's appended.
 
 `peek` also takes `atLeast`, a `stream` and `version`, and waits until the stream's writer has handled that commit. It only covers sources the writer consumes directly. `AccountCards` reads accounts through the `AccountSummary` view, so an account command's receipt is not one its stream can wait for.
 

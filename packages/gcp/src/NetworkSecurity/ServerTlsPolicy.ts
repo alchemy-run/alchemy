@@ -471,9 +471,9 @@ export const ServerTlsPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsServerTlsPolicies({
+            ...toCreateBody(news, desiredLabels),
             parent: parentOf(env.project, location),
             serverTlsPolicyId,
-            body: toCreateBody(news, desiredLabels),
           })
           .pipe(
             Effect.retry({
@@ -519,16 +519,13 @@ export const ServerTlsPolicyProvider = () =>
           mtlsChanged ? "mtlsPolicy" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* networksecurity.patchProjectsLocationsServerTlsPolicies({
+          labels: desiredLabels,
+          description: news.description,
+          allowOpen,
+          serverCertificate: desiredCertificate,
+          mtlsPolicy: desiredMtls,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            allowOpen,
-            serverCertificate: desiredCertificate,
-            mtlsPolicy: desiredMtls,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name);

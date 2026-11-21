@@ -360,15 +360,13 @@ export const BackendsDomainProvider = () =>
       if (current === undefined) {
         const created = yield* firebaseapphosting
           .createProjectsLocationsBackendsDomains({
+            serve: news.serve,
+            displayName: news.displayName,
+            disabled: desiredDisabled,
+            annotations: desiredAnnotations,
+            labels: desiredLabels,
             parent: backend,
             domainId,
-            body: {
-              serve: news.serve,
-              displayName: news.displayName,
-              disabled: desiredDisabled,
-              annotations: desiredAnnotations,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -394,16 +392,14 @@ export const BackendsDomainProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* firebaseapphosting.patchProjectsLocationsBackendsDomains({
+          etag: current.etag,
+          serve: news.serve,
+          displayName: news.displayName,
+          disabled: desiredDisabled,
+          annotations: desiredAnnotations,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            serve: news.serve,
-            displayName: news.displayName,
-            disabled: desiredDisabled,
-            annotations: desiredAnnotations,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

@@ -9,7 +9,7 @@ import { Platform, type PlatformProps, type PlatformServices } from "alchemy/Pla
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import type { HostRuntimeContext } from "alchemy/Runtime/Process";
-import { packEnvValue, unpackEnvValue, RuntimeContext } from "alchemy/RuntimeContext";
+import { packEnvValueKeepRedacted, unpackEnvValue, RuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags } from "alchemy/Tags";
 import { unwrapRedacted } from "alchemy/Util/data";
@@ -36,7 +36,8 @@ import { toConnection, type ClusterLike, type Connection } from "./Connection.ts
 import { makeConnectionRegistry } from "./internal/registry.ts";
 import {
   collectBindingEnv,
-  containerEnvValue,
+  ENV_SECRET_DIGEST,
+  workloadEnv,
   connectionIdentity,
   connectionOfOutput,
   deepMerge,
@@ -107,7 +108,12 @@ export interface JobPropsBase extends PlatformProps {
     limits?: { cpu?: string; memory?: string };
   };
   /**
-   * Additional environment variables for the container.
+   * Additional environment variables for the container. A `Redacted` value
+   * (or one holding a `Redacted`) is kept in the Job's own Secret,
+   * `<name>-env`, and read through `secretKeyRef`, so the pod template never
+   * holds it; a changed secret rolls the pods. `{ valueFrom: { ... } }`
+   * passes through as a Kubernetes `EnvVarSource`, to read a Secret,
+   * ConfigMap or field of your own.
    */
   env?: Record<string, any>;
   /**
@@ -433,7 +439,8 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Plat
         set: (bindingId: string, output: Output.Output) =>
           Effect.sync(() => {
             const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
-            env[key] = output.pipe(Output.map(packEnvValue));
+            // A Redacted stays Redacted, so the Job keeps it in its Secret.
+            env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
             return key;
           }),
         // oxlint-disable-next-line effecttsgo/process-env-in-effect -- runtime ctx.get must read raw env, never Config (see unpackEnvValue)
@@ -619,6 +626,9 @@ export const JobProvider = () =>
             ...news.env,
           };
 
+          // Secrets move into the workload's own Secret, read by reference.
+          const env = yield* workloadEnv({ name: baseName, namespace, labels, env: containerEnv });
+
           const serviceAccountObject: KubernetesObjectDefinition = {
             apiVersion: "v1",
             kind: "ServiceAccount",
@@ -633,7 +643,12 @@ export const JobProvider = () =>
           };
           const podTemplate = deepMerge(
             {
-              metadata: { labels },
+              metadata: {
+                labels,
+                ...(env.digest === undefined
+                  ? {}
+                  : { annotations: { [ENV_SECRET_DIGEST]: env.digest } }),
+              },
               spec: {
                 serviceAccountName,
                 ...(news.runtimeClassName ? { runtimeClassName: news.runtimeClassName } : {}),
@@ -644,10 +659,7 @@ export const JobProvider = () =>
                     image: resolved.imageUri,
                     command: news.command,
                     args: news.args,
-                    env: Object.entries(containerEnv).map(([name, value]) => ({
-                      name,
-                      value: containerEnvValue(value),
-                    })),
+                    env: env.entries,
                     resources: news.resources,
                   },
                 ],
@@ -696,7 +708,11 @@ export const JobProvider = () =>
                 spec: jobSpec,
               };
 
-          const desiredObjects = [serviceAccountObject, workloadObject];
+          const desiredObjects = [
+            serviceAccountObject,
+            ...(env.secret === undefined ? [] : [env.secret as KubernetesObjectDefinition]),
+            workloadObject,
+          ];
 
           const kubernetesObjects = yield* reconcileObjects({
             transport,

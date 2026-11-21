@@ -233,10 +233,7 @@ export const ManagedProvider = () =>
 
       if (current === undefined) {
         const created = yield* storage
-          .insertManagedFolders({
-            bucket: bucketName,
-            body: { name: managedFolderName },
-          })
+          .insertManagedFolders({ name: managedFolderName, bucket: bucketName })
           .pipe(Effect.catchTag("Conflict", () => getByName(bucketName, managedFolderName)));
         current = created ?? undefined;
       }

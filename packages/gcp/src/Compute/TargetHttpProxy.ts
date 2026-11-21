@@ -315,15 +315,10 @@ export const TargetHttpProxyProvider = () =>
         if (news.httpKeepAliveTimeoutSec !== undefined) {
           body.httpKeepAliveTimeoutSec = news.httpKeepAliveTimeoutSec;
         }
-        yield* compute
-          .insertTargetHttpProxies({
-            project: env.project,
-            body,
-          })
-          .pipe(
-            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        yield* compute.insertTargetHttpProxies({ ...body, project: env.project }).pipe(
+          Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* getByName(env.project, targetHttpProxyName);
       }
 
@@ -334,9 +329,9 @@ export const TargetHttpProxyProvider = () =>
       if (resourceTail(current.urlMap) !== resourceTail(desiredUrlMap)) {
         yield* compute
           .setUrlMapTargetHttpProxies({
+            urlMap: desiredUrlMap,
             project: env.project,
             targetHttpProxy: targetHttpProxyName,
-            body: { urlMap: desiredUrlMap },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetHttpProxyName);
@@ -367,9 +362,9 @@ export const TargetHttpProxyProvider = () =>
         }
         yield* compute
           .patchTargetHttpProxies({
+            ...body,
             project: env.project,
             targetHttpProxy: targetHttpProxyName,
-            body,
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetHttpProxyName);

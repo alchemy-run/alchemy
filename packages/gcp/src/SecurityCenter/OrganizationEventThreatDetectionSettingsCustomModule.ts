@@ -251,15 +251,13 @@ export const OrganizationEventThreatDetectionSettingsCustomModuleProvider = () =
       if (current === undefined) {
         const created = yield* scc
           .createOrganizationsEventThreatDetectionSettingsCustomModules({
+            type,
+            config,
+            enablementState,
+            cloudProvider,
+            displayName,
+            description,
             parent,
-            body: {
-              type,
-              config,
-              enablementState,
-              cloudProvider,
-              displayName,
-              description,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(parent, id)));
         current = created ?? undefined;
@@ -281,9 +279,12 @@ export const OrganizationEventThreatDetectionSettingsCustomModuleProvider = () =
 
       if (updateMask.length > 0) {
         current = yield* scc.patchOrganizationsEventThreatDetectionSettingsCustomModules({
+          config,
+          enablementState,
+          displayName,
+          description,
           name: currentName,
           updateMask,
-          body: { config, enablementState, displayName, description },
         });
       }
 

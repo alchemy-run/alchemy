@@ -1,6 +1,7 @@
 import * as appintegrations from "@distilled.cloud/aws/appintegrations";
 import * as Output from "alchemy/Output";
 import * as Layer from "effect/Layer";
+import { partitionOf } from "../Partition.ts";
 import { makeAppIntegrationsHttpBinding } from "./BindingHttp.ts";
 import type { DataIntegration } from "./DataIntegration.ts";
 import { UpdateDataIntegrationAssociation } from "./UpdateDataIntegrationAssociation.ts";
@@ -23,7 +24,7 @@ export const UpdateDataIntegrationAssociationHttp = Layer.effect(
     iamActions: ["app-integrations:UpdateDataIntegrationAssociation"],
     resources: (integration, { region, accountId }) => [
       Output.interpolate`${integration.dataIntegrationArn}`,
-      Output.interpolate`arn:aws:app-integrations:${region}:${accountId}:data-integration-association/${integration.dataIntegrationId}/*`,
+      Output.interpolate`arn:${partitionOf(region)}:app-integrations:${region}:${accountId}:data-integration-association/${integration.dataIntegrationId}/*`,
     ],
     // Rerunning the on-demand job snapshots through Customer Profiles on the
     // caller's behalf.

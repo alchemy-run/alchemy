@@ -512,9 +512,9 @@ export const DataExchangesListingProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           analyticshub.createProjectsLocationsDataExchangesListings({
+            ...body,
             parent: dataExchange,
             listingId,
-            body,
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -598,6 +598,7 @@ export const DataExchangesListingProvider = () =>
       ) {
         current = yield* retryTransient(
           analyticshub.patchProjectsLocationsDataExchangesListings({
+            ...body,
             name: currentName,
             updateMask: updateMaskOf(
               displayChanged ? "displayName" : undefined,
@@ -619,7 +620,6 @@ export const DataExchangesListingProvider = () =>
               restrictedPolicyChanged ? "bigqueryDataset.restrictedExportPolicy" : undefined,
               affinityChanged ? "pubsubTopic.dataAffinityRegions" : undefined,
             ),
-            body: { name: currentName, ...body },
           }),
         );
       }

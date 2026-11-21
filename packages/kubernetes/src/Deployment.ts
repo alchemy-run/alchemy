@@ -4,6 +4,7 @@ import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
+import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
@@ -13,6 +14,7 @@ import {
   type HostRuntimeContext,
   type ServerHost as ServerHostService,
 } from "alchemy/Runtime/Process";
+import { packEnvValueKeepRedacted } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
@@ -39,7 +41,8 @@ import { toConnection, type ClusterLike, type Connection } from "./Connection.ts
 import { makeConnectionRegistry } from "./internal/registry.ts";
 import {
   collectBindingEnv,
-  containerEnvValue,
+  ENV_SECRET_DIGEST,
+  workloadEnv,
   connectionIdentity,
   connectionOfOutput,
   deepMerge,
@@ -126,7 +129,12 @@ export interface DeploymentPropsBase extends PlatformProps {
     limits?: { cpu?: string; memory?: string };
   };
   /**
-   * Additional environment variables for the container.
+   * Additional environment variables for the container. A `Redacted` value
+   * (or one holding a `Redacted`) is kept in the Deployment's own Secret,
+   * `<name>-env`, and read through `secretKeyRef`, so the pod template never
+   * holds it; a changed secret rolls the pods. `{ valueFrom: { ... } }`
+   * passes through as a Kubernetes `EnvVarSource`, to read a Secret,
+   * ConfigMap or field of your own.
    */
   env?: Record<string, any>;
   /**
@@ -526,9 +534,19 @@ export const Deployment: Platform<
         : props.cluster;
       return { ...props, cluster };
     }),
-  createRuntimeContext: createHostRuntimeContext("Kubernetes.Deployment") as (
-    id: string,
-  ) => DeploymentRuntimeContext,
+  createRuntimeContext: (id: string): DeploymentRuntimeContext => {
+    const base = createHostRuntimeContext("Kubernetes.Deployment")(id);
+    return {
+      ...base,
+      // A Redacted stays Redacted, so the Deployment keeps it in its Secret.
+      set: (bindingId: string, output: Output.Output) =>
+        Effect.sync(() => {
+          const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+          base.env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
+          return key;
+        }),
+    } as DeploymentRuntimeContext;
+  },
 });
 
 /**
@@ -769,6 +787,9 @@ export const DeploymentProvider = () =>
             ...news.env,
           };
 
+          // Secrets move into the workload's own Secret, read by reference.
+          const env = yield* workloadEnv({ name: baseName, namespace, labels, env: containerEnv });
+
           const serviceAccountObject: KubernetesObjectDefinition = {
             apiVersion: "v1",
             kind: "ServiceAccount",
@@ -783,7 +804,12 @@ export const DeploymentProvider = () =>
           };
           const podTemplate = deepMerge(
             {
-              metadata: { labels },
+              metadata: {
+                labels,
+                ...(env.digest === undefined
+                  ? {}
+                  : { annotations: { [ENV_SECRET_DIGEST]: env.digest } }),
+              },
               spec: {
                 serviceAccountName,
                 ...(news.runtimeClassName ? { runtimeClassName: news.runtimeClassName } : {}),
@@ -794,10 +820,7 @@ export const DeploymentProvider = () =>
                     command: news.command,
                     args: news.args,
                     ports: [{ containerPort: port }],
-                    env: Object.entries(containerEnv).map(([name, value]) => ({
-                      name,
-                      value: containerEnvValue(value),
-                    })),
+                    env: env.entries,
                     resources: news.resources,
                   },
                 ],
@@ -840,7 +863,12 @@ export const DeploymentProvider = () =>
             },
           };
 
-          const desiredObjects = [serviceAccountObject, deploymentObject, serviceObject];
+          const desiredObjects = [
+            serviceAccountObject,
+            ...(env.secret === undefined ? [] : [env.secret as KubernetesObjectDefinition]),
+            deploymentObject,
+            serviceObject,
+          ];
 
           const kubernetesObjects = yield* reconcileObjects({
             transport,

@@ -41,18 +41,16 @@ const ensureConversation = (project: string) =>
       .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
     if (existing !== undefined) return existing;
     return yield* cci.createProjectsLocationsConversations({
-      parent: `projects/${project}/locations/us-central1`,
-      conversationId,
-      body: {
-        medium: "CHAT",
-        languageCode: "en-US",
-        labels: { "alchemy-test": "cci" },
-        dataSource: {
-          gcsSource: {
-            transcriptUri: `gs://${transcriptBucket}/transcript.json`,
-          },
+      medium: "CHAT",
+      languageCode: "en-US",
+      labels: { "alchemy-test": "cci" },
+      dataSource: {
+        gcsSource: {
+          transcriptUri: `gs://${transcriptBucket}/transcript.json`,
         },
       },
+      parent: `projects/${project}/locations/us-central1`,
+      conversationId,
     });
   });
 

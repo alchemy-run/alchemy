@@ -44,10 +44,7 @@ test.provider.skipIf(runLifecycle)(
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
-        sasportal.createSignedNodesDevices({
-          parent: "nodes/missing",
-          body: signedDeviceProbe,
-        }),
+        sasportal.createSignedNodesDevices({ ...signedDeviceProbe, parent: "nodes/missing" }),
       );
       expect(error._tag).toEqual("ServiceDisabled");
 

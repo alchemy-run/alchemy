@@ -235,13 +235,11 @@ export const BillingExclusionProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createBillingAccountsExclusions({
+            name: exclusionId,
+            filter: news.filter,
+            description: desiredDescription,
+            disabled: news.disabled === true ? true : undefined,
             parent: billingAccountParent(billingAccountId),
-            body: {
-              name: exclusionId,
-              filter: news.filter,
-              description: desiredDescription,
-              disabled: news.disabled === true ? true : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -264,13 +262,11 @@ export const BillingExclusionProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* logging.patchBillingAccountsExclusions({
+          filter: news.filter,
+          description: desiredDescription,
+          disabled: desiredDisabled,
           name: current.name?.includes("/") ? current.name : name,
           updateMask: updateMask.join(","),
-          body: {
-            filter: news.filter,
-            description: desiredDescription,
-            disabled: desiredDisabled,
-          },
         });
       }
 

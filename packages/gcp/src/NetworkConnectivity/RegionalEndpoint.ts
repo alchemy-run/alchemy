@@ -367,17 +367,15 @@ export const RegionalEndpointProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsRegionalEndpoints({
+            targetGoogleApi: news.targetGoogleApi,
+            accessType: news.accessType,
+            network,
+            subnetwork,
+            address: news.address,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             regionalEndpointId,
-            body: {
-              targetGoogleApi: news.targetGoogleApi,
-              accessType: news.accessType,
-              network,
-              subnetwork,
-              address: news.address,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({

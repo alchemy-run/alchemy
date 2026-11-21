@@ -352,14 +352,12 @@ export const ImageImportProvider = () =>
       if (current === undefined) {
         const created = yield* vm
           .createProjectsLocationsImageImports({
+            cloudStorageUri: news.cloudStorageUri,
+            diskImageTargetDefaults,
+            machineImageTargetDefaults,
+            encryption: news.encryption,
             parent: locationParent(env.project, location),
             imageImportId,
-            body: {
-              cloudStorageUri: news.cloudStorageUri,
-              diskImageTargetDefaults,
-              machineImageTargetDefaults,
-              encryption: news.encryption,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

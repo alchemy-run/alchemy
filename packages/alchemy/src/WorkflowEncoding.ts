@@ -1,8 +1,10 @@
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
-import { Workflow } from "effect/workflow";
+import type * as Scope from "effect/Scope";
+import { Workflow, WorkflowEngine } from "effect/workflow";
 
 /**
  * How the workflow engines store what a run produces as JSON: step and signal
@@ -84,6 +86,32 @@ export const decodeResult = (workflow: WorkflowSchemas, text: string) =>
       Effect.map((exit) => new Workflow.Complete({ exit })),
       Effect.orDie,
     );
+
+/**
+ * `Workflow.intoResult`, for an engine that stores a run's result. When the
+ * run can't produce a result because a compensation or finalizer dies after
+ * the workflow ended (Effect-TS/effect#10813), every replay fails the same
+ * way. So a workflow that captures defects completes with that failure
+ * instead. A failure made only of interrupts (an external interrupt, an
+ * abandoned attempt) still fails, and the engine runs it again.
+ */
+export const intoStoredResult = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<
+  Workflow.Result<A, E>,
+  never,
+  Exclude<R, Scope.Scope> | WorkflowEngine.WorkflowInstance
+> =>
+  Workflow.intoResult(effect).pipe(
+    Effect.catchCause((cause) =>
+      Effect.flatMap(WorkflowEngine.WorkflowInstance, (instance) =>
+        Cause.hasInterruptsOnly(cause) ||
+        !Context.get(instance.workflow.annotations, Workflow.CaptureDefects)
+          ? Effect.failCause(cause)
+          : Effect.succeed(new Workflow.Complete<A, E>({ exit: Exit.failCause(cause) })),
+      ),
+    ),
+  );
 
 /**
  * The step a workflow engine is running: provided around each `Activity` so

@@ -153,9 +153,9 @@ export class Bank extends Domain.Model("Bank", {
 }) {}
 ```
 
-Every command has one implementation: an aggregate or a decision. A second one is a type error on its entry in the model, and `Domain.verify` reports it as `ImplementedTwice`.
+Every command has one implementation: an aggregate or a decision. A second one is a type error on its entry in the model, and building the model's Layer fails with `ImplementedTwice`.
 
-A decision that reads an aggregate the model leaves out is a type error on its entry too, and `Domain.verify` reports it as `UnknownRead`.
+A decision that reads an aggregate the model leaves out is a type error on its entry too, and building the Layer fails with `UnknownRead`.
 
 ## Send it
 

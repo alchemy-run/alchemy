@@ -323,9 +323,9 @@ export const NetworkMonitoringProviderProvider = () =>
       if (current === undefined) {
         const created = yield* networkmanagement
           .createProjectsLocationsNetworkMonitoringProviders({
+            providerType,
             parent: parentOf(env.project, location),
             networkMonitoringProviderId,
-            body: { providerType },
           })
           .pipe(
             Effect.retry({

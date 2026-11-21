@@ -65,12 +65,10 @@ test.provider.skipIf(privateServiceAccess)(
       yield* stack.destroy();
       const error = yield* Effect.flip(
         memcache.createProjectsLocationsInstances({
+          nodeCount: 1,
+          nodeConfig: { cpuCount: 1, memorySizeMb: 1024 },
           parent: `projects/${project}/locations/us-central1`,
           instanceId: "alchemy-memcache-psa-probe",
-          body: {
-            nodeCount: 1,
-            nodeConfig: { cpuCount: 1, memorySizeMb: 1024 },
-          },
         }),
       );
       expect(error._tag).toEqual("PrivateServiceAccessNotEnabled");

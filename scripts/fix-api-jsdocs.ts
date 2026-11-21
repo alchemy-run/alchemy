@@ -25,6 +25,7 @@ const packages = [
   "infisical",
   "1password",
   "turso",
+  "convex",
   "e2b",
   "daytona",
   "archil",

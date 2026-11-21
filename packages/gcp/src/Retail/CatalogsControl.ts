@@ -328,11 +328,7 @@ export const CatalogsControlProvider = () =>
 
       if (current === undefined) {
         const created = yield* retail
-          .createProjectsLocationsCatalogsControls({
-            parent: catalog,
-            controlId,
-            body,
-          })
+          .createProjectsLocationsCatalogsControls({ ...body, parent: catalog, controlId })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -356,9 +352,9 @@ export const CatalogsControlProvider = () =>
 
       if (mask.length > 0) {
         current = yield* retail.patchProjectsLocationsCatalogsControls({
+          ...body,
           name: resource,
           updateMask: mask,
-          body: { ...body, name: resource },
         });
       }
 

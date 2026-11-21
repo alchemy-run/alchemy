@@ -415,9 +415,7 @@ export const TagKeyProvider = () =>
 
       if (current === undefined) {
         const created = yield* resourcemanager
-          .createTagKeys({
-            body: toCreateBody(parent, shortName, desiredDescription, news),
-          })
+          .createTagKeys({ ...toCreateBody(parent, shortName, desiredDescription, news) })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const settled = yield* waitForCreate(created);
@@ -437,13 +435,10 @@ export const TagKeyProvider = () =>
       const resourceName = current.name;
       if ((current.description ?? "") !== (desiredDescription ?? "")) {
         const operation = yield* resourcemanager.patchTagKeys({
+          description: desiredDescription,
+          etag: current.etag,
           name: resourceName,
           updateMask: "description",
-          body: {
-            name: resourceName,
-            description: desiredDescription,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(resourceName, namespaced);
