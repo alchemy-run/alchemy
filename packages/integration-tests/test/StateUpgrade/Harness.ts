@@ -22,7 +22,25 @@ export const RELEASED = "2.0.0-beta.85";
 /** Outside the repository, so nothing resolves from the workspace by accident. */
 const ROOT = "/tmp/alchemy-state-upgrade";
 
-const FIXTURE = fileURLToPath(new URL("./fixtures/alchemy.run.ts", import.meta.url));
+/**
+ * What an upgrade deploys: the project each version runs, and what the
+ * released one installs beyond {@link releasedDependencies}.
+ */
+export interface Fixture {
+  /** Names the fixture's projects, so two fixtures never share one. */
+  readonly name: string;
+  /** Copied into the released project: a file becomes `alchemy.run.ts`, a directory's files land at its root. */
+  readonly released: string;
+  /** Copied into the current project, the same way. */
+  readonly current: string;
+  /** Released packages to install beyond the defaults, e.g. `@alchemy.run/domain`. */
+  readonly dependencies?: ReadonlyArray<string>;
+}
+
+const STATE_FIXTURE = fileURLToPath(new URL("./fixtures/alchemy.run.ts", import.meta.url));
+
+/** The state stores' fixture: one file, valid for both versions. */
+const stateFixture: Fixture = { name: "state", released: STATE_FIXTURE, current: STATE_FIXTURE };
 
 /** `packages/`; this file lives at `packages/integration-tests/test/StateUpgrade/`. */
 const PACKAGES = fileURLToPath(new URL("../../..", import.meta.url)).replace(/\/$/, "");
@@ -49,7 +67,8 @@ export interface Project {
  * The released packages a user of {@link RELEASED} has installed, at exact
  * versions so every run installs the same tree.
  */
-const releasedDependencies = (version: string) => ({
+const releasedDependencies = (version: string, extra: ReadonlyArray<string> = []) => ({
+  ...Object.fromEntries(extra.map((name) => [name, version])),
   alchemy: version,
   "@alchemy.run/aws": version,
   "@alchemy.run/cloudflare": version,
@@ -62,21 +81,27 @@ const releasedDependencies = (version: string) => ({
   pg: "8.22.0",
 });
 
-const copyFixture = Effect.fn(function* (dir: string) {
+const copyFixture = Effect.fn(function* (source: string, dir: string) {
   const fs = yield* FileSystem.FileSystem;
-  yield* fs.copyFile(FIXTURE, `${dir}/alchemy.run.ts`);
+  if ((yield* fs.stat(source)).type === "Directory") {
+    for (const entry of yield* fs.readDirectory(source)) {
+      yield* fs.copy(`${source}/${entry}`, `${dir}/${entry}`, { overwrite: true });
+    }
+  } else {
+    yield* fs.copyFile(source, `${dir}/alchemy.run.ts`);
+  }
 });
 
-const manifest = (version: string) =>
+const manifest = (version: string, fixture: Fixture) =>
   JSON.stringify({
     name: "alchemy-state-upgrade-released",
     private: true,
     type: "module",
-    dependencies: releasedDependencies(version),
+    dependencies: releasedDependencies(version, fixture.dependencies),
   });
 
 /** Whether `dir` holds a finished install of exactly these dependencies. */
-const installed = (dir: string, version: string) =>
+const installed = (dir: string, version: string, fixture: Fixture) =>
   FileSystem.FileSystem.pipe(
     Effect.flatMap((fs) =>
       Effect.all([
@@ -84,7 +109,7 @@ const installed = (dir: string, version: string) =>
         fs.exists(`${dir}/node_modules/alchemy/package.json`),
       ]),
     ),
-    Effect.map(([text, done]) => done && text === manifest(version)),
+    Effect.map(([text, done]) => done && text === manifest(version, fixture)),
     Effect.orElseSucceed(() => false),
   );
 
@@ -100,16 +125,20 @@ const setup = Semaphore.makeUnsafe(1);
  * machine: it is made in a scratch directory and renamed into place, so an
  * interrupted install never leaves a half-installed tree behind.
  */
-export const released = (version: string = RELEASED) =>
-  setup.withPermits(1)(installReleased(version));
+export const released = (version: string = RELEASED, fixture: Fixture = stateFixture) =>
+  setup.withPermits(1)(installReleased(version, fixture));
 
-const installReleased = Effect.fn(function* (version: string) {
+/** Where a fixture's project for `label` lives; the state fixture keeps its original path. */
+const projectDir = (label: string, fixture: Fixture) =>
+  fixture === stateFixture ? `${ROOT}/${label}` : `${ROOT}/${fixture.name}-${label}`;
+
+const installReleased = Effect.fn(function* (version: string, fixture: Fixture) {
   const fs = yield* FileSystem.FileSystem;
-  const dir = `${ROOT}/released-${version}`;
-  if (!(yield* installed(dir, version))) {
+  const dir = projectDir(`released-${version}`, fixture);
+  if (!(yield* installed(dir, version, fixture))) {
     yield* fs.makeDirectory(ROOT, { recursive: true });
     const scratch = yield* fs.makeTempDirectory({ directory: ROOT, prefix: "install-" });
-    yield* fs.writeFileString(`${scratch}/package.json`, manifest(version));
+    yield* fs.writeFileString(`${scratch}/package.json`, manifest(version, fixture));
     const install = yield* exec(
       ChildProcess.make("bun", ["install"], { cwd: scratch, stdout: "pipe", stderr: "pipe" }),
     );
@@ -119,7 +148,7 @@ const installReleased = Effect.fn(function* (version: string) {
     yield* fs.remove(dir, { recursive: true }).pipe(Effect.ignore);
     yield* fs.rename(scratch, dir);
   }
-  yield* copyFixture(dir);
+  yield* copyFixture(fixture.released, dir);
   return {
     label: `released ${version}`,
     dir,
@@ -129,11 +158,12 @@ const installReleased = Effect.fn(function* (version: string) {
 });
 
 /** A project whose `alchemy` and provider packages are links to this workspace. */
-export const current = () => setup.withPermits(1)(linkCurrent());
+export const current = (fixture: Fixture = stateFixture) =>
+  setup.withPermits(1)(linkCurrent(fixture));
 
-const linkCurrent = Effect.fn(function* () {
+const linkCurrent = Effect.fn(function* (fixture: Fixture) {
   const fs = yield* FileSystem.FileSystem;
-  const dir = `${ROOT}/current-${CHECKOUT}`;
+  const dir = projectDir(`current-${CHECKOUT}`, fixture);
   yield* fs.makeDirectory(`${dir}/node_modules/@alchemy.run`, { recursive: true });
   yield* fs.makeDirectory(`${dir}/node_modules/@effect`, { recursive: true });
   const link = Effect.fn(function* (name: string, target: string) {
@@ -143,7 +173,7 @@ const linkCurrent = Effect.fn(function* () {
     yield* fs.remove(path, { recursive: true }).pipe(Effect.ignore);
     yield* fs.symlink(target, path);
   });
-  for (const pkg of ["alchemy", "aws", "cloudflare", "gcp", "sql"]) {
+  for (const pkg of ["alchemy", "aws", "cloudflare", "domain", "gcp", "sql"]) {
     yield* link(pkg === "alchemy" ? pkg : `@alchemy.run/${pkg}`, `${PACKAGES}/${pkg}`);
   }
   for (const dependency of WORKSPACE_DEPENDENCIES) {
@@ -153,7 +183,7 @@ const linkCurrent = Effect.fn(function* () {
     `${dir}/package.json`,
     JSON.stringify({ name: "alchemy-state-upgrade-current", private: true, type: "module" }),
   );
-  yield* copyFixture(dir);
+  yield* copyFixture(fixture.current, dir);
   return {
     label: "current",
     dir,
@@ -163,13 +193,14 @@ const linkCurrent = Effect.fn(function* () {
 });
 
 /**
- * The working directory a test's runs share, emptied first. A local store
- * keeps its state here.
+ * The working directory a test's runs share, emptied first unless `keep` is
+ * set. A local store keeps its state here, so a kept one still has what an
+ * interrupted run deployed, for the next run to destroy.
  */
-export const workdir = Effect.fn(function* (name: string) {
+export const workdir = Effect.fn(function* (name: string, options?: { readonly keep?: boolean }) {
   const fs = yield* FileSystem.FileSystem;
   const dir = `${ROOT}/work/${CHECKOUT}/${name}`;
-  yield* fs.remove(dir, { recursive: true }).pipe(Effect.ignore);
+  if (options?.keep !== true) yield* fs.remove(dir, { recursive: true }).pipe(Effect.ignore);
   yield* fs.makeDirectory(dir, { recursive: true });
   return dir;
 });

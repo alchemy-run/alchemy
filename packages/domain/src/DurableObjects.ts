@@ -372,6 +372,8 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
     const acquire = exclusively(acquireLease(state, lease));
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
     const drain: Effect.Effect<void> = Effect.gen(function* () {
+      // Nothing staged: nothing to do, and no lease to take.
+      if ((yield* state.storage.list({ prefix, limit: 1 })).size === 0) return;
       const held = yield* acquire;
       if (held !== undefined) {
         // Another drain holds the lease, or held it when its instance died
@@ -1012,7 +1014,9 @@ const aggregateObject = (
     const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
         const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
-        if (duplicate) return { sent: duplicate, kick: false };
+        // A resend may follow an instance that died before delivering what the
+        // first commit staged: deliver it now rather than at the backstop.
+        if (duplicate) return { sent: duplicate, kick: duplicate._tag === "Accepted" };
         const current = yield* storedMeta;
         if (current.held) return yield* new InstanceHeld();
         const result = yield* kit.handle({
@@ -1051,7 +1055,8 @@ const aggregateObject = (
         const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
         if (duplicate?._tag === "Accepted") {
           const imported: ImportResult = { _tag: "Imported", receipt: duplicate.receipt };
-          return { imported, kick: false };
+          // As a resent command: deliver what the first import may have left staged.
+          return { imported, kick: true };
         }
         const current = yield* storedMeta;
         if (current.held) return yield* new InstanceHeld();
@@ -1433,6 +1438,17 @@ const aggregateObject = (
           // The same arming again (a policy or step ran again): leave it as it is.
           const armed = yield* state.storage.get<Armed>(`armed:${name}`);
           if (armed?.commandId === meta.commandId) return { at: armed.at };
+          // Before arming records (2.0.0-beta.85 and earlier) a name was its
+          // arming's command id, so a receipt under a name with no arming
+          // record is that arming's command, already run: this is the same
+          // arming again (a policy redelivered after an upgrade). Record it
+          // as this arming, so it stays a no-op and a later trigger arms the
+          // name again.
+          if (armed === undefined && (yield* executed(name))) {
+            const at = yield* Clock.currentTimeMillis;
+            yield* state.storage.put(`armed:${name}`, { commandId: meta.commandId, at });
+            return { at };
+          }
           const token = yield* random.uuidV4();
           const at = "at" in due ? due.at : (yield* Clock.currentTimeMillis) + due.afterMillis;
           yield* state.storage.put(`armed:${name}`, { commandId: meta.commandId, at });

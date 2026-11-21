@@ -9,7 +9,7 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import { waitForReady } from "../Domain/conformance/conformance.ts";
+import { conformance, waitForReady } from "../Domain/conformance/conformance.ts";
 import DomainDurableObjectsFront from "./fixtures/domain-cloudflare/front.ts";
 import { ENTITY } from "./fixtures/domain-cloudflare/live.ts";
 
@@ -64,6 +64,8 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll.skipIf(!!process.env.NO_DESTROY)(stack.destroy(), { timeout: 300_000 });
+
+    conformance({ test, url: Effect.sync(() => baseUrl), kind: "live" });
 
     // Retention sweeps the rows of a shared database. The pool keeps them in
     // each instance's own object, so its runners have nothing to sweep, and

@@ -2389,7 +2389,10 @@ export default defineConfig({
             },
             {
               label: "Rivet Services",
-              items: [{ label: "Durable Streams", link: "/rivet/durable-streams" }],
+              items: [
+                { label: "Durable Streams", link: "/rivet/durable-streams" },
+                { label: "agentOS Sandboxes", link: "/rivet/sandboxes" },
+              ],
             },
             {
               label: "Running Rivet",

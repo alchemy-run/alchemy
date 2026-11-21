@@ -178,8 +178,8 @@ export interface BundleProgram {
  * in it, whose `CMD` runs the node (a Rust crate's binary).
  */
 export interface ImageProgram {
-  readonly context: string;
-  readonly dockerfile: string;
+  readonly context: Input<string>;
+  readonly dockerfile: Input<string>;
 }
 
 export type NodeProgram = BundleProgram | ImageProgram;
@@ -235,10 +235,11 @@ const makeHost = <Network, Req>(options: {
     const cluster = yield* Cluster;
     // An external Durable Object deploys from its own Effect: give it the
     // services this Layer was built with.
-    const context = yield* Effect.context<Stack | Providers | Req>();
+    const services = yield* Effect.context<Stack | Providers | Req>();
     const noop: PoolHost["Service"] = {
       deployExternal: () => Effect.void,
       deployCrate: () => Effect.void,
+      deployDockerfile: () => Effect.void,
     };
     if (globalThis.__ALCHEMY_RUNTIME__) return noop;
     const network = options.network(cluster);
@@ -360,7 +361,7 @@ const makeHost = <Network, Req>(options: {
             },
           }),
           main,
-        ).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
+        ).pipe(Effect.provide(services), Effect.orDie) as Effect.Effect<void>,
       deployCrate: ({ id, crate, build, resource }) =>
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
         Effect.gen(function* () {
@@ -374,9 +375,66 @@ const makeHost = <Network, Req>(options: {
             // A Rust program brings its own RivetKit.
             crate,
           );
-        }).pipe(Effect.provide(context), Effect.orDie) as Effect.Effect<void>,
+        }).pipe(Effect.provide(services), Effect.orDie) as Effect.Effect<void>,
+      deployDockerfile: ({ id, context, dockerfile, resource }) =>
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
+        Effect.gen(function* () {
+          // The Dockerfile's image is the node, built wherever the host builds images.
+          const label = yield* stackDnsLabel(id);
+          const program = yield* stageDockerfileProgram(label, context, dockerfile);
+          yield* deploy(
+            { name: id, module: `dockerfile:${label}`, handler: "", external: true },
+            {},
+            resource.bind`Pool`(caller),
+            () => program,
+            // An image brings its own RivetKit, as a Rust program does.
+            (yield* Path.Path).resolve(context ?? "."),
+          );
+        }).pipe(Effect.provide(services), Effect.orDie) as Effect.Effect<void>,
     } satisfies PoolHost["Service"];
   });
+
+/**
+ * A user's Dockerfile as a node program, resolved as every container
+ * resource resolves `context` and `dockerfile`: paths are relative to where
+ * the deploy runs, the Dockerfile defaults to `${context}/Dockerfile`, and
+ * inline content is written, once it resolves, to an empty context of its
+ * own named `label`. Every host already builds an {@link ImageProgram} for
+ * its platform, so it reaches each one the way a Rust crate's does.
+ */
+const stageDockerfileProgram = Effect.fn(function* (
+  label: string,
+  context: string | undefined,
+  dockerfile: string | { readonly content: Input<string> } | undefined,
+) {
+  const path = yield* Path.Path;
+  if (typeof dockerfile !== "object") {
+    const dir = path.resolve(context ?? ".");
+    return {
+      context: dir,
+      dockerfile:
+        dockerfile === undefined ? path.join(dir, "Dockerfile") : path.resolve(dockerfile),
+    } satisfies ImageProgram;
+  }
+  const fs = yield* FileSystem.FileSystem;
+  const dir = path.resolve(yield* dotAlchemyDirectory, "rivet", "dockerfile", label);
+  const file = path.join(dir, "Dockerfile");
+  // Written once the content resolves, so an image built in the same stack
+  // is built before the pool builds from it.
+  const staged = output(dockerfile.content).pipe(
+    Output.mapEffect((content: string) =>
+      Effect.gen(function* () {
+        yield* fs.makeDirectory(dir, { recursive: true });
+        yield* fs.writeFileString(file, content);
+        return dir;
+      }).pipe(Effect.orDie),
+    ),
+  );
+  return {
+    context: staged,
+    dockerfile: staged.pipe(Output.map(() => file)),
+  } satisfies ImageProgram;
+});
 
 /** A cluster value as an Output, whether it is one already or a plain value. */
 const output = <T>(value: Input<T>): Output.Output<T> =>
