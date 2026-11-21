@@ -2,6 +2,7 @@ import { resolve4, resolveNs, Resolver } from "node:dns/promises";
 import { expect } from "@alchemy.run/test";
 import type * as Test from "@alchemy.run/test/Alchemy";
 import { createUrlCheck, getProject, getUrl } from "@distilled.cloud/prisma/management";
+import * as Retry from "@distilled.cloud/prisma/Retry";
 import { isActionState, State } from "alchemy/State/State";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
@@ -109,7 +110,7 @@ export const checkOnceThenPollUntilActive = (id: string) =>
     Effect.flatMap(({ data }) =>
       data.customDomain === null &&
       (data.state === "not_verified" || data.state === "waiting_for_dns")
-        ? createUrlCheck({ id })
+        ? createUrlCheck({ id }).pipe(Retry.none, Effect.ignore)
         : Effect.void,
     ),
     Effect.andThen(pollUntilActive(id)),

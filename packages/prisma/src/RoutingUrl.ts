@@ -352,8 +352,9 @@ export interface RoutingUrl extends Resource<
  * The wait fails with `RoutingUrlNotActive` and `reason: "timedOut"` when the
  * 6 minutes run out, naming the first unmet condition and Prisma's last sync
  * error; a redeploy waits again, and asks Prisma to check once more when it
- * has not seen a record. It fails at once with `reason: "held"` when another
- * RoutingUrl holds the hostname (`heldBy`), and with
+ * has not seen a record and holds no certificate for the hostname. It fails
+ * at once with `reason: "held"` when another RoutingUrl holds the hostname
+ * (`heldBy`), and with
  * `reason: "certificateFailed"` when the certificate failed: a redeploy does
  * not retry it; retry it from `setupUrl` in the Console or with one
  * `POST /v1/urls/{id}/check`, which orders a new certificate. It fails at
@@ -596,11 +597,20 @@ const unseenRecordsOf = (url: ApiRoutingUrl) => {
     : `${records.map((record) => `${record.type} ${record.name} = ${record.value}`).join(" and ")}${detail}`;
 };
 
+/**
+ * Prisma looks the hostname's DNS up only when the row is written or checked.
+ * A check orders a certificate only by retrying a failed one, or by
+ * registering the first one, which the write would have made anyway. With no
+ * custom domain there is nothing to retry, so one check per deploy is safe.
+ */
+const needsCheck = (url: ApiRoutingUrl) => url.customDomain === null && missesDns(url);
+
 const notActive = (url: ApiRoutingUrl) => {
   const reported =
     url.customDomainSyncError === null ? "" : ` Prisma reports: "${url.customDomainSyncError}".`;
   const reason = isHeld(url) ? "held" : certificateFailed(url) ? "certificateFailed" : "timedOut";
   const failureReason = url.customDomain?.failureReason ?? null;
+  const minutes = Duration.toMinutes(ACTIVE_WAIT);
   const unmet =
     url.firstUnmetCondition === null
       ? "every condition is met, but Prisma has not marked it active yet"
@@ -608,9 +618,11 @@ const notActive = (url: ApiRoutingUrl) => {
   const explanation = {
     held: `is ${holderOf(url.heldBy)}, so it cannot become active until that RoutingUrl gives it up.${reported}`,
     certificateFailed: `has a failed certificate: ${failureReason ?? "Prisma gave no reason"}.${reported} A redeploy does not retry it. Retry it in the Console${url.setupUrl === null ? "" : ` at ${url.setupUrl}`}, or with one POST /v1/urls/${url.id}/check; a retry orders a new certificate, which counts toward the workspace's hourly limit.`,
-    timedOut: missesDns(url)
-      ? `did not become active within ${Duration.toMinutes(ACTIVE_WAIT)} minutes: Prisma has not seen ${unseenRecordsOf(url)}.${reported} Prisma does not look again on its own; a redeploy asks it to check once.`
-      : `did not become active within ${Duration.toMinutes(ACTIVE_WAIT)} minutes: ${unmet}.${reported} Prisma keeps working on it; redeploy to wait again.`,
+    timedOut: !missesDns(url)
+      ? `did not become active within ${minutes} minutes: ${unmet}.${reported} Prisma keeps working on it; redeploy to wait again.`
+      : needsCheck(url)
+        ? `did not become active within ${minutes} minutes: Prisma has not seen ${unseenRecordsOf(url)}.${reported} Prisma does not look again on its own; a redeploy asks it to check once.`
+        : `did not become active within ${minutes} minutes: Prisma has not seen ${unseenRecordsOf(url)}.${reported} Prisma already holds a custom domain for the hostname, so a deploy does not ask it to check, because a check can order another certificate. Once the record is published, ask Prisma to check in the Console${url.setupUrl === null ? "" : ` at ${url.setupUrl}`}.`,
   }[reason];
   return new RoutingUrlNotActive({
     routingUrlId: url.id,
@@ -655,14 +667,6 @@ const untilActive = (
   });
 
 /**
- * Prisma looks the hostname's DNS up only when the row is written or checked.
- * A check orders a certificate only by retrying a failed one, or by
- * registering the first one, which the write would have made anyway. With no
- * custom domain there is nothing to retry, so one check per deploy is safe.
- */
-const needsCheck = (url: ApiRoutingUrl) => url.customDomain === null && missesDns(url);
-
-/**
  * One `/check`, never resent: a resend after a lost reply or a 429 can find
  * the certificate the first one ordered failed, and retry it. When the check
  * fails, the wait reads the row instead.
@@ -680,13 +684,19 @@ const checkOnce = (url: ApiRoutingUrl) =>
   );
 
 /**
- * Whether this reconcile waits: when this resource has not yet completed a
- * deploy that published this hostname's records. A failed wait commits no
- * props, so the deploy after it waits again.
+ * Whether this reconcile waits: this deploy created the row or changed its
+ * hostname in Prisma, or this resource has not yet completed a deploy that
+ * published this hostname's records. A failed wait commits no props, so the
+ * deploy after it waits again.
  */
-const waitsForActive = (news: RoutingUrl["Props"], olds: RoutingUrl["Props"] | undefined) =>
+const waitsForActive = (
+  news: RoutingUrl["Props"],
+  olds: RoutingUrl["Props"] | undefined,
+  hostnameWritten: boolean,
+) =>
   news.publishesRecords === true &&
-  (olds?.publishesRecords !== true ||
+  (hostnameWritten ||
+    olds?.publishesRecords !== true ||
     normalizeHostname(olds.hostname) !== normalizeHostname(news.hostname));
 
 const ProviderLive = () =>
@@ -841,7 +851,8 @@ const ProviderLive = () =>
 
       /**
        * Create or update the row `news` describes, and return it as Prisma
-       * answered, with whether this deploy already saw its published records.
+       * answered, with whether this deploy already saw its published records
+       * and whether it created the row or changed its hostname.
        */
       const save = (
         fqn: string,
@@ -879,7 +890,7 @@ const ProviderLive = () =>
                 ),
               ),
             );
-            return { url, service, recordsSeen: publishes };
+            return { url, service, recordsSeen: publishes, hostnameWritten: true };
           }
           const change = {
             ...(normalizeHostname(observed.hostname) === hostname ? {} : { hostname }),
@@ -887,7 +898,7 @@ const ProviderLive = () =>
             ...(observed.logicalId === logicalId ? {} : { logicalId }),
           };
           if (Object.keys(change).length === 0) {
-            return { url: observed, service, recordsSeen: false };
+            return { url: observed, service, recordsSeen: false, hostnameWritten: false };
           }
           if (change.hostname !== undefined && observed.status === "active") {
             yield* ensureCanServe(service, observed.hostname, hostname, publishes);
@@ -901,6 +912,7 @@ const ProviderLive = () =>
             url: updated.data,
             service,
             recordsSeen: publishes && change.hostname !== undefined,
+            hostnameWritten: change.hostname !== undefined,
           };
         });
 
@@ -930,8 +942,8 @@ const ProviderLive = () =>
           return claimed ? Unowned(attrsFrom(claimed)) : undefined;
         }),
         reconcile: Effect.fn(function* ({ fqn, news, olds, output }) {
-          const { url, service, recordsSeen } = yield* save(fqn, news, output);
-          if (!waitsForActive(news, olds)) return attrsFrom(url);
+          const { url, service, recordsSeen, hostnameWritten } = yield* save(fqn, news, output);
+          if (!waitsForActive(news, olds, hostnameWritten)) return attrsFrom(url);
           if (!needsCheck(url)) return attrsFrom(yield* untilActive(url));
           if (!recordsSeen) {
             yield* awaitPublishedRecords(service, normalizeHostname(news.hostname), "check");

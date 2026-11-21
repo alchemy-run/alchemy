@@ -734,7 +734,7 @@ testFor(dnsNeverSeen).test.provider(
 
 const dnsWithCustomDomain = makeUrlCloud();
 testFor(dnsWithCustomDomain).test.provider(
-  "with dns, does not check a row waiting for DNS that holds a custom domain",
+  "with dns, does not check a row waiting for DNS that holds a custom domain, and says to check from the Console",
   (stack) =>
     Effect.gen(function* () {
       dnsWithCustomDomain.reset({
@@ -746,10 +746,96 @@ testFor(dnsWithCustomDomain).test.provider(
       });
       yield* stack.destroy();
 
-      yield* onTestClock(failuresOf(stack.deploy(dnsStack())));
+      const result = yield* onTestClock(failuresOf(stack.deploy(dnsStack())));
 
+      const error = result.pipe(
+        Result.map(({ errors }) =>
+          errors.find((each): each is RoutingUrlNotActive => each instanceof RoutingUrlNotActive),
+        ),
+        Result.getOrUndefined,
+      );
       expect(CHECKS(dnsWithCustomDomain)).toEqual([]);
+      expect(error?.reason).toBe("timedOut");
+      expect(error?.message).toContain(
+        `Prisma has not seen CNAME ${HOSTNAME} = switchboard.us-east-1.prisma.build`,
+      );
+      expect(error?.message).toContain("Prisma already holds a custom domain for the hostname");
+      expect(error?.message).toContain(
+        "ask Prisma to check in the Console at https://console.prisma.test/urls/url-1",
+      );
+      expect(error?.message).not.toContain("a redeploy asks it to check once");
 
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const revertedChange = makeUrlCloud();
+testFor(revertedChange).test.provider(
+  "with dns, reverting a hostname change whose wait failed waits again for the hostname Prisma changes back",
+  (stack) =>
+    Effect.gen(function* () {
+      revertedChange.reset({ fromZone: true });
+      yield* stack.destroy();
+      const served = yield* stack.deploy(dnsStack());
+      expect(served.status).toBe("active");
+
+      revertedChange.state.progress = (row, _zone, event) =>
+        event === "write" ? failedCertificateAfter(row) : row;
+      const changed = yield* failuresOf(stack.deploy(dnsStack("new.example.com")));
+      expect(changed.errors.some((each) => each instanceof RoutingUrlNotActive)).toBe(true);
+      expect(revertedChange.rows.get(served.routingUrlId)?.hostname).toBe("new.example.com");
+
+      revertedChange.fake.captured.length = 0;
+      const { errors } = yield* failuresOf(stack.deploy(dnsStack()));
+
+      expect(PATCHES(revertedChange)).toEqual([`PATCH /v1/urls/${served.routingUrlId}`]);
+      expect(revertedChange.rows.get(served.routingUrlId)?.hostname).toBe(HOSTNAME);
+      const error = errors.find(
+        (each): each is RoutingUrlNotActive => each instanceof RoutingUrlNotActive,
+      );
+      expect(error?.reason).toBe("certificateFailed");
+
+      revertedChange.state.progress = looksOnWrite;
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const deletedOutside = makeUrlCloud();
+testFor(deletedOutside).test.provider(
+  "with dns, a RoutingUrl deleted outside Alchemy is created again and waited for",
+  (stack) =>
+    Effect.gen(function* () {
+      deletedOutside.reset({ fromZone: true });
+      yield* stack.destroy();
+      const served = yield* stack.deploy(dnsStack());
+      expect(served.status).toBe("active");
+
+      deletedOutside.rows.delete(served.routingUrlId);
+      deletedOutside.state.progress = (row, _zone, event) =>
+        event === "write" ? failedCertificateAfter(row) : row;
+      deletedOutside.fake.captured.length = 0;
+      const { errors } = yield* failuresOf(
+        stack.deploy(
+          RoutingUrl("Url", {
+            app: "svc-1",
+            hostname: HOSTNAME,
+            logicalId: "Renamed",
+            dns: TEST_DNS,
+          }),
+        ),
+      );
+
+      expect(
+        deletedOutside.routes().filter((route) => route.startsWith("POST /v1/services")),
+      ).toHaveLength(1);
+      const error = errors.find(
+        (each): each is RoutingUrlNotActive => each instanceof RoutingUrlNotActive,
+      );
+      expect(error?.reason).toBe("certificateFailed");
+
+      deletedOutside.state.progress = looksOnWrite;
       yield* stack.destroy();
     }),
   { tags },

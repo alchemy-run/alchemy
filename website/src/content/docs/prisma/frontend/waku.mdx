@@ -132,7 +132,7 @@ const site = yield* Prisma.Website.Waku("Web", {
 });
 ```
 
-`domain` saves the hostname as a `Prisma.RoutingUrl` and makes `site.url` the HTTPS hostname. The deploy does not wait for DNS: `site.domain.status` is `pending` until the records in `site.domain.records` are published, or pass `dns` to publish them. See [Custom domains](/prisma/frontend/websites#custom-domains).
+`domain` saves the hostname as a `Prisma.RoutingUrl` and makes `site.url` the HTTPS hostname. Without `dns`, the deploy does not wait for DNS: `site.domain.status` is `pending` until the records in `site.domain.records` are published. Pass `dns` to publish them, and the deploy then waits for the hostname to serve. See [Custom domains](/prisma/frontend/websites#custom-domains).
 
 ## Where next
 
