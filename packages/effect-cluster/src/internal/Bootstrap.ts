@@ -140,7 +140,7 @@ export const runExternal = (
   runProcess(
     "Effect Cluster runner",
     Effect.gen(function* () {
-      yield* loadSecretEnv;
+      yield* Effect.sync(loadSecretEnv);
       const host = yield* runnerHost;
       const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -370,6 +370,6 @@ export const bootstrap = (
 
   return runProcess(
     "Effect Cluster runner",
-    Effect.andThen(loadSecretEnv, program) as Effect.Effect<never, unknown, never>,
+    Effect.andThen(Effect.sync(loadSecretEnv), program) as Effect.Effect<never, unknown, never>,
   );
 };
