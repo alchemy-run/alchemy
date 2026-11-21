@@ -5,11 +5,13 @@ import * as SecretManager from "@alchemy.run/gcp/SecretManager";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import {
   isImageProgram,
   makePoolLayer,
   nodeDockerfile,
-  nodeEnvironment,
+  SECRET_ENV,
+  splitNodeEnvironment,
   RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
@@ -208,8 +210,15 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
                 value: nodes.environment.RIVET_TOKEN,
               })).version.pipe(Output.map((version) => version ?? ""))
             : undefined;
+        // Secrets the classes read as config: one secret of the pool's, loaded
+        // by the node at start, never metadata or the worker pool's config.
+        const split = splitNodeEnvironment(nodes);
+        const secretEnvVersion = (yield* SecretManager.Secret(`${id}SecretEnv`, {
+          value: split.pipe(Output.map(({ secrets }) => Redacted.make(JSON.stringify(secrets)))),
+        })).version.pipe(Output.map((version) => version ?? ""));
         const secretMap: Record<string, Input<string>> = {
           ...(token === undefined ? {} : { RIVET_TOKEN: token }),
+          [SECRET_ENV]: secretEnvVersion,
           ...options.secrets,
         };
         const secrets = Object.entries(secretMap);
@@ -256,7 +265,7 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
           ...(location === undefined ? {} : { location }),
           scaling: { manualInstanceCount: options.replicas ?? 1 },
           template: nodeTemplate(options, { serviceAccount, secretEnv }),
-          env: Output.all(nodeEnvironment(nodes), own).pipe(
+          env: Output.all(split.pipe(Output.map(({ plain }) => plain)), own).pipe(
             Output.map(([env, extra]) => plainEnvironment({ ...env, ...extra }, secretMap)),
           ),
         });

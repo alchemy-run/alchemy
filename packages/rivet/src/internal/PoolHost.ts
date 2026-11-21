@@ -359,24 +359,54 @@ const nodeValues = (
     })),
   );
 
+const unwrap = (value: unknown) => (Redacted.isRedacted(value) ? Redacted.value(value) : value);
+
 /**
  * Every value a node needs, as plain strings, for hosts whose environments
- * hold no `Redacted` (AWS task and instance environments).
+ * hold no `Redacted` (AWS task and instance environments): the token and any
+ * secret a class reads as config are unwrapped.
  * `endpoint` overrides the control plane URL nodes connect to.
  */
 export const nodeEnvironment = (nodes: PoolNodes<unknown>, endpoint?: Input<string>) =>
   nodeValues(nodes, endpoint).pipe(
-    Output.map(({ RIVET_TOKEN, ...rest }) => ({
-      ...rest,
-      RIVET_TOKEN: Redacted.value(RIVET_TOKEN),
-    })),
+    Output.map(
+      (values) =>
+        Object.fromEntries(
+          Object.entries(values).map(([name, value]) => [name, unwrap(value)]),
+        ) as Omit<typeof values, "RIVET_TOKEN"> & { RIVET_TOKEN: string },
+    ),
   );
 
 /**
- * Every value a node needs, the token still `Redacted`, for hosts that keep
- * secrets apart (`Kubernetes.Deployment` reads it from a Secret).
+ * Every value a node needs, the token and any secret a class reads as config
+ * still `Redacted`, for hosts that keep secrets apart (`Kubernetes.Deployment`
+ * reads them from a Secret).
  */
 export const secretNodeEnvironment = nodeValues;
+
+export { SECRET_ENV } from "./SecretEnv.ts";
+
+/**
+ * A node's environment split for hosts that hand secrets over as one value
+ * (a Secret Manager secret): `secrets` holds every secret a class reads as
+ * config, unwrapped, for the host to keep in its secret store and pass as
+ * {@link SECRET_ENV}; `plain` holds the rest, the token unwrapped.
+ */
+export const splitNodeEnvironment = (nodes: PoolNodes<unknown>, endpoint?: Input<string>) =>
+  nodeValues(nodes, endpoint).pipe(
+    Output.map((values) => {
+      const plain: Record<string, string> = {};
+      const secrets: Record<string, string> = {};
+      for (const [name, value] of Object.entries(values)) {
+        if (Redacted.isRedacted(value) && name !== "RIVET_TOKEN") {
+          secrets[name] = String(Redacted.value(value));
+        } else {
+          plain[name] = String(unwrap(value));
+        }
+      }
+      return { plain, secrets };
+    }),
+  );
 
 /**
  * The node entry, which imports the pool's classes from {@link VIRTUAL}.

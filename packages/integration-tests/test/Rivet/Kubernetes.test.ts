@@ -12,6 +12,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
 import { kubectlGet, type KindCluster } from "../Kubernetes/fixtures/kind.ts";
+import { CLASS_SECRET, ClassSecretConfig } from "./fixtures/class-secret.ts";
 import { expectDurableStream } from "./fixtures/durable-stream-check.ts";
 import {
   Cluster,
@@ -72,7 +73,7 @@ describe.skipIf(!!process.env.FAST)(
             });
             const actors = yield* RustActors().pipe(Effect.provide(RustPool));
             return { front: front.deploymentName, rust: rustTarget(actors), kind: cluster };
-          }).pipe(Effect.provide(CounterLive)),
+          }).pipe(Effect.provide(CounterLive.pipe(Layer.provide(ClassSecretConfig)))),
         );
         expect(outputs.front).toBe(FRONT_NAME);
         rust = outputs.rust as RustTarget;
@@ -106,6 +107,13 @@ describe.skipIf(!!process.env.FAST)(
           ),
         );
         expect(nodes.length).toBe(3);
+        // Nor does any secret a class reads as config: it is in the Secret too.
+        expect(JSON.stringify(deployments)).not.toContain(CLASS_SECRET);
+        expect(
+          nodes
+            .flatMap((node) => node.spec.template.spec.containers[0]!.env!)
+            .find((entry) => entry.name === "RIVET_TEST_CLASS_SECRET")?.valueFrom?.secretKeyRef,
+        ).toBeDefined();
         for (const node of nodes) {
           const token = node.spec.template.spec.containers[0]!.env!.find(
             (entry) => entry.name === "RIVET_TOKEN",
