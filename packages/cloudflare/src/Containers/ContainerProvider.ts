@@ -925,6 +925,25 @@ export const LiveContainerProvider = () =>
         session: ScopedPlanStatusSession;
       }) {
         const { accountId } = yield* yield* CloudflareEnvironment;
+        // A Container moving off fleet scheduling owned its fleet
+        // application. Its Durable Object class creates its own application
+        // on the same namespace, so delete the fleet one (the class does too,
+        // whichever reconciles first). An unbound Container has no class to
+        // do it, so this is the only delete it gets.
+        if (
+          output !== undefined &&
+          isLiveId(output.applicationId) &&
+          output.applicationId !== "" &&
+          output.schedulingPolicy !== "durable_object"
+        ) {
+          yield* session.note(
+            `Deleting fleet container application ${output.applicationName}; Durable Object scheduling replaces it...`,
+          );
+          yield* Containers.deleteContainerApplication({
+            accountId: output.accountId,
+            applicationId: output.applicationId,
+          }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.void));
+        }
         const attributes = {
           ...durableObjectPlaceholder({
             // The application is owned by the Durable Object class.

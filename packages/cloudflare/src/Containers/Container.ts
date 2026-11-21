@@ -479,10 +479,12 @@ type ContainerShape<Shape> = {
  * ```
  *
  * An Effect-native Container deployed on a fleet application before
- * Durable Object scheduling became the default keeps deploying only with
- * `schedulingPolicy: "default"`. The policy cannot change in place: moving to
- * Durable Object scheduling takes a new Container and Durable Object class,
- * and Durable Object storage does not carry over.
+ * Durable Object scheduling became the default moves to it on the next
+ * deploy. Cloudflare cannot change a policy in place, so Alchemy deletes the
+ * fleet application and creates the Durable Object-managed one on the same
+ * namespace: the Durable Objects and their storage stay, running containers
+ * stop, and the next `start()` starts them under the new policy. Name
+ * `schedulingPolicy: "default"` to stay on fleet scheduling instead.
  *
  * ### Native Durable Objects on Async Workers
  * A plain Durable Object class on an async Worker attaches its Containers
@@ -541,13 +543,15 @@ type ContainerShape<Shape> = {
  *
  * Local development runs every image through workerd and Docker.
  *
- * Switching an existing application to this scheduling policy requires a new
- * application and a new Durable Object class/namespace. Alchemy rejects an
- * in-place policy change; existing Durable Object storage is not transferred.
- * Replacing only a wrapper with the native API while retaining the original
- * policy and class preserves the namespace. Deployment properties such as
- * `maxInstances`, `instanceType`, `env`, and `rollout` are not valid with the
- * new policy; pass per-instance settings to `start()`.
+ * Switching a fleet Container to this scheduling policy replaces its
+ * application on the same Durable Object namespace: the class keeps its
+ * Durable Objects and their storage, and running containers stop. The class
+ * must call the Durable Object Container API itself, because the
+ * `@cloudflare/containers` `Container` class does not support this policy.
+ * Switching back to fleet scheduling needs a new Durable Object class.
+ * Deployment properties such as `maxInstances`, `instanceType`, `env`, and
+ * `rollout` are not valid with the new policy; pass per-instance settings to
+ * `start()`.
  *
  * ### Image Sources
  * A container's image comes from one of three sources, picked by which

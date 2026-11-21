@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { describe, expect } from "@alchemy.run/test";
+import { assert, describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Workers from "@distilled.cloud/cloudflare/workers";
@@ -7,12 +7,18 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import {
   BuildInputs,
   type BuildInputSet,
   buildSecretsStack,
 } from "./fixtures/buildsecrets/stack.ts";
+import MyContainerLive, {
+  MyContainer,
+  MyFleetContainerLive,
+} from "./fixtures/effectful/container.ts";
+import EffectfulWorker from "./fixtures/effectful/worker.ts";
 import { GuardWorker } from "./fixtures/native/guard-worker.ts";
 import { policyStack, settingsStack, TEST_SSH_PUBLIC_KEY } from "./fixtures/native/settings.ts";
 import {
@@ -91,6 +97,19 @@ const getText = (baseUrl: string, path: string) =>
       return yield* Effect.fail(new Error(`GET ${path} failed (${response.status}): ${body}`));
     }
     return body;
+  });
+
+/** PUT a text body to a route; a non-2xx response fails with its status and body. */
+const putText = (baseUrl: string, path: string, body: string) =>
+  Effect.gen(function* () {
+    const response = yield* HttpClient.execute(
+      HttpClientRequest.put(new URL(path, baseUrl)).pipe(HttpClientRequest.bodyText(body)),
+    );
+    if (response.status < 200 || response.status >= 300) {
+      return yield* Effect.fail(
+        new Error(`PUT ${path} failed (${response.status}): ${yield* response.text}`),
+      );
+    }
   });
 
 const getJson = <A>(baseUrl: string, path: string) =>
@@ -484,28 +503,88 @@ for (const dev of [true, false]) {
         );
 
         test.provider(
-          "rejects switching an application between fleet and Durable Object scheduling",
+          "upgrades a fleet application to Durable Object scheduling in place, and refuses the way back",
           (stack) =>
             Effect.gen(function* () {
               yield* stack.destroy();
               yield* Effect.gen(function* () {
                 const fleet = yield* stack.deploy(policyStack("default"));
-                const switched = yield* stack
-                  .deploy(policyStack("durable_object"))
-                  .pipe(Effect.exit);
-                expect(Exit.isFailure(switched)).toBe(true);
-                if (Exit.isFailure(switched)) {
-                  expect(Cause.pretty(switched.cause)).toContain(
-                    "cannot switch between fleet and Durable Object scheduling",
+                expect((yield* observe(fleet)).schedulingPolicy).toBe("default");
+
+                // Cloudflare cannot change a policy in place: the Container
+                // deletes its fleet application, and Durable Object
+                // scheduling needs none of its own.
+                const upgraded = yield* stack.deploy(policyStack("durable_object"));
+                expect(upgraded.applicationId).toBe("");
+                expect(upgraded.schedulingPolicy).toBe("durable_object");
+                expect(yield* waitForApplicationDeleted(fleet.accountId, fleet.applicationId)).toBe(
+                  undefined,
+                );
+
+                const back = yield* stack.deploy(policyStack("default")).pipe(Effect.exit);
+                expect(Exit.isFailure(back)).toBe(true);
+                if (Exit.isFailure(back)) {
+                  expect(Cause.pretty(back.cause)).toContain(
+                    "cannot move back to fleet scheduling in place",
                   );
                 }
-                // The rejected deploy did not touch the deployed application.
-                const observed = yield* observe(fleet);
-                expect(observed.id).toBe(fleet.applicationId);
-                expect(observed.schedulingPolicy).toBe("default");
               }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
             }),
-          { timeout: 120_000, retry: 0 },
+          { timeout: 180_000, retry: 0 },
+        );
+
+        test.provider(
+          "upgrades a fleet Effect-native Container to Durable Object scheduling, keeping its Durable Objects' storage",
+          (stack) =>
+            Effect.gen(function* () {
+              yield* stack.destroy();
+              const program = (live: typeof MyContainerLive) =>
+                Effect.gen(function* () {
+                  const worker = yield* EffectfulWorker;
+                  const app: Cloudflare.ContainerApplication = yield* MyContainer.Application;
+                  return { app, url: worker.url.as<string>() };
+                }).pipe(Effect.provide(live));
+              // A cold container start, then the program's port, can take a while.
+              const ping = (url: string) =>
+                getText(url, "/ping").pipe(
+                  within("/ping", "90 seconds"),
+                  Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 6 }),
+                );
+
+              yield* Effect.gen(function* () {
+                const fleet = yield* stack.deploy(program(MyFleetContainerLive));
+                const namespaceId = fleet.app.durableObjects?.namespaceId;
+                assert(namespaceId);
+                expect(fleet.app.schedulingPolicy).toBe("default");
+                yield* waitUntilReady(fleet.url);
+                expect(yield* ping(fleet.url)).toBe("pong");
+                yield* putText(fleet.url, "/remember", "kept across the upgrade");
+
+                // The default Effect-native Container is Durable Object-managed.
+                const upgraded = yield* stack.deploy(program(MyContainerLive));
+                expect(upgraded.app.schedulingPolicy).toBe("durable_object");
+                expect(
+                  yield* waitForApplicationDeleted(fleet.app.accountId, fleet.app.applicationId),
+                ).toBe(undefined);
+                // The class's application takes the same namespace, so the
+                // Durable Objects and their storage stay.
+                const application = yield* Containers.getContainerApplication({
+                  accountId: fleet.app.accountId,
+                  applicationId: namespaceId,
+                });
+                expect(application.schedulingPolicy).toBe("durable_object");
+                expect(application.durableObjects?.namespaceId).toBe(namespaceId);
+
+                expect(yield* getJson<{ value: string | null }>(upgraded.url, "/recall")).toEqual({
+                  value: "kept across the upgrade",
+                });
+                expect(yield* ping(upgraded.url)).toBe("pong");
+
+                const unchanged = yield* stack.plan(program(MyContainerLive));
+                expect(unchanged.resources.EffectfulContainer?.action).toBe("noop");
+              }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+            }),
+          { timeout: 600_000, retry: 0 },
         );
       }
 

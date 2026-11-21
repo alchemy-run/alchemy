@@ -174,21 +174,22 @@ export const imagePreparationTimeoutMillis = (timeout: Duration.Input = "30 minu
 
 /**
  * Validate container props before publishing images or touching the hosting
- * Worker. Reject switches between fleet scheduling and Durable Object scheduling.
+ * Worker. Reject a switch from Durable Object scheduling back to fleet
+ * scheduling.
  */
 export const validateContainerConfiguration = Effect.fn(function* (
   props: AnyContainerApplicationProps,
   deployedPolicy?: string,
 ) {
   const policy = schedulingPolicyOf(props);
-  if (
-    deployedPolicy !== undefined &&
-    (deployedPolicy === "durable_object") !== (policy === "durable_object")
-  ) {
+  // Fleet → Durable Object scheduling replaces the fleet application on the
+  // same namespace (see DurableObjectApplication), so the class keeps its
+  // Durable Objects and their storage. The reverse has no such path: a fleet
+  // application is not attached until its Container reconciles, while the
+  // class's Durable Object-managed application still holds the namespace.
+  if (deployedPolicy === "durable_object" && policy !== "durable_object") {
     return yield* invalid(
-      props.schedulingPolicy === undefined && props.main
-        ? `This Effect-native container is deployed with fleet scheduling ('${deployedPolicy}'), and Effect-native containers now default to schedulingPolicy: 'durable_object'. Set schedulingPolicy: '${deployedPolicy}' to keep the deployed application, or declare a new container application and Durable Object class to move to Durable Object scheduling. Existing Durable Object storage is not transferred.`
-        : "A container cannot switch between fleet and Durable Object scheduling in place. Declare a new container application and Durable Object class, then move traffic to the new namespace. Existing Durable Object storage is not transferred.",
+      "A Durable Object-managed container cannot move back to fleet scheduling in place. Declare a new container application and Durable Object class, then move traffic to the new namespace. Existing Durable Object storage is not transferred.",
     );
   }
 
