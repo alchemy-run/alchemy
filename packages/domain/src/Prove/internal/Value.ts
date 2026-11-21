@@ -233,7 +233,23 @@ export class Run {
     private readonly prefix: ReadonlyArray<number>,
     /** Picks at a choice the prefix does not make: without it, the first option. */
     private readonly pick?: (of: number) => number,
+    /**
+     * Which test of a condition, counted from the first, the code is told the
+     * opposite of: it goes on as if the test had failed, on inputs that pass
+     * it. It is how a refusal is taken out, to see what it was there for.
+     */
+    private readonly unguarded?: number,
   ) {}
+
+  /** For each test of a condition, in order: how many choices the run had made once it was settled. */
+  readonly tests: Array<number> = [];
+
+  /** Note a test of a condition and what it came to, and say what the code is told. */
+  test(truth: boolean): boolean {
+    const index = this.tests.length;
+    this.tests.push(this.taken.length);
+    return index === this.unguarded ? !truth : truth;
+  }
 
   /**
    * A run that goes on from the end of this one: what holds here holds there,

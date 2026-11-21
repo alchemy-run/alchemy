@@ -44,6 +44,12 @@
  * one, and `Aborted` for an attempt it no longer knows: it forgets an outcome
  * only once every instance has it, so whoever still asks holds a stray copy.
  *
+ * **It is model-checked.** `spec/TwoPhase.tla` models these steps with what
+ * goes wrong around them: a call that doesn't arrive, a driver that dies, a
+ * wake-up that overlaps the call it finishes. Its test checks every order of
+ * them, and holds the steps {@link finish} and {@link deliver} really take
+ * against the model. Change the protocol and the spec together.
+ *
  * **It can't deadlock.** The primary is the first instance in stream order, so a primary only ever
  * prepares instances after itself. And nothing waits while it holds: a
  * decision that meets a held instance aborts, lets go of everything, and

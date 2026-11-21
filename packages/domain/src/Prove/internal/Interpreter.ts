@@ -100,7 +100,7 @@ const isPrimitive = (v: V): boolean =>
 const isQuotient = (v: V): boolean => v._tag === "Term" && v.quotient !== undefined;
 
 /** `a === b`: known, a formula, or `undefined` when the prover cannot tell. */
-const same = (a: V, b: V): boolean | string | undefined => {
+export const same = (a: V, b: V): boolean | string | undefined => {
   if (a._tag === "Opaque" || b._tag === "Opaque" || a._tag === "Time" || b._tag === "Time")
     return a === b ? true : undefined;
   if (isPrimitive(a) && isPrimitive(b))
@@ -648,7 +648,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
 
   const decide: Interpreter["decide"] = (value, site) =>
     truthOf(value, site).pipe(
-      Effect.map((t) => (typeof t === "boolean" ? t : current.run.branch(t))),
+      Effect.map((t) => current.run.test(typeof t === "boolean" ? t : current.run.branch(t))),
     );
 
   const bind: (pattern: Node, value: V, scope: Scope, env: Env) => Eval<void> = Effect.fnUntraced(

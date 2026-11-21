@@ -332,7 +332,7 @@ const replay = Effect.fn(function* (
 });
 
 /** A value as text two values share only when they are the same data. */
-const canon = (value: unknown): string => {
+export const canon = (value: unknown): string => {
   if (typeof value === "bigint") return `${value}n`;
   if (typeof value === "string") return JSON.stringify(value);
   if (value === null || typeof value !== "object") return String(value);
