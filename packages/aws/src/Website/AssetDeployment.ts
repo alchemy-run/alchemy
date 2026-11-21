@@ -371,20 +371,21 @@ const inferContentType = (file: string, textEncoding: WebsiteTextEncoding = "utf
 const defaultCacheControlFor = (file: string) =>
   extname(file) === ".html" ? defaultHtmlCacheControl : defaultAssetCacheControl;
 
-const escapeRegex = (value: string) => value.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+const escapeRegex = (value: string) => value.replace(/[|\\{}()[\]^$+*?.]/g, "\\$&");
 
 const globToRegExp = (glob: string) =>
   new RegExp(
     `^${escapeRegex(toPosix(glob))
+      .replace(/\\\*\\\*\//g, "(?:.*/)?")
       .replace(/\\\*\\\*/g, ".*")
       .replace(/\\\*/g, "[^/]*")
-      .replace(/\\\?/g, ".")}$`,
+      .replace(/\\\?/g, "[^/]")}$`,
   );
 
 const matchesAny = (file: string, globs: string | string[]) =>
   (Array.isArray(globs) ? globs : [globs]).some((glob) => globToRegExp(glob).test(file));
 
-const getFileOptions = (
+export const getFileOptions = (
   file: string,
   options: AssetFileOption[] | undefined,
   textEncoding: WebsiteTextEncoding | undefined,
