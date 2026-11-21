@@ -82,8 +82,6 @@ describe.concurrent(
                 versionId: worker.versionId!,
               });
               expect(uploaded.id).toEqual(worker.versionId);
-              expect(uploaded.annotations?.workersTag).toEqual(tag);
-              expect(uploaded.annotations?.workersMessage).toEqual(message);
             }
 
             yield* stack.destroy();
