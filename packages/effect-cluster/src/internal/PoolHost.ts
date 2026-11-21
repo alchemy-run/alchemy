@@ -22,6 +22,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Semaphore from "effect/Semaphore";
 import { DATABASE_MAX_CONNECTIONS, Database, type DatabaseShape } from "../Database.ts";
 import { shardGroupKey, type Entity } from "../Entity.ts";
 import { Pool, type PoolEntity } from "../Pool.ts";
@@ -311,6 +312,22 @@ const runnerEntry = (name: "runner" | "external-runner") =>
   );
 
 /**
+ * One lock per bundle directory. Every resource that reads a pool's
+ * program (its image, its service) resolves the bundle on its own, and a
+ * plan diffs them at once: without the lock, one bundle's `remove` runs
+ * while another makes the directory again (`EEXIST`).
+ */
+const bundleLocks = new Map<string, Semaphore.Semaphore>();
+const bundleLock = (dir: string) => {
+  let lock = bundleLocks.get(dir);
+  if (lock === undefined) {
+    lock = Semaphore.makeUnsafe(1);
+    bundleLocks.set(dir, lock);
+  }
+  return lock;
+};
+
+/**
  * Bundle the runner program and its Dockerfile into a directory of their
  * own, once the pool knows its classes, and resolve to the directory.
  */
@@ -356,6 +373,6 @@ const bundleProgram = Effect.fn(function* (id: string, pool: Pool, dockerfile: s
         createHash("sha256").update(hashes.join("\n")).digest("hex").slice(0, 16),
       );
       return { dir, hash };
-    }).pipe(Effect.orDie),
+    }).pipe(bundleLock(dir).withPermits(1), Effect.orDie),
   )(pool.entities);
 });
