@@ -94,6 +94,6 @@ export default class Coder extends Cloudflare.DurableObject<Coder>()(
 
 ## What the sandbox image needs
 
-The harness installs OpenCode with `sh`, `curl`, `tar` and `sha512sum`, from `registry.npmjs.org`, and checks the download against a known hash. Boat's own image and `node:22-bookworm` have what it needs. A new sandbox's first prompt waits for that install.
+The harness installs OpenCode with `sh`, `curl`, `tar` and `sha256sum`, from its release on `github.com`, and checks the download against a known hash. Boat's own image and `node:22-bookworm` have what it needs. A new sandbox's first prompt waits for that install.
 
 Next: the [tutorial](/opencode/tutorial/part-1).

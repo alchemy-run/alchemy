@@ -32,7 +32,7 @@ const harness = yield* OpenCode.Harness({
 
 ## What happens on first use
 
-The first call on a session opens its sandbox, downloads OpenCode from npm, checks it against a known hash, writes its configuration and starts it with the bridge. That can take a minute on a new sandbox. Every later call finds OpenCode running.
+The first call on a session opens its sandbox, downloads OpenCode from its GitHub release, checks it against a known hash, writes its configuration and starts it with the bridge. That can take a minute on a new sandbox. Every later call finds OpenCode running.
 
 A session's sandbox is found by a key made from the Durable Object's id and the session's name. `session.sandboxKey` is that key, for finding the sandbox on the platform yourself.
 

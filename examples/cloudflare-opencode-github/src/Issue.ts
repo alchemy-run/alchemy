@@ -68,11 +68,19 @@ export default class Issue extends Cloudflare.DurableObject<Issue>()(
         toolCalls: Effect.fn(function* () {
           const messages = yield* session.messages;
           return messages.flatMap((message) =>
-            message.parts.flatMap((part) =>
-              part.type === "tool"
-                ? [{ tool: part.tool, status: part.state?.status, output: part.state?.output }]
-                : [],
-            ),
+            message.type === "assistant"
+              ? (message as OpenCode.AssistantMessage).content.flatMap((content) =>
+                  content.type === "tool"
+                    ? [
+                        {
+                          tool: content.name,
+                          status: content.state?.status,
+                          input: content.state?.input,
+                        },
+                      ]
+                    : [],
+                )
+              : [],
           );
         }),
         /** The issue is closed: its sandbox is no longer needed. */

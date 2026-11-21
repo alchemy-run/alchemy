@@ -13,7 +13,7 @@ import {
   type ToolTagService,
 } from "@alchemy.run/ai/Tool";
 import { RuntimeContext } from "alchemy/RuntimeContext";
-import { LanguageModel, McpClient } from "effect/ai";
+import { LanguageModel, McpClient, Tool as AiToolSchema } from "effect/ai";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
@@ -66,6 +66,13 @@ export interface HarnessOptions<
   readonly cwd?: string;
   /** OpenCode's own configuration (`opencode.json`), merged under what the harness sets. */
   readonly config?: Readonly<Record<string, unknown>>;
+  /**
+   * Code mode: the model calls the harness's tools from a JavaScript
+   * program it writes (OpenCode's `execute` tool), and only the program's
+   * result reaches it. Off, it calls each tool directly.
+   * @default true
+   */
+  readonly codeMode?: boolean;
 }
 
 /** What a prompt runs with. Unset fields keep the session's, then the harness's. */
@@ -77,6 +84,8 @@ export interface PromptOptions {
   readonly instructions?: string;
   /** One of OpenCode's agents (`build`, `plan`, or one from `config`). */
   readonly agent?: string;
+  /** Call the tools from a program (`true`) or one at a time (`false`). See {@link HarnessOptions.codeMode}. */
+  readonly codeMode?: boolean;
   /**
    * Makes the prompt exactly-once while its sandbox runs: a retry with the
    * same id waits for the original.
@@ -84,35 +93,47 @@ export interface PromptOptions {
   readonly requestId?: string;
 }
 
-/** One part of an OpenCode message: `text`, `tool`, `reasoning`, `step-start`, … */
-export interface Part {
+/**
+ * One entry of a session's transcript as OpenCode stores it, told apart by
+ * `type`: `user` (a prompt), `assistant` (one step of an answer), `idle`
+ * (the end of a run, with its `outcome`), `skill`, `agent-switched`, …
+ */
+export interface Message {
+  readonly id: string;
+  readonly type: string;
+  readonly [key: string]: unknown;
+}
+
+/** One piece of an assistant step: `text`, `reasoning`, or a `tool` call. */
+export interface Content {
   readonly type: string;
   readonly text?: string;
-  /** A `tool` part's tool, as OpenCode names it. */
-  readonly tool?: string;
+  /** A `tool` call's tool, as OpenCode names it (`shell`, `alchemy_add`, `execute`). */
+  readonly name?: string;
   readonly state?: {
-    readonly status: "pending" | "running" | "completed" | "error";
+    readonly status: "streaming" | "running" | "completed" | "error";
     readonly input?: unknown;
-    readonly output?: string;
-    readonly error?: string;
+    /** What the tool returned. */
+    readonly content?: ReadonlyArray<{ readonly type: string; readonly text?: string }>;
+    readonly error?: { readonly type: string; readonly message: string };
+    /** A code mode program's tool calls are in `toolCalls`. */
+    readonly metadata?: { readonly [key: string]: unknown };
   };
   readonly [key: string]: unknown;
 }
 
-/** An OpenCode message: who wrote it, and its parts. */
-export interface Message {
-  readonly info: {
-    readonly id: string;
-    readonly role: "user" | "assistant";
-    readonly [key: string]: unknown;
-  };
-  readonly parts: ReadonlyArray<Part>;
+/** One step of an answer: what the model said and the tools it called. */
+export interface AssistantMessage extends Message {
+  readonly type: "assistant";
+  readonly content: ReadonlyArray<Content>;
 }
 
-/** The assistant's answer to one prompt. */
-export interface Reply extends Message {
-  /** The answer's text. */
+/** The answer to one prompt. */
+export interface Reply {
+  /** The text of every step of the answer. */
   readonly text: string;
+  /** What the prompt added to the transcript, from the prompt itself to its `idle` entry. */
+  readonly messages: ReadonlyArray<Message>;
 }
 
 /** One session: an OpenCode session in a sandbox of its own. */
@@ -132,7 +153,7 @@ export interface Session {
   ) => Effect.Effect<Reply, OpenCodeError | NotOnHarness, RuntimeContext>;
   /** Stop the prompt that is running. */
   readonly abort: Effect.Effect<void, OpenCodeError, RuntimeContext>;
-  /** Every message of the session, oldest first. */
+  /** The session's transcript, oldest first. */
   readonly messages: Effect.Effect<ReadonlyArray<Message>, OpenCodeError, RuntimeContext>;
   /**
    * Stop the session's sandbox and keep its files, where its platform can
@@ -218,7 +239,22 @@ interface BridgeTool {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: object;
+  /** Types what a code mode program gets back. MCP allows only an object. */
+  readonly outputSchema?: object;
 }
+
+/** A tool's `success` schema as an MCP `outputSchema`, when it describes an object. */
+const outputSchemaOf = (spec: ToolSpec): object | undefined => {
+  if (spec.success.ast._tag === "Void") return undefined;
+  const schema = AiToolSchema.getJsonSchemaFromSchema(spec.success) as {
+    readonly type?: unknown;
+    readonly $ref?: unknown;
+    readonly $defs?: Readonly<Record<string, { readonly type?: unknown }>>;
+  };
+  const target =
+    typeof schema.$ref === "string" ? schema.$defs?.[schema.$ref.split("/").at(-1)!] : schema;
+  return target?.type === "object" ? schema : undefined;
+};
 
 /** What one instance builds once: its models, and the tools each server gives. */
 interface Built {
@@ -261,6 +297,8 @@ interface Connection {
   ) => Effect.Effect<Finished, OpenCodeError, RuntimeContext>;
   /** Prompts waiting for OpenCode to finish, by request id. */
   readonly waiting: Map<string, Deferred.Deferred<Finished, OpenCodeError>>;
+  /** The session settings last applied, as JSON, so an unchanged one is not sent again. */
+  readonly applied: Map<string, string>;
   readonly close: Effect.Effect<void>;
 }
 
@@ -421,11 +459,15 @@ export const Harness = <
           const bridgeServers: Record<string, ReadonlyArray<BridgeTool>> = {
             ...(tools.length > 0
               ? {
-                  [name]: tools.map(({ tool }) => ({
-                    name: tool.toolName,
-                    description: tool.spec.description,
-                    inputSchema: parametersJsonSchema(tool.spec),
-                  })),
+                  [name]: tools.map(({ tool }) => {
+                    const outputSchema = outputSchemaOf(tool.spec);
+                    return {
+                      name: tool.toolName,
+                      description: tool.spec.description,
+                      inputSchema: parametersJsonSchema(tool.spec),
+                      ...(outputSchema !== undefined ? { outputSchema } : {}),
+                    };
+                  }),
                 }
               : {}),
             ...Object.fromEntries(
@@ -435,6 +477,9 @@ export const Harness = <
                   name: tool.name,
                   description: tool.description ?? tool.title ?? tool.name,
                   inputSchema: tool.inputSchema as object,
+                  ...(tool.outputSchema !== undefined
+                    ? { outputSchema: tool.outputSchema as object }
+                    : {}),
                 })),
               ]),
             ),
@@ -678,17 +723,21 @@ export const Harness = <
 
         // The session is the one titled after its name; a new sandbox has none yet.
         const title = `alchemy:${session}`;
-        const existing = yield* call("opencode", "GET", "/session");
+        const existing = yield* call(
+          "opencode",
+          "GET",
+          `/api/session?search=${encodeURIComponent(title)}&limit=100`,
+        ).pipe(Effect.flatMap((answer) => ok(answer, "list sessions")));
         const found = (
-          JSON.parse(existing.body) as ReadonlyArray<{ id: string; title: string }>
-        ).find((candidate) => candidate.title === title);
+          existing as { readonly data: ReadonlyArray<{ id: string; title?: string }> }
+        ).data.find((candidate) => candidate.title === title);
         const sessionId =
           found?.id ??
           (
-            JSON.parse((yield* call("opencode", "POST", "/session", { title })).body) as {
-              id: string;
-            }
-          ).id;
+            (yield* call("opencode", "POST", "/api/session", { title }).pipe(
+              Effect.flatMap((answer) => ok(answer, "create session")),
+            )) as { readonly data: { readonly id: string } }
+          ).data.id;
 
         const waiting: Connection["waiting"] = new Map();
         const answer = (request: {
@@ -783,7 +832,7 @@ export const Harness = <
             Effect.andThen(close),
           ),
         );
-        return { handle, sessionId, call, waiting, close } satisfies Connection;
+        return { handle, sessionId, call, waiting, applied: new Map(), close } satisfies Connection;
       });
 
     const connection = (session: string) =>
@@ -823,11 +872,15 @@ export const Harness = <
         : Effect.fail(fail(`OpenCode ${what}: ${answer.status} ${answer.body.slice(0, 500)}`));
 
     /**
-     * OpenCode's switch for each tool: everything off, then the chosen ones
-     * on. A sandbox image can bring OpenCode tools of its own; a prompt only
-     * gets what its harness lists.
+     * The session's permissions: every tool denied, then the chosen ones
+     * allowed. A sandbox image can bring OpenCode tools of its own; a prompt
+     * only gets what its harness lists. Code mode is OpenCode's `execute`
+     * tool, which reaches the allowed tools of ours from a program.
      */
-    const switches = (selected: ReadonlyArray<ToolRef | AnyMcpServer> | undefined) =>
+    const permissions = (
+      selected: ReadonlyArray<ToolRef | AnyMcpServer> | undefined,
+      codeMode: boolean,
+    ) =>
       Effect.gen(function* () {
         const state = yield* build;
         const ours = Object.entries(state.servers).flatMap(([server, tools]) =>
@@ -856,9 +909,42 @@ export const Harness = <
           }
         }
         if (skills.length > 0) on.add("skill");
-        // The wildcard comes first: OpenCode applies the switches in order.
-        return { "*": false, ...Object.fromEntries([...on].map((tool) => [tool, true])) };
+        if (codeMode) on.add("execute");
+        // The wildcard comes first: a later rule wins.
+        return [
+          { action: "*", resource: "*", effect: "deny" },
+          ...[...on].map((tool) => ({ action: tool, resource: "*", effect: "allow" })),
+        ];
       });
+
+    /** Apply one session setting, unless it is what the session already has. */
+    const apply = (
+      open: Connection,
+      key: string,
+      value: unknown,
+      send: Effect.Effect<Finished, OpenCodeError, RuntimeContext>,
+    ) =>
+      Effect.suspend(() => {
+        const json = JSON.stringify(value) ?? "null";
+        if (open.applied.get(key) === json) return Effect.void;
+        return send.pipe(
+          Effect.flatMap((answer) => ok(answer, `set ${key}`)),
+          Effect.tap(() => Effect.sync(() => open.applied.set(key, json))),
+          Effect.asVoid,
+        );
+      });
+
+    /** The text of the answer's steps. */
+    const textOf = (messages: ReadonlyArray<Message>) =>
+      messages
+        .flatMap((message) =>
+          message.type === "assistant"
+            ? (message as AssistantMessage).content.flatMap((content) =>
+                content.type === "text" && content.text !== undefined ? [content.text] : [],
+              )
+            : [],
+        )
+        .join("");
 
     const session = (sessionName: string, defaults: PromptOptions = {}): Session => ({
       name: sessionName,
@@ -873,8 +959,42 @@ export const Harness = <
           ) {
             return yield* new NotOnHarness({ kind: "model", missing: chosen.model.modelName });
           }
-          const tools = yield* switches(chosen.tools);
+          const rules = yield* permissions(
+            chosen.tools,
+            chosen.codeMode ?? options.codeMode ?? true,
+          );
           const open = yield* connection(sessionName);
+          const path = `/api/session/${open.sessionId}`;
+          // A prompt runs with what the session has: set what this one asks for.
+          const model = { id: (chosen.model ?? models[0]!.model).modelName, providerID: name };
+          yield* apply(
+            open,
+            "model",
+            model,
+            open.call("opencode", "POST", `${path}/model`, { model }),
+          );
+          const agent = chosen.agent ?? "build";
+          yield* apply(
+            open,
+            "agent",
+            agent,
+            open.call("opencode", "POST", `${path}/agent`, { agent }),
+          );
+          yield* apply(
+            open,
+            "permissions",
+            rules,
+            open.call("opencode", "PATCH", path, { permissions: rules }),
+          );
+          const entry = `/api/experimental/session/${open.sessionId}/instructions/entries/alchemy`;
+          yield* apply(
+            open,
+            "instructions",
+            chosen.instructions ?? null,
+            chosen.instructions === undefined
+              ? open.call("opencode", "DELETE", entry)
+              : open.call("opencode", "PUT", entry, { value: chosen.instructions }),
+          );
           // oxlint-disable-next-line effecttsgo/crypto-random-uuid-in-effect -- only a unique id for a prompt that gave none
           const requestId = chosen.requestId ?? crypto.randomUUID();
           let waiter = open.waiting.get(requestId);
@@ -886,15 +1006,7 @@ export const Harness = <
             .call("bridge", "POST", "/_prompt", {
               requestId,
               sessionId: open.sessionId,
-              body: {
-                parts: [{ type: "text", text }],
-                tools,
-                ...(chosen.model !== undefined
-                  ? { model: { providerID: name, modelID: chosen.model.modelName } }
-                  : {}),
-                ...(chosen.instructions !== undefined ? { system: chosen.instructions } : {}),
-                ...(chosen.agent !== undefined ? { agent: chosen.agent } : {}),
-              },
+              body: { text },
             })
             .pipe(Effect.flatMap((answer) => ok(answer, "prompt")))) as {
             readonly finished?: Finished;
@@ -902,38 +1014,44 @@ export const Harness = <
           // A retry of a prompt that already finished is given its answer again.
           if (admitted.finished !== undefined) open.waiting.delete(requestId);
           const finished = admitted.finished ?? (yield* Deferred.await(waiter));
-          const message = (yield* ok(finished, "prompt")) as Message & {
-            readonly info: { readonly error?: { readonly name: string; readonly data?: unknown } };
+          const { messages } = (yield* ok(finished, "prompt")) as {
+            readonly messages: ReadonlyArray<Message>;
           };
-          if (message.info.error !== undefined) {
-            const data = message.info.error.data as { readonly message?: string } | undefined;
-            return yield* fail(data?.message ?? message.info.error.name, message.info.error);
+          const idle = messages.findLast((message) => message.type === "idle") as
+            | (Message & {
+                readonly outcome: "succeeded" | "failed" | "interrupted";
+                readonly error?: { readonly message?: string };
+              })
+            | undefined;
+          if (idle !== undefined && idle.outcome !== "succeeded") {
+            return yield* fail(idle.error?.message ?? `The prompt was ${idle.outcome}`, idle.error);
           }
-          return {
-            ...message,
-            text: message.parts
-              .flatMap((part) =>
-                part.type === "text" && part.text !== undefined ? [part.text] : [],
-              )
-              .join(""),
-          };
+          return { text: textOf(messages), messages } satisfies Reply;
         }),
       abort: Effect.flatMap(connection(sessionName), (open) =>
         Effect.asVoid(
           Effect.flatMap(
-            open.call("opencode", "POST", `/session/${open.sessionId}/abort`),
-            (answer) => ok(answer, "abort"),
+            open.call("opencode", "POST", `/api/session/${open.sessionId}/interrupt`),
+            (answer) => ok(answer, "interrupt"),
           ),
         ),
       ),
       messages: Effect.flatMap(connection(sessionName), (open) =>
-        Effect.map(
-          Effect.flatMap(
-            open.call("opencode", "GET", `/session/${open.sessionId}/message`),
-            (answer) => ok(answer, "messages"),
-          ),
-          (messages) => messages as ReadonlyArray<Message>,
-        ),
+        Effect.gen(function* () {
+          const messages: Array<Message> = [];
+          let query = "order=asc&limit=200";
+          for (;;) {
+            const page = (yield* open
+              .call("opencode", "GET", `/api/session/${open.sessionId}/message?${query}`)
+              .pipe(Effect.flatMap((answer) => ok(answer, "messages")))) as {
+              readonly data: ReadonlyArray<Message>;
+              readonly cursor?: { readonly next?: string | null };
+            };
+            messages.push(...page.data);
+            if (!page.cursor?.next) return messages as ReadonlyArray<Message>;
+            query = `cursor=${encodeURIComponent(page.cursor.next)}`;
+          }
+        }),
       ),
       suspendSandbox: disconnect(sessionName).pipe(
         Effect.andThen(sandboxes.suspend(sandboxKey(instanceId, sessionName))),

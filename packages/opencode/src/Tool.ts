@@ -13,7 +13,7 @@ import {
 const OpenCodeToolTypeId = "~alchemy/OpenCode/Tool" as const;
 
 /**
- * One of the tools only OpenCode has (`webfetch`, `task`, …), run by
+ * One of the tools only OpenCode has (`webfetch`, `subagent`, …), run by
  * OpenCode in the session's sandbox. The tools every coding agent has are
  * tool tags instead (`AI.Bash`), provided here by `OpenCode.CodingTools`.
  */
@@ -62,7 +62,7 @@ const builtin = <const Name extends string>(toolName: Name): BuiltinTool<Name> =
 
 /** Fetch a URL. */
 export const WebFetch = builtin("webfetch");
-/** Keep a todo list for the task. */
-export const TodoWrite = builtin("todowrite");
-/** Hand part of the task to a subagent. */
-export const Task = builtin("task");
+/** Search the web. */
+export const WebSearch = builtin("websearch");
+/** Hand part of the task to a subagent, in a session of its own. */
+export const Subagent = builtin("subagent");

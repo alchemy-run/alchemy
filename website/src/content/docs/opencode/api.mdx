@@ -12,7 +12,7 @@ A harness covers prompting a session and reading its transcript. OpenCode's serv
 ```typescript
 const session = harness.session("pr-142");
 const id = yield* session.id;
-const diff = yield* session.request("GET", `/session/${id}/diff`);
+const diff = yield* session.request("GET", `/api/session/${id}/diff`);
 ```
 
 `session.id` is OpenCode's own id for the session. The call goes over the sandbox's `exec`, like everything else, so the server is never exposed.

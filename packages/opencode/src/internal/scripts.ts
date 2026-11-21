@@ -8,16 +8,13 @@
 
 /** The OpenCode release sessions run. */
 export const OPENCODE = {
-  version: "1.18.18",
-  /** sha512 of each platform's npm tarball. */
-  sha512: {
-    x64: "5a67949e1963609db9db0cb0293896e1b343cec6acda78e98cf5048748cce8728d238bc5c49b5112dcda595898e0028401c3a42d64fc2e5d7b8b1bdc1f3dc09c",
-    arm64:
-      "7bc0f7834a89108cdac04836fb2816def9198c060bdacb32031e066e2863c17c1916f959672e734565b3773e4a2c1a07493974141ef7bcdb6735e5ce3721e955",
-    "x64-musl":
-      "956896c68b6ac954c9622bb674df742833434abc26ca1664f1a8f3c9f0058f09acd93055c782f42f2ea091d873f27c6cc703d1bfbe755bcfb2529cdeb41f0030",
-    "arm64-musl":
-      "0e9dd70721514599e03c0428b4d6cec2bdb61e065e8f8afd0a4d08bfface554fa83b97cb0fd612a47130c7cd054d939998599dfefae209dad1fdd19dcda6c80b",
+  version: "2.3.2",
+  /** sha256 of each platform's release tarball (`SHA256SUMS` of the GitHub release). */
+  sha256: {
+    x64: "563b5d663637226b6e3bb4bb6803281bc39b0d2cd88db06d674b6420aab009b0",
+    arm64: "9d10185acdb72336e086e699ca363a6065f410fd3c1caed0dc8046e95ac06ccb",
+    "x64-musl": "4e952a67874cfdb4f53eeae5840f9813acc9f109c10e61bc26020271f56d7d84",
+    "arm64-musl": "2148ba748f5410177868ed67d59ef70626cb6bd4fb2abc5177c807adfdc24fc3",
   },
 };
 
@@ -27,7 +24,7 @@ export const PORTS = { bridge: 41991, opencode: 41992 };
 /** The harness's directory in the sandbox user's home. */
 export const DIR = `"$HOME/.alchemy/opencode"`;
 
-/** Install OpenCode once per sandbox: the npm tarball, checked against its hash. */
+/** Install OpenCode once per sandbox: the release tarball, checked against its hash. */
 export const INSTALL = `set -e
 dir=${DIR}
 bin="$dir/opencode-${OPENCODE.version}"
@@ -36,18 +33,20 @@ if [ ! -x "$bin" ]; then
   case "$(uname -m)" in x86_64|amd64) arch=x64 ;; aarch64|arm64) arch=arm64 ;; *) echo "opencode: unsupported $(uname -m)" >&2; exit 1 ;; esac
   if [ -e /etc/alpine-release ]; then arch="$arch-musl"; fi
   case "$arch" in
-    x64) sum=${OPENCODE.sha512.x64} ;;
-    arm64) sum=${OPENCODE.sha512.arm64} ;;
-    x64-musl) sum=${OPENCODE.sha512["x64-musl"]} ;;
-    arm64-musl) sum=${OPENCODE.sha512["arm64-musl"]} ;;
+    x64) sum=${OPENCODE.sha256.x64} ;;
+    arm64) sum=${OPENCODE.sha256.arm64} ;;
+    x64-musl) sum=${OPENCODE.sha256["x64-musl"]} ;;
+    arm64-musl) sum=${OPENCODE.sha256["arm64-musl"]} ;;
   esac
-  url="https://registry.npmjs.org/opencode-linux-$arch/-/opencode-linux-$arch-${OPENCODE.version}.tgz"
+  url="https://github.com/anomalyco/opencode/releases/download/v${OPENCODE.version}/opencode-linux-$arch.tar.gz"
   if command -v curl >/dev/null 2>&1; then curl -fsSL "$url" -o "$dir/opencode.tgz"; else wget -qO "$dir/opencode.tgz" "$url"; fi
-  echo "$sum  $dir/opencode.tgz" | sha512sum -c - >/dev/null
-  tar -xzf "$dir/opencode.tgz" -C "$dir" package/bin/opencode
-  chmod +x "$dir/package/bin/opencode"
-  mv "$dir/package/bin/opencode" "$bin"
-  rm -rf "$dir/package" "$dir/opencode.tgz"
+  echo "$sum  $dir/opencode.tgz" | sha256sum -c - >/dev/null
+  # Unpacked beside, not over, the link an earlier version left at $dir/opencode.
+  rm -rf "$dir/unpack" && mkdir -p "$dir/unpack"
+  tar -xzf "$dir/opencode.tgz" -C "$dir/unpack" opencode
+  chmod +x "$dir/unpack/opencode"
+  mv "$dir/unpack/opencode" "$bin"
+  rm -rf "$dir/unpack" "$dir/opencode.tgz"
 fi
 ln -sf "$bin" "$dir/opencode"`;
 
@@ -83,6 +82,22 @@ export const READ_STATE = `cat ${DIR}/session.json 2>/dev/null || true`;
 export const BRIDGE = String.raw`
 const config = JSON.parse(await Bun.file(process.argv[2]).text());
 const OPENCODE = "http://127.0.0.1:" + config.opencodePort;
+// OpenCode's API takes a password; a fresh one per launch, kept in a file only
+// this user can read, for call.js.
+const password = Buffer.from(crypto.getRandomValues(new Uint8Array(24))).toString("base64url");
+const fs = await import("node:fs");
+// A mode applies only to a new file.
+fs.rmSync("password", { force: true });
+fs.writeFileSync("password", password, { mode: 0o600 });
+const opencode = (path, init = {}) =>
+  fetch(OPENCODE + path, {
+    ...init,
+    headers: {
+      authorization: "Basic " + btoa("opencode:" + password),
+      ...(init.body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    timeout: false,
+  });
 const pending = new Map();
 const listeners = new Set();
 const prompts = new Map();
@@ -177,7 +192,11 @@ const rpc = async (server, message) => {
       });
       return result({
         content: [{ type: "text", text: reply.text ?? "" }],
-        ...(reply.structured !== undefined && reply.structured !== null && typeof reply.structured === "object"
+        // A failure's fields are not the success value its outputSchema describes.
+        ...(reply.isError !== true &&
+        reply.structured !== undefined &&
+        reply.structured !== null &&
+        typeof reply.structured === "object"
           ? { structuredContent: reply.structured }
           : {}),
         isError: reply.isError === true,
@@ -188,6 +207,39 @@ const rpc = async (server, message) => {
         ? undefined
         : { jsonrpc: "2.0", id: message.id, error: { code: -32601, message: "Method not found" } };
   }
+};
+
+/**
+ * Admit a prompt, wait for the session to go idle, and answer with the
+ * messages it added: from the prompt to the next prompt, oldest first.
+ */
+const run = async (sessionId, body) => {
+  const session = "/api/session/" + sessionId;
+  const admitted = await opencode(session + "/prompt", {
+    method: "POST",
+    body: JSON.stringify({ ...body, delivery: "queue" }),
+  });
+  if (!admitted.ok) return { status: admitted.status, body: await admitted.text() };
+  const prompt = (await admitted.json()).data.id;
+  const waited = await opencode("/api/experimental/session/" + sessionId + "/wait", { method: "POST" });
+  if (!waited.ok) return { status: waited.status, body: await waited.text() };
+  // Newest first, back to the prompt.
+  const added = [];
+  let cursor;
+  for (;;) {
+    const page = await opencode(
+      session + "/message?" + (cursor ? "cursor=" + encodeURIComponent(cursor) : "order=desc&limit=100"),
+    );
+    if (!page.ok) return { status: page.status, body: await page.text() };
+    const { data, cursor: next } = await page.json();
+    const at = data.findIndex((message) => message.id === prompt);
+    added.push(...(at === -1 ? data : data.slice(0, at + 1)));
+    if (at !== -1 || !next?.next) break;
+    cursor = next.next;
+  }
+  added.reverse();
+  const after = added.findIndex((message, index) => index > 0 && message.type === "user");
+  return { status: 200, body: JSON.stringify({ messages: after === -1 ? added : added.slice(0, after) }) };
 };
 
 const handle = async (request) => {
@@ -234,16 +286,8 @@ const handle = async (request) => {
     prompts.set(requestId, prompt);
     // The answers of the newest prompts are kept, for a caller that asks again.
     if (prompts.size > 200) prompts.delete(prompts.keys().next().value);
-    fetch(OPENCODE + "/session/" + sessionId + "/message", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-      timeout: false,
-    })
-      .then(
-        async (response) => ({ status: response.status, body: await response.text() }),
-        (error) => ({ status: 0, body: String(error) }),
-      )
+    run(sessionId, body)
+      .catch((error) => ({ status: 0, body: String(error) }))
       .then((finished) => {
         prompt.finished = finished;
         post({ kind: "done", requestId, ...finished }, () => {});
@@ -288,7 +332,10 @@ const child = Bun.spawn(
       ...process.env,
       BUN_BE_BUN: undefined,
       OPENCODE_CONFIG: process.cwd() + "/opencode.json",
+      OPENCODE_SERVER_PASSWORD: password,
       OPENCODE_DISABLE_AUTOUPDATE: "1",
+      // The harness lists every model; nothing to look up online.
+      OPENCODE_DISABLE_MODELS_FETCH: "1",
     },
     stdout: "inherit",
     stderr: "inherit",
@@ -312,6 +359,10 @@ const [mode, ...args] = process.argv.slice(2);
 const BRIDGE = "http://127.0.0.1:${PORTS.bridge}";
 const OPENCODE = "http://127.0.0.1:${PORTS.opencode}";
 const out = (value) => console.log("oc:" + Buffer.from(JSON.stringify(value)).toString("base64"));
+/** OpenCode's password, which the running bridge chose. */
+const auth = async () => ({
+  authorization: "Basic " + btoa("opencode:" + (await Bun.file("password").text())),
+});
 const bodyOf = async (arg) => {
   if (arg === undefined) return undefined;
   if (!arg.startsWith("@")) return Buffer.from(arg, "base64");
@@ -327,7 +378,7 @@ if (mode === "follow") {
   for (let attempt = 0; attempt < 240; attempt++) {
     try {
       const health = await (await fetch(BRIDGE + "/_health")).json();
-      if (health.epoch === args[0] && (await fetch(OPENCODE + "/global/health")).ok) {
+      if (health.epoch === args[0] && (await fetch(OPENCODE + "/api/info", { headers: await auth() })).ok) {
         out({ status: 200, body: "ready" });
         process.exit(0);
       }
@@ -340,7 +391,10 @@ if (mode === "follow") {
     const body = await bodyOf(args[2]);
     const response = await fetch((mode === "bridge" ? BRIDGE : OPENCODE) + args[1], {
       method: args[0],
-      headers: body === undefined ? {} : { "content-type": "application/json" },
+      headers: {
+        ...(mode === "bridge" ? {} : await auth()),
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
       body,
       timeout: false,
     });
