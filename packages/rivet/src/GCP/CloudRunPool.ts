@@ -38,8 +38,7 @@ export interface CloudRunPoolOptions extends PoolSettings {
   /**
    * Environment each node runs with, besides the pool's own. A value named
    * here wins over the pool's own, so `RIVET_ENDPOINT` points the nodes at
-   * a private address of the control plane, and `RIVET_NODE_VERSION` tells
-   * the control plane which nodes are newer (see `drainOnVersionUpgrade`).
+   * a private address of the control plane.
    */
   env?: Record<string, Input<string>>;
   /**
@@ -156,7 +155,7 @@ export const nodeTemplate = (
  *
  * A deploy that changes the nodes rolls out a new worker pool revision.
  * To move actors off the old nodes before Cloud Run stops them, give each
- * deploy a higher `RIVET_NODE_VERSION` and set `drainOnVersionUpgrade`.
+ * deploy a higher `version` and set `drainOnVersionUpgrade`.
  *
  * ### Running Durable Objects on Cloud Run
  * **Example:** Two nodes
@@ -174,7 +173,8 @@ export const nodeTemplate = (
  *   serviceAccount: "nodes@acme.iam.gserviceaccount.com",
  *   network: "private",
  *   subnetwork: "private-us-central1",
- *   env: { RIVET_ENDPOINT: "http://10.0.0.2:6420", RIVET_NODE_VERSION: "42" },
+ *   env: { RIVET_ENDPOINT: "http://10.0.0.2:6420" },
+ *   version: 42,
  *   secrets: {
  *     RIVET_TOKEN: "projects/acme/secrets/rivet-token/versions/1",
  *     DATABASE_URL: "projects/acme/secrets/database-url/versions/3",
