@@ -13,6 +13,7 @@ import { connections } from "./fixtures/domain/connections.ts";
 import { crash } from "./fixtures/domain/crash.ts";
 import DomainFrontV1 from "./fixtures/domain/front-v1.ts";
 import DomainFront from "./fixtures/domain/front.ts";
+import { beginsNewRun } from "./fixtures/domain/runs.ts";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -63,11 +64,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     // After the cases that read the model as deployed: it redeploys the front.
+    // The bump's new runners begin its new run before the case calls the model.
     rebuild({
       test,
       url: Effect.succeed(url),
       kind: "local",
-      deploy: (v) => Effect.asVoid(deploy(v)),
+      deploy: (v) =>
+        v === 1 ? beginsNewRun(stack, Effect.asVoid(deploy(1))) : Effect.asVoid(deploy(v)),
     });
 
     // Last: each case kills a runner.
