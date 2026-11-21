@@ -370,6 +370,53 @@ test(
 );
 
 test(
+  "a code mode script's tool call rejects with the tool's declared failure, by its tag",
+  Effect.gen(function* () {
+    const user = `user-${Date.now()}`;
+    yield* call(`/${user}/script/create`, { tools: ["withdraw"] });
+    yield* call(`/${user}/script/codemode`, {});
+    yield* call(`/${user}/script/prompt`, {
+      text: 'Run exactly this script with the codemode tool, unchanged:\n\nconst outcome = await tools.withdraw({ account: "frozen", amount: 5 }).then(() => "resolved", (error) => error._tag + ":" + error.account);\nconsole.log("OUTCOME " + outcome);',
+      requestId: "script-failure-1",
+    });
+    const results = (yield* call(`/${user}/script/results`)) as ReadonlyArray<{
+      tool: string;
+      isError: boolean;
+      text: string;
+    }>;
+    const printed = results
+      .filter((result) => result.tool === "codemode")
+      .map((result) => result.text)
+      .join("\n---\n");
+    expect(printed).toContain("OUTCOME AccountFrozen:frozen");
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
+  "Effect code mode runs in a loaded isolate, with declared failures in the error channel",
+  Effect.gen(function* () {
+    const name = `effect-${Date.now()}`;
+    yield* call(`/effect/${name}/create`, {});
+    yield* call(`/effect/${name}/prompt`, {
+      text: 'Run exactly this script with the codemode tool, unchanged:\n\nconst added = yield* tools.add({ a: 2, b: 3 });\nconst balance = yield* tools.withdraw({ account: "checking", amount: 500 }).pipe(Effect.map(() => -1), Effect.catchTag("InsufficientFunds", (error) => Effect.succeed(error.balance)));\nconsole.log("EFFECT " + added.sum + " " + balance);',
+      requestId: "effect-1",
+    });
+    const results = (yield* call(`/effect/${name}/results`)) as ReadonlyArray<{
+      tool: string;
+      isError: boolean;
+      text: string;
+    }>;
+    const printed = results
+      .filter((result) => result.tool === "codemode")
+      .map((result) => result.text)
+      .join("\n---\n");
+    expect(printed).toContain("EFFECT 1005 137");
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
   "an MCP server's tools are listed, called, and added or removed as one",
   Effect.gen(function* () {
     const name = `mcp-${Date.now()}`;
