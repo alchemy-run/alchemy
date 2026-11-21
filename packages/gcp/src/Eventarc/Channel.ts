@@ -418,14 +418,14 @@ export const ChannelProvider = () =>
       if (current === undefined) {
         const created = yield* eventarc
           .createProjectsLocationsChannels({
-            parent: `projects/${env.project}/locations/${location}`,
-            channelId,
-            body: compact({
+            ...compact({
               name,
               labels: desiredLabels,
               provider: desiredProvider,
               cryptoKeyName: desiredCryptoKey,
             }),
+            parent: `projects/${env.project}/locations/${location}`,
+            channelId,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -451,13 +451,10 @@ export const ChannelProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const patched = yield* eventarc.patchProjectsLocationsChannels({
+          labels: desiredLabels,
+          cryptoKeyName: desiredCryptoKey,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            cryptoKeyName: desiredCryptoKey,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(name);

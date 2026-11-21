@@ -200,7 +200,7 @@ export const DomainProvider = () =>
 
       if (current === undefined) {
         const created = yield* gmailpostmastertools
-          .createDomains({ body: { domainId } })
+          .createDomains({ domainId })
           .pipe(Effect.catchTag("Conflict", () => getDomain(name)));
         current = created ?? undefined;
       }
@@ -215,8 +215,8 @@ export const DomainProvider = () =>
         !sameText(current.verificationState, "VERIFIED")
       ) {
         yield* gmailpostmastertools.verifyDomains({
+          verificationMethod: news.verificationMethod,
           name: resourceName,
-          body: { verificationMethod: news.verificationMethod },
         });
         current = (yield* getDomain(resourceName)) ?? current;
       }

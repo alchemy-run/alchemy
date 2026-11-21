@@ -417,19 +417,17 @@ export const LakesEntityProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsLakesZonesEntities({
+            id: entityId,
+            displayName: news.displayName,
+            description,
+            type,
+            asset,
+            dataPath: news.dataPath,
+            dataPathPattern: news.dataPathPattern,
+            system,
+            format,
+            schema,
             parent: zone,
-            body: {
-              id: entityId,
-              displayName: news.displayName,
-              description,
-              type,
-              asset,
-              dataPath: news.dataPath,
-              dataPathPattern: news.dataPathPattern,
-              system,
-              format,
-              schema,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -453,20 +451,18 @@ export const LakesEntityProvider = () =>
         schemaChanged
       ) {
         current = yield* dataplex.updateProjectsLocationsLakesZonesEntities({
+          id: entityId,
+          etag: current.etag,
+          displayName: news.displayName,
+          description,
+          type,
+          asset,
+          dataPath: news.dataPath,
+          dataPathPattern: news.dataPathPattern,
+          system,
+          format,
+          schema,
           name: current.name ?? name,
-          body: {
-            id: entityId,
-            etag: current.etag,
-            displayName: news.displayName,
-            description,
-            type,
-            asset,
-            dataPath: news.dataPath,
-            dataPathPattern: news.dataPathPattern,
-            system,
-            format,
-            schema,
-          },
         });
       }
 

@@ -542,11 +542,6 @@ const loadTable = (namespace: string, table: string) =>
     Effect.catchTag("NoSuchTableException", () => Effect.undefined),
   );
 
-const requirement = (type: string, fields: Record<string, unknown>): Iceberg.TableRequirement => ({
-  type,
-  ...fields,
-});
-
 const currentSchemaOf = (metadata: Iceberg.TableMetadata) =>
   metadata.schemas?.find((s) => s.schema_id === metadata.current_schema_id) ??
   metadata.schemas?.[0];
@@ -599,7 +594,7 @@ const syncTable = (input: {
     if (reasons.length > 0) return yield* rejected(identifier, reasons);
 
     const requirements: Iceberg.TableRequirement[] = [
-      requirement("assert-table-uuid", { uuid: metadata.table_uuid }),
+      { type: "assert-table-uuid", uuid: metadata.table_uuid },
     ];
     const updates: Iceberg.TableUpdateInput[] = [];
 
@@ -611,11 +606,12 @@ const syncTable = (input: {
     ) {
       let next = Math.max(metadata.last_column_id ?? 0, maxFieldId(observedFields)) + 1;
       const fields = assignFieldIds(input.schema.fields, observedFields, () => next++);
-      requirements.push(
-        requirement("assert-current-schema-id", {
-          "current-schema-id": metadata.current_schema_id,
-        }),
-      );
+      if (metadata.current_schema_id !== undefined) {
+        requirements.push({
+          type: "assert-current-schema-id",
+          current_schema_id: metadata.current_schema_id,
+        });
+      }
       updates.push(
         { action: "add-schema", schema: { type: "struct", fields } },
         { action: "set-current-schema", schema_id: -1 },

@@ -1,6 +1,7 @@
 import * as DurableObjects from "@alchemy.run/domain/DurableObjects";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { type InputGateShape, makeInputGate } from "alchemy/Workers/InputGate";
+import { storageCallbacks } from "alchemy/Workers/StorageCallbacks";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -166,7 +167,7 @@ export const simHost = (
             saved.alarm = at;
             if (previous) yield* Fiber.interrupt(previous.fiber);
           });
-        const callbacks = DurableObjects.alarmCallbacks(storage, {
+        const callbacks = storageCallbacks(storage, {
           get: Effect.sync(() => timer?.at ?? null),
           set,
         });

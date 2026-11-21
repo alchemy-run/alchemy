@@ -690,9 +690,9 @@ export const CertificateProvider = () =>
       if (current === undefined) {
         const created = yield* certificatemanager
           .createProjectsLocationsCertificates({
+            ...toCreateBody(news, type, scope, desiredLabels),
             parent: `projects/${env.project}/locations/${location}`,
             certificateId,
-            body: toCreateBody(news, type, scope, desiredLabels),
           })
           .pipe(
             Effect.retry({
@@ -724,13 +724,10 @@ export const CertificateProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* certificatemanager.patchProjectsLocationsCertificates({
+          labels: desiredLabels,
+          description: news.description,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);

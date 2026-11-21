@@ -99,17 +99,15 @@ test.provider(
         Buffer.from(JSON.stringify({ id: "1" }), "utf8").toString("base64"),
       );
       const task = yield* cloudtasks.createProjectsLocationsQueuesTasks({
-        parent: created.name,
-        body: {
-          responseView: "FULL",
-          task: {
-            httpRequest: {
-              url: "https://example.com/alchemy-cloudtasks-test",
-              httpMethod: "POST",
-              body: payload,
-            },
+        responseView: "FULL",
+        task: {
+          httpRequest: {
+            url: "https://example.com/alchemy-cloudtasks-test",
+            httpMethod: "POST",
+            body: payload,
           },
         },
+        parent: created.name,
       });
       expect(task.name).toContain("/tasks/");
       expect(task.httpRequest?.url).toEqual("https://example.com/alchemy-cloudtasks-test");

@@ -63,8 +63,8 @@ test.provider(
 
       const error = yield* Effect.flip(
         connectors.createProjectsLocationsConnectionsEntityTypesEntities({
+          fields: { Name: "Alchemy Probe" },
           parent: missingParent(project),
-          body: { fields: { Name: "Alchemy Probe" } },
         }),
       );
       expect(error._tag).toEqual("EntitiesNotImplemented");

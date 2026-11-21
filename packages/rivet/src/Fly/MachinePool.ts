@@ -5,7 +5,6 @@ import {
   isImageProgram,
   makePoolLayer,
   nodeEnvironment,
-  RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -66,7 +65,7 @@ export const MachinePool = (id: string, options: MachinePoolOptions = {}) =>
           ? { context: nodes.program.context }
           : {
               main: (yield* bundleNodes("fly", id, nodes.program)) as unknown as string,
-              build: { install: { rivetkit: options.rivetkitVersion ?? RIVETKIT_VERSION } },
+              build: { install: { rivetkit: options.rivetkitVersion ?? nodes.rivetkitVersion } },
             }),
         public: false,
         // Nodes only dial out: nothing listens for the proxy to check.

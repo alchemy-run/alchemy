@@ -276,14 +276,12 @@ export const AppsExampleProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           ces.createProjectsLocationsAppsExamples({
+            displayName,
+            description,
+            entryAgent: news.entryAgent,
+            messages: news.messages,
             parent: app,
             exampleId,
-            body: {
-              displayName,
-              description,
-              entryAgent: news.entryAgent,
-              messages: news.messages,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -302,6 +300,10 @@ export const AppsExampleProvider = () =>
       if (displayChanged || descriptionChanged || entryChanged || messagesChanged) {
         current = yield* retryTransient(
           ces.patchProjectsLocationsAppsExamples({
+            displayName,
+            description,
+            entryAgent: news.entryAgent,
+            messages: news.messages,
             name: currentName,
             updateMask: updateMaskOf(
               displayChanged ? "display_name" : undefined,
@@ -309,12 +311,6 @@ export const AppsExampleProvider = () =>
               entryChanged ? "entry_agent" : undefined,
               messagesChanged ? "messages" : undefined,
             ),
-            body: {
-              displayName,
-              description,
-              entryAgent: news.entryAgent,
-              messages: news.messages,
-            },
           }),
         );
       }

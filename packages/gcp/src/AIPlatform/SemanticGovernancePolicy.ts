@@ -311,15 +311,13 @@ export const SemanticGovernancePolicyProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsSemanticGovernancePolicies({
+            displayName,
+            description: desiredDescription,
+            agent: news.agent,
+            naturalLanguageConstraint: news.naturalLanguageConstraint,
+            mcpTools,
             parent,
             semanticGovernancePolicyId: policyId,
-            body: {
-              displayName,
-              description: desiredDescription,
-              agent: news.agent,
-              naturalLanguageConstraint: news.naturalLanguageConstraint,
-              mcpTools,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -346,6 +344,12 @@ export const SemanticGovernancePolicyProvider = () =>
 
       if (displayChanged || descriptionChanged || agentChanged || constraintChanged || mcpChanged) {
         const patched = yield* aiplatform.patchProjectsLocationsSemanticGovernancePolicies({
+          displayName,
+          description: desiredDescription,
+          agent: news.agent,
+          naturalLanguageConstraint: news.naturalLanguageConstraint,
+          mcpTools,
+          etag: current.etag,
           name,
           updateMask: [
             displayChanged ? "displayName" : undefined,
@@ -356,15 +360,6 @@ export const SemanticGovernancePolicyProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            description: desiredDescription,
-            agent: news.agent,
-            naturalLanguageConstraint: news.naturalLanguageConstraint,
-            mcpTools,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(name);

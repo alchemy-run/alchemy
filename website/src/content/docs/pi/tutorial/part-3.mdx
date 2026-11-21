@@ -1,0 +1,211 @@
+---
+title: "Part 3: Answer issues"
+description: Subscribe the Worker to the repository's issues with GitHub.consumeRepositoryEvents, and give the agent a tool that posts its answer as a comment.
+sidebar:
+  order: 3
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+The bot answers over `curl`. Now GitHub starts it, and the agent replies where the question was asked. Two pieces do that: an event source that calls the Worker when an issue opens, and a tool that comments on the issue.
+
+## Declare a comment tool
+
+A tool is a contract first: what the model sees, what it takes, what it returns.
+
+```typescript title="src/tools.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Schema from "effect/Schema";
+
+export class Comment extends AI.Tool<Comment>()("comment", {
+  description:
+    "Post a comment on the issue you are working on. Call it exactly once, with your full answer in Markdown.",
+  parameters: Schema.Struct({ body: Schema.String }),
+  success: Schema.Struct({ url: Schema.String }),
+}) {}
+```
+
+The tool takes no issue number. Each Durable Object is one issue, so the tool will know which.
+
+## Implement it with a GitHub binding
+
+`GitHub.CreateIssueComment` is a binding: it gives the Durable Object a client for one repository, and a token to call it with.
+
+```diff lang="typescript"
+import * as AI from "@alchemy.run/ai";
++import * as Cloudflare from "@alchemy.run/cloudflare";
++import * as GitHub from "@alchemy.run/github";
++import * as Effect from "effect/Effect";
++import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
++import { Repo } from "./Repo.ts";
+
+export class Comment extends AI.Tool<Comment>()("comment", {
+  description:
+    "Post a comment on the issue you are working on. Call it exactly once, with your full answer in Markdown.",
+  parameters: Schema.Struct({ body: Schema.String }),
+  success: Schema.Struct({ url: Schema.String }),
+}) {}
++
++export const CommentLive = Comment.make(
++  Effect.gen(function* () {
++    const createComment = yield* GitHub.CreateIssueComment(yield* Repo);
++    const state = yield* Cloudflare.DurableObjectState;
++
++    return Effect.fn(function* ({ body }) {
++      const issue = yield* state.storage.get<number>("issue").pipe(Effect.orDie);
++      const comment = yield* createComment({ issue_number: issue!, body }).pipe(Effect.orDie);
++      return { url: comment.html_url };
++    });
++  }),
++).pipe(Layer.provide(GitHub.CreateIssueCommentHttp));
+```
+
+The outer Effect runs where the harness is yielded, so the binding is part of the deploy. The handler it returns runs for each call, and reads the issue's number from the object's own storage.
+
+Comments are posted with a token for the account you signed in to GitHub with, so they appear as yours.
+
+## Store the issue's number
+
+`opened` writes the number the tool reads:
+
+```diff lang="typescript"
+Effect.gen(function* () {
+  const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools] });
++  const state = yield* Cloudflare.DurableObjectState;
+
+  return Effect.gen(function* () {
+    return {
+      opened: Effect.fn(function* (
+        issue: { readonly number: number; readonly title: string; readonly body: string },
+        deliveryId: string,
+      ) {
++        yield* state.storage.put("issue", issue.number);
+        const conversation = yield* harness.createConversation({
+```
+
+## Give the agent the tool
+
+List the tool on the harness, provide its Layer, and add it to the conversation:
+
+```diff lang="typescript"
+import { Fast, FastLive } from "./models.ts";
+import { Sandbox } from "./Sandbox.ts";
++import { Comment, CommentLive } from "./tools.ts";
+
+const HarnessLive = Layer.mergeAll(
+  FastLive,
++  CommentLive,
+  PiCloudflare.DurableObjectStorage,
+  Pi.CodingTools.pipe(Layer.provideMerge(Sandbox)),
+);
+```
+
+```diff lang="typescript"
+-const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools] });
++const harness = yield* Pi.Harness({ models: [Fast], tools: [AI.CodingTools, Comment] });
+```
+
+```diff lang="typescript"
+const conversation = yield* harness.createConversation({
+  name: "issue",
+-  tools: [AI.Bash, AI.Read, AI.Grep],
++  tools: [AI.Bash, AI.Read, AI.Grep, Comment],
+  instructions,
+});
+```
+
+Leaving `CommentLive` out of `HarnessLive` is a compile error on the Durable Object.
+
+## Tell the model to use it
+
+```diff lang="typescript"
+const instructions = [
+  "You answer issues on a GitHub repository.",
+  "The repository is cloned at /home/user/repo. Read the files that matter with your tools before you answer.",
++  "When you have the answer, call the comment tool once with it. Then stop.",
+].join("\n");
+```
+
+## Consume the repository's events
+
+`GitHub.consumeRepositoryEvents` subscribes the Worker to the repository. At deploy it creates the webhook, pointed at the Worker, with a signing secret. While the Worker runs, it verifies each delivery and calls your handler with a typed event.
+
+```diff lang="typescript"
+import * as Cloudflare from "@alchemy.run/cloudflare";
++import * as GitHub from "@alchemy.run/github";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import Issue from "./Issue.ts";
++import { owner, repository } from "./Repo.ts";
+
+export default class Bot extends Cloudflare.Worker<Bot>()(
+  "Bot",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const issues = yield* Issue;
+
++    yield* GitHub.consumeRepositoryEvents(
++      { owner, repository, events: ["issues"] },
++      Effect.fn(function* (event) {
++        const { action, issue } = event.payload;
++        if (action === "opened") {
++          yield* issues
++            .getByName(String(issue.number))
++            .opened({ number: issue.number, title: issue.title, body: issue.body ?? "" }, event.id);
++        }
++      }, Effect.orDie),
++    );
++
+    return {
+```
+
+`event.id` is GitHub's id for the delivery. GitHub sends a delivery again when the Worker doesn't answer in time, and as the submission's `requestId` it makes a repeat harmless.
+
+The handler returns as soon as the input is submitted, so GitHub gets its answer in milliseconds. The agent's run continues in the Durable Object.
+
+## Provide the event source
+
+```diff lang="typescript"
+        return yield* HttpServerResponse.json(yield* issue.transcript());
+      }).pipe(Effect.orDie),
+    };
+-  }),
++  }).pipe(Effect.provide(GitHub.RepositoryEventSourceLive)),
+) {}
+```
+
+## Remove the stand-in route
+
+GitHub starts conversations now, so `fetch` only shows transcripts:
+
+```diff lang="typescript"
+const issue = issues.getByName(number);
+-if (request.method === "POST") {
+-  const { title, body } = (yield* request.json) as { title: string; body: string };
+-  yield* issue.opened({ number: Number(number), title, body }, crypto.randomUUID());
+-  return HttpServerResponse.text("started", { status: 202 });
+-}
+return yield* HttpServerResponse.json(yield* issue.transcript());
+```
+
+## Deploy and open an issue
+
+<PackageManagers run="alchemy deploy" />
+
+Open an issue on the repository: "What does README.md say?" Within a minute a comment appears with the answer. `GET /issues/1` on the Worker shows how the agent got there:
+
+```json
+[
+  { "role": "user", "text": "Issue #1: What is in the README?\n\nRead README.md…" },
+  { "role": "assistant", "text": "read({\"path\":\"/home/user/repo/README.md\"})" },
+  { "role": "toolResult", "text": "# issue-bot-demo\n…" },
+  { "role": "assistant", "text": "comment({\"body\":\"The README.md file says…\"})" },
+  { "role": "toolResult", "text": "{\"url\":\"https://github.com/acme/issue-bot-demo/issues/1#issuecomment-…\"}" }
+]
+```
+
+## Next
+
+[Part 4](/pi/tutorial/part-4) answers replies on the issue, and removes the sandbox when it closes.

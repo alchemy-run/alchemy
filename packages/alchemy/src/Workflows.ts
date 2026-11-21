@@ -200,6 +200,83 @@ export type Status<A, E> =
   | { readonly _tag: "Interrupted" }
   | { readonly _tag: "Died"; readonly defect: unknown };
 
+/**
+ * How a finished run ended, from its stored exit.
+ *
+ * @internal
+ */
+export const statusOf = <A, E>(exit: Exit.Exit<A, E>): Ended<A, E> => {
+  if (Exit.isSuccess(exit)) return { _tag: "Completed", result: exit.value };
+  const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail");
+  if (failure?._tag === "Fail") return { _tag: "Failed", error: failure.error };
+  const defect = exit.cause.reasons.find((reason) => reason._tag === "Die");
+  return defect?._tag === "Die" ? { _tag: "Died", defect: defect.defect } : { _tag: "Interrupted" };
+};
+
+/** Where a finished run ended. */
+export type Ended<A, E> = Exclude<Status<A, E>, { readonly _tag: "NotStarted" | "Running" }>;
+
+/** A run whose result the engine stored, as {@link OnResult} receives it. */
+export interface StoredResult {
+  /** The workflow's name. */
+  readonly workflow: string;
+  /** The run's id. */
+  readonly executionId: string;
+  /** How the run ended. */
+  readonly status: Ended<unknown, unknown>;
+}
+
+/**
+ * Called each time the workflow engine stores a run's result: when the run
+ * completes, fails, is interrupted, or dies. A run that suspends or is retried
+ * stores nothing and calls nothing.
+ *
+ * It is delivered at least once and only after the result is stored. The
+ * engine schedules the call in the same write as the result and retries it
+ * until it succeeds, so a hook that dies runs again and must be idempotent.
+ * Key what it writes by the workflow and execution id.
+ *
+ * Provide it where the engine Layer is built. The Durable Object engines
+ * call it: `Cloudflare.Workflows.layerDurableObjectEngine`, Rivet's engine,
+ * and `@alchemy.run/domain` sagas on Cloudflare and Rivet. It runs inside the
+ * execution's Durable Object, so resolve bindings while the Layer builds.
+ *
+ * ### Reacting to stored results
+ * **Example:** Report every run that died
+ * ```typescript
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import * as Workflows from "alchemy/Workflows";
+ * import * as Effect from "effect/Effect";
+ * import * as Layer from "effect/Layer";
+ * import { Incidents } from "./Incidents.ts";
+ * import { SendWelcomeLive } from "./SendWelcome.ts";
+ *
+ * const ReportDeaths = Layer.effect(
+ *   Workflows.OnResult,
+ *   Effect.gen(function* () {
+ *     const incidents = yield* Cloudflare.Queues.WriteQueue(Incidents);
+ *     return Effect.fn(function* ({ workflow, executionId, status }) {
+ *       if (status._tag !== "Died") return;
+ *       yield* incidents
+ *         .send({ id: `${workflow}/${executionId}`, defect: String(status.defect) })
+ *         .pipe(Effect.orDie);
+ *     });
+ *   }),
+ * ).pipe(Layer.provide(Cloudflare.Queues.WriteQueueBinding));
+ *
+ * const WorkflowsLive = SendWelcomeLive.pipe(
+ *   Layer.provideMerge(Cloudflare.Workflows.layerDurableObjectEngine()),
+ *   Layer.provide(ReportDeaths),
+ * );
+ * ```
+ *
+ * @primitive
+ */
+export class OnResult extends Context.Service<
+  OnResult,
+  (stored: StoredResult) => Effect.Effect<void, never, RuntimeContext>
+>()("alchemy/Workflows/OnResult") {}
+
 /** One run of a workflow. */
 export interface Run<A, E> {
   /** The run's id. Store it to read the run again later, with `get`. */
@@ -307,14 +384,7 @@ export const makeRun = <A = unknown, E = unknown>(
     status: Effect.map(poll, (result): Status<A, E> => {
       if (Option.isNone(result)) return { _tag: "NotStarted" };
       if (result.value._tag === "Suspended") return { _tag: "Running" };
-      const exit = result.value.exit;
-      if (Exit.isSuccess(exit)) return { _tag: "Completed", result: exit.value };
-      const failure = exit.cause.reasons.find((reason) => reason._tag === "Fail");
-      if (failure?._tag === "Fail") return { _tag: "Failed", error: failure.error };
-      const defect = exit.cause.reasons.find((reason) => reason._tag === "Die");
-      return defect?._tag === "Die"
-        ? { _tag: "Died", defect: defect.defect }
-        : { _tag: "Interrupted" };
+      return statusOf(result.value.exit);
     }),
     result: poll.pipe(
       Effect.flatMap((result) =>

@@ -343,13 +343,11 @@ export const FederationProvider = () =>
       if (current === undefined) {
         const created = yield* metastore
           .createProjectsLocationsFederations({
+            version,
+            backendMetastores: backends,
+            labels: desiredLabels,
             parent: locationParent(env.project, location),
             federationId,
-            body: {
-              version,
-              backendMetastores: backends,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -382,12 +380,10 @@ export const FederationProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* metastore.patchProjectsLocationsFederations({
+          labels: desiredLabels,
+          backendMetastores: backends,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            labels: desiredLabels,
-            backendMetastores: backends,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

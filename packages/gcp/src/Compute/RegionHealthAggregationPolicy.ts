@@ -327,15 +327,13 @@ export const RegionHealthAggregationPolicyProvider = () =>
           env.project,
           region,
           compute.insertRegionHealthAggregationPolicies({
+            name: policyName,
+            description: desiredDescription,
+            policyType,
+            minHealthyThreshold,
+            healthyPercentThreshold,
             project: env.project,
             region,
-            body: {
-              name: policyName,
-              description: desiredDescription,
-              policyType,
-              minHealthyThreshold,
-              healthyPercentThreshold,
-            },
           }),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
@@ -372,10 +370,10 @@ export const RegionHealthAggregationPolicyProvider = () =>
           env.project,
           region,
           compute.patchRegionHealthAggregationPolicies({
+            ...patch,
             project: env.project,
             region,
             healthAggregationPolicy: policyName,
-            body: patch,
           }),
         );
         current = (yield* getByName(env.project, region, policyName)) ?? current;

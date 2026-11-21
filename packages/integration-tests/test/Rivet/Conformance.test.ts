@@ -4,6 +4,7 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
@@ -375,6 +376,32 @@ describe.skipIf(!!process.env.FAST)(
       );
 
       test(
+        "a call still running past the sleep grace period fails as one that never arrived",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          // RivetKit closes storage 15 seconds into the sleep; the call writes at 20.
+          expect(yield* step<{ late: string }>(name, "late?ms=20000")).toEqual({
+            late: "RpcCallError 503",
+          });
+          expect(yield* step<Hooks>(name, "hooks")).toMatchObject({ slept: 1 });
+        }),
+        { timeout: 180_000 },
+      );
+
+      test(
+        "a call whose storage closes as the instance stops fails as one that never arrived",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          // It writes until RivetKit closes storage 15 seconds into the sleep,
+          // and would report "Database is closed" as data.
+          expect(yield* step<{ busy: string }>(name, "busy")).toEqual({
+            busy: "RpcCallError 503",
+          });
+        }),
+        { timeout: 180_000 },
+      );
+
+      test(
         "an idle instance runs onSleep and keeps its storage",
         Effect.gen(function* () {
           const name = crypto.randomUUID();
@@ -401,47 +428,226 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
-    test(
-      "an alarm whose node dies in its handler runs again on the next activation",
-      Effect.gen(function* () {
-        const name = crypto.randomUUID();
-        const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
-        const docker = yield* Docker.Docker;
-        interface AlarmState {
-          runs: number;
-          done: number;
-          node: string | null;
-          alarm: number | null;
-        }
-        const get = <T>(path: string) =>
-          Effect.suspend(() => client.get(`${baseUrl}/abandoned-alarm/${name}/${path}`)).pipe(
-            Effect.flatMap((res) => res.json),
-            // While the pool's nodes restart, calls fail.
-            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
-            Effect.map((body) => body as T),
-          );
-        const stateUntil = (done: (state: AlarmState) => boolean) =>
-          get<AlarmState>("state").pipe(
-            Effect.repeat({ schedule: Schedule.spaced("1 second"), until: done, times: 90 }),
-          );
+    // Each case kills or stops the one node of the pool the fixture runs on.
+    describe.sequential("on a node that dies", () => {
+      test(
+        "an alarm whose node dies in its handler runs again on the next activation",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+          const docker = yield* Docker.Docker;
+          interface AlarmState {
+            runs: number;
+            done: number;
+            node: string | null;
+            alarm: number | null;
+          }
+          const get = <T>(path: string) =>
+            Effect.suspend(() => client.get(`${baseUrl}/abandoned-alarm/${name}/${path}`)).pipe(
+              Effect.flatMap((res) => res.json),
+              // While the pool's nodes restart, calls fail.
+              Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+              Effect.map((body) => body as T),
+            );
+          const stateUntil = (done: (state: AlarmState) => boolean) =>
+            get<AlarmState>("state").pipe(
+              Effect.repeat({ schedule: Schedule.spaced("1 second"), until: done, times: 90 }),
+            );
 
-        yield* get("arm");
-        // The handler's first run has started, and hangs.
-        const running = yield* stateUntil((state) => state.runs > 0);
-        expect(running).toMatchObject({ runs: 1, done: 0, alarm: null });
-        expect(running.node).not.toBeNull();
-        // SIGKILL the node running it; Swarm starts another.
-        yield* docker.run(["kill", running.node!]);
-        // The next activation runs the handler again, and it finishes once.
-        yield* stateUntil((state) => state.done > 0);
-        // Long enough for a duplicate run to show.
-        yield* Effect.sleep("5 seconds");
-        const final = yield* get<AlarmState>("state");
-        expect(final).toMatchObject({ runs: 2, done: 1, alarm: null });
-        expect(final.node).not.toBe(running.node);
-      }).pipe(Effect.provide(Docker.DockerLive)),
-      { timeout: 240_000 },
-    );
+          yield* get("arm");
+          // The handler's first run has started, and hangs.
+          const running = yield* stateUntil((state) => state.runs > 0);
+          expect(running).toMatchObject({ runs: 1, done: 0, alarm: null });
+          expect(running.node).not.toBeNull();
+          // SIGKILL the node running it; Swarm starts another.
+          yield* docker.run(["kill", running.node!]);
+          // The next activation runs the handler again, and it finishes once.
+          yield* stateUntil((state) => state.done > 0);
+          // Long enough for a duplicate run to show.
+          yield* Effect.sleep("5 seconds");
+          const final = yield* get<AlarmState>("state");
+          expect(final).toMatchObject({ runs: 2, done: 1, alarm: null });
+          expect(final.node).not.toBe(running.node);
+        }).pipe(Effect.provide(Docker.DockerLive)),
+        { timeout: 240_000 },
+      );
+
+      test(
+        "an alarm whose node dies after RivetKit fired it, before it was claimed, runs on the next activation",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          const client = yield* HttpClient.HttpClient;
+          const docker = yield* Docker.Docker;
+          const ok = HttpClient.filterStatusOk(client);
+          const get = <T>(path: string) =>
+            Effect.suspend(() => ok.get(`${baseUrl}/abandoned-alarm/${name}/${path}`)).pipe(
+              Effect.flatMap((res) => res.json),
+              // While the pool's node restarts, calls fail.
+              Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+              Effect.map((body) => body as T),
+            );
+          const { node } = yield* get<{ node: string }>("node");
+          // Sent once: it sets the alarm, then holds storage while RivetKit fires it.
+          yield* Effect.forkChild(
+            Effect.ignore(client.get(`${baseUrl}/abandoned-alarm/${name}/arm-held`)),
+          );
+          yield* Effect.sleep("5 seconds");
+          // SIGKILL the node; Swarm starts another.
+          yield* docker.run(["kill", node]);
+          const final = yield* get<{ runs: number; done: number; node: string; alarm: null }>(
+            "state",
+          ).pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (state) => state.done > 0,
+              times: 90,
+            }),
+          );
+          expect(final).toMatchObject({ runs: 1, done: 1, alarm: null });
+          expect(final.node).not.toBe(node);
+        }).pipe(Effect.provide(Docker.DockerLive)),
+        { timeout: 240_000 },
+      );
+
+      test(
+        "a call whose node shuts down while it writes fails as one that never arrived",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          const client = yield* HttpClient.HttpClient;
+          const docker = yield* Docker.Docker;
+          const { node } = (yield* client.get(`${baseUrl}/abandoned-alarm/${name}/node`).pipe(
+            Effect.flatMap((res) => res.json),
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+          )) as { node: string };
+          // Sent once: it writes until the node's shutdown closes its storage.
+          const busy = yield* Effect.forkChild(
+            client
+              .get(`${baseUrl}/abandoned-alarm/${name}/busy`)
+              .pipe(Effect.flatMap((res) => res.json)),
+          );
+          yield* Effect.sleep("2 seconds");
+          // SIGTERM, as when its pod is deleted: RivetKit stops the actor gracefully.
+          yield* docker.run(["kill", "--signal", "TERM", node]);
+          expect(yield* Fiber.join(busy)).toEqual({ busy: "RpcCallError 503" });
+        }).pipe(Effect.provide(Docker.DockerLive)),
+        { timeout: 180_000 },
+      );
+    });
+
+    describe("durable callbacks", () => {
+      type Counts = Record<
+        "every" | "cron" | "once" | "flaky" | "alarm" | "rolled-back" | "slept",
+        number
+      >;
+      // GET `/callbacks/<name>/<step>`, retried while the stack settles.
+      const step = <T>(name: string, path: string) =>
+        Effect.gen(function* () {
+          const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+          return (yield* Effect.suspend(() =>
+            client.get(`${baseUrl}/callbacks/${name}/${path}`),
+          ).pipe(
+            Effect.flatMap((res) => res.json),
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+          )) as T;
+        });
+      // Polls the counts, which never wake the instance, until `done`.
+      const countsUntil = (name: string, done: (counts: Counts) => boolean) =>
+        step<Counts>(name, "counts").pipe(
+          Effect.repeat({ schedule: Schedule.spaced("1 second"), until: done, times: 90 }),
+        );
+      const scheduledAt = (name: string, id: string) =>
+        step<{ scheduledAt: number | null }>(name, `status?id=${id}`).pipe(
+          Effect.map((body) => body.scheduledAt),
+        );
+
+      test(
+        "interval and cron jobs keep running until they are cancelled",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "every");
+          yield* step(name, "cron");
+          yield* countsUntil(name, (counts) => counts.every >= 3 && counts.cron >= 3);
+          expect(yield* scheduledAt(name, "every")).not.toBeNull();
+          yield* step(name, "cancel?id=every");
+          yield* step(name, "cancel?id=cron");
+          const cancelled = yield* step<Counts>(name, "counts");
+          expect(yield* scheduledAt(name, "every")).toBeNull();
+          // A run already under way when it was cancelled may still finish.
+          yield* Effect.sleep("3 seconds");
+          const settled = yield* step<Counts>(name, "counts");
+          expect(settled.every - cancelled.every).toBeLessThanOrEqual(1);
+          expect(settled.cron - cancelled.cron).toBeLessThanOrEqual(1);
+          yield* Effect.sleep("3 seconds");
+          expect(yield* step<Counts>(name, "counts")).toEqual(settled);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a one-off job runs once and is gone",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "once?after=1000");
+          expect(yield* scheduledAt(name, "once")).not.toBeNull();
+          yield* countsUntil(name, (counts) => counts.once >= 1);
+          yield* Effect.sleep("3 seconds");
+          expect((yield* step<Counts>(name, "counts")).once).toBe(1);
+          expect(yield* scheduledAt(name, "once")).toBeNull();
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a job scheduled in a transaction that rolls back never runs",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "rolled-back");
+          expect(yield* scheduledAt(name, "rolled-back")).toBeNull();
+          yield* Effect.sleep("4 seconds");
+          expect((yield* step<Counts>(name, "counts"))["rolled-back"]).toBe(0);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a run that dies is delivered again, and the job keeps running",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "flaky");
+          // The first run dies; its retry and the runs after it count.
+          yield* countsUntil(name, (counts) => counts.flaky >= 2);
+          yield* step(name, "cancel?id=flaky");
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "the instance's own alarm re-arms itself beside its callbacks",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "every");
+          yield* step(name, "alarm?times=3");
+          yield* countsUntil(name, (counts) => counts.alarm >= 3 && counts.every >= 3);
+          yield* step(name, "cancel?id=every");
+          yield* Effect.sleep("3 seconds");
+          expect((yield* step<Counts>(name, "counts")).alarm).toBe(3);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a due job wakes an instance that has gone to sleep",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          // RivetKit sleeps an actor 30 seconds after its last call.
+          yield* step(name, "once?after=45000");
+          const counts = yield* countsUntil(name, (counts) => counts.once >= 1);
+          expect(counts.slept).toBeGreaterThanOrEqual(1);
+          expect(counts.once).toBe(1);
+        }),
+        { timeout: 180_000 },
+      );
+    });
 
     describe("WebSockets", () => {
       /** A WebSocket to `path` on the front, read one JSON frame at a time. */

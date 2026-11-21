@@ -240,13 +240,11 @@ export const DocumentSchemaProvider = () =>
       if (current === undefined) {
         const created = yield* cw
           .createProjectsLocationsDocumentSchemas({
+            displayName,
+            description,
+            documentIsFolder,
+            propertyDefinitions,
             parent,
-            body: {
-              displayName,
-              description,
-              documentIsFolder,
-              propertyDefinitions,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* findInParent);
@@ -270,16 +268,14 @@ export const DocumentSchemaProvider = () =>
       const displayChanged = !sameText(current.displayName, displayName);
       if (descriptionChanged || displayChanged || appended.appended) {
         current = yield* cw.patchProjectsLocationsDocumentSchemas({
-          name: currentName,
-          body: {
-            documentSchema: {
-              name: currentName,
-              displayName,
-              description,
-              documentIsFolder,
-              propertyDefinitions: appended.properties,
-            },
+          documentSchema: {
+            name: currentName,
+            displayName,
+            description,
+            documentIsFolder,
+            propertyDefinitions: appended.properties,
           },
+          name: currentName,
         });
       }
 

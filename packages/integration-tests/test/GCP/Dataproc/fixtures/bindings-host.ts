@@ -27,9 +27,7 @@ export default class DataprocBindingsHost extends GCP.Function<DataprocBindingsH
     return {
       fetch: serveProbes({
         getCluster: getCluster(),
-        submitJob: submitJob({
-          body: { job: { pigJob: { queryList: { queries: ["DUMP;"] } } } },
-        }),
+        submitJob: submitJob({ job: { pigJob: { queryList: { queries: ["DUMP;"] } } } }),
       }),
     };
   }).pipe(Effect.provide(GCP.Dataproc.GetClusterHttp), Effect.provide(GCP.Dataproc.SubmitJobHttp)),

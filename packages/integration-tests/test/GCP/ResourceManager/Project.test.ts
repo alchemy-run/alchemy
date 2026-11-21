@@ -76,11 +76,9 @@ test.provider.skipIf(runLifecycle)(
       );
       const error = yield* Effect.flip(
         resourcemanager.createProjects({
-          body: {
-            projectId: "alchemy-rm-probe-xxxx",
-            parent: parent ?? "organizations/0",
-            displayName: "Alchemy Probe",
-          },
+          projectId: "alchemy-rm-probe-xxxx",
+          parent: parent ?? "organizations/0",
+          displayName: "Alchemy Probe",
         }),
       );
       expect(error._tag).toEqual("Forbidden");
@@ -207,8 +205,9 @@ test.provider.skipIf(!runLifecycle)(
       // labels; v3 `projects.patch` would only merge into them.
       const foreign = yield* resourcemanagerV1.getProjects({ projectId: created.projectId });
       yield* resourcemanagerV1.updateProjects({
+        ...foreign,
+        labels: {},
         projectId: created.projectId,
-        body: { ...foreign, labels: {} },
       });
       const stripped = yield* resourcemanager.getProjects({ name: created.name }).pipe(
         Effect.repeat({

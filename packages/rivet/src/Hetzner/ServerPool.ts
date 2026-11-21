@@ -5,7 +5,6 @@ import {
   isImageProgram,
   makePoolLayer,
   nodeEnvironment,
-  RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -66,7 +65,7 @@ export const ServerPool = (id: string, options: ServerPoolOptions = {}) =>
         ? { context: nodes.program.context, dockerfile: nodes.program.dockerfile }
         : {
             main: (yield* bundleNodes("hetzner", id, nodes.program)) as unknown as string,
-            build: { install: { rivetkit: options.rivetkitVersion ?? RIVETKIT_VERSION } },
+            build: { install: { rivetkit: options.rivetkitVersion ?? nodes.rivetkitVersion } },
           };
       const location = options.location ?? "nbg1";
       const firewall = yield* Hetzner.Firewall(`${id}Firewall`, {

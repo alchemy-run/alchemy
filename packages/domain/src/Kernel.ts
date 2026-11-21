@@ -60,6 +60,7 @@ import type {
   Json,
   PolicyKit,
   ReceiptJson,
+  Root,
   StoredEvent,
   StreamEntry,
   ViewEntry,
@@ -102,9 +103,13 @@ export const InputMeta = Symbol.for("alchemy/Domain/Projection/InputMeta");
 export interface InputMetaValue {
   readonly projection: string;
   readonly key: string;
+  /** The projection's generation: its input log starts over at each one. */
+  readonly generation: number;
   readonly position: number;
   readonly source: string;
   readonly sourceSeq: number;
+  /** The aggregate event the input derives from, through any views. */
+  readonly root: Root;
   readonly at: number;
   readonly commandId: string;
   /** Appends made for this input so far in this run. */
@@ -151,6 +156,10 @@ export const decodeEnvelope = (json: EnvelopeJson): Aggregate.Envelope => ({
   commandId: json.commandId,
   correlationId: json.correlationId ?? json.commandId,
 });
+
+/** The aggregate event a delivery derives from: its own, unless a view passed it on. @internal */
+export const rootOf = (delivery: Delivery): Root =>
+  delivery.root ?? { source: delivery.source, seq: delivery.seq };
 
 /** The structural attributes of a delivery a reaction handles. */
 const deliveryAttributes = (delivery: Delivery): Record<string, unknown> => ({
@@ -1684,6 +1693,7 @@ const build = (
                   event: row.event,
                   envelope: row.envelope,
                   state: row.state,
+                  ...(row.root ? { root: row.root } : {}),
                   history: true,
                 },
                 only,
@@ -1798,6 +1808,7 @@ const build = (
                 event: yield* encodeEvent(out),
                 envelope: encodeEnvelope(outEnvelope, delivery.envelope.trace),
                 state: encodeState(current),
+                root: rootOf(delivery),
               };
               entries.push(entry);
               downstream.push(
@@ -1811,6 +1822,7 @@ const build = (
                     event: entry.event,
                     envelope: entry.envelope,
                     state: entry.state,
+                    root: entry.root,
                     ...(delivery.history ? { history: true } : {}),
                   },
                 ),
@@ -1904,6 +1916,7 @@ const build = (
   ): Effect.Effect<ReadonlyArray<unknown>> =>
     Effect.gen(function* () {
       const keyRef = Key.refOf(projection.definition.key, key);
+      const generation = generationOf("projection", projection.projectionName);
       const inputs: Array<unknown> = [];
       for (const { delivery, position } of batch) {
         const upstream = sources.get(delivery.origin)!;
@@ -1915,9 +1928,11 @@ const build = (
         const meta: InputMetaValue = {
           projection: projection.projectionName,
           key,
+          generation,
           position,
           source: delivery.source,
           sourceSeq: delivery.seq,
+          root: rootOf(delivery),
           at: delivery.envelope.at,
           commandId: delivery.envelope.commandId,
           appends: 0,

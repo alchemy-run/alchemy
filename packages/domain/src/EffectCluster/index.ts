@@ -23,6 +23,7 @@ import type { HttpEffect } from "alchemy/Http";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeInputGate } from "alchemy/Workers/InputGate";
+import { storageCallbacks } from "alchemy/Workers/StorageCallbacks";
 import {
   CurrentActivity,
   decodeResult,
@@ -59,7 +60,6 @@ import { SqlClient } from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 import { type Activity, DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
 import {
-  alarmCallbacks,
   type Attachment,
   className,
   type Host,
@@ -71,6 +71,7 @@ import {
   type ObjectStorage,
   type ObjectStateShape,
   parseMultiplexedName,
+  runtimeClaim,
   SUBSCRIPTION_HEADER,
 } from "../DurableObjects.ts";
 import type { Platform, Subscription } from "../Platform.ts";
@@ -216,14 +217,6 @@ export class DomainClassNotHosted extends Data.TaggedError("Cluster.DomainClassN
 export class DomainEngineNotStarted extends Data.TaggedError("Cluster.DomainEngineNotStarted")<{
   readonly message: string;
 }> {}
-
-/** The class names each host entity claims, by type. */
-const claims = new Map<string, object>();
-const claimOf = (type: string) => {
-  let claim = claims.get(type);
-  if (claim === undefined) claims.set(type, (claim = {}));
-  return claim;
-};
 
 /** The object of every saga's runs, reached from outside the cluster. */
 const WORKFLOWS = "~workflows";
@@ -590,11 +583,19 @@ export const layerEntities = <PoolReq>(
           : parseMultiplexedName(id);
         const build = parsed === undefined ? undefined : classes.get(parsed.className);
         if (build === undefined) {
-          return yield* Effect.die(
-            new DomainClassNotHosted({
-              message: `Cluster.Entity '${name}' hosts no Domain class for '${id}'.`,
-            }),
-          );
+          // A class this code no longer hosts, like a consumer's earlier
+          // generation after a version bump. Its persisted wake-ups are
+          // dropped: dying here would redeliver them forever. Only older
+          // code calls it, and those calls fail.
+          const notHosted = new DomainClassNotHosted({
+            message: `Cluster.Entity '${name}' hosts no Domain class for '${id}'.`,
+          });
+          return objects.of({
+            Call: () => Effect.die(notHosted),
+            Live: () =>
+              Stream.make({ _tag: "Close", code: 1011, reason: notHosted.message } as const),
+            Wake: () => Effect.void,
+          });
         }
         const gate = yield* makeInputGate;
         // The instance's own object where the pool gives it one; otherwise
@@ -608,7 +609,7 @@ export const layerEntities = <PoolReq>(
           : objectStorage(yield* sql, `${name}/${id}`, gate);
         const instanceScope = yield* Scope.Scope;
         const wakes = yield* objects.client;
-        const callbacks = alarmCallbacks(storage, {
+        const callbacks = storageCallbacks(storage, {
           set: (at) =>
             Effect.gen(function* () {
               yield* storage.put("~alarm", at);
@@ -826,7 +827,7 @@ export const layerEntities = <PoolReq>(
             }),
           lookup: ({ modelName }, cls) => self(className(modelName, cls)),
           connect: connectTo,
-          claimKey: Effect.succeed(claimOf(name)),
+          claimKey: runtimeClaim(name),
           revision: revisions.host,
         };
         return Layer.merge(
@@ -841,7 +842,7 @@ export const layerEntities = <PoolReq>(
         declare: ({ modelName }, cls) => Effect.succeed(self(className(modelName, cls))),
         lookup: ({ modelName }, cls) => self(className(modelName, cls)),
         connect: connectTo,
-        claimKey: Effect.succeed(claimOf(name)),
+        claimKey: runtimeClaim(name),
         revision: revisions.host,
       };
       return Layer.merge(

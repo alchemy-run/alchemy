@@ -250,16 +250,14 @@ export const OrganizationsLocationsInspectTemplateProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createOrganizationsLocationsInspectTemplates({
-            parent,
-            body: {
-              templateId,
-              inspectTemplate: {
-                displayName,
-                description,
-                inspectConfig,
-                allowLimitedAvailabilityInfoTypes,
-              },
+            templateId,
+            inspectTemplate: {
+              displayName,
+              description,
+              inspectConfig,
+              allowLimitedAvailabilityInfoTypes,
             },
+            parent,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -284,16 +282,14 @@ export const OrganizationsLocationsInspectTemplateProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* dlp.patchOrganizationsLocationsInspectTemplates({
-          name: currentName,
-          body: {
-            updateMask,
-            inspectTemplate: {
-              displayName,
-              description,
-              inspectConfig,
-              allowLimitedAvailabilityInfoTypes,
-            },
+          updateMask,
+          inspectTemplate: {
+            displayName,
+            description,
+            inspectConfig,
+            allowLimitedAvailabilityInfoTypes,
           },
+          name: currentName,
         });
       }
 

@@ -151,6 +151,15 @@
       "path": "./packages/boat/tsconfig.json"
     },
     {
+      "path": "./packages/ai/tsconfig.json"
+    },
+    {
+      "path": "./packages/pi/tsconfig.json"
+    },
+    {
+      "path": "./packages/opencode/tsconfig.json"
+    },
+    {
       "path": "./packages/rivet/tsconfig.json"
     },
     {
@@ -399,6 +408,15 @@
     },
     {
       "path": "./examples/cloudflare-neon-prisma-psl/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-pi/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-pi-github/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-opencode-github/tsconfig.json"
     },
     {
       "path": "./examples/cloudflare-planetscale-mysql-drizzle/tsconfig.json"

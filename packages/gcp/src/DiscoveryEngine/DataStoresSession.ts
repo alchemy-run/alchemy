@@ -303,15 +303,13 @@ export const DataStoresSessionProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsDataStoresSessions({
+            displayName,
+            userPseudoId: news.userPseudoId,
+            state: news.state,
+            isPinned: news.isPinned === true ? true : undefined,
+            labels: desiredLabels,
             parent,
             sessionId,
-            body: {
-              displayName,
-              userPseudoId: news.userPseudoId,
-              state: news.state,
-              isPinned: news.isPinned === true ? true : undefined,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -329,6 +327,11 @@ export const DataStoresSessionProvider = () =>
 
       if (displayChanged || userChanged || stateChanged || pinChanged || labelsChanged) {
         current = yield* discoveryengine.patchProjectsLocationsDataStoresSessions({
+          displayName,
+          userPseudoId: news.userPseudoId,
+          state: news.state,
+          isPinned: news.isPinned === true,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: [
             displayChanged ? "display_name" : undefined,
@@ -339,14 +342,6 @@ export const DataStoresSessionProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name: current.name ?? name,
-            displayName,
-            userPseudoId: news.userPseudoId,
-            state: news.state,
-            isPinned: news.isPinned === true,
-            labels: desiredLabels,
-          },
         });
       }
 

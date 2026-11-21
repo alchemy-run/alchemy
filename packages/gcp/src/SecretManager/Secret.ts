@@ -421,7 +421,7 @@ const syncValue = Effect.fn(function* (name: string, value: string | Redacted.Re
   }
   const added = yield* secretmanager.addVersionProjectsSecrets({
     parent: name,
-    body: { payload: { data: Buffer.from(desired, "utf8").toString("base64") } },
+    payload: { data: Buffer.from(desired, "utf8").toString("base64") },
   });
   return added.name;
 });
@@ -549,9 +549,9 @@ export const SecretProvider = () =>
       if (current === undefined) {
         const created = yield* secretmanager
           .createProjectsSecrets({
+            ...toCreateBody(news, desiredLabels),
             parent: `projects/${env.project}`,
             secretId,
-            body: toCreateBody(news, desiredLabels),
           })
           .pipe(
             // A just-deleted secret (replacement) keeps its id reserved for
@@ -606,6 +606,14 @@ export const SecretProvider = () =>
         ttlChanged
       ) {
         current = yield* secretmanager.patchProjectsSecrets({
+          labels: desiredLabels,
+          annotations: desiredAnnotations,
+          versionAliases: desiredAliases,
+          topics: desiredTopics,
+          rotation: desiredRotation,
+          versionDestroyTtl: desiredDestroyTtl,
+          expireTime: news.expireTime,
+          ttl: ttlChanged ? news.ttl : undefined,
           name,
           updateMask: [
             labelsChanged ? "labels" : undefined,
@@ -619,17 +627,6 @@ export const SecretProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            annotations: desiredAnnotations,
-            versionAliases: desiredAliases,
-            topics: desiredTopics,
-            rotation: desiredRotation,
-            versionDestroyTtl: desiredDestroyTtl,
-            expireTime: news.expireTime,
-            ttl: ttlChanged ? news.ttl : undefined,
-          },
         });
       }
 
