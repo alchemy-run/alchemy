@@ -763,7 +763,9 @@
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
     "build:package": "node scripts/build.ts",
-    "sync:permission-groups": "bun scripts/sync-permission-groups.ts"
+    "sync:permission-groups": "bun scripts/sync-permission-groups.ts",
+    "test": "alchemy-test test",
+    "typecheck": "tsrs -b tsconfig.json tsconfig.test.json"
   },
   "dependencies": {
     "@alchemy.run/acme": "workspace:*",
