@@ -2197,6 +2197,29 @@ const bindState = (impl: ObjectImpl): ObjectImpl =>
     return bound;
   });
 
+/** Every runtime's claims, by host name; a process outside any runtime has one of its own. */
+const runtimeClaims = new WeakMap<object, Map<string, object>>();
+const noRuntime = {};
+
+/**
+ * The claim key of a host named `name` (a pool, or a class of objects) in
+ * the runtime building the model. Two models with one name fail in one
+ * runtime; a redeploy builds a new runtime, so the model it hosts replaces
+ * the old one even when both are built in one process (a test, or a reload
+ * in dev).
+ *
+ * @internal
+ */
+export const runtimeClaim = (name: string): Effect.Effect<object> =>
+  Effect.map(Effect.serviceOption(RuntimeContext), (context) => {
+    const runtime = Option.getOrElse(context, () => noRuntime);
+    let byName = runtimeClaims.get(runtime);
+    if (byName === undefined) runtimeClaims.set(runtime, (byName = new Map()));
+    let claim = byName.get(name);
+    if (claim === undefined) byName.set(name, (claim = {}));
+    return claim;
+  });
+
 /** The models each host hosts, by name. */
 const claims = new WeakMap<object, ReturnType<typeof hostedModels>>();
 const claimsOf = (key: object) => {

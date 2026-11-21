@@ -71,6 +71,7 @@ import {
   type ObjectStorage,
   type ObjectStateShape,
   parseMultiplexedName,
+  runtimeClaim,
   SUBSCRIPTION_HEADER,
 } from "../DurableObjects.ts";
 import type { Platform, Subscription } from "../Platform.ts";
@@ -213,14 +214,6 @@ export class DomainClassNotHosted extends Data.TaggedError("Cluster.DomainClassN
 export class DomainEngineNotStarted extends Data.TaggedError("Cluster.DomainEngineNotStarted")<{
   readonly message: string;
 }> {}
-
-/** The class names each host entity claims, by type. */
-const claims = new Map<string, object>();
-const claimOf = (type: string) => {
-  let claim = claims.get(type);
-  if (claim === undefined) claims.set(type, (claim = {}));
-  return claim;
-};
 
 /** The object of every saga's runs, reached from outside the cluster. */
 const WORKFLOWS = "~workflows";
@@ -821,7 +814,7 @@ export const layerEntities = <PoolReq>(
             }),
           lookup: ({ modelName }, cls) => self(className(modelName, cls)),
           connect: connectTo,
-          claimKey: Effect.succeed(claimOf(name)),
+          claimKey: runtimeClaim(name),
         };
         return Layer.merge(
           makePlatform(host),
@@ -835,7 +828,7 @@ export const layerEntities = <PoolReq>(
         declare: ({ modelName }, cls) => Effect.succeed(self(className(modelName, cls))),
         lookup: ({ modelName }, cls) => self(className(modelName, cls)),
         connect: connectTo,
-        claimKey: Effect.succeed(claimOf(name)),
+        claimKey: runtimeClaim(name),
       };
       return Layer.merge(
         makePlatform(host),
