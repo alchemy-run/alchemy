@@ -4,7 +4,9 @@
  * the instance.
  */
 import * as Rivet from "@alchemy.run/rivet";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import { Default } from "./cluster.ts";
 import Counter from "./counter.ts";
 
@@ -21,6 +23,20 @@ export default class Lifecycle extends Rivet.DurableObject<Lifecycle>()(
         put: (value: number) => state.storage.put("value", value),
         get: () => Effect.map(state.storage.get<number>("value"), (value) => value ?? null),
         sleepNow: () => state.sleep(),
+        // Writes after `ms`: past the sleep grace period, its storage is closed.
+        writeLate: (ms: number) =>
+          Effect.andThen(Effect.sleep(ms), state.storage.put("late", true)),
+        // Writes every 100ms until storage fails, then reports the failure as
+        // data, as a Domain object reports a defect.
+        writeUntilStopped: () =>
+          Effect.gen(function* () {
+            for (let i = 0; i < 300; i++) {
+              const exit = yield* Effect.exit(state.storage.put("busy", i));
+              if (Exit.isFailure(exit)) return { failed: Cause.pretty(exit.cause) };
+              yield* Effect.sleep("100 millis");
+            }
+            return { failed: null };
+          }),
         destroyNow: () => state.destroy(),
         onSleep: () => record("slept"),
         onDestroy: () => record("destroyed"),

@@ -3,7 +3,7 @@ import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { Region } from "@distilled.cloud/aws/Region";
-import { deepEqual, isResolved } from "alchemy/Diff";
+import { deepEqual, isResolved, stripEffects } from "alchemy/Diff";
 import type { DnsConfig } from "alchemy/DNS/Adapter";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
@@ -3227,7 +3227,16 @@ export const ServiceProvider = () =>
 
       return {
         stables: ["serviceArn", "serviceName", "clusterArn"],
-        diff: Effect.fn(function* ({ id, olds, news, output }) {
+        diff: Effect.fn(function* ({ id, olds, news: desired, output }) {
+          // Effect-native runtime exports remain unevaluated during planning.
+          // Their identity is represented by the image hash, so they must not
+          // prevent source changes from reaching the hash comparison below.
+          const news =
+            typeof desired === "object" && desired !== null && "exports" in desired
+              ? (Object.assign({}, desired, {
+                  exports: stripEffects(desired.exports),
+                }) as typeof desired)
+              : desired;
           if (!isResolved(news)) return;
           // serviceName change → delete-first replace (name is the identity).
           if ((yield* toServiceName(id, olds ?? {})) !== (yield* toServiceName(id, news ?? {}))) {

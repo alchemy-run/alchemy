@@ -3,12 +3,7 @@ import type { SecurityGroupId } from "@alchemy.run/aws/EC2/SecurityGroup";
 import type { SubnetId } from "@alchemy.run/aws/EC2/Subnet";
 import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
-import {
-  isImageProgram,
-  makePoolLayer,
-  RIVETKIT_VERSION,
-  type PoolSettings,
-} from "../internal/PoolHost.ts";
+import { isImageProgram, makePoolLayer, type PoolSettings } from "../internal/PoolHost.ts";
 import { nodeEnvironment, poolNetworkOf, resolvePoolNetwork } from "./internal/Pool.ts";
 
 export interface Ec2PoolOptions extends PoolSettings {
@@ -102,7 +97,7 @@ export const Ec2Pool = (id: string, options: Ec2PoolOptions = {}) =>
               ? program
               : {
                   ...program,
-                  userData: installRivetKit(options.rivetkitVersion ?? RIVETKIT_VERSION),
+                  userData: installRivetKit(options.rivetkitVersion ?? nodes.rivetkitVersion),
                 }),
             imageId: EC2.amazonLinux2023(),
             instanceType: options.instanceType ?? "t3.small",
