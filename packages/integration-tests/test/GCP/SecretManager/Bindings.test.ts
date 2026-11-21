@@ -162,10 +162,8 @@ describe(
         (_stack) =>
           Effect.gen(function* () {
             yield* secretmanager.addVersionProjectsSecrets({
+              payload: { data: btoa(SEEDED) },
               parent: secrets.readOnly,
-              body: {
-                payload: { data: btoa(SEEDED) },
-              },
             });
             const out = yield* expectProbe<{
               latest: string;

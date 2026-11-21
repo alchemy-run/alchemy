@@ -7,7 +7,7 @@ import { havePropsChanged, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { initialCwd } from "../Util/Node.ts";
-import { sha256Object } from "../Util/sha256.ts";
+import { sha256, sha256Object } from "../Util/sha256.ts";
 import {
   CommandExecutor,
   OutputNotFound,
@@ -181,13 +181,19 @@ export const BuildProvider = () =>
                         }),
                       ),
                     ),
-                    output: hashDirectory({
-                      cwd: outdir,
-                      memo: {
-                        exclude: [],
-                        lockfile: false,
-                      },
-                    }),
+                    output: fs.stat(outdir).pipe(
+                      Effect.flatMap((info) =>
+                        info.type === "Directory"
+                          ? hashDirectory({
+                              cwd: outdir,
+                              memo: {
+                                exclude: [],
+                                lockfile: false,
+                              },
+                            })
+                          : fs.readFile(outdir).pipe(Effect.flatMap(sha256)),
+                      ),
+                    ),
                   },
                   { concurrency: "unbounded" },
                 ),

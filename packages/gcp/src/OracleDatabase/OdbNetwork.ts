@@ -283,13 +283,11 @@ export const OdbNetworkProvider = () =>
       if (current === undefined) {
         const created = yield* oracle
           .createProjectsLocationsOdbNetworks({
+            network,
+            gcpOracleZone: news.gcpOracleZone,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             odbNetworkId,
-            body: {
-              network,
-              gcpOracleZone: news.gcpOracleZone,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

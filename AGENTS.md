@@ -441,6 +441,29 @@ The canonical reference reconcilers cover the common shapes:
 
 Existence-only resources (Lambda Permission, EC2 Route, EC2 RouteTableAssociation, IAM AccessKey, etc.) have nothing mutable beyond their identity. Their reconciler is just observe → if missing, create. There is no sync step.
 
+# Container image sources
+
+Every resource that runs a container takes its image from the same three props, so moving a workload between clouds changes the resource, not its source. Exactly one source is set:
+
+```ts
+// a prebuilt image
+yield* AWS.ECS.Task("Api", { image: "ghcr.io/acme/api@sha256:…" });
+// your own Dockerfile, built by the platform
+yield* Cloudflare.Container("Api", { context: "./api", dockerfile: "./api/Dockerfile.prod" });
+// a bundled program, optionally on a base image
+yield* AWS.ECS.Task("Api", { main: import.meta.url, image: "oven/bun:1" }, impl);
+```
+
+Rules:
+
+- **Use the shared shapes** from `@alchemy.run/docker/ImageSource`: `RegistryImageSource` (`image`), `DockerfileImageSource` (`context`, `dockerfile`) and `BundledImageSource` (`main`). A package that has `@alchemy.run/docker` only as an optional peer declares the same keys structurally instead of importing them into its root types.
+- **Same semantics everywhere.** `context` defaults to `.` and is relative to where the deploy runs. `dockerfile` is a path relative to where the deploy runs (default `${context}/Dockerfile`), or inline content (`Dockerfile.inline`) built in an empty context. `image` beside `main` is the base the program runs on (`FROM`); alone, it runs as is.
+- **`image` is a reference, not a pull policy.** A tag is resolved once per reference (ECS and Kubernetes mirror content-addressed on the ref), so docs tell users to pin a digest. `Cloudflare.Container` is the one exception: it re-pulls `image` on every deploy.
+- **Accept Outputs.** `image: someImage.imageRef` from a `Docker.Image` in the same stack must work, with the dependency ordering that implies. Resource props get this for free; a constructor taking plain props declares `Input<string>`.
+- **Align names, not options.** Build options (`build.args`, `secrets`, cache) are offered only where the platform's builder supports them. A platform-specific source (Rivet's `crate`) sits beside the three, never instead of one.
+
+References: [AWS.ECS.Task](./packages/aws/src/ECS/Task.ts), [Cloudflare.Container](./packages/cloudflare/src/Containers/ContainerApplication.ts), [Kubernetes.Deployment](./packages/kubernetes/src/Deployment.ts), [Rivet.DurableObject](./packages/rivet/src/DurableObject.ts).
+
 # SQL database migrations
 
 Every SQL database resource applies schema migrations at deploy time through a `migrations` prop. A database resource without it is a gap to fill. Users get the same DX on every cloud:

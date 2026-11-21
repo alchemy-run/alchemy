@@ -295,13 +295,11 @@ export const DatasetsHl7V2StoresMessageProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           healthcare.createProjectsLocationsDatasetsHl7V2StoresMessages({
-            parent,
-            body: {
-              message: {
-                data: encoded,
-                labels: desiredLabels,
-              },
+            message: {
+              data: encoded,
+              labels: desiredLabels,
             },
+            parent,
           }),
         ).pipe(Effect.catchTag("Conflict", () => findOwned(parent, id)));
         current = created ?? undefined;
@@ -322,11 +320,9 @@ export const DatasetsHl7V2StoresMessageProvider = () =>
       if (labelsChanged) {
         current = yield* retryTransient(
           healthcare.patchProjectsLocationsDatasetsHl7V2StoresMessages({
+            labels: desiredLabels,
             name: currentName,
             updateMask: "labels",
-            body: {
-              labels: desiredLabels,
-            },
           }),
         );
       }

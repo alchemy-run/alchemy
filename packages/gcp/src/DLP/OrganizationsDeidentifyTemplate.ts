@@ -281,15 +281,13 @@ export const OrganizationsDeidentifyTemplateProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createOrganizationsDeidentifyTemplates({
-            parent: organization,
-            body: {
-              templateId,
-              deidentifyTemplate: {
-                displayName,
-                description,
-                deidentifyConfig,
-              },
+            templateId,
+            deidentifyTemplate: {
+              displayName,
+              description,
+              deidentifyConfig,
             },
+            parent: organization,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -311,15 +309,13 @@ export const OrganizationsDeidentifyTemplateProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* dlp.patchOrganizationsDeidentifyTemplates({
-          name: currentName,
-          body: {
-            updateMask,
-            deidentifyTemplate: {
-              displayName,
-              description,
-              deidentifyConfig,
-            },
+          updateMask,
+          deidentifyTemplate: {
+            displayName,
+            description,
+            deidentifyConfig,
           },
+          name: currentName,
         });
       }
 

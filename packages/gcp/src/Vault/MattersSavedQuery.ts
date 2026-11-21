@@ -223,10 +223,7 @@ export const MattersSavedQueryProvider = () =>
 
       if (current === undefined) {
         const created = yield* vault
-          .createMattersSavedQueries({
-            matterId,
-            body: desired,
-          })
+          .createMattersSavedQueries({ ...desired, matterId })
           .pipe(Effect.catchTag("Conflict", () => findSavedQueryByName(matterId, displayName)));
         current = created ?? undefined;
       }

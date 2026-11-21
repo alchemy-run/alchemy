@@ -28,8 +28,8 @@ let project: string;
  */
 const expectFunctionGrants = Effect.gen(function* () {
   const policy = yield* crm.getIamPolicyProjects({
+    options: { requestedPolicyVersion: 3 },
     resource: `projects/${project}`,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   const condition = `resource.name == "${functionName}" || resource.name.startsWith("${functionName}/")`;
   const grants = (policy.bindings ?? [])

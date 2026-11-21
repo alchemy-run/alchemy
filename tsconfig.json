@@ -27,6 +27,9 @@
       "path": "./submodules/distilled/packages/turso/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/convex/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/daytona/tsconfig.json"
     },
     {
@@ -136,6 +139,9 @@
       "path": "./packages/turso/tsconfig.json"
     },
     {
+      "path": "./packages/convex/tsconfig.json"
+    },
+    {
       "path": "./packages/daytona/tsconfig.json"
     },
     {
@@ -143,6 +149,15 @@
     },
     {
       "path": "./packages/boat/tsconfig.json"
+    },
+    {
+      "path": "./packages/ai/tsconfig.json"
+    },
+    {
+      "path": "./packages/pi/tsconfig.json"
+    },
+    {
+      "path": "./packages/opencode/tsconfig.json"
     },
     {
       "path": "./packages/rivet/tsconfig.json"
@@ -395,6 +410,15 @@
       "path": "./examples/cloudflare-neon-prisma-psl/tsconfig.json"
     },
     {
+      "path": "./examples/cloudflare-pi/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-pi-github/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-opencode-github/tsconfig.json"
+    },
+    {
       "path": "./examples/cloudflare-planetscale-mysql-drizzle/tsconfig.json"
     },
     {
@@ -402,6 +426,15 @@
     },
     {
       "path": "./examples/cloudflare-turso-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-convex-worker/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-convex-tanstack-start/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-convex-self-hosted/tsconfig.json"
     },
     {
       "path": "./examples/e2b-agent-sandbox/tsconfig.json"

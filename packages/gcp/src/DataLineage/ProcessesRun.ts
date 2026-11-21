@@ -251,15 +251,13 @@ export const ProcessesRunProvider = () =>
         const startTime = news.startTime ?? (yield* nowIso());
         const created = yield* datalineage
           .createProjectsLocationsProcessesRuns({
+            name,
+            startTime,
+            endTime: news.endTime,
+            state: news.state ?? "STARTED",
+            displayName: news.displayName,
+            attributes,
             parent: process,
-            body: {
-              name,
-              startTime,
-              endTime: news.endTime,
-              state: news.state ?? "STARTED",
-              displayName: news.displayName,
-              attributes,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -288,15 +286,12 @@ export const ProcessesRunProvider = () =>
 
       if (startChanged || endChanged || stateChanged || displayNameChanged || attributesChanged) {
         current = yield* datalineage.patchProjectsLocationsProcessesRuns({
+          startTime,
+          endTime,
+          state,
+          displayName,
+          attributes,
           name: resolvedName,
-          body: {
-            name: resolvedName,
-            startTime,
-            endTime,
-            state,
-            displayName,
-            attributes,
-          },
         });
       }
 

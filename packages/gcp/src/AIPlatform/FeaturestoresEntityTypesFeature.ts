@@ -364,16 +364,14 @@ export const FeaturestoresEntityTypesFeatureProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsFeaturestoresEntityTypesFeatures({
+            valueType,
+            description: news.description,
+            labels: desiredLabels,
+            disableMonitoring,
+            pointOfContact: news.pointOfContact,
+            versionColumnName: news.versionColumnName,
             parent: entityType,
             featureId,
-            body: {
-              valueType,
-              description: news.description,
-              labels: desiredLabels,
-              disableMonitoring,
-              pointOfContact: news.pointOfContact,
-              versionColumnName: news.versionColumnName,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -395,6 +393,10 @@ export const FeaturestoresEntityTypesFeatureProvider = () =>
 
       if (descriptionChanged || labelsChanged || monitoringChanged || contactChanged) {
         current = yield* aiplatform.patchProjectsLocationsFeaturestoresEntityTypesFeatures({
+          description: news.description,
+          labels: desiredLabels,
+          disableMonitoring,
+          pointOfContact: news.pointOfContact,
           name,
           updateMask: [
             descriptionChanged ? "description" : undefined,
@@ -404,13 +406,6 @@ export const FeaturestoresEntityTypesFeatureProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            description: news.description,
-            labels: desiredLabels,
-            disableMonitoring,
-            pointOfContact: news.pointOfContact,
-          },
         });
       }
 

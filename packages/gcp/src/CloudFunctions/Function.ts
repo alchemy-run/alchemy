@@ -8,7 +8,7 @@ import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import { type ServerHost } from "alchemy/Runtime/Process";
-import { packEnvValue } from "alchemy/RuntimeContext";
+import { envStrings } from "alchemy/RuntimeContext";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -956,16 +956,7 @@ export const FunctionProvider = () =>
         ...news.serviceConfig,
         serviceAccountEmail: serviceAccount,
         environmentVariables: {
-          ...Object.fromEntries(
-            // A string is already an env value: the user's own (deployed
-            // verbatim, like every other host) or one the runtime context
-            // packed when it was bound. Packing it again would quote
-            // `"false"` and double-wrap bound secrets.
-            Object.entries(runtimeEnv).map(([key, value]) => [
-              key,
-              typeof value === "string" ? value : packEnvValue(value),
-            ]),
-          ),
+          ...envStrings(runtimeEnv),
           ...news.serviceConfig?.environmentVariables,
         },
       };
@@ -1013,18 +1004,16 @@ export const FunctionProvider = () =>
       if (current === undefined) {
         const created = yield* cloudfunctions
           .createProjectsLocationsFunctions({
+            name,
+            description: news.description,
+            labels: desiredLabels,
+            kmsKeyName: news.kmsKeyName,
+            environment,
+            buildConfig: mergeBuildConfig(buildConfig, undefined),
+            serviceConfig,
+            eventTrigger: news.eventTrigger,
             parent: `projects/${env.project}/locations/${location}`,
             functionId,
-            body: {
-              name,
-              description: news.description,
-              labels: desiredLabels,
-              kmsKeyName: news.kmsKeyName,
-              environment,
-              buildConfig: mergeBuildConfig(buildConfig, undefined),
-              serviceConfig,
-              eventTrigger: news.eventTrigger,
-            },
           })
           .pipe(
             retryActAs,
@@ -1122,23 +1111,20 @@ export const FunctionProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* cloudfunctions.patchProjectsLocationsFunctions({
+          labels: desiredLabels,
+          description: news.description,
+          kmsKeyName: news.kmsKeyName ?? current.kmsKeyName,
+          buildConfig: desiredBuild ?? current.buildConfig,
+          serviceConfig: {
+            ...current.serviceConfig,
+            ...desiredService,
+            service: undefined,
+            uri: undefined,
+            revision: undefined,
+          },
+          eventTrigger: news.eventTrigger ?? current.eventTrigger,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            description: news.description,
-            kmsKeyName: news.kmsKeyName ?? current.kmsKeyName,
-            buildConfig: desiredBuild ?? current.buildConfig,
-            serviceConfig: {
-              ...current.serviceConfig,
-              ...desiredService,
-              service: undefined,
-              uri: undefined,
-              revision: undefined,
-            },
-            eventTrigger: news.eventTrigger ?? current.eventTrigger,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(name);

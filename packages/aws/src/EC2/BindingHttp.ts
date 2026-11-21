@@ -1,3 +1,4 @@
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as AWSBindings from "../AWSBindings.ts";
@@ -126,7 +127,7 @@ export const makeVolumeHttpBinding = <I extends object, A, E, R>(options: {
   /** IAM actions granted on the volume ARN (+ `extraResources`). */
   actions: readonly string[];
   /** Additional IAM resource ARNs (e.g. `arn:aws:ec2:*::snapshot/*`). */
-  extraResources?: readonly string[];
+  extraResources?: readonly Input<string>[];
 }) =>
   Effect.gen(function* () {
     const bind = yield* AWSBindings.Bind;
