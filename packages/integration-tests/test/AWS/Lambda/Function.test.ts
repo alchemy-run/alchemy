@@ -8,6 +8,7 @@ import * as Lambda from "@distilled.cloud/aws/lambda";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
+import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
 import { zipCode } from "alchemy/Util/zip";
@@ -1467,6 +1468,62 @@ test.provider(
   },
 );
 
+const precreateCleanupFunction = (functionName: string) =>
+  Effect.gen(function* () {
+    const queue = yield* AWS.SQS.Queue("PrecreateCleanupQueue");
+    const fn = yield* AWS.Lambda.Function("PrecreateCleanup", {
+      main: asyncHandlerPath,
+      functionName,
+      functionUrl: false,
+      // CreateFunction rejects DurableConfig with no ExecutionTimeout, after
+      // the role and log group exist.
+      durableConfig: { RetentionPeriodInDays: 14 },
+      env: { QUEUE_URL: queue.queueUrl },
+    });
+    yield* fn.bind`Self`({ env: { SELF_NAME: fn.functionName } });
+    return fn;
+  });
+
+test.provider(
+  "a failed precreate releases the execution role and log group it created",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const functionName = yield* createPhysicalName({
+        id: "PrecreateCleanup",
+        instanceId: "00000000000000000000000000000000",
+        maxLength: 64,
+      });
+      const error = yield* stack.deploy(precreateCleanupFunction(functionName)).pipe(Effect.flip);
+      expect(error).toMatchObject({ _tag: "InvalidParameterValueException" });
+      expect(String(error)).toContain("executionTimeout");
+      yield* assertFunctionDeleted(functionName);
+      const row = yield* Effect.gen(function* () {
+        const state = yield* yield* State;
+        return yield* state.get({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "PrecreateCleanup",
+        });
+      }).pipe(Effect.provide(stack.state));
+      if (row === undefined || !("instanceId" in row)) {
+        return yield* Effect.die("Missing precreate resource checkpoint");
+      }
+      const roleName = yield* createPhysicalName({
+        id: "PrecreateCleanup",
+        instanceId: row.instanceId,
+        maxLength: 64,
+      });
+      yield* assertRoleDeleted(roleName);
+      yield* assertLogGroupDeleted(functionName);
+      yield* stack.destroy();
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  {
+    tags: ["provider:aws", "provider:aws:iam", "provider:aws:lambda", "provider:aws:sqs", "live"],
+    timeout: 180_000,
+  },
+);
+
 // Out-of-band proof that the trailing destroy actually removed the function
 // from the cloud (bounded retry to ride out delete propagation).
 const assertFunctionDeleted = Effect.fn(function* (functionName: string) {
@@ -1488,6 +1545,21 @@ const assertRoleDeleted = Effect.fn(function* (roleName: string) {
     Effect.retry({
       schedule: Schedule.spaced("1 second"),
       times: 8,
+    }),
+  );
+});
+
+const assertLogGroupDeleted = Effect.fn(function* (functionName: string) {
+  const logGroupName = `/aws/lambda/${functionName}`;
+  yield* Logs.describeLogGroups({ logGroupNamePrefix: logGroupName }).pipe(
+    Effect.flatMap((result) => {
+      const present = (result.logGroups ?? []).some((group) => group.logGroupName === logGroupName);
+      return present
+        ? Effect.fail(new Error(`Log group ${logGroupName} still exists`))
+        : Effect.void;
+    }),
+    Effect.retry({
+      schedule: Schedule.max([Schedule.exponential(500), Schedule.recurs(8)]),
     }),
   );
 });
