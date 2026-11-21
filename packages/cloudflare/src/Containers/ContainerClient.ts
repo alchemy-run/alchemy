@@ -13,13 +13,13 @@ import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import * as Sink from "effect/Sink";
-import type * as Socket from "effect/socket/Socket";
 import * as Stream from "effect/Stream";
 import {
   fromCloudflareFetcher,
   type Fetcher,
   type SocketAddress,
   type SocketOptions,
+  type TcpSocket,
 } from "../Fetcher.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import {
@@ -67,7 +67,7 @@ export interface ContainerPort {
     ContainerPortError | HttpServerError,
     RuntimeContext
   >;
-  connect(address: SocketAddress | string, options?: SocketOptions): Socket.Socket;
+  connect(address: SocketAddress | string, options?: SocketOptions): TcpSocket;
 }
 
 /** A native process, owned by the scope that called {@link ContainerClient.exec}. */

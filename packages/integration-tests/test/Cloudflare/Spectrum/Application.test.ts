@@ -5,6 +5,7 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as spectrum from "@distilled.cloud/cloudflare/spectrum";
 import * as zones from "@distilled.cloud/cloudflare/zones";
+import * as NodeSocket from "@effect/platform-node/NodeSocket";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import * as Cause from "effect/Cause";
@@ -13,6 +14,8 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { testName } from "../../names.ts";
+import { resolveAuthoritativeIpv4 } from "../Utils/Http.ts";
+import SpectrumTcpWorker from "./fixtures/tcp-worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
@@ -353,6 +356,108 @@ test.provider.skipIf(!entitledZoneId)(
       "live",
     ],
     timeout: 120_000,
+  },
+);
+
+const decoder = new TextDecoder();
+
+/**
+ * Open a TCP connection to the application's edge hostname, send one line
+ * and read until it comes back upper-cased. Retried while the edge record
+ * and the Worker origin propagate.
+ */
+const tcpRoundTrip = (host: string, port: number, message: string) =>
+  Effect.gen(function* () {
+    const socket = yield* NodeSocket.makeNet({ host, port, openTimeout: "5 seconds" });
+    const { pull } = yield* socket.reader;
+    const writer = yield* socket.writer;
+    yield* writer.write(`${message}\n`);
+    const expected = `${message.toUpperCase()}\n`;
+    let received = "";
+    while (!received.includes(expected)) {
+      for (const chunk of yield* pull) {
+        received += typeof chunk === "string" ? chunk : decoder.decode(chunk);
+      }
+    }
+    return received;
+  }).pipe(
+    Effect.scoped,
+    Effect.timeout("15 seconds"),
+    Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 12 }),
+  );
+
+// Unlike every other origin, a Worker origin is accepted on the Free
+// testing zone, so the whole lifecycle runs without an entitled zone. A zone
+// gets one Worker-origin application on one port.
+test.provider(
+  "Worker origin — TCP through Spectrum reaches the Worker's connect handler",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+      const dnsName = `${testName("alchemy-spectrum-tcp")}.${zoneName}`;
+
+      yield* stack.destroy();
+      yield* purgeApps(zoneId, dnsName, "tcp/9000");
+
+      const { worker, app } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const worker = yield* SpectrumTcpWorker;
+          const app = yield* Cloudflare.Spectrum.Application("Tcp", {
+            zoneId,
+            dns: { type: "CNAME", name: dnsName },
+            protocol: "tcp/9000",
+            trafficType: "worker",
+            originWorkerId: worker.workerId,
+          });
+          return { worker, app };
+        }),
+      );
+
+      expect(app.trafficType).toEqual("worker");
+      expect(app.originWorkerId).toEqual(worker.workerId);
+      expect(app.originDirect).toBeUndefined();
+
+      const live = yield* getApp(zoneId, app.appId);
+      expect("trafficType" in live && live.trafficType).toEqual("worker");
+      expect("originWorkerId" in live && live.originWorkerId).toEqual(worker.workerId);
+
+      // The edge record is a CNAME to the application's anycast name.
+      // Resolve it through authoritative nameservers and connect by
+      // address: an early system lookup would cache NXDOMAIN for the zone's
+      // SOA minimum.
+      const address = yield* resolveAuthoritativeIpv4(dnsName);
+      const received = yield* tcpRoundTrip(address, 9000, "ping");
+      expect(received).toEqual("hello\nPING\n");
+
+      // An unchanged redeploy is a no-op.
+      const plan = yield* stack.plan(
+        Effect.gen(function* () {
+          const worker = yield* SpectrumTcpWorker;
+          return yield* Cloudflare.Spectrum.Application("Tcp", {
+            zoneId,
+            dns: { type: "CNAME", name: dnsName },
+            protocol: "tcp/9000",
+            trafficType: "worker",
+            originWorkerId: worker.workerId,
+          });
+        }),
+      );
+      expect(plan.resources.Tcp?.action).toEqual("noop");
+
+      yield* stack.destroy();
+
+      const gone = yield* findApp(zoneId, dnsName, "tcp/9000");
+      expect(gone).toBeUndefined();
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:spectrum",
+      "provider:cloudflare:worker",
+      "provider:cloudflare:zone",
+      "live",
+    ],
+    timeout: 240_000,
   },
 );
 
