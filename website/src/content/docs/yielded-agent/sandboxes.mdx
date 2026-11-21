@@ -1,0 +1,60 @@
+---
+title: Sandboxes
+description: Give each Yielded Thread a sandbox. A tool that uses AI.Sandbox gets its Thread's sandbox, opened by the first call that needs it.
+---
+
+A Durable Object has no file system and cannot run a program. A tool that needs either uses `AI.Sandbox`, and the harness gives it the sandbox of the Thread the call belongs to.
+
+## A tool that uses the sandbox
+
+```typescript title="src/tools.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+
+export class RunTests extends AI.Tool<RunTests>()("run_tests", {
+  description: "Run the test suite and report its output.",
+  parameters: Schema.Struct({}),
+  success: Schema.Struct({ exitCode: Schema.Number, output: Schema.String }),
+}) {}
+
+export const RunTestsLive = RunTests.make(
+  Effect.fn(function* () {
+    const sandbox = yield* AI.Sandbox;
+    const result = yield* sandbox.exec(["npm", "test"]).pipe(Effect.orDie);
+    return { exitCode: result.exitCode, output: result.stdout.slice(-8000) };
+  }),
+);
+```
+
+## Say where sandboxes run
+
+Using `AI.Sandbox` makes the tool's Layer require `AI.Sandboxes`. Provide one platform's Layer to it. See [Sandbox platforms](/ai/sandbox-platforms).
+
+```typescript title="src/Threads.ts"
+import * as AIBoat from "@alchemy.run/ai/Boat";
+import * as Boat from "@alchemy.run/boat";
+
+const Base = Boat.Snapshot("Base", { run: ["npm install --global pnpm"] });
+
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  RunTestsLive.pipe(Layer.provideMerge(AIBoat.Sandboxes(Base))),
+  YieldedCloudflare.DurableObjectHistory,
+).pipe(Layer.provideMerge(Boat.CreateSandboxHttp));
+```
+
+## One sandbox per Thread
+
+Every run on a Thread uses the same sandbox, so files one run writes are there for the next. The sandbox is opened by the first tool call that uses it; a Thread whose tools never touch `AI.Sandbox` has none.
+
+## Suspend and remove
+
+Stop a Thread's sandbox and keep its files, or delete it:
+
+```typescript
+yield* harness.suspendSandbox("ticket-7");
+yield* harness.removeSandbox("ticket-7");
+```
+
+The next tool call resumes a suspended sandbox, and starts an empty one after a removal. `harness.sandboxKey("ticket-7")` is the key the platform's Layer names the sandbox by.

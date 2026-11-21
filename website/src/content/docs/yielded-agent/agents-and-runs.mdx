@@ -1,0 +1,77 @@
+---
+title: Agents & runs
+description: Define a Yielded agent with schemas, run it on a Thread, follow its events, and choose the model a run uses.
+---
+
+An agent is a definition: what it takes, what it returns, what it is told and what it may call. A Run executes it once on a Thread.
+
+## Define an agent
+
+`Agent.make` comes from `@yielded/agent`. `input` and `output` are Effect schemas:
+
+```typescript title="src/agent.ts"
+import { Agent } from "@yielded/agent";
+import { Toolkit } from "effect/ai";
+import * as Schema from "effect/Schema";
+
+export const Triage = Agent.make("triage", {
+  input: Schema.String,
+  output: Schema.Struct({
+    severity: Schema.Literals(["low", "medium", "high"]),
+    reason: Schema.String,
+  }),
+  instructions: "Classify the bug report and give the reason in one sentence.",
+  toolkit: Toolkit.empty,
+  policy: { maxTurns: 2, maxDuration: "30 seconds" },
+});
+```
+
+The model is told to answer as JSON matching `output`, and the answer is decoded with that schema before the run returns.
+
+## Return text instead of JSON
+
+Wrap the output schema in `Output.text` when the answer is ordinary text:
+
+```typescript
+import { Agent, Output } from "@yielded/agent";
+
+output: Output.text(Schema.String),
+```
+
+Without it, a plain-text answer fails the run with "Agent output is not valid JSON".
+
+## Run an agent
+
+`harness.run` takes the agent, its input and the Thread, and waits for the output:
+
+```typescript
+const result = yield* harness.run(Triage, "Users cannot sign in.", { thread: "bug-311" });
+result.output.severity; // "low" | "medium" | "high"
+```
+
+## Follow a run's events
+
+`harness.stream` returns a Stream of Yielded's `RunEvent`s: turns starting, text arriving, each tool call and its result, and the end of the run.
+
+```typescript
+const events = yield* Stream.runCollect(
+  harness.stream(Triage, "Users cannot sign in.", { thread: "bug-311" }),
+);
+events.map((event) => event._tag); // "RunStarted", "TurnStarted", …, "RunCompleted"
+```
+
+## Choose the model
+
+A run uses the first model the harness lists. Name another to use it for one run:
+
+```typescript
+const harness = yield* YieldedAgent.Harness({ models: [Fast, Smart] });
+
+yield* harness.run(Triage, report, { thread: "bug-311", model: Smart });
+```
+
+## Limits
+
+An agent's `policy` bounds a run: `maxTurns`, `maxToolCalls` and `maxDuration`. `result.finishReason` says how a run ended: `completed`, `model-stop` or `budget-exhausted`.
+
+See Yielded's [agents guide](https://yielded.dev/agent/guide/agents/) for everything a definition can hold.
