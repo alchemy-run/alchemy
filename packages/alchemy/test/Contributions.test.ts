@@ -115,26 +115,31 @@ describe("Contributions.load", { tags: ["unit", "local"] }, () =>
     );
 
     it.effect(
-      "merges the dev environment providers contribute",
+      "unions the trusted CAs providers contribute, each file once",
       () =>
         Effect.gen(function* () {
           const path = yield* Path.Path;
           // Imports `effect`, so the project lives under this package.
-          const devEnvProvider = (name: string, env: Record<string, string>) =>
+          const devTrustProvider = (name: string, files: ReadonlyArray<string>) =>
             contributingPackage(
               name,
               `import * as Effect from "effect/Effect";
-export default { name: ${JSON.stringify(name)}, devEnv: Effect.succeed(Effect.succeed(${JSON.stringify(env)})) };`,
+export default { name: ${JSON.stringify(name)}, devTrust: Effect.succeed(Effect.succeed(${JSON.stringify(files)})) };`,
             );
           const root = yield* project(
             {
-              "env-one": devEnvProvider("env-one", { ONE: "1" }),
-              "env-two": devEnvProvider("env-two", { TWO: "2" }),
+              "trust-one": devTrustProvider("trust-one", ["/ca/one.pem", "/ca/shared.pem"]),
+              "trust-two": devTrustProvider("trust-two", ["/ca/shared.pem", "/ca/two.pem"]),
+              "trust-none": contributingPackage("trust-none", `export default { name: "none" };`),
             },
             { directory: path.resolve(import.meta.dirname, "../.alchemy/test-providers") },
           );
-          const env = yield* inDirectory(root, Contributions.devEnv());
-          expect(env).toMatchObject({ ONE: "1", TWO: "2" });
+          const files = yield* inDirectory(root, Contributions.devTrust());
+          // alchemy's own providers contribute theirs too.
+          for (const file of ["/ca/one.pem", "/ca/shared.pem", "/ca/two.pem"]) {
+            expect(files).toContain(file);
+          }
+          expect(files.filter((file) => file === "/ca/shared.pem")).toHaveLength(1);
         }).pipe(Effect.scoped),
       // Exclusive: changes the process's working directory.
       { exclusive: true },
