@@ -104,7 +104,7 @@ testFor(withDns).test.provider(
       const url = yield* stack.deploy(siteDomain({ name: SITE_HOST, dns: TEST_DNS }));
 
       expect(url.status).toBe("active");
-      expect(url.logicalId).toBe(`Site/${WEBSITE_ROUTING_URL_ID}`);
+      expect(url.logicalId).toBe(`Site.${WEBSITE_ROUTING_URL_ID}`);
       expect(byName(withDns.zone.records)).toEqual(byName(recordsFor(SITE_HOST)));
       expect(domainsRoutes(withDns)).toEqual([]);
       expect(ownershipWrites(withDns)).toEqual([]);
@@ -157,7 +157,7 @@ testFor(upgrade).test.provider(
 
       expect(url.routingUrlId).toBe(recorded?.id);
       expect(Array.from(upgrade.rows.keys())).toEqual([recorded?.id]);
-      expect(upgrade.rows.get(recorded!.id)?.logicalId).toBe(`Site/${WEBSITE_ROUTING_URL_ID}`);
+      expect(upgrade.rows.get(recorded!.id)?.logicalId).toBe(`Site.${WEBSITE_ROUTING_URL_ID}`);
       expect(upgrade.domains.has(customDomain!)).toBe(true);
       expect(upgrade.routes().filter((route) => route.startsWith("DELETE"))).toEqual([]);
       expect(byName(upgrade.zone.records)).toEqual(byName(recordsFor(SITE_HOST)));
@@ -204,7 +204,7 @@ testFor(siteChange).test.provider(
         url.routingUrlId,
         routingUrl(url.routingUrlId, {
           status: "active",
-          logicalId: `Site/${WEBSITE_ROUTING_URL_ID}`,
+          logicalId: `Site.${WEBSITE_ROUTING_URL_ID}`,
           hostname: SITE_HOST,
         }),
       );
@@ -307,7 +307,6 @@ const { test } = Test.make({
 });
 
 const ZONE = "alchemy-test-2.us";
-const HOSTNAME = `prisma-dns.${ZONE}`;
 const MARKER = "StaticSite fixture v1";
 
 const fixtureDir = pathe.resolve(
@@ -358,6 +357,7 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      const HOSTNAME = `prisma-dns-${stack.stage.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.${ZONE}`;
       const zoneId = yield* resolveZoneId;
       const cwd = yield* cloneFixture(fixtureDir, {
         prefix: "alchemy-prisma-dns-",

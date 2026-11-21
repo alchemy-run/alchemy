@@ -209,8 +209,9 @@ export interface RoutingUrlProps {
    * Identity of the RoutingUrl on its Branch. Without state, a row on this
    * app with this `logicalId` is this resource's; one on another app needs
    * `--adopt`, since another stage or stack on the Branch can use the same.
-   * @default the resource's fully qualified name: `Site/Url` for
-   * `Prisma.RoutingUrl("Url", …)` inside a `Prisma.Website` named `Site`
+   * @default the resource's fully qualified name with `.` for `/`:
+   * `Site.Url` for `Prisma.RoutingUrl("Url", …)` inside a `Prisma.Website`
+   * named `Site`
    */
   logicalId?: Input<string>;
   /**
@@ -464,6 +465,10 @@ const serviceOf = (serviceId: string) =>
   });
 
 type Service = Effect.Success<ReturnType<typeof serviceOf>>;
+
+// A RoutingUrl's logicalId allows letters, digits, `.`, `-` and `_`, so a
+// namespaced FQN (`Site/Url`) uses `.` between its segments.
+const defaultLogicalId = (fqn: string) => fqn.replaceAll("/", ".");
 
 const branchUrls = (service: Service, logicalId?: string) =>
   getProjectBranchUrls({
@@ -846,7 +851,7 @@ const ProviderLive = () =>
         Effect.gen(function* () {
           const serviceId = yield* resolveServiceId(news.app);
           const hostname = normalizeHostname(news.hostname);
-          const logicalId = news.logicalId ?? fqn;
+          const logicalId = news.logicalId ?? defaultLogicalId(fqn);
           const publishes = news.publishesRecords === true;
           const service = yield* serviceOf(serviceId);
           const urls = yield* branchUrls(service);
@@ -913,7 +918,7 @@ const ProviderLive = () =>
             Effect.catchTag("RoutingUrlServiceNotOnABranch", () => Effect.undefined),
           );
           if (service === undefined) return undefined;
-          const logicalId = olds.logicalId ?? fqn;
+          const logicalId = olds.logicalId ?? defaultLogicalId(fqn);
           const found = ownRow(
             yield* branchUrls(service),
             serviceId,
