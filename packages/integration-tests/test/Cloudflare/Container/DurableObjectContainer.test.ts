@@ -957,7 +957,15 @@ for (const dev of [true, false]) {
               // after the object waits out the placeholder of a fresh deploy.
               const run = (box: BoxName) =>
                 getJson<RunResult>(url, `/run?box=${box}`).pipe(
-                  within(`/run?box=${box}`, "180 seconds"),
+                  // A Durable Object can run the deploy's placeholder for
+                  // minutes after its Worker serves the new code. The
+                  // placeholder runs none of the real code, so retry it.
+                  Effect.retry({
+                    while: (error) => String(error).includes("Alchemy worker is being deployed"),
+                    schedule: Schedule.spaced("10 seconds"),
+                    times: 18,
+                  }),
+                  within(`/run?box=${box}`, "360 seconds"),
                 );
 
               // Both programs are images of the one class application.
@@ -1020,7 +1028,7 @@ for (const dev of [true, false]) {
               ).toBeUndefined();
             }
           }),
-        { timeout: 300_000, retry: 0 },
+        { timeout: 600_000, retry: 0 },
       );
 
       test.provider(
