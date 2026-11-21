@@ -5,10 +5,19 @@ import * as RivetRailway from "@alchemy.run/rivet/Railway";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
+import * as RivetApi from "@distilled.cloud/rivet";
+import * as Namespaces from "@distilled.cloud/rivet/namespaces";
+import * as Pools from "@distilled.cloud/rivet/pools";
+import * as Output from "alchemy/Output";
+import { Random } from "alchemy/Random";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
 import { railwayApi } from "../Railway/limit.ts";
+import { suitePartition } from "../Railway/suiteProject.ts";
 import { expectDurableStream } from "./fixtures/durable-stream-check.ts";
 import { Cluster } from "./fixtures/railway/cluster.ts";
 import { CounterLive } from "./fixtures/railway/counter-live.ts";
@@ -72,6 +81,101 @@ describe.skipIf(true)(
         yield* expectRustCounter(rust, "railway-rust");
       }),
       { timeout: 300_000 },
+    );
+  },
+);
+
+// A single engine on a Railway Service, with its namespace and pool in the
+// same stack. Railway answers for a Service that is starting or restarting
+// with its own 404 page ("Application not found").
+const engine = Effect.gen(function* () {
+  const { project, environment } = yield* suitePartition;
+  const token = yield* Random("EngineAdminToken", { bytes: 32 });
+  const service = yield* Railway.Service("Engine", {
+    project,
+    environment,
+    image: "rivetdev/engine:3.1.1",
+    port: 6420,
+    publicDomain: true,
+    env: {
+      RIVET__AUTH__ADMIN_TOKEN: token.text,
+      RIVET__STORAGE__LOG_DIRECTORY: "/var/lib/rivet",
+      RIVET__STORAGE__AUTO_PROVISION_PARTITIONS: "true",
+      RIVET__OBJECT_STORAGE__PRIMARY__FILE_SYSTEM__PATH: "/var/lib/rivet/objects",
+      RIVET__TELEMETRY__ENABLED: "false",
+    },
+  });
+  return { project, environment, token: token.text, service };
+});
+
+// Mounting the volume restarts the engine. The namespace is created once it
+// is mounted, so it lands on the volume, through an engine that is restarting.
+const engineWithPool = Effect.gen(function* () {
+  const { project, environment, token, service } = yield* engine;
+  const data = yield* Railway.Volume("EngineData", {
+    project,
+    environment,
+    service,
+    mountPath: "/var/lib/rivet",
+  });
+  const endpoint = Output.all(service.url, data.volumeId).pipe(
+    Output.map(([url]) => url as string),
+  );
+  const namespace = yield* Rivet.Namespace("Ns", { endpoint, token });
+  const pool = yield* Rivet.Pool("Pool", { endpoint, token, namespace: namespace.name });
+  return { endpoint, token, namespace: namespace.name, pool: pool.name };
+});
+
+// The same namespace and pool, with the volume removed: that restarts the
+// engine, and the destroy right after deletes the pool while it restarts.
+const engineWithoutVolume = Effect.gen(function* () {
+  const { token, service } = yield* engine;
+  const endpoint = service.url.as<string>();
+  const namespace = yield* Rivet.Namespace("Ns", { endpoint, token });
+  yield* Rivet.Pool("Pool", { endpoint, token, namespace: namespace.name });
+});
+
+describe(
+  "Rivet engine on a Railway Service",
+  { tags: ["provider:rivet", "provider:railway", "live"] },
+  () => {
+    test.provider(
+      "creates a namespace and pool, and deletes the pool, while the engine restarts",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          const out = yield* stack.deploy(engineWithPool);
+          const credentials = RivetApi.credentials({
+            token: out.token as Redacted.Redacted<string>,
+            endpoint: out.endpoint,
+          });
+          const getPool = Pools.getPool({ pool: out.pool, namespace: out.namespace }).pipe(
+            Effect.map((res) => res.pool),
+            Effect.catchTag("PoolNotFound", () => Effect.undefined),
+            Effect.provide(credentials),
+          );
+          const namespaces = yield* Namespaces.listNamespaces({ name: out.namespace }).pipe(
+            Effect.provide(credentials),
+          );
+          expect(namespaces.namespaces.map((ns) => ns.name)).toContain(out.namespace);
+          expect((yield* getPool)?.name).toBe(out.pool);
+
+          yield* stack.deploy(engineWithoutVolume);
+          // Destroy once Railway answers for the restarting engine.
+          const client = yield* HttpClient.HttpClient;
+          yield* client.get(`${out.endpoint}/namespaces`).pipe(
+            Effect.map((res) => res.status === 404 && res.headers["x-rivet-ray-id"] === undefined),
+            Effect.orElseSucceed(() => false),
+            Effect.repeat({
+              schedule: Schedule.spaced("1 second"),
+              until: (down) => down,
+              times: 90,
+            }),
+          );
+          yield* stack.destroy();
+        }),
+      { timeout: 900_000 },
     );
   },
 );
