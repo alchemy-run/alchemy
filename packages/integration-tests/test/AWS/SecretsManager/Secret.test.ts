@@ -6,14 +6,20 @@ import { Secret } from "@alchemy.run/aws/SecretsManager/Secret";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
+import * as Alchemy from "alchemy";
 import * as Provider from "alchemy/Provider";
+import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 
-const { test } = Test.make({ providers: AWS.providers() });
+const { test, deploy, destroy } = Test.make({ providers: AWS.providers() });
 
 class SecretNotListed extends Data.TaggedError("SecretNotListed") {}
 
@@ -528,4 +534,118 @@ test.provider(
       yield* assertSecretDeleted(secret.secretArn);
     }),
   { tags: ["provider:aws", "provider:aws:secretsmanager", "live"], timeout: 180_000 },
+);
+
+test.provider(
+  "AWS.Secrets loads a prefix across pages into stack Config",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const prefix = `alchemy-secrets-source-${stack.stage}/`;
+      // More than BatchGetSecretValue's 20-item page, plus names that must
+      // never become config keys. Values are deliberately not JSON objects.
+      const indices = Array.from({ length: 23 }, (_, i) => i);
+      const seeded = yield* stack.deploy(
+        Effect.gen(function* () {
+          const strings = yield* Effect.forEach(indices, (i) =>
+            Secret(`Source${i}`, {
+              name: `${prefix}KEY_${i}`,
+              secretString: Redacted.make(`value-${i}`),
+            }),
+          );
+          const nested = yield* Secret("NestedSource", {
+            name: `${prefix}nested/KEY`,
+            secretString: Redacted.make("nested-value"),
+          });
+          const binary = yield* Secret("BinarySource", {
+            name: `${prefix}BINARY`,
+            secretBinary: Redacted.make(BINARY_V1),
+          });
+          const outside = yield* Secret("OutsideSource", {
+            name: `${prefix.slice(0, -1)}-other/OUTSIDE`,
+            secretString: Redacted.make("outside-value"),
+          });
+          const prototype = yield* Secret("PrototypeSource", {
+            name: `${prefix}__proto__`,
+            secretString: Redacted.make("remote-prototype-value"),
+          });
+          return { strings, nested, binary, outside, prototype };
+        }),
+      );
+
+      const { endpoint } = yield* AWSEnvironment.current;
+      const client = yield* HttpClient.HttpClient;
+      // The source uses real auth-provider resolution. In the Floci runner,
+      // run with dummy AWS environment credentials and route its actual HTTP
+      // requests to the emulator, not a stubbed HTTP/SDK response.
+      const transport = endpoint
+        ? client.pipe(
+            HttpClient.mapRequest((request) => HttpClientRequest.setUrl(request, endpoint)),
+          )
+        : client;
+      const source = AWS.Secrets(({ stage }) => ({
+        prefix: `alchemy-secrets-source-${stage}/`,
+      }));
+      const consumer = Alchemy.Stack(
+        `${stack.name}-consumer`,
+        {
+          providers: AWS.providers(),
+          state: Alchemy.localState(),
+          secrets: [
+            ConfigProvider.layerAdd(
+              ConfigProvider.fromUnknown({
+                FALLBACK: "retained",
+                ["__proto__"]: "earlier-prototype-value",
+              }),
+              { asPrimary: true },
+            ),
+            source.layer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, transport))),
+            Alchemy.Secrets.ProcessEnv({ disabled: true }),
+          ],
+        },
+        Effect.gen(function* () {
+          const values = yield* Effect.forEach(indices, (i) => Config.Redacted(`KEY_${i}`));
+          const nested = yield* Config.String("nested/KEY").pipe(Config.withDefault("absent"));
+          const binary = yield* Config.String("BINARY").pipe(Config.withDefault("absent"));
+          const outside = yield* Config.String("OUTSIDE").pipe(Config.withDefault("absent"));
+          const fallback = yield* Config.String("FALLBACK");
+          const prototype = yield* Config.Redacted("__proto__");
+          // Never persist secret values as stack outputs.
+          return {
+            initialValuesMatch: values.every((value, i) => Redacted.value(value) === `value-${i}`),
+            firstIsRotated: Redacted.value(values[0]!) === "rotated-value",
+            remotePrototypeWins: Redacted.value(prototype) === "remote-prototype-value",
+            excluded: [nested, binary, outside],
+            fallback,
+          };
+        }),
+      );
+
+      const loaded = yield* deploy(consumer, { stage: stack.stage });
+      expect(loaded.initialValuesMatch).toBe(true);
+      expect(loaded.excluded).toEqual(["absent", "absent", "absent"]);
+      expect(loaded.fallback).toBe("retained");
+      expect(loaded.remotePrototypeWins).toBe(true);
+
+      yield* secretsmanager.putSecretValue({
+        SecretId: seeded.strings[0]!.secretArn,
+        SecretString: "rotated-value",
+      });
+      const reloaded = yield* deploy(consumer, { stage: stack.stage });
+      expect(reloaded.firstIsRotated).toBe(true);
+      expect(reloaded.initialValuesMatch).toBe(false);
+
+      yield* destroy(consumer, { stage: stack.stage });
+      yield* stack.destroy();
+      for (const secret of [
+        ...seeded.strings,
+        seeded.nested,
+        seeded.binary,
+        seeded.outside,
+        seeded.prototype,
+      ]) {
+        yield* assertSecretDeleted(secret.secretArn);
+      }
+    }),
+  { tags: ["provider:aws", "provider:aws:secretsmanager", "live"] },
 );
