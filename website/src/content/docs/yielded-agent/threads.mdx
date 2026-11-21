@@ -1,0 +1,44 @@
+---
+title: Threads
+description: A Thread is a named conversation in a Durable Object. Runs on the same name share its history, which is stored in the object's SQLite.
+---
+
+A Thread is one conversation. Every run names its Thread, reads what earlier runs left there, and adds its own messages when it succeeds.
+
+## Continue a conversation
+
+Use the same `thread` for each run of a conversation:
+
+```typescript
+yield* harness.run(Support, "Where is order A-1042?", { thread: "ticket-7" });
+const followUp = yield* harness.run(Support, "And when will it arrive?", { thread: "ticket-7" });
+```
+
+The second run's model sees the first question, the tool calls it made and its answer.
+
+## Read a Thread
+
+`harness.history` returns the Thread as an Effect AI `Prompt`: the messages the next run's model would be given. A Thread nothing has run on yet is empty.
+
+```typescript
+const prompt = yield* harness.history("ticket-7");
+prompt.content.map((message) => message.role); // "system", "user", "assistant", "tool", …
+```
+
+## Where Threads live
+
+A Thread belongs to the Durable Object that ran it. Two objects can both have a Thread named `ticket-7`, and they are different Threads. Route a person, a tenant or a ticket to one object by name, and name its Threads within it:
+
+```typescript title="src/Api.ts"
+const threads = yield* Threads;
+
+const answer = yield* threads.getByName(userId).ask(ticketId, text);
+```
+
+## What is kept
+
+`YieldedCloudflare.DurableObjectHistory` stores Threads in the object's SQLite. Each successful Run is committed as one batch, so a Thread continues after the object is evicted or redeployed. A Run that fails or is cut off leaves the Thread as it was.
+
+`YieldedAgent.MemoryHistory` keeps Threads in memory instead, for tests.
+
+See [Surviving eviction](/yielded-agent/eviction).
