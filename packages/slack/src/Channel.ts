@@ -11,7 +11,7 @@ import type { Providers } from "./Providers.ts";
 
 /** The channel name is held by a channel the bot can't see. */
 export class ChannelNameUnavailable extends Data.TaggedError("Slack.ChannelNameUnavailable")<{
-  readonly name: string;
+  readonly channelName: string;
   readonly message: string;
 }> {}
 
@@ -229,7 +229,7 @@ export const ChannelProvider = () =>
         // `name_taken` for a channel the bot can't see (another member's
         // private channel).
         return yield* new ChannelNameUnavailable({
-          name,
+          channelName: name,
           message: `Slack channel name '${name}' is taken by a channel the bot can't see. Pick another name.`,
         });
       }

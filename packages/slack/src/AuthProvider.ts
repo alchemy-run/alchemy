@@ -19,6 +19,7 @@ import * as Interaction from "alchemy/Interaction";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 
@@ -172,12 +173,14 @@ const rotate = (config: SlackAuthConfig) =>
     const rotated = yield* Tooling.rotateToken({ refresh_token: Redacted.make(refreshToken) }).pipe(
       // The tokenless form: rotation authenticates with the refresh token.
       Effect.provide(
-        slackCredentials({
-          token: Redacted.make(""),
-          apiBaseUrl: config.apiBaseUrl ?? DEFAULT_API_BASE_URL,
-        }),
+        Layer.mergeAll(
+          slackCredentials({
+            token: Redacted.make(""),
+            apiBaseUrl: config.apiBaseUrl ?? DEFAULT_API_BASE_URL,
+          }),
+          FetchHttpClient.layer,
+        ),
       ),
-      Effect.provide(FetchHttpClient.layer),
       Effect.mapError((cause) =>
         AuthError.make({
           message:
