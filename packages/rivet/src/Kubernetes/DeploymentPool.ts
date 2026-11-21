@@ -6,7 +6,6 @@ import {
   makePoolLayer,
   secretNodeEnvironment,
   nodeDockerfile,
-  RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -98,7 +97,7 @@ export const DeploymentPool = (id: string, options: DeploymentPoolOptions = {}) 
             : {
                 ...nodes.program,
                 dockerfile: {
-                  content: nodeDockerfile(options.rivetkitVersion ?? RIVETKIT_VERSION),
+                  content: nodeDockerfile(options.rivetkitVersion ?? nodes.rivetkitVersion),
                 },
               }),
           cluster,

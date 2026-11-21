@@ -20,7 +20,7 @@ import { Namespace } from "../Namespace.ts";
 export { ObjectStorageRequired, type ObjectStorage } from "../internal/ObjectStorage.ts";
 
 /** The engine release `RivetKubernetes.StatefulSetControlPlane` runs by default. */
-export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
+export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.1.1";
 
 const DATA_PATH = "/var/lib/rivet";
 const API_PORT = 6420;
@@ -88,7 +88,7 @@ export interface StatefulSetControlPlaneProps {
   expose?: ControlPlaneExposure;
   /**
    * Engine image.
-   * @default "rivetdev/engine:3.0.0"
+   * @default "rivetdev/engine:3.1.1"
    */
   image?: string;
   /**
@@ -254,6 +254,8 @@ export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPla
                         valueFrom: { secretKeyRef: { name: secret.name, key: "token" } },
                       },
                       { name: "RIVET__STORAGE__LOG_DIRECTORY", value: DATA_PATH },
+                      // Engine 3.1 places its storage partitions only when asked to.
+                      { name: "RIVET__STORAGE__AUTO_PROVISION_PARTITIONS", value: "true" },
                       {
                         name: "RIVET__API_PEER__ADVERTISE_ADDRESS",
                         value: `$(POD_IP):${PEER_PORT}`,
