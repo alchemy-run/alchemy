@@ -1,7 +1,6 @@
 import * as Backfill from "@alchemy.run/domain/Backfill";
 import type { Routed } from "@alchemy.run/domain/CatchUp";
 import type { Delivery } from "@alchemy.run/domain/Platform";
-import { decodeRpcArgs, encodeRpcArgs } from "alchemy/Rpc";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 
@@ -281,12 +280,6 @@ export class Sim {
   deployed = false;
   calls = 0;
   failures = 0;
-  /** Carry RPC arguments over the JSON transport the Effect Cluster and Rivet hosts use. */
-  json = false;
-
-  /** An argument as it arrives at the callee. */
-  readonly wire = <A>(value: A): A =>
-    this.json ? (decodeRpcArgs(encodeRpcArgs([value]))[0] as A) : value;
 
   constructor(
     seed: number,
@@ -501,11 +494,7 @@ export class Sim {
         this.call(this.node(path).object, () => this.node(path).role.child(path, child), "child"),
       list: (path, after) =>
         Effect.andThen(this.interject?.(path) ?? Effect.void, () =>
-          this.call(
-            this.node(path).object,
-            () => this.node(path).role.list(path, this.wire(after)),
-            "list",
-          ),
+          this.call(this.node(path).object, () => this.node(path).role.list(path, after), "list"),
         ),
     },
     source: {

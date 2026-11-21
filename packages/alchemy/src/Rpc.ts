@@ -557,18 +557,34 @@ const isUndefinedArg = (value: unknown): boolean =>
 
 /**
  * Encode a method's arguments for a JSON transport, keeping an `undefined`
- * argument `undefined` on the other side. Properties set to `undefined` inside
- * an argument are dropped by JSON, which the callee reads as `undefined` too.
+ * argument `undefined` on the other side. Trailing `undefined` arguments are
+ * left off, which a callee on any version reads as `undefined`; one followed
+ * by a defined argument goes as a marker that {@link decodeRpcArgs} restores.
+ * Properties set to `undefined` inside an argument are dropped by JSON, which
+ * the callee reads as `undefined` too.
  */
-export const encodeRpcArgs = (args: ReadonlyArray<unknown>): string =>
-  JSON.stringify(args.map((arg) => (arg === undefined ? UNDEFINED_ARG : arg)));
-
-/** Decode arguments encoded by {@link encodeRpcArgs}. Throws when `text` is not a JSON array. */
-export const decodeRpcArgs = (text: string): Array<unknown> => {
-  const args: unknown = text.length > 0 ? JSON.parse(text) : [];
-  if (!Array.isArray(args)) throw new TypeError("RPC arguments must be a JSON array");
-  return args.map((arg) => (isUndefinedArg(arg) ? undefined : arg));
+export const encodeRpcArgs = (args: ReadonlyArray<unknown>): string => {
+  let end = args.length;
+  while (end > 0 && args[end - 1] === undefined) end--;
+  return JSON.stringify(args.slice(0, end).map((arg) => (arg === undefined ? UNDEFINED_ARG : arg)));
 };
+
+/**
+ * Decode arguments encoded by {@link encodeRpcArgs} (or by a plain
+ * `JSON.stringify(args)`). An empty body is no arguments; anything other than
+ * a JSON array fails with {@link RpcDecodeError}.
+ */
+export const decodeRpcArgs = (text: string): Effect.Effect<Array<unknown>, RpcDecodeError> =>
+  Effect.try({
+    try: (): unknown => (text.length > 0 ? JSON.parse(text) : []),
+    catch: (cause) => new RpcDecodeError({ cause }),
+  }).pipe(
+    Effect.flatMap((args) =>
+      Array.isArray(args)
+        ? Effect.succeed(args.map((arg) => (isUndefinedArg(arg) ? undefined : arg)))
+        : Effect.fail(new RpcDecodeError({ cause: "RPC arguments must be a JSON array" })),
+    ),
+  );
 
 /**
  * Build a typed RPC stub over a plain `fetch` transport. Any property that
@@ -655,12 +671,7 @@ export const serveRpc = <Req = never>(
     const text = yield* request.text;
     // Keep arg-decode failures out of the handler's error channel — a
     // malformed argument payload is a client error, so answer 400.
-    const argsResult = yield* Effect.result(
-      Effect.try({
-        try: () => decodeRpcArgs(text),
-        catch: (cause) => new RpcDecodeError({ cause }),
-      }),
-    );
+    const argsResult = yield* Effect.result(decodeRpcArgs(text));
     if (Result.isFailure(argsResult)) {
       return HttpServerResponse.text(
         `Invalid RPC arguments for "${name}": ${argsResult.failure.message}`,

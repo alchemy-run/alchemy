@@ -82,11 +82,12 @@ describe("Rpc fetch protocol", { tags: ["unit", "local"] }, () => {
     it.effect("keeps an undefined argument undefined, in any position", () =>
       withRpc(shape, (stub) =>
         Effect.gen(function* () {
-          expect(yield* stub.undefinedArgs("a", undefined, null, undefined)).toEqual([
+          // A trailing undefined argument is left off, so the callee reads it as undefined too.
+          expect(yield* stub.undefinedArgs(undefined, "a", undefined, null, undefined)).toEqual([
+            "undefined",
             "a",
             "undefined",
             null,
-            "undefined",
           ]);
         }),
       ),
@@ -412,6 +413,52 @@ describe("Rpc method addressing", { tags: ["unit", "local"] }, () => {
       expect(of("https://worker/page?next=/__rpc__/increment")).toBeUndefined();
       expect(of("https://worker/page#/__rpc__/increment")).toBeUndefined();
       expect(of("https://worker/")).toBeUndefined();
+    }),
+  );
+});
+
+describe("Rpc argument encoding", { tags: ["unit", "local"] }, () => {
+  const roundTrip = (args: ReadonlyArray<unknown>) => Rpc.decodeRpcArgs(Rpc.encodeRpcArgs(args));
+
+  it.effect("keeps an undefined argument undefined, in any position", () =>
+    Effect.gen(function* () {
+      expect(yield* roundTrip(["a", undefined, null, undefined])).toEqual(["a", undefined, null]);
+      expect((yield* roundTrip(["path", undefined]))[1]).toBeUndefined();
+      expect(yield* roundTrip([undefined, 1])).toEqual([undefined, 1]);
+      expect(yield* roundTrip([{ a: undefined, b: null }, [undefined]])).toEqual([
+        { b: null },
+        [null],
+      ]);
+    }),
+  );
+
+  it.effect("leaves trailing undefined arguments off, as a callee on any version reads them", () =>
+    Effect.sync(() => {
+      expect(Rpc.encodeRpcArgs(["path", undefined])).toBe(`["path"]`);
+      expect(Rpc.encodeRpcArgs([undefined, undefined])).toBe(`[]`);
+      // Followed by a defined argument, it goes as a marker.
+      expect(JSON.parse(Rpc.encodeRpcArgs([undefined, 1]))[0]).not.toBeNull();
+    }),
+  );
+
+  it.effect("decodes arguments a caller sent as plain JSON", () =>
+    Effect.gen(function* () {
+      expect(yield* Rpc.decodeRpcArgs(JSON.stringify(["a", 1, null, { b: [2] }]))).toEqual([
+        "a",
+        1,
+        null,
+        { b: [2] },
+      ]);
+      expect(yield* Rpc.decodeRpcArgs("")).toEqual([]);
+    }),
+  );
+
+  it.effect("fails with RpcDecodeError on anything but a JSON array", () =>
+    Effect.gen(function* () {
+      for (const text of ["{", `{"a":1}`, `"a"`]) {
+        const error = yield* Effect.flip(Rpc.decodeRpcArgs(text));
+        expect(error._tag).toBe("RpcDecodeError");
+      }
     }),
   );
 });

@@ -656,8 +656,13 @@ export const layerEntities = <PoolReq>(
               Effect.suspend(() => {
                 const method = record[payload.method];
                 return typeof method === "function"
-                  ? (method as (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(
-                      ...decodeRpcArgs(payload.args),
+                  ? decodeRpcArgs(payload.args).pipe(
+                      Effect.orDie,
+                      Effect.flatMap((args) =>
+                        (method as (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(
+                          ...args,
+                        ),
+                      ),
                     )
                   : Effect.die(new Error(`${id} has no method ${payload.method}`));
               }).pipe(Effect.map((result) => JSON.stringify(result ?? null))),
