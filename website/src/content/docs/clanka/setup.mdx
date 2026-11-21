@@ -1,6 +1,6 @@
 ---
 title: Setup
-description: Install @alchemy.run/clanka and @alchemy.run/ai, choose a sandbox platform, and add a clanka harness to a Cloudflare Durable Object.
+description: Install @alchemy.run/Clanka and @alchemy.run/ai, choose a sandbox platform, and add a Clanka harness to a Cloudflare Durable Object.
 ---
 
 import PackageManagers from "../../../components/PackageManagers.astro";
@@ -11,7 +11,7 @@ You need:
 - An Alchemy app on Cloudflare. See [Cloudflare setup](/cloudflare/setup).
 - An account on a sandbox platform: [Boat](/boat/setup), [E2B](/e2b/setup), [Daytona](/daytona/setup), [Modal](/modal/setup) or [Archil](/archil/setup)
 
-clanka needs no account. The sandbox it runs in needs Node and npm.
+Clanka needs no account. The sandbox it runs in needs Node and npm.
 
 ## Install
 
@@ -21,7 +21,7 @@ Install the harness, the shared AI package and your sandbox platform's provider:
 
 ## Add the sandbox provider
 
-clanka's executor runs in a sandbox, so the Stack needs the platform's provider next to Cloudflare's:
+Clanka's executor runs in a sandbox, so the Stack needs the platform's provider next to Cloudflare's:
 
 ```typescript title="alchemy.run.ts"
 import * as Boat from "@alchemy.run/boat";
@@ -70,7 +70,7 @@ export const Base = Boat.Snapshot("Base", { run: [Clanka.installCommand] });
 export const Sandbox = AIBoat.Sandboxes(Base);
 ```
 
-`Clanka.installCommand` installs clanka while the snapshot is built, so a conversation's first prompt doesn't wait for it.
+`Clanka.installCommand` installs Clanka while the snapshot is built, so a conversation's first prompt doesn't wait for it.
 
 ## A harness
 

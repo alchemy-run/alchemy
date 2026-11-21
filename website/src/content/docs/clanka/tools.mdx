@@ -1,11 +1,11 @@
 ---
 title: Tools
-description: clanka's own functions run in the sandbox. An AI.Tool listed on the harness is a function scripts call the same way, with its handler in your Durable Object.
+description: Clanka's own functions run in the sandbox. An AI.Tool listed on the harness is a function scripts call the same way, with its handler in your Durable Object.
 ---
 
-A clanka script calls functions. Some are clanka's own and run in the sandbox. The rest are yours and run in your Durable Object, where your bindings are.
+A Clanka script calls functions. Some are Clanka's own and run in the sandbox. The rest are yours and run in your Durable Object, where your bindings are.
 
-## clanka's own functions
+## Clanka's own functions
 
 The executor gives every script these, among others: `readFile`, `writeFile`, `applyPatch`, `removeFile`, `renameFile`, `ls`, `rg`, `bash`, `gh`, `webSearch`, `fetchMarkdown`, `subagent` and `taskComplete`. They work on the sandbox's files and run its commands.
 
@@ -82,4 +82,4 @@ const HarnessLive = Layer.mergeAll(
 ).pipe(Layer.provideMerge(Sandbox), Layer.provideMerge(Boat.CreateSandboxHttp));
 ```
 
-Tool tags such as `AI.Bash` are not used here: clanka's coding functions are always on unless you exclude them.
+Tool tags such as `AI.Bash` are not used here: Clanka's coding functions are always on unless you exclude them.

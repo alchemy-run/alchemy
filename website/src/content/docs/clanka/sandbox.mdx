@@ -1,13 +1,13 @@
 ---
 title: The executor & sandbox
-description: clanka's executor runs in the conversation's sandbox. Install clanka into a snapshot, choose the working directory, and suspend or remove the sandbox.
+description: Clanka's executor runs in the conversation's sandbox. Install Clanka into a snapshot, choose the working directory, and suspend or remove the sandbox.
 ---
 
-Each conversation has one sandbox, and clanka's executor runs in it. The sandbox holds the project the agent works on, so it lasts across the conversation's prompts.
+Each conversation has one sandbox, and Clanka's executor runs in it. The sandbox holds the project the agent works on, so it lasts across the conversation's prompts.
 
-## Install clanka in a snapshot
+## Install Clanka in a snapshot
 
-The executor needs clanka and Node in the sandbox. `Clanka.installCommand` is a shell command that installs clanka; run it when the snapshot is built:
+The executor needs Clanka and Node in the sandbox. `Clanka.installCommand` is a shell command that installs Clanka; run it when the snapshot is built:
 
 ```typescript title="src/agent.ts"
 import * as AIBoat from "@alchemy.run/ai/Boat";
@@ -21,7 +21,7 @@ export const Base = Boat.Snapshot("Base", {
 export const Sandbox = AIBoat.Sandboxes(Base);
 ```
 
-Without it, the first prompt of each conversation installs clanka before it starts.
+Without it, the first prompt of each conversation installs Clanka before it starts.
 
 ## Choose the working directory
 
