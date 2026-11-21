@@ -355,8 +355,15 @@ export const SchedulerCallbacks = <R = never>(options: SchedulerCallbacksOptions
               DeadLetterConfig: DeadLetterArn ? { Arn: yield* DeadLetterArn } : undefined,
             },
           };
-          yield* createSchedule(request).pipe(
-            Effect.catchTag("ConflictException", () => updateSchedule(request)),
+          // Update first: the SDK retries a create's ConflictException with
+          // backoff, so creating a job that exists (a replacement, a recurring
+          // job's next run) would stall for seconds before falling back.
+          yield* updateSchedule(request).pipe(
+            Effect.catchTag("ResourceNotFoundException", () =>
+              createSchedule(request).pipe(
+                Effect.catchTag("ConflictException", () => updateSchedule(request)),
+              ),
+            ),
           );
         }).pipe(Effect.mapError(failed(envelope.callback, "Failed to schedule callback job")));
 
@@ -396,10 +403,8 @@ export const SchedulerCallbacks = <R = never>(options: SchedulerCallbacksOptions
             yield* put(recovery);
             yield* Effect.scoped(run(envelope.payload));
             const after = yield* read(envelope.callback, name);
-            // Scheduled again or cancelled while it ran: that stands. A read
-            // right after the recovery write can still return the job as it
-            // was before it, which is ours too.
-            if (after?.token !== recovery.token && after?.token !== envelope.token) return;
+            // Scheduled again or cancelled while it ran: that stands.
+            if (after?.token !== recovery.token) return;
             const { attempts: _, retryAt: __, ...job } = recovery;
             return yield* put({
               ...job,
