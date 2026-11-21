@@ -126,6 +126,7 @@
     { "path": "../railway/tsconfig.json" },
     { "path": "../fly/tsconfig.json" },
     { "path": "../github/tsconfig.json" },
+    { "path": "../slack/tsconfig.json" },
     { "path": "../stripe/tsconfig.json" },
     { "path": "../cloudflare/tsconfig.json" }
   ]

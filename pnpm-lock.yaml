@@ -11221,6 +11221,9 @@ importers:
       '@alchemy.run/rivet':
         specifier: workspace:*
         version: link:../rivet
+      '@alchemy.run/slack':
+        specifier: workspace:*
+        version: link:../slack
       '@alchemy.run/sql':
         specifier: workspace:*
         version: link:../sql
@@ -11311,6 +11314,9 @@ importers:
       '@distilled.cloud/s3':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/s3
+      '@distilled.cloud/slack':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/slack
       '@distilled.cloud/stripe':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stripe
@@ -12003,6 +12009,28 @@ importers:
       '@alchemy.run/railway':
         specifier: workspace:*
         version: link:../railway
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-beta
+
+  packages/slack:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/slack':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/slack
+    devDependencies:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3

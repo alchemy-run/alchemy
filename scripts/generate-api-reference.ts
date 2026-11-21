@@ -150,6 +150,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/github/src",
   },
   {
+    srcRoot: "packages/slack/src",
+    providerPrefix: "Slack",
+    sourceDisplayPrefix: "packages/slack/src",
+  },
+  {
     srcRoot: "packages/stripe/src",
     providerPrefix: "Stripe",
     sourceDisplayPrefix: "packages/stripe/src",

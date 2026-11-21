@@ -39,6 +39,7 @@ const packages = [
   "railway",
   "fly",
   "github",
+  "slack",
   "stripe",
   "cloudflare",
   "gcp",
