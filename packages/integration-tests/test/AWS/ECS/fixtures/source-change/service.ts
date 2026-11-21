@@ -4,9 +4,7 @@ import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { sourceChangeMarker } from "./marker.ts";
 
-export const SourceChangeCluster = Cluster("SourceChangeCluster", {
-  clusterName: "alchemy-test-ecs-source-change",
-});
+export const SourceChangeCluster = Cluster("SourceChangeCluster", {});
 
 /**
  * An Effect-native service whose only change between deploys is the source
