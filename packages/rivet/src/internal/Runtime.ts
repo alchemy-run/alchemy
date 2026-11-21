@@ -25,6 +25,7 @@ import * as Stream from "effect/Stream";
 import type { HostedDurableObject } from "../DurableObject.ts";
 import {
   ALARM_ACTION,
+  CallStorage,
   CALLBACKS_ACTION,
   type CallbackWakeHandler,
   clearCallbackWake,
@@ -63,6 +64,8 @@ interface ActivationVars {
 
 type ActivationContext = ActorContextLike & {
   readonly vars: ActivationVars;
+  /** Aborted once the actor starts to stop: it's going to sleep, being destroyed, or its node is shutting down. */
+  readonly abortSignal: AbortSignal;
   /** The request a WebSocket was opened with. */
   readonly request?: Request | undefined;
 };
@@ -88,11 +91,21 @@ export interface NodeConnectionSettings {
 
 const deadlock = (message: string) => new Response(message, { status: DEADLOCK_STATUS });
 
+/**
+ * A call whose storage failed while the actor stopped: RivetKit closed it
+ * under the call. What it returned can't be trusted (a Domain object
+ * reports the failure as data), so answer it as a call that never arrived,
+ * which the caller sends again to the next activation.
+ */
+const stopped = () =>
+  new Response("This Durable Object stopped while it served the call.", { status: 503 });
+
 /** Serve one actor request through the instance's `fetch` (and fetch-RPC). */
 const handleRequest = (
   instance: DurableObjectInstance,
   activation: Activation,
   request: Request,
+  stopping: AbortSignal,
 ) => {
   const awaiting = receive(request.headers.get(AWAITING_HEADER));
   // The instance's construction waits on this call, and the call can't
@@ -104,6 +117,8 @@ const handleRequest = (
       ),
     );
   }
+  // Marked if one of this call's storage operations fails.
+  const storage = { failed: false };
   return instance.execute(
     (shape) =>
       Effect.gen(function* () {
@@ -132,15 +147,23 @@ const handleRequest = (
           );
         }
         return HttpServerResponse.toWeb(response, { context });
-      }).pipe(Effect.provideService(Awaiting, awaiting)),
+      }).pipe(
+        Effect.provideContext(
+          Context.make(Awaiting, awaiting).pipe(Context.add(CallStorage, storage)),
+        ),
+      ),
     async (exit) =>
-      Exit.isSuccess(exit)
-        ? (exit.value as Response)
-        : isDeadlock(exit.cause)
-          ? deadlock(
-              "A transaction on this Durable Object waits on this call, which needs its storage.",
-            )
-          : new Response("Internal Server Error", { status: 500 }),
+      // Checked once the call ends: a write can fail an instant before
+      // RivetKit marks the actor as stopping.
+      storage.failed && stopping.aborted
+        ? stopped()
+        : Exit.isSuccess(exit)
+          ? (exit.value as Response)
+          : isDeadlock(exit.cause)
+            ? deadlock(
+                "A transaction on this Durable Object waits on this call, which needs its storage.",
+              )
+            : new Response("Internal Server Error", { status: 500 }),
   );
 };
 
@@ -351,7 +374,7 @@ const durableObjectActors = (
         onDestroy: (c: ActivationContext) => runLifecycle(c, "onDestroy"),
         onRequest: (c: ActivationContext, request: Request) => {
           const { instance, activation } = instanceOf(c);
-          return handleRequest(instance, activation, request);
+          return handleRequest(instance, activation, request, c.abortSignal);
         },
         // A WebSocket through the gateway: the instance's `fetch` accepts it
         // with `Rivet.upgrade()`.

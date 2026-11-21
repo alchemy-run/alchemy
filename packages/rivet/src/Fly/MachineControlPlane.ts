@@ -8,7 +8,7 @@ import { adminToken } from "../internal/AdminToken.ts";
 import { Namespace } from "../Namespace.ts";
 
 /** The engine release `RivetFly.MachineControlPlane` runs by default. */
-export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
+export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.1.1";
 
 const DATA_PATH = "/var/lib/rivet";
 const API_PORT = 6420;
@@ -38,7 +38,7 @@ export interface MachineControlPlaneProps {
   diskSize?: number;
   /**
    * Engine image.
-   * @default "rivetdev/engine:3.0.0"
+   * @default "rivetdev/engine:3.1.1"
    */
   image?: string;
 }
@@ -109,6 +109,7 @@ export const MachineControlPlane = (id: string, props: MachineControlPlaneProps 
         Output.map(([text, name, endpoint, region, keyId, secret]) => ({
           RIVET__AUTH__ADMIN_TOKEN: Redacted.value(text),
           RIVET__STORAGE__LOG_DIRECTORY: DATA_PATH,
+          RIVET__STORAGE__AUTO_PROVISION_PARTITIONS: "true",
           RIVET__OBJECT_STORAGE__PRIMARY__S3__BUCKET: name ? Redacted.value(name) : "",
           RIVET__OBJECT_STORAGE__PRIMARY__S3__ENDPOINT: endpoint ? Redacted.value(endpoint) : "",
           RIVET__OBJECT_STORAGE__PRIMARY__S3__REGION: region ? Redacted.value(region) : "auto",
@@ -128,7 +129,7 @@ export const MachineControlPlane = (id: string, props: MachineControlPlaneProps 
           yield* Fly.Machine(`${id}Engine${i}`, {
             app,
             region: props.region ?? "iad",
-            image: props.image ?? "rivetdev/engine:3.0.0",
+            image: props.image ?? "rivetdev/engine:3.1.1",
             init: { entrypoint: ENTRYPOINT },
             guest: props.guest ?? { cpus: 2, memoryMb: 4096 },
             mounts: [{ path: DATA_PATH, sizeGb: props.diskSize ?? 10 }],

@@ -15,7 +15,7 @@ import { stackDnsLabel } from "../internal/PoolHost.ts";
 import { Namespace } from "../Namespace.ts";
 
 /** The engine release `RivetGCP.ComputeEngineControlPlane` runs by default. */
-export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.0.0";
+export const DEFAULT_ENGINE_IMAGE = "rivetdev/engine:3.1.1";
 
 /** Container-Optimized OS: Docker preinstalled, a read-only root. */
 const COS_IMAGE = "projects/cos-cloud/global/images/family/cos-stable";
@@ -72,7 +72,7 @@ export interface ComputeEngineControlPlaneProps {
   zones?: string[];
   /**
    * Engine image.
-   * @default "rivetdev/engine:3.0.0"
+   * @default "rivetdev/engine:3.1.1"
    */
   image?: string;
   /**
@@ -122,6 +122,7 @@ docker run -d --name rivet-engine --restart always --network host \\
   -v ${MOUNT_PATH}:${DATA_PATH} \\
   -e RIVET__AUTH__ADMIN_TOKEN \\
   -e RIVET__STORAGE__LOG_DIRECTORY=${DATA_PATH} \\
+  -e RIVET__STORAGE__AUTO_PROVISION_PARTITIONS=true \\
   -e RIVET__OBJECT_STORAGE__PRIMARY__GCS__BUCKET='${options.bucket}' \\
   -e RIVET__API_PEER__ADVERTISE_ADDRESS="$PRIVATE_IP:${PEER_PORT}" \\
   -e RIVET__TELEMETRY__ENABLED=false \\

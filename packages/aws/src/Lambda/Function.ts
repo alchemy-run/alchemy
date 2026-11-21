@@ -180,6 +180,20 @@ export type AccessPointRef = string | { accessPointArn: string };
  */
 export type LayerRef = string | { layerVersionArn: string };
 
+/**
+ * A Lambda Managed Instances capacity provider: an
+ * `AWS.Lambda.CapacityProvider` resource, or a capacity provider ARN.
+ */
+export type CapacityProviderRef = string | { capacityProviderArn: string };
+
+export const capacityProviderArnOf = (ref: CapacityProviderRef | undefined): string | undefined =>
+  ref === undefined ? undefined : typeof ref === "string" ? ref : ref.capacityProviderArn;
+
+/**
+ * Accelerator (GPU) memory, in GB, for a GPU-accelerated function.
+ */
+export type AcceleratorMemorySize = 3 | 6 | 12 | 16 | 24 | 48;
+
 /** Resolve a {@link LayerRef} to its layer version ARN. */
 export const layerVersionArnOf = (layer: LayerRef): string =>
   typeof layer === "string" ? layer : layer.layerVersionArn;
@@ -274,11 +288,65 @@ export interface FunctionCommonProps extends PlatformProps {
    */
   architecture?: FunctionArchitecture;
   /**
-   * Memory allocated to the function, in MB.
+   * Memory allocated to the function, in MB. Functions on a
+   * {@link capacityProvider} need at least 2048 MB.
    *
-   * @default 128
+   * @default 128, or 2048 with a `capacityProvider`
    */
   memorySize?: number;
+  /**
+   * Size of the function's `/tmp` directory, in MB (512-10240, or up to
+   * 32768 for GPU-accelerated functions).
+   *
+   * @default 512
+   */
+  ephemeralStorageSize?: number;
+  /**
+   * Run the function on Lambda Managed Instances: EC2 instances in your VPC
+   * that an `AWS.Lambda.CapacityProvider` manages. Pass the capacity
+   * provider resource or its ARN.
+   *
+   * Lambda only runs published versions on a capacity provider, so every
+   * deploy publishes the function to `$LATEST.PUBLISHED` (or to a numbered
+   * version behind {@link alias}) and waits for it to become `Active`, which
+   * launches the instances. Invoking the unqualified function runs
+   * `$LATEST.PUBLISHED`.
+   *
+   * Adding, removing or changing the capacity provider replaces the function.
+   */
+  capacityProvider?: CapacityProviderRef;
+  /**
+   * Maximum concurrent invocations in one execution environment on a
+   * {@link capacityProvider}.
+   *
+   * @default chosen by Lambda (4 for GPU-accelerated functions)
+   */
+  perExecutionEnvironmentMaxConcurrency?: number;
+  /**
+   * Memory (GiB) per vCPU of each execution environment on a
+   * {@link capacityProvider} (2-8). Python functions often need 4 or 8.
+   *
+   * @default 2
+   */
+  executionEnvironmentMemoryGiBPerVCpu?: number;
+  /**
+   * Minimum execution environments Lambda keeps running for the published
+   * version on a {@link capacityProvider} (0-15000). `0` scales the
+   * function to zero when idle: the first invocation after an idle period
+   * is throttled while an execution environment starts.
+   *
+   * Set it together with {@link maxExecutionEnvironments}; when both are
+   * omitted Lambda's defaults apply (3, or 1 for GPU-accelerated functions).
+   */
+  minExecutionEnvironments?: number;
+  /**
+   * Maximum execution environments for the published version on a
+   * {@link capacityProvider} (0-15000). `0` with a minimum of `0`
+   * deactivates the version without deleting it.
+   *
+   * @default no limit
+   */
+  maxExecutionEnvironments?: number;
   env?: Record<string, any>;
   /**
    * Attach the function to a VPC for private AWS connectivity such as Aurora.
@@ -417,6 +485,11 @@ export interface FunctionZipProps extends FunctionCommonProps {
   bundle?: false;
   image?: never;
   /**
+   * GPU-accelerated functions must be container images — see
+   * {@link FunctionImageProps.acceleratorMemorySize}.
+   */
+  acceleratorMemorySize?: never;
+  /**
    * Name of the export in `main` that Lambda invokes. Only applies to async
    * handlers (`main` exports a plain Lambda handler); Effect Functions are
    * wrapped in a generated entry and ignore it.
@@ -467,6 +540,14 @@ export interface FunctionImageProps extends FunctionCommonProps {
    * repository with content-addressed tags.
    */
   image: FunctionImageSource;
+  /**
+   * Accelerator (GPU) memory, in GB, each execution environment needs. Makes
+   * this a GPU-accelerated function: it needs a {@link capacityProvider}
+   * whose `allowedInstanceTypes` include a GPU with at least this much
+   * memory (T4 16 GB, A10G/L4 24 GB, L40S 48 GB, fractional L4 3, 6 or
+   * 12 GB). Each execution environment gets exactly one GPU or GPU fraction.
+   */
+  acceleratorMemorySize?: AcceleratorMemorySize;
   handler?: never;
   runtime?: never;
   layers?: never;
@@ -482,6 +563,12 @@ export type FunctionProps = FunctionZipProps | FunctionImageProps;
 
 const isFunctionImageProps = (props: FunctionProps): props is FunctionImageProps =>
   props.image !== undefined;
+
+/** The capacity provider ARN, or `undefined` when unset or not yet resolved. */
+const resolvedCapacityProviderArn = (props: FunctionProps): string | undefined => {
+  const arn = capacityProviderArnOf(props.capacityProvider);
+  return typeof arn === "string" ? arn : undefined;
+};
 
 interface FunctionPackageValidationProps {
   image?: unknown;
@@ -747,6 +834,25 @@ export interface Function extends Resource<
       executionTimeout?: number;
       retentionPeriodInDays?: number;
     };
+    /**
+     * Lambda Managed Instances settings, as observed on functions that run on
+     * a capacity provider. Lets `alchemy drift` detect out-of-band changes.
+     */
+    capacityProviderConfig?: {
+      capacityProviderArn: string;
+      perExecutionEnvironmentMaxConcurrency?: number;
+      executionEnvironmentMemoryGiBPerVCpu?: number;
+    };
+    /**
+     * Accelerator (GPU) memory in GB, as observed on GPU-accelerated
+     * functions. Lets `alchemy drift` detect out-of-band changes.
+     */
+    acceleratorMemorySize?: number;
+    /**
+     * Size of `/tmp` in MB, as observed on the deployed function. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    ephemeralStorageSize?: number;
   },
   {
     env?: Record<string, any>;
@@ -2022,7 +2128,9 @@ export const FunctionProvider = () =>
             });
           }
           if (
-            configuration?.State === "Active" &&
+            // `$LATEST` of a function on a capacity provider settles as
+            // ActiveNonInvocable: only its published versions run.
+            (configuration?.State === "Active" || configuration?.State === "ActiveNonInvocable") &&
             (configuration.LastUpdateStatus === undefined ||
               configuration.LastUpdateStatus === "Successful")
           ) {
@@ -2163,6 +2271,8 @@ export const FunctionProvider = () =>
           .map((config) => ({ arn: config.Arn, localMountPath: config.LocalMountPath }))
           .sort((a, b) => a.localMountPath.localeCompare(b.localMountPath));
         const cors = urlConfig?.Cors;
+        const managedInstances =
+          fn.CapacityProviderConfig?.LambdaManagedInstancesCapacityProviderConfig;
         return {
           memorySize: fn.MemorySize,
           timeoutSeconds: fn.Timeout,
@@ -2207,6 +2317,17 @@ export const FunctionProvider = () =>
                 retentionPeriodInDays: fn.DurableConfig.RetentionPeriodInDays,
               }
             : undefined,
+          capacityProviderConfig: managedInstances
+            ? {
+                capacityProviderArn: managedInstances.CapacityProviderArn,
+                perExecutionEnvironmentMaxConcurrency:
+                  managedInstances.PerExecutionEnvironmentMaxConcurrency,
+                executionEnvironmentMemoryGiBPerVCpu:
+                  managedInstances.ExecutionEnvironmentMemoryGiBPerVCpu,
+              }
+            : undefined,
+          acceleratorMemorySize: fn.AcceleratorConfig?.AcceleratorMemorySize,
+          ephemeralStorageSize: fn.EphemeralStorage?.Size,
         } satisfies Partial<Function["Attributes"]>;
       });
 
@@ -2431,6 +2552,9 @@ export const FunctionProvider = () =>
           interrupt: interruptsAtTimeout(news),
         });
 
+        // Unresolved while precreating a stub inside a dependency cycle;
+        // reconcile attaches the capacity provider once it resolves.
+        const capacityProviderArn = resolvedCapacityProviderArn(news);
         const createFunctionRequest: CreateFunctionRequest = {
           FunctionName: functionName,
           Role: roleArn,
@@ -2455,7 +2579,27 @@ export const FunctionProvider = () =>
           // Defaults are explicit so removing the prop (or repairing drift on
           // a function that never set it) converges back to AWS's default;
           // `UpdateFunctionConfiguration` treats omitted fields as "leave as-is".
-          MemorySize: news.memorySize ?? 128,
+          // Managed instances need at least 2 GB.
+          MemorySize: news.memorySize ?? (capacityProviderArn !== undefined ? 2048 : 128),
+          EphemeralStorage: { Size: news.ephemeralStorageSize ?? 512 },
+          // Changing the capacity provider replaces the function (see
+          // `diff`), so on update this only carries the per-environment
+          // settings.
+          CapacityProviderConfig:
+            capacityProviderArn === undefined
+              ? undefined
+              : {
+                  LambdaManagedInstancesCapacityProviderConfig: {
+                    CapacityProviderArn: capacityProviderArn,
+                    PerExecutionEnvironmentMaxConcurrency:
+                      news.perExecutionEnvironmentMaxConcurrency,
+                    ExecutionEnvironmentMemoryGiBPerVCpu: news.executionEnvironmentMemoryGiBPerVCpu,
+                  },
+                },
+          AcceleratorConfig:
+            isFunctionImageProps(news) && news.acceleratorMemorySize !== undefined
+              ? { AcceleratorMemorySize: news.acceleratorMemorySize }
+              : undefined,
           // Always explicit: `UpdateFunctionConfiguration` treats an omitted
           // `Layers` as "leave as-is", so removing the prop would strand the
           // previously-attached layers.
@@ -2526,6 +2670,8 @@ export const FunctionProvider = () =>
             TracingConfig: createFunctionRequest.TracingConfig,
             VpcConfig: createFunctionRequest.VpcConfig,
             DurableConfig: createFunctionRequest.DurableConfig,
+            CapacityProviderConfig: createFunctionRequest.CapacityProviderConfig,
+            AcceleratorConfig: createFunctionRequest.AcceleratorConfig,
           }).pipe(
             Effect.tapError((e) =>
               isRolePropagationError(e) ? noteCreateDependencyWait() : Effect.void,
@@ -2743,6 +2889,110 @@ export const FunctionProvider = () =>
       });
 
       /**
+       * Publish the settled `$LATEST` to `$LATEST.PUBLISHED`, the version a
+       * function on a capacity provider serves when invoked unqualified.
+       */
+      const publishLatest = Effect.fn(function* (functionName: string) {
+        const published = yield* Lambda.publishVersion({
+          FunctionName: functionName,
+          PublishTo: "LATEST_PUBLISHED",
+        }).pipe(retryFunctionMutation);
+        return published.Version ?? "$LATEST.PUBLISHED";
+      });
+
+      /**
+       * Wait for a published version on a capacity provider to become
+       * `Active`: Lambda launches the instances, pulls the code and starts
+       * the minimum execution environments first, which can take minutes
+       * (longer for large GPU images).
+       */
+      const waitForVersionActive = Effect.fn(function* (
+        functionName: string,
+        qualifier: string,
+        session: { note: (note: string) => Effect.Effect<void> },
+      ) {
+        yield* Effect.gen(function* () {
+          const configuration = yield* Lambda.getFunctionConfiguration({
+            FunctionName: functionName,
+            Qualifier: qualifier,
+          });
+          if (configuration.State === "Failed" || configuration.LastUpdateStatus === "Failed") {
+            return yield* new FunctionUpdateFailed({
+              functionName,
+              reason: configuration.LastUpdateStatusReason ?? configuration.StateReason,
+              reasonCode:
+                configuration.LastUpdateStatus === "Failed"
+                  ? configuration.LastUpdateStatusReasonCode
+                  : configuration.StateReasonCode,
+            });
+          }
+          if (configuration.State === "Active" || configuration.State === "Inactive") {
+            return;
+          }
+          return yield* new FunctionUpdatePending({
+            functionName,
+            state: configuration.State,
+            stateReason: configuration.StateReason,
+            lastUpdateStatus: configuration.LastUpdateStatus,
+            lastUpdateStatusReason: configuration.LastUpdateStatusReason,
+          });
+        }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "FunctionUpdatePending",
+            schedule: Schedule.spaced("5 seconds").pipe(
+              Schedule.tap(({ attempt }) =>
+                session.note(
+                  `Waiting for ${functionName}:${qualifier} to start on its capacity provider (${attempt * 5}s)`,
+                ),
+              ),
+            ),
+            times: 240,
+          }),
+        );
+      });
+
+      /**
+       * Converge the version's execution-environment floor and ceiling. Both
+       * omitted leaves Lambda's defaults in place.
+       */
+      const syncFunctionScaling = Effect.fn(function* ({
+        functionName,
+        qualifier,
+        min,
+        max,
+      }: {
+        functionName: string;
+        qualifier: string;
+        min: number | undefined;
+        max: number | undefined;
+      }) {
+        if (min === undefined && max === undefined) return;
+        const observed = yield* Lambda.getFunctionScalingConfig({
+          FunctionName: functionName,
+          Qualifier: qualifier,
+        }).pipe(
+          Effect.map((r) => r.RequestedFunctionScalingConfig),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+        );
+        if (
+          observed?.MinExecutionEnvironments === min &&
+          observed?.MaxExecutionEnvironments === max
+        ) {
+          return;
+        }
+        // Min and max are applied together; an omitted one resets to its
+        // default.
+        yield* Lambda.putFunctionScalingConfig({
+          FunctionName: functionName,
+          Qualifier: qualifier,
+          FunctionScalingConfig: {
+            MinExecutionEnvironments: min,
+            MaxExecutionEnvironments: max,
+          },
+        }).pipe(retryFunctionMutation);
+      });
+
+      /**
        * Publish the settled `$LATEST` as a version and point `alias` at it.
        * Lambda hands back the latest version when nothing changed since it
        * was published, so an unchanged deploy publishes nothing new.
@@ -2925,6 +3175,20 @@ export const FunctionProvider = () =>
             // DurableConfig can only be enabled/disabled at CreateFunction —
             // switching a logical id between Function and DurableFunction (or
             // vice versa) must replace the physical function.
+            return {
+              action: "replace",
+              deleteFirst: news.functionName !== undefined,
+            };
+          }
+          if (
+            capacityProviderArnOf(olds.capacityProvider) !==
+              capacityProviderArnOf(news.capacityProvider) ||
+            (olds.acceleratorMemorySize === undefined) !==
+              (news.acceleratorMemorySize === undefined)
+          ) {
+            // The compute type (Lambda or a managed-instances capacity
+            // provider) and GPU acceleration are fixed when the function is
+            // created.
             return {
               action: "replace",
               deleteFirst: news.functionName !== undefined,
@@ -3372,6 +3636,7 @@ export const FunctionProvider = () =>
             previousImage: output?.code?.image,
             session,
           });
+          const capacityProviderArn = capacityProviderArnOf(news.capacityProvider);
 
           yield* createOrUpdateFunction({
             id,
@@ -3384,9 +3649,13 @@ export const FunctionProvider = () =>
             }),
             functionName,
             // On update an omitted VpcConfig means "leave as-is"; detach
-            // explicitly so a VPC attached out-of-band is removed.
+            // explicitly so a VPC attached out-of-band is removed. Managed
+            // instances take their VPC from the capacity provider instead.
             vpc:
-              vpc ?? (output !== undefined ? { subnetIds: [], securityGroupIds: [] } : undefined),
+              vpc ??
+              (output !== undefined && capacityProviderArn === undefined
+                ? { subnetIds: [], securityGroupIds: [] }
+                : undefined),
             preferUpdate: output !== undefined,
             // `[]` (when the prop/bindings were removed on a function that
             // previously had mounts) explicitly clears the file-system
@@ -3399,7 +3668,13 @@ export const FunctionProvider = () =>
                   : undefined,
             session,
           }).pipe(
-            Effect.andThen(waitForFunctionUpdate(functionName, session, vpc !== undefined)),
+            Effect.andThen(
+              waitForFunctionUpdate(
+                functionName,
+                session,
+                vpc !== undefined || capacityProviderArn !== undefined,
+              ),
+            ),
             // The create/update call can succeed while Lambda's ASYNC
             // provisioning (VPC ENIs, EFS mounts) still fails with
             // `InsufficientRolePermissions` — "The function's execution role
@@ -3447,6 +3722,30 @@ export const FunctionProvider = () =>
             ? yield* syncAlias({ functionName, functionArn, alias: news.alias })
             : undefined;
           const previousAlias = output?.aliasName;
+
+          if (capacityProviderArn !== undefined) {
+            // Lambda runs only published versions on a capacity provider.
+            // Without an alias the settled code is published to
+            // `$LATEST.PUBLISHED`, which unqualified invocations run.
+            const qualifier = alias?.version ?? (yield* publishLatest(functionName));
+            yield* waitForVersionActive(functionName, qualifier, session);
+            yield* syncFunctionScaling({
+              functionName,
+              qualifier,
+              min: news.minExecutionEnvironments,
+              max: news.maxExecutionEnvironments,
+            });
+            // The alias moved on: stop paying for the instances that served
+            // the previous version. It stays published for rollbacks.
+            if (alias && output?.version && output.version !== alias.version) {
+              yield* syncFunctionScaling({
+                functionName,
+                qualifier: output.version,
+                min: 0,
+                max: 0,
+              });
+            }
+          }
 
           yield* syncEventInvokeConfig({
             functionName,
