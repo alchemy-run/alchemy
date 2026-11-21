@@ -281,12 +281,10 @@ export const FolderLogScopeProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createFoldersLocationsLogScopes({
+            resourceNames: [...news.resourceNames],
+            description: desiredDescription,
             parent: locationParent(parent, location),
             logScopeId,
-            body: {
-              resourceNames: [...news.resourceNames],
-              description: desiredDescription,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -308,12 +306,10 @@ export const FolderLogScopeProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* logging.patchFoldersLocationsLogScopes({
+          resourceNames: [...news.resourceNames],
+          description: desiredDescription,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            resourceNames: [...news.resourceNames],
-            description: desiredDescription,
-          },
         });
       }
 

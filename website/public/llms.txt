@@ -84,6 +84,7 @@ Stages, credential profiles, auth providers, secrets and config, local developme
 - [Secret providers](https://alchemy.run/environments/secret-providers) — Configure a stack with dotenv files, environment variables, Doppler, or Infisical.
 - [Doppler](https://alchemy.run/environments/doppler) — Load a Doppler config into your Stack — log in with the browser on your machine, use a service token in CI.
 - [Infisical](https://alchemy.run/environments/infisical) — Load an Infisical environment into your Stack — a machine identity on your machine, the platform's own OIDC token in CI.
+- [1Password](https://alchemy.run/environments/1password) — Read 1Password Environments and op:// vault references into Effect Config using desktop authorization or a service account token.
 - [Local development](https://alchemy.run/environments/local-development) — How alchemy dev provides hot reloading, local execution, and local emulation with per-resource opt-in to real cloud services.
 - [Worktrees](https://alchemy.run/environments/worktrees) — Run alchemy deploy, dev, and tests from several git worktrees at once — one stage per worktree, so parallel agents never touch each other's resources.
 - [CI](https://alchemy.run/environments/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.
@@ -145,6 +146,7 @@ A linear six-part walkthrough from zero to a tested, locally-developed, CI-deplo
 - [Browser rendering](https://alchemy.run/cloudflare/compute/browser-rendering) — Attach Cloudflare Browser Rendering to a Worker — run quick actions like markdown and scrape, stream screenshots and PDFs, or drive the raw binding with puppeteer.
 - [Worker Loader](https://alchemy.run/cloudflare/compute/worker-loader) — Load and run ephemeral Workers at runtime from inline source — each in its own sandboxed isolate, with optional outbound-network control and typed RPC entrypoints.
 - [Workers for Platforms](https://alchemy.run/cloudflare/compute/workers-for-platforms) — Run your customers' Workers in your own account — create a dispatch namespace, upload user Workers into it, and route requests from a platform Worker with the Get binding.
+- [Accept TCP connections](https://alchemy.run/cloudflare/compute/tcp) — Serve raw TCP from a Worker's connect handler, expose it on a public port with Spectrum, and open TCP connections to it from other Workers.
 - [Code updates](https://alchemy.run/cloudflare/compute/code-updates) — What happens to running Workers and Durable Objects when you deploy, how to choose when Durable Objects pick up new code, and how to write tests that see the code you just deployed.
 - [Container lifecycle](https://alchemy.run/cloudflare/compute/container-lifecycle) — Start, stop, wait for, and restore a Cloudflare Container from its Durable Object — and save its filesystem as a snapshot to restore later.
 - [Containers](https://alchemy.run/cloudflare/compute/containers) — Cloudflare Containers run long-lived processes beside a Durable Object — declare a typed container class, implement its runtime in a separate file, and alchemy builds the image, pushes it, and wires the DO pairing.
@@ -770,6 +772,36 @@ Neon backend resources: Postgres branches, Functions, private object storage, ma
 - [Vocs](https://alchemy.run/neon/frontend/vocs) — Package Vocs documentation and its Waku RSC handler for Neon Functions.
 - [Static Site](https://alchemy.run/neon/frontend/static-site) — Run a static-site build command and package its output for a Neon Function.
 
+## Convex
+
+Convex projects, deployments, keys and functions as Stack resources, with bindings that call functions from any host.
+
+- [Convex](https://alchemy.run/convex) — Build on Convex with Alchemy. Declare projects and deployments in TypeScript, write queries, mutations and actions with Effect, and call them typed from your Workers and Lambdas.
+- [What is Convex?](https://alchemy.run/convex/what-is-convex) — The concepts behind Convex — teams, projects, deployments, tables, queries, mutations and actions, and self-hosting — and how @alchemy.run/convex models each of them.
+- [Setup](https://alchemy.run/convex/setup) — Install @alchemy.run/convex, create a Convex team access token, and connect it with a profile or CI environment variables.
+- [Part 1: Your First Stack](https://alchemy.run/convex/tutorial/part-1) — Declare a Convex table, a query and a mutation with Effect, create a project and a deployment, and push your functions.
+- [Part 2: Add a Worker](https://alchemy.run/convex/tutorial/part-2) — Call your Convex functions from a Cloudflare Worker with the RunQuery and RunMutation bindings.
+- [Part 3: Testing](https://alchemy.run/convex/tutorial/part-3) — Deploy your Stack in a test, send it a request, and tear it down.
+- [Part 4: Stages](https://alchemy.run/convex/tutorial/part-4) — Give every developer and pull request their own Convex deployment.
+- [Part 5: CI/CD](https://alchemy.run/convex/tutorial/part-5) — Deploy from GitHub Actions with a Convex access token.
+- [Teams and tokens](https://alchemy.run/convex/teams-and-tokens) — How a Convex team holds your projects and deployments, how Alchemy signs in to it with a team access token, and the narrower keys your Stack creates for pushes, CI and runtimes.
+- [Deploy keys](https://alchemy.run/convex/deployments/deploy-keys) — Create deploy keys for CI, and preview keys that create previews.
+- [Projects](https://alchemy.run/convex/deployments/projects) — Create a Convex project, name it, tag it, and decide what happens on destroy.
+- [Deployments](https://alchemy.run/convex/deployments/deployments) — Create prod, dev and preview deployments, move them between projects, and pause them.
+- [Custom domains](https://alchemy.run/convex/deployments/custom-domains) — Serve a Convex deployment from your own domain.
+- [Canonical URLs](https://alchemy.run/convex/deployments/canonical-urls) — Set the URL a Convex deployment reports as its own.
+- [Usage limits](https://alchemy.run/convex/deployments/usage-limits) — Get warned, or pause a deployment, when it uses too much.
+- [Tables](https://alchemy.run/convex/functions/tables) — Declare Convex tables with Effect Schema, index them with Convex's own builder, and read and write documents from your functions.
+- [Queries, mutations and actions](https://alchemy.run/convex/functions/queries-mutations-actions) — Declare Convex queries, mutations and actions with Effect Schema, implement them as Layers, schedule work after a mutation commits, and bind other clouds from an action.
+- [Push functions](https://alchemy.run/convex/functions/functions) — Push your Convex functions and schema on every deploy, with a key that only lives for the push.
+- [Environment variables](https://alchemy.run/convex/functions/environment-variables) — Set a deployment's variables from your Stack, take over ones set by hand, set project defaults, and read secrets from a secrets manager.
+- [Calling functions](https://alchemy.run/convex/functions/calling-functions) — Call Convex queries, mutations and actions from a Worker or Lambda, typed by their declarations, and read usage, audit logs and data.
+- [Connect](https://alchemy.run/convex/functions/connect) — Give a Worker or Lambda your deployment's URLs for the convex client.
+- [Log streams](https://alchemy.run/convex/observability/log-streams) — Send a Convex deployment's logs to a webhook or another service.
+- [Backend](https://alchemy.run/convex/self-hosted/backend) — Run one self-hosted Convex backend on AWS, with its own network, buckets and TLS.
+- [Platform](https://alchemy.run/convex/self-hosted/platform) — Share one network, load balancer, database server and buckets between stages.
+- [Two AWS accounts](https://alchemy.run/convex/self-hosted/two-accounts) — Keep production in its own account and give every other stage a preview in a shared development account.
+
 ## Turso
 
 Turso SQLite databases as Stack resources: groups, databases, migrations, connections, a database per tenant, preview databases, and scoped tokens.
@@ -847,6 +879,61 @@ Archil runs commands, processes and programs against durable disks in Firecracke
 - [Mounting](https://alchemy.run/archil/storage/mounting) — Mount Archil disks in program sandboxes, your own Containers, and ECS tasks.
 - [Branches and checkpoints](https://alchemy.run/archil/storage/branches) — Seed a disk once, checkpoint it at deploy time, and copy a writable branch per session in milliseconds.
 - [Your own bucket](https://alchemy.run/archil/storage/your-own-bucket) — Keep a disk's files as ordinary objects in your own S3, R2, GCS or Azure bucket, with no keys for S3.
+
+## AI
+
+What every agent harness shares: models, tools and their failures, the coding tools, MCP servers, skills, and the sandboxes tools work in.
+
+- [AI](https://alchemy.run/ai) — Declare models, tools, skills, MCP servers and sandboxes once with @alchemy.run/ai, and run them on any agent harness.
+- [What is an agent harness?](https://alchemy.run/ai/what-is-a-harness) — The concepts behind an agent harness — the loop, models, tools, coding tools, skills, MCP servers and sandboxes — and how @alchemy.run/ai models each of them.
+- [Models](https://alchemy.run/ai/models) — Name a model once with AI.Model and back it with any Effect AI LanguageModel Layer, so a harness changes LLM by changing one Layer.
+- [Tools](https://alchemy.run/ai/tools) — Declare a tool with AI.Tool — its parameters, what it returns and how it fails — and implement it as a Layer or inline, on any harness.
+- [Coding tools](https://alchemy.run/ai/coding-tools) — AI.Bash, AI.Read, AI.Edit, AI.Write, AI.Grep and AI.Glob are names every harness implements its own way. Use a harness's own tools, or replace any of them with yours.
+- [MCP servers](https://alchemy.run/ai/mcp-servers) — Name an MCP server once with AI.McpServer, reach it with an Effect AI McpClient Layer, and give its tools to any harness.
+- [Skills](https://alchemy.run/ai/skills) — Declare a skill with AI.Skill: a description the model always sees, and instructions, files and tools it loads only when the task calls for them.
+- [Sandboxes](https://alchemy.run/ai/sandboxes) — AI.Sandboxes maps each conversation to a sandbox on E2B, Daytona, Modal, Boat or Archil, and AI.Sandbox gives a tool that conversation's files and shell.
+- [Sandbox platforms](https://alchemy.run/ai/sandbox-platforms) — The AI.Sandboxes Layer for Boat, E2B, Daytona, Modal and Archil — one import each, and what finding and suspending a sandbox means on each platform.
+- [Build your own](https://alchemy.run/ai/custom-sandboxes) — Write an AI.Sandboxes Layer for a sandbox platform of your own, or one that finds, creates and suspends sandboxes differently from the Layers @alchemy.run/ai ships.
+
+## Pi
+
+Pi Durable on Alchemy: conversations in a Durable Object, tools, extensions, skills, code mode, sandboxes, and runs that resume after a crash.
+
+- [Pi](https://alchemy.run/pi) — Run the Pi coding agent's durable engine with Alchemy. Conversations in a Durable Object's storage, tools and models as Layers, coding tools in a sandbox, and runs that resume after a crash.
+- [What is Pi?](https://alchemy.run/pi/what-is-pi) — The concepts behind Pi Durable — the harness and its storage, conversations and submissions, tools, extensions, skills, code mode and sandboxes — and how @alchemy.run/pi models each of them.
+- [Setup](https://alchemy.run/pi/setup) — Install @alchemy.run/pi and @alchemy.run/ai, and add a Pi harness to a Cloudflare Durable Object.
+- [Part 1: A harness in a Durable Object](https://alchemy.run/pi/tutorial/part-1) — Start an issue bot. Declare a model, yield a Pi harness in a Durable Object for each issue, and submit an input to it from a Worker.
+- [Part 2: A sandbox with the repository](https://alchemy.run/pi/tutorial/part-2) — Give each issue's conversation a Boat sandbox that starts with the repository cloned, and Pi's coding tools to read it with.
+- [Part 3: Answer issues](https://alchemy.run/pi/tutorial/part-3) — Subscribe the Worker to the repository's issues with GitHub.consumeRepositoryEvents, and give the agent a tool that posts its answer as a comment.
+- [Part 4: Replies and cleanup](https://alchemy.run/pi/tutorial/part-4) — Continue an issue's conversation when someone replies, steer a run that is still going, and remove the sandbox when the issue closes.
+- [Conversations](https://alchemy.run/pi/conversations) — Create a Pi conversation by name, submit inputs to it, change what it runs with, steer or stop a run, and read its transcript.
+- [Surviving a crash](https://alchemy.run/pi/durability) — A Pi harness stores each step before acting on it and keeps its Durable Object's alarm set while it has work, so an evicted or crashed object resumes every run.
+- [Tools](https://alchemy.run/pi/tools) — Give a Pi harness your own tools, inline tools that close over a Durable Object's bindings, and Pi's coding tools, and choose which ones each conversation may use.
+- [MCP servers](https://alchemy.run/pi/mcp-servers) — Give a Pi harness the tools of an MCP server, and add or remove a server's tools from a conversation as one.
+- [Code mode](https://alchemy.run/pi/code-mode) — In Pi's code mode the model writes a JavaScript program that calls the conversation's tools, and only the program's output goes back to the model.
+- [Extensions](https://alchemy.run/pi/extensions) — A Pi extension adds prompt sections, tools and hooks that a conversation selects by name: block a tool call, rewrite its arguments, or keep a run going.
+- [Skills](https://alchemy.run/pi/skills) — Give Pi conversations skills: the model sees each skill's description and loads its instructions and files with load_skill when the task calls for it.
+- [Sandboxes](https://alchemy.run/pi/sandboxes) — Pi's coding tools run in a sandbox for each conversation, opened on first use on E2B, Daytona, Modal, Boat or Archil, and suspended or removed when you say.
+- [Other hosts](https://alchemy.run/pi/other-hosts) — Run a Pi harness on a long-lived machine — a Fly Machine, an ECS task, a container — by changing its storage, its sandbox and its code mode runtime.
+
+## OpenCode
+
+OpenCode on Alchemy: sessions in a sandbox, prompts, model requests answered by your Layers, tools, MCP servers and skills.
+
+- [OpenCode](https://alchemy.run/opencode) — Run the OpenCode coding agent with Alchemy. A sandbox for each session, your models and tools answered from your own runtime, and no API key in the sandbox.
+- [What is OpenCode?](https://alchemy.run/opencode/what-is-opencode) — The concepts behind OpenCode on Alchemy — the server in a sandbox, sessions and prompts, the bridge that carries model requests and tool calls, tools, skills — and how @alchemy.run/opencode models each of them.
+- [Setup](https://alchemy.run/opencode/setup) — Install @alchemy.run/opencode and @alchemy.run/ai, choose a sandbox platform, and add an OpenCode harness to a Cloudflare Durable Object.
+- [Part 1: A harness in a Durable Object](https://alchemy.run/opencode/tutorial/part-1) — Start an issue bot. Declare a model and where sandboxes run, yield an OpenCode harness in a Durable Object for each issue, and prompt it from a Worker.
+- [Part 2: A sandbox with the repository](https://alchemy.run/opencode/tutorial/part-2) — Start every issue's sandbox from a snapshot with the repository cloned, and make it the directory OpenCode works in.
+- [Part 3: Answer issues](https://alchemy.run/opencode/tutorial/part-3) — Subscribe the Worker to the repository's issues with GitHub.consumeRepositoryEvents, run each prompt from the Durable Object's alarm, and post the answer as a comment.
+- [Part 4: Replies, your own tool, and cleanup](https://alchemy.run/opencode/tutorial/part-4) — Continue an issue's OpenCode session when someone replies, give OpenCode a tool that searches the repository's issues from your Durable Object, and remove the sandbox when the issue closes.
+- [Sessions & prompts](https://alchemy.run/opencode/sessions) — Name an OpenCode session, prompt it, choose the model, tools and instructions a prompt runs with, make prompts exactly-once, and read the transcript.
+- [Model requests](https://alchemy.run/opencode/model-requests) — OpenCode in the sandbox never holds an API key. Its model requests go to a bridge on the sandbox's loopback, and the harness answers them with your AI.Model Layer.
+- [Tools](https://alchemy.run/opencode/tools) — OpenCode runs its own coding tools in the sandbox and calls your tools in your Durable Object. Choose which a prompt may use, and replace any of OpenCode's with your own.
+- [MCP servers](https://alchemy.run/opencode/mcp-servers) — Give OpenCode sessions the tools of an MCP server. The harness connects from your Durable Object, so the server's credentials never enter the sandbox.
+- [Skills](https://alchemy.run/opencode/skills) — Give OpenCode sessions skills. Each AI.Skill becomes an OpenCode skill in the sandbox, which the model loads with OpenCode's own skill tool.
+- [The session's sandbox](https://alchemy.run/opencode/sandbox) — Each OpenCode session runs in its own sandbox, which holds OpenCode, the bridge and the session's transcript. Suspend it to keep the session, remove it to delete both.
+- [OpenCode's own API](https://alchemy.run/opencode/api) — Call any route of OpenCode's HTTP server in a session's sandbox, pass OpenCode configuration through the harness, and run a harness outside a Durable Object.
 
 ## Boat
 
@@ -1243,10 +1330,10 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Domain](https://alchemy.run/domain) — A domain-driven design framework for Effect. Model your business as commands, aggregates, decisions, events, views, projections and policies, test it in memory, and run it on Durable Objects on Cloudflare, Rivet or Effect Cluster.
 - [What is Domain-Driven Design?](https://alchemy.run/domain/what-is-ddd) — The concepts of Domain-Driven Design, event sourcing and CQRS, and how they fit together to model a business.
 - [Project layout](https://alchemy.run/domain/project-layout) — How to lay out an @alchemy.run/domain project. One file per building block, named after its noun and its kind; folders per subdomain; a pure domain package, a server package that hosts it, and a foldkit web package, wired in one stack.
-- [Part 1: Model an account](https://alchemy.run/domain/tutorial/part-1) — Declare events, commands and rejections, decide them in an aggregate, and check it with stories.
+- [Part 1: Model an account](https://alchemy.run/domain/tutorial/part-1) — Declare events, commands and rejections, decide them in an aggregate, check it with stories, and prove a rule about it.
 - [Part 2: Read it with a view](https://alchemy.run/domain/tutorial/part-2) — Show each account's balance and a statement of every movement, kept up to date as events arrive.
 - [Part 3: React with a policy](https://alchemy.run/domain/tutorial/part-3) — Register customers, and open a main account for each one with a policy.
-- [Part 4: Expose an Api](https://alchemy.run/domain/tutorial/part-4) — Authenticate requests, let customers act only on their own accounts, and expose the bank through a typed Api.
+- [Part 4: Expose an Api](https://alchemy.run/domain/tutorial/part-4) — Authenticate requests, let customers act only on their own accounts, expose the bank through a typed Api, and verify the whole bank.
 - [Part 5: Deploy to Cloudflare](https://alchemy.run/domain/tutorial/part-5) — Host the bank on Durable Objects behind a Worker, run it locally, deploy it, and watch a balance change live.
 - [Part 6: Build the UI with foldkit](https://alchemy.run/domain/tutorial/part-6) — A browser app that signs in with a cookie, opens an account, deposits, and watches its balance live.
 - [Part 7: Observe it](https://alchemy.run/domain/tutorial/part-7) — Send the bank's traces and logs to Axiom, follow a deposit through every Durable Object it reaches, and trace clicks from the browser.
@@ -1271,6 +1358,8 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [In memory](https://alchemy.run/domain/in-memory) — Run a domain model in a single process, for tests and for apps that don't need Cloudflare.
 - [Story](https://alchemy.run/domain/story) — A specification you can run. Given some history, when a command is sent, then these events are recorded.
 - [Testing a model](https://alchemy.run/domain/testing-models) — Test your model's rules, views, policies and deadlines with stories that run it in memory.
+- [Verifying a model](https://alchemy.run/domain/verifying-models) — Write down what must always be true of your model, and have it proved, or searched for a sequence of commands that breaks it.
+- [What the prover reads](https://alchemy.run/domain/verifiable-code) — The TypeScript, the Effect helpers and the schemas that Verify reads as logic, and what happens to code outside that set.
 - [Testing an Api](https://alchemy.run/domain/testing-apis) — Test what each client may do and see, in process, over HTTP, and against a real deployment.
 - [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api) — Publish an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
 - [CLI](https://alchemy.run/domain/cli) — Run an Api's calls from a terminal, as a person or an agent, against the deployed Api.
@@ -1290,4 +1379,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~273 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~289 KB) — only fetch it when you need to locate a specific resource's reference page.

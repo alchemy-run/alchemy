@@ -240,13 +240,11 @@ export const AdaptiveMtDatasetProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           translate.createProjectsLocationsAdaptiveMtDatasets({
+            name,
+            displayName,
+            sourceLanguageCode: news.sourceLanguageCode,
+            targetLanguageCode: news.targetLanguageCode,
             parent,
-            body: {
-              name,
-              displayName,
-              sourceLanguageCode: news.sourceLanguageCode,
-              targetLanguageCode: news.targetLanguageCode,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;

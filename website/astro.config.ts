@@ -43,11 +43,15 @@ function providersSidebarEntry() {
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
+      { label: "Convex", link: "/convex" },
       { label: "E2B", link: "/e2b" },
       { label: "Daytona", link: "/daytona" },
       { label: "Modal", link: "/modal" },
       { label: "Archil", link: "/archil" },
       { label: "Boat", link: "/boat" },
+      { label: "AI", link: "/ai" },
+      { label: "Pi", link: "/pi" },
+      { label: "OpenCode", link: "/opencode" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -457,6 +461,7 @@ export default defineConfig({
                 },
                 { label: "Doppler", link: "/environments/doppler" },
                 { label: "Infisical", link: "/environments/infisical" },
+                { label: "1Password", link: "/environments/1password" },
                 {
                   label: "Local development",
                   link: "/environments/local-development",
@@ -602,6 +607,7 @@ export default defineConfig({
                 { label: "Previews", link: "/cloudflare/compute/previews" },
                 { label: "Python Workers", link: "/cloudflare/compute/python-workers" },
                 { label: "Workers Cache", link: "/cloudflare/compute/cache" },
+                { label: "TCP connections", link: "/cloudflare/compute/tcp" },
                 { label: "Rate limiting", link: "/cloudflare/compute/rate-limiting" },
                 { label: "Browser rendering", link: "/cloudflare/compute/browser-rendering" },
                 { label: "Worker Loader", link: "/cloudflare/compute/worker-loader" },
@@ -1714,6 +1720,62 @@ export default defineConfig({
           ],
         },
         {
+          label: "Convex",
+          items: [
+            { label: "Overview", link: "/convex" },
+            { label: "What is Convex?", link: "/convex/what-is-convex" },
+            { label: "Setup", link: "/convex/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "convex/tutorial" } }],
+            },
+            {
+              label: "Accounts & access",
+              items: [
+                { label: "Teams and tokens", link: "/convex/teams-and-tokens" },
+                { label: "Deploy keys", link: "/convex/deployments/deploy-keys" },
+              ],
+            },
+            {
+              label: "Deployments",
+              items: [
+                { label: "Projects", link: "/convex/deployments/projects" },
+                { label: "Deployments", link: "/convex/deployments/deployments" },
+                { label: "Custom domains", link: "/convex/deployments/custom-domains" },
+                { label: "Canonical URLs", link: "/convex/deployments/canonical-urls" },
+                { label: "Usage limits", link: "/convex/deployments/usage-limits" },
+              ],
+            },
+            {
+              label: "Functions",
+              items: [
+                { label: "Tables", link: "/convex/functions/tables" },
+                {
+                  label: "Queries, mutations and actions",
+                  link: "/convex/functions/queries-mutations-actions",
+                },
+                { label: "Push functions", link: "/convex/functions/functions" },
+                { label: "Environment variables", link: "/convex/functions/environment-variables" },
+                { label: "Calling functions", link: "/convex/functions/calling-functions" },
+                { label: "Connect", link: "/convex/functions/connect" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [{ label: "Log streams", link: "/convex/observability/log-streams" }],
+            },
+            {
+              label: "Self-hosted",
+              items: [
+                { label: "Backend", link: "/convex/self-hosted/backend" },
+                { label: "Platform", link: "/convex/self-hosted/platform" },
+                { label: "Two AWS accounts", link: "/convex/self-hosted/two-accounts" },
+              ],
+            },
+            providerResourcesEntry("Convex"),
+          ],
+        },
+        {
           label: "Neon",
           items: [
             { label: "Overview", link: "/neon" },
@@ -2004,6 +2066,8 @@ export default defineConfig({
               items: [
                 { label: "Story", link: "/domain/story" },
                 { label: "Testing a model", link: "/domain/testing-models" },
+                { label: "Verifying a model", link: "/domain/verifying-models" },
+                { label: "What the prover reads", link: "/domain/verifiable-code" },
                 { label: "Testing an Api", link: "/domain/testing-apis" },
               ],
             },
@@ -2433,6 +2497,106 @@ export default defineConfig({
               ],
             },
             providerApiReferenceEntry("SQL", "Drizzle"),
+          ],
+        },
+        {
+          label: "AI",
+          items: [
+            { label: "Overview", link: "/ai" },
+            { label: "What is an agent harness?", link: "/ai/what-is-a-harness" },
+            {
+              label: "Models & tools",
+              items: [
+                { label: "Models", link: "/ai/models" },
+                { label: "Tools", link: "/ai/tools" },
+                { label: "Coding tools", link: "/ai/coding-tools" },
+                { label: "MCP servers", link: "/ai/mcp-servers" },
+                { label: "Skills", link: "/ai/skills" },
+              ],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Sandboxes", link: "/ai/sandboxes" },
+                { label: "Sandbox platforms", link: "/ai/sandbox-platforms" },
+                { label: "Build your own", link: "/ai/custom-sandboxes" },
+              ],
+            },
+          ],
+        },
+        {
+          label: "Pi",
+          items: [
+            { label: "Overview", link: "/pi" },
+            { label: "What is Pi?", link: "/pi/what-is-pi" },
+            { label: "Setup", link: "/pi/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "pi/tutorial" } }],
+            },
+            {
+              label: "Conversations",
+              items: [
+                { label: "Conversations", link: "/pi/conversations" },
+                { label: "Surviving a crash", link: "/pi/durability" },
+              ],
+            },
+            {
+              label: "Tools",
+              items: [
+                { label: "Tools", link: "/pi/tools" },
+                { label: "MCP servers", link: "/pi/mcp-servers" },
+                { label: "Code mode", link: "/pi/code-mode" },
+              ],
+            },
+            {
+              label: "Extensions & skills",
+              items: [
+                { label: "Extensions", link: "/pi/extensions" },
+                { label: "Skills", link: "/pi/skills" },
+              ],
+            },
+            {
+              label: "Hosting",
+              items: [
+                { label: "Sandboxes", link: "/pi/sandboxes" },
+                { label: "Other hosts", link: "/pi/other-hosts" },
+              ],
+            },
+          ],
+        },
+        {
+          label: "OpenCode",
+          items: [
+            { label: "Overview", link: "/opencode" },
+            { label: "What is OpenCode?", link: "/opencode/what-is-opencode" },
+            { label: "Setup", link: "/opencode/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "opencode/tutorial" } }],
+            },
+            {
+              label: "Sessions",
+              items: [
+                { label: "Sessions & prompts", link: "/opencode/sessions" },
+                { label: "Model requests", link: "/opencode/model-requests" },
+              ],
+            },
+            {
+              label: "Tools",
+              items: [
+                { label: "Tools", link: "/opencode/tools" },
+                { label: "MCP servers", link: "/opencode/mcp-servers" },
+                { label: "Skills", link: "/opencode/skills" },
+              ],
+            },
+            {
+              label: "Hosting",
+              items: [
+                { label: "The session's sandbox", link: "/opencode/sandbox" },
+                { label: "OpenCode's own API", link: "/opencode/api" },
+              ],
+            },
           ],
         },
         {

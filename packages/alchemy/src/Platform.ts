@@ -570,16 +570,20 @@ export const Platform = <
                       const configProvider = yield* ConfigProvider.ConfigProvider;
                       const phase = yield* ALCHEMY_PHASE;
 
+                      // At runtime the ambient provider is `runtimeConfigProvider`;
+                      // reads pass straight through.
+                      if (phase !== "plan") {
+                        return configProvider;
+                      }
                       return ConfigProvider.make(
                         Effect.fnUntraced(function* (path) {
                           const ctx = yield* CurrentRuntimeContext;
                           // `set`/`get` store keys verbatim, so canonicalize the
                           // logical config path here (the caller's job) before
                           // handing it to the RuntimeContext.
-                          const key = sanitizeKey(path.map((p) => p.toString()).join("_"));
+                          const key = sanitizeKey(path.join("_"));
                           const node = yield* configProvider.load(path);
-                          if (phase === "plan" && node) {
-                            // bind it to the RuntimeContext if running in plan phase
+                          if (node) {
                             const output = Output.literal(Redacted.make(node.value));
                             // Under a sandbox gateway the program's Construction also
                             // runs in the gateway, which reads the same config.
@@ -588,24 +592,7 @@ export const Platform = <
                                 ? ctx.gateway.set(key, output, { sandbox: true })
                                 : ctx?.set(key, output)) ?? Effect.void
                             );
-                            return node;
-                          } else if (phase === "runtime" && ctx) {
-                            // retrieve from the RuntimeContext if running in runtime phase
-                            const value = yield* ctx.get<unknown>(key);
-                            if (value) {
-                              // `get` JSON-decodes unbound env values (`"true"` →
-                              // `true`), but a `Value` node holds the raw string the
-                              // `Config` schema parses.
-                              return ConfigProvider.makeValue(
-                                Redacted.isRedacted(value)
-                                  ? String(Redacted.value(value))
-                                  : typeof value === "string"
-                                    ? value
-                                    : JSON.stringify(value),
-                              );
-                            }
                           }
-                          // fallback to the config provider otherwise
                           return node;
                         }),
                       );

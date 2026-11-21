@@ -1,0 +1,117 @@
+---
+title: Sandbox platforms
+description: The AI.Sandboxes Layer for Boat, E2B, Daytona, Modal and Archil — one import each, and what finding and suspending a sandbox means on each platform.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+`@alchemy.run/ai` has an [`AI.Sandboxes`](/ai/sandboxes) Layer for each sandbox platform, as its own import. Each takes the image sandboxes start from. The platforms differ in two ways that matter to a harness: how a sandbox is found again by its key, and what stopping one keeps.
+
+Each platform's package is an optional peer. Install the one you use, add its provider to the Stack, and sign in to it with your profile.
+
+## Boat
+
+<PackageManagers add="@alchemy.run/boat" />
+
+```typescript title="src/Sandbox.ts"
+import * as AIBoat from "@alchemy.run/ai/Boat";
+import * as Boat from "@alchemy.run/boat";
+
+export const Sandbox = AIBoat.Sandboxes(
+  Boat.Snapshot("Base", { run: ["npm install --global pnpm"] }),
+  { type: "small", autoStop: "10 minutes" },
+);
+```
+
+Boat finds a sandbox by a `key` label. `suspend` stops it and keeps its disk, and Boat stops one by itself after `autoStop`. New sandboxes get none of your account's environments. See [Boat sandboxes](/boat/sandboxes/sandboxes).
+
+## E2B
+
+<PackageManagers add="@alchemy.run/e2b" />
+
+```typescript title="src/Sandbox.ts"
+import * as AIE2B from "@alchemy.run/ai/E2B";
+import * as E2B from "@alchemy.run/e2b";
+
+export const Sandbox = AIE2B.Sandboxes(E2B.Template("Base", { image: "node:22-bookworm" }), {
+  timeout: 600,
+});
+```
+
+E2B finds a sandbox by its `key` metadata. `suspend` pauses it, keeping its memory and files. E2B kills a sandbox that runs for `timeout` seconds without being used. See [E2B sandboxes](/e2b/sandboxes).
+
+## Daytona
+
+<PackageManagers add="@alchemy.run/daytona" />
+
+```typescript title="src/Sandbox.ts"
+import * as AIDaytona from "@alchemy.run/ai/Daytona";
+import * as Daytona from "@alchemy.run/daytona";
+
+export const Sandbox = AIDaytona.Sandboxes(
+  Daytona.Snapshot("Base", { image: "node:22-bookworm", cpu: 1, memory: 1, disk: 3 }),
+  { autoStopInterval: 15, autoDeleteInterval: 24 * 60 },
+);
+```
+
+Daytona names a sandbox by its key. `suspend` stops it and keeps its disk. Daytona stops a sandbox idle for `autoStopInterval` minutes, and deletes one that has been stopped for `autoDeleteInterval` minutes. See [Daytona sandboxes](/daytona/sandboxes/sandboxes).
+
+## Modal
+
+<PackageManagers add="@alchemy.run/modal" />
+
+```typescript title="src/Sandbox.ts"
+import * as AIModal from "@alchemy.run/ai/Modal";
+import * as Modal from "@alchemy.run/modal";
+import * as Effect from "effect/Effect";
+
+export const Sandbox = AIModal.Sandboxes(
+  Effect.gen(function* () {
+    const app = yield* Modal.App("App", {});
+    return yield* Modal.Image("Base", { app, image: "node:22-bookworm" });
+  }),
+  { idleTimeout: "10 minutes" },
+);
+```
+
+Modal names a sandbox by its key. It has no pause, so `suspend` does nothing: Modal ends a sandbox idle for `idleTimeout`, and the next use creates an empty one. See [Modal sandboxes](/modal/sandboxes/sandboxes).
+
+## Archil
+
+<PackageManagers add="@alchemy.run/archil" />
+
+```typescript title="src/Sandbox.ts"
+import * as AIArchil from "@alchemy.run/ai/Archil";
+import * as Archil from "@alchemy.run/archil";
+
+export const Sandbox = AIArchil.Sandboxes(Archil.Image("Base", { image: "node:22-bookworm" }));
+```
+
+Archil names a sandbox by its key. `suspend` pauses a running sandbox, keeping its memory and files. Archil also pauses a sandbox that is idle, and resumes it on the next command. See [Archil sandboxes](/archil/compute/sandboxes).
+
+## An image that depends on something else
+
+Each Layer takes the image as a declaration or as an Effect that returns one. Use an Effect when the image is built from another resource, such as a repository to clone:
+
+```typescript title="src/Sandbox.ts"
+import * as AIBoat from "@alchemy.run/ai/Boat";
+import * as Boat from "@alchemy.run/boat";
+import * as Output from "alchemy/Output";
+import * as Effect from "effect/Effect";
+import { Repo } from "./Repo.ts";
+
+export const Sandbox = AIBoat.Sandboxes(
+  Effect.gen(function* () {
+    const repo = yield* Repo;
+    return yield* Boat.Snapshot("Checkout", {
+      run: [Output.interpolate`git clone ${repo.cloneUrl} ~/repo`],
+    });
+  }),
+);
+```
+
+## What the image needs
+
+A harness installs its own program in each new sandbox: Pi its daemon, OpenCode itself. The image needs `sh`, `curl`, `tar`, `sha512sum`, `base64`, `dd` and `mkfifo`, and the sandbox needs to reach `registry.npmjs.org` for that install. `node:22-bookworm` has them all, and so does Boat's own image.
+
+A platform that isn't here, or a Layer that should work differently, is a Layer of your own. See [Build your own](/ai/custom-sandboxes).

@@ -18,6 +18,7 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { nameTagFilter, single } from "../internal/Lookup.ts";
 import { tagListRecord } from "../internal/Observe.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { getDefaultVpcEmrManagedSecurityGroupIds, getDefaultVpcScope } from "./defaultVpcScope.ts";
@@ -44,7 +45,7 @@ export const SecurityGroupId = <ID extends string>(id: ID): ID & SecurityGroupId
   `sg-${id}` as ID & SecurityGroupId<ID>;
 
 export type SecurityGroupArn<GroupId extends SecurityGroupId = SecurityGroupId> =
-  `arn:aws:ec2:${RegionID}:${AccountID}:security-group/${GroupId}`;
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:security-group/${GroupId}`;
 
 /**
  * Ingress or egress rule for a security group.
@@ -561,7 +562,7 @@ export const SecurityGroupProvider = () =>
         return {
           groupId: sg.GroupId as SecurityGroupId,
           groupArn:
-            `arn:aws:ec2:${region}:${accountId}:security-group/${sg.GroupId as SecurityGroupId}` as SecurityGroupArn,
+            `arn:${partitionOf(region)}:ec2:${region}:${accountId}:security-group/${sg.GroupId as SecurityGroupId}` as SecurityGroupArn,
           groupName: sg.GroupName!,
           description: sg.Description!,
           vpcId: sg.VpcId as VpcId,

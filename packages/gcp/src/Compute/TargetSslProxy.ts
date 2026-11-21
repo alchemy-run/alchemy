@@ -379,15 +379,10 @@ export const TargetSslProxyProvider = () =>
         if (news.proxyHeader !== undefined) {
           body.proxyHeader = news.proxyHeader;
         }
-        yield* compute
-          .insertTargetSslProxies({
-            project: env.project,
-            body,
-          })
-          .pipe(
-            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        yield* compute.insertTargetSslProxies({ ...body, project: env.project }).pipe(
+          Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* getByName(env.project, targetSslProxyName);
       }
 
@@ -400,9 +395,9 @@ export const TargetSslProxyProvider = () =>
       if (resourceTail(current.service) !== resourceTail(desiredService)) {
         yield* compute
           .setBackendServiceTargetSslProxies({
+            service: desiredService,
             project: env.project,
             targetSslProxy: targetSslProxyName,
-            body: { service: desiredService },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetSslProxyName);
@@ -419,9 +414,9 @@ export const TargetSslProxyProvider = () =>
       ) {
         yield* compute
           .setSslCertificatesTargetSslProxies({
+            sslCertificates: desiredCerts,
             project: env.project,
             targetSslProxy: targetSslProxyName,
-            body: { sslCertificates: desiredCerts },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetSslProxyName);
@@ -438,9 +433,9 @@ export const TargetSslProxyProvider = () =>
       ) {
         yield* compute
           .setCertificateMapTargetSslProxies({
+            certificateMap: news.certificateMap,
             project: env.project,
             targetSslProxy: targetSslProxyName,
-            body: { certificateMap: news.certificateMap },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetSslProxyName);
@@ -454,9 +449,9 @@ export const TargetSslProxyProvider = () =>
       if ((current.proxyHeader ?? DEFAULT_PROXY_HEADER) !== desiredProxyHeader) {
         yield* compute
           .setProxyHeaderTargetSslProxies({
+            proxyHeader: desiredProxyHeader,
             project: env.project,
             targetSslProxy: targetSslProxyName,
-            body: { proxyHeader: desiredProxyHeader },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetSslProxyName);
@@ -470,9 +465,9 @@ export const TargetSslProxyProvider = () =>
       if (news.sslPolicy !== undefined && (current.sslPolicy ?? "") !== news.sslPolicy) {
         yield* compute
           .setSslPolicyTargetSslProxies({
+            sslPolicy: news.sslPolicy,
             project: env.project,
             targetSslProxy: targetSslProxyName,
-            body: { sslPolicy: news.sslPolicy },
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, targetSslProxyName);

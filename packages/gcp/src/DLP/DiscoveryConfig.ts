@@ -308,11 +308,9 @@ export const DiscoveryConfigProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createProjectsLocationsDiscoveryConfigs({
+            configId,
+            discoveryConfig: body,
             parent: locationParent(env.project, location),
-            body: {
-              configId,
-              discoveryConfig: body,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -338,18 +336,16 @@ export const DiscoveryConfigProvider = () =>
         processingChanged
       ) {
         current = yield* dlp.patchProjectsLocationsDiscoveryConfigs({
+          discoveryConfig: body,
+          updateMask: updateMaskOf(
+            displayChanged ? "displayName" : undefined,
+            statusChanged ? "status" : undefined,
+            targetsChanged ? "targets" : undefined,
+            templatesChanged ? "inspectTemplates" : undefined,
+            actionsChanged ? "actions" : undefined,
+            processingChanged ? "processingLocation" : undefined,
+          ),
           name: current.name ?? name,
-          body: {
-            discoveryConfig: body,
-            updateMask: updateMaskOf(
-              displayChanged ? "displayName" : undefined,
-              statusChanged ? "status" : undefined,
-              targetsChanged ? "targets" : undefined,
-              templatesChanged ? "inspectTemplates" : undefined,
-              actionsChanged ? "actions" : undefined,
-              processingChanged ? "processingLocation" : undefined,
-            ),
-          },
         });
       }
 

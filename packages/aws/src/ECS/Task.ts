@@ -21,6 +21,7 @@ import {
   type ServerHost,
 } from "alchemy/Runtime/Process";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
 import { moduleExtension } from "alchemy/Util/Node";
@@ -37,13 +38,14 @@ import {
   makeImageSource,
   type BundledImageSource,
   type DockerfileImageSource,
+  type EcrRegistryImageSource,
   type ImageSourceLike,
-  type RegistryImageSource,
   type ResolvedImageAgent,
 } from "../ECR/ImageSource.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
+import { managedPolicyArn, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export class TaskConflict extends Data.TaggedError("TaskConflict")<{
@@ -271,9 +273,10 @@ export interface BundledTaskProps extends TaskPropsBase, BundledImageSource {}
  */
 export interface DockerfileTaskProps extends TaskPropsBase, DockerfileImageSource {}
 /**
- * Run a pre-built registry image (`image`), mirrored into ECR.
+ * Run a pre-built registry image (`image`), mirrored into ECR unless
+ * `mirror: false`.
  */
-export interface ImageTaskProps extends TaskPropsBase, RegistryImageSource {}
+export interface ImageTaskProps extends TaskPropsBase, EcrRegistryImageSource {}
 
 /**
  * Task props — the image comes from exactly one of three sources, flat on
@@ -746,8 +749,9 @@ export const ensureTaskExecutionRole = Effect.fn(function* ({
   managedPolicyArns?: string[];
 }) {
   const roleArn = yield* createTaskRoleIfNotExists({ id, roleName });
+  const { partition } = yield* AWSEnvironment.current;
   const policies = [
-    "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
+    managedPolicyArn(partition, "service-role/AmazonECSTaskExecutionRolePolicy"),
     ...(managedPolicyArns ?? []),
   ];
   for (const policyArn of policies) {
@@ -827,7 +831,7 @@ export const ensureTaskLogGroup = Effect.fn(function* ({
       tags,
     })
     .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.void));
-  return `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`;
+  return `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:${logGroupName}`;
 });
 
 /**
@@ -1002,10 +1006,7 @@ export const registerTaskDefinitionRevision = Effect.fn(function* ({
             },
           ]
         : undefined,
-    environment: Object.entries(props.env ?? {}).map(([name, value]) => ({
-      name,
-      value: typeof value === "string" ? value : JSON.stringify(value),
-    })),
+    environment: Object.entries(envStrings(props.env)).map(([name, value]) => ({ name, value })),
     environmentFiles: props.environmentFiles,
     logConfiguration: {
       logDriver: "awslogs",
@@ -1389,7 +1390,7 @@ export const TaskProvider = () =>
           executionRoleArn,
           executionRoleName,
           logGroupName,
-          logGroupArn: `arn:aws:logs:${region}:${accountId}:log-group:${logGroupName}`,
+          logGroupArn: `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:${logGroupName}`,
           code: { hash },
         };
       };

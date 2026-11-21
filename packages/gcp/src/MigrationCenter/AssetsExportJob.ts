@@ -350,9 +350,9 @@ export const AssetsExportJobProvider = () =>
       if (current === undefined) {
         const created = yield* mc
           .createProjectsLocationsAssetsExportJobs({
+            ...desiredBody(news, desiredLabels),
             parent: locationParent(env.project, location),
             assetsExportJobId,
-            body: desiredBody(news, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {

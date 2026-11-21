@@ -1,5 +1,6 @@
 import { loadImageArchiveScript } from "@alchemy.run/docker/ImageArchive";
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as VolumeActions from "@distilled.cloud/hetzner/volume_actions";
+import * as Volumes from "@distilled.cloud/hetzner/volumes";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import {
   matchesPackageRoot,
@@ -10,6 +11,7 @@ import {
 import { findCwdForBundle, resolveMainPath } from "alchemy/Bundle/TempRoot";
 import type { ResourceBinding } from "alchemy/Resource";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
+import { containerEnvFile, DOCKER_ENV, systemdEnvFile } from "alchemy/Util/envFile";
 import {
   contextRootOf,
   extraFileDestination,
@@ -86,17 +88,6 @@ const matchesConfiguredExternal = (
 };
 
 export { extraFileDestination };
-
-const quoteEnvValue = (value: unknown) => {
-  const text = typeof value === "string" ? value : JSON.stringify(value ?? null);
-  return `'${text.replaceAll(/'/g, `'""'`).replaceAll(/\n/g, "\\n")}'`;
-};
-
-export const renderEnvFile = (env: Record<string, unknown>) =>
-  Object.entries(env)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}=${quoteEnvValue(value)}`)
-    .join("\n");
 
 export const collectBindingState = (bindings: ResourceBinding<ServiceBinding>[]) => {
   const active = bindings.filter(
@@ -376,7 +367,7 @@ WantedBy=multi-user.target
     volumes: Array<{ volumeId: number; path: string }>;
   }) {
     for (const { volumeId, path } of input.volumes) {
-      let volume = yield* Hetzner.volumes.getVolume({ id: volumeId }).pipe(
+      let volume = yield* Volumes.getVolume({ id: volumeId }).pipe(
         Effect.map(({ volume }) => volume),
         Effect.retry({
           while: hetznerTransient,
@@ -392,7 +383,7 @@ WantedBy=multi-user.target
 
       if (volume.server !== input.serverId) {
         if (volume.server !== null) {
-          yield* Hetzner.volumeActions.detachVolume({ id: volumeId }).pipe(
+          yield* VolumeActions.detachVolume({ id: volumeId }).pipe(
             Effect.tap(({ action }) =>
               waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void)),
             ),
@@ -402,35 +393,33 @@ WantedBy=multi-user.target
             ),
           );
         }
-        yield* Hetzner.volumeActions
-          .attachVolume({
-            id: volumeId,
-            assignee: { id: input.serverId, type: "server" },
-            // No automount: Hetzner would mount the device at
-            // `/mnt/HC_Volume_{id}`, and a device mounted elsewhere makes
-            // our own `mount` at the service path fail with
-            // "already mounted". We own the mount + fstab below.
-            automount: false,
-          })
-          .pipe(
-            Effect.retry({
-              while: hetznerTransient,
-              times: 8,
-              schedule: Schedule.min([
-                Schedule.exponential(Duration.millis(500), 1.5),
-                Schedule.spaced(Duration.seconds(5)),
-              ]),
-            }),
-            Effect.tap(({ action }) =>
-              waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void)),
-            ),
-            Effect.catchTag(["UnprocessableEntity", "Locked", "Conflict"], () => Effect.void),
-          );
-        const readVolume = Hetzner.volumes.getVolume({ id: volumeId }).pipe(
+        yield* VolumeActions.attachVolume({
+          id: volumeId,
+          assignee: { id: input.serverId, type: "server" },
+          // No automount: Hetzner would mount the device at
+          // `/mnt/HC_Volume_{id}`, and a device mounted elsewhere makes
+          // our own `mount` at the service path fail with
+          // "already mounted". We own the mount + fstab below.
+          automount: false,
+        }).pipe(
+          Effect.retry({
+            while: hetznerTransient,
+            times: 8,
+            schedule: Schedule.min([
+              Schedule.exponential(Duration.millis(500), 1.5),
+              Schedule.spaced(Duration.seconds(5)),
+            ]),
+          }),
+          Effect.tap(({ action }) =>
+            waitForAction(action).pipe(Effect.catchTag("ActionTimeout", () => Effect.void)),
+          ),
+          Effect.catchTag(["UnprocessableEntity", "Locked", "Conflict"], () => Effect.void),
+        );
+        const readVolume = Volumes.getVolume({ id: volumeId }).pipe(
           Effect.map(({ volume }) => volume),
           Effect.catchTag("NotFound", () => Effect.undefined),
         );
-        volume = yield* Hetzner.volumes.getVolume({ id: volumeId }).pipe(
+        volume = yield* Volumes.getVolume({ id: volumeId }).pipe(
           Effect.flatMap(({ volume }) =>
             volume.server === input.serverId
               ? Effect.succeed(volume)
@@ -515,6 +504,7 @@ WantedBy=multi-user.target
     entryRel?: string;
   }) {
     const appDir = `/opt/${input.unitName}`;
+    const envFile = yield* systemdEnvFile(input.env);
     yield* waitForSsh(input.ssh);
     yield* input.ssh.exec(
       [
@@ -548,7 +538,7 @@ WantedBy=multi-user.target
       ].join("\n"),
     );
     yield* input.ssh.scp(input.archive, `${appDir}/bundle.zip`);
-    yield* input.ssh.scp(new TextEncoder().encode(renderEnvFile(input.env)), `${appDir}/env`);
+    yield* input.ssh.scp(new TextEncoder().encode(envFile), `${appDir}/env`);
     yield* input.ssh.scp(
       new TextEncoder().encode(renderUnit(input.unitName, appDir, input.entryRel ?? "index.mjs")),
       `/etc/systemd/system/${input.unitName}.service`,
@@ -588,17 +578,6 @@ WantedBy=multi-user.target
     );
   });
 
-  /** A `docker run --env-file`: one literal `NAME=value` per line, no quoting. */
-  const renderDockerEnvFile = (env: Record<string, unknown>) =>
-    Object.entries(env)
-      .filter(([, value]) => value !== undefined)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => {
-        const text = typeof value === "string" ? value : JSON.stringify(value);
-        return `${key}=${text.replaceAll("\n", " ")}`;
-      })
-      .join("\n");
-
   const renderImageUnit = (unitName: string, appDir: string) => `[Unit]
 Description=Alchemy Hetzner Service ${unitName}
 After=network-online.target docker.service
@@ -608,7 +587,8 @@ Requires=docker.service
 [Service]
 Type=simple
 ExecStartPre=-/usr/bin/docker rm -f ${unitName}
-ExecStart=/bin/sh -c 'exec docker run --rm --name ${unitName} --network host --env-file ${appDir}/env "$(cat ${appDir}/image)"'
+EnvironmentFile=-${appDir}/env
+ExecStart=/usr/bin/docker run --rm --name ${unitName} --network host $${DOCKER_ENV} alchemy-${unitName}:latest
 ExecStop=/usr/bin/docker stop ${unitName}
 Restart=always
 RestartSec=5
@@ -628,6 +608,7 @@ WantedBy=multi-user.target
     env: Record<string, unknown>;
   }) {
     const appDir = `/opt/${input.unitName}`;
+    const envFile = yield* containerEnvFile(input.env);
     yield* waitForSsh(input.ssh);
     yield* input.ssh.exec(
       [
@@ -649,7 +630,7 @@ WantedBy=multi-user.target
       ].join("\n"),
     );
     yield* input.ssh.scp(input.archive, `${appDir}/image.tar`);
-    yield* input.ssh.scp(new TextEncoder().encode(renderDockerEnvFile(input.env)), `${appDir}/env`);
+    yield* input.ssh.scp(new TextEncoder().encode(envFile), `${appDir}/env`);
     yield* input.ssh.scp(
       new TextEncoder().encode(renderImageUnit(input.unitName, appDir)),
       `/etc/systemd/system/${input.unitName}.service`,
@@ -658,7 +639,6 @@ WantedBy=multi-user.target
       [
         `set -euo pipefail`,
         loadImageArchiveScript(`${appDir}/image.tar`),
-        `echo "$IMAGE" > ${JSON.stringify(`${appDir}/image`)}`,
         `systemctl daemon-reload`,
         `systemctl enable ${input.unitName}.service`,
         `systemctl restart ${input.unitName}.service`,

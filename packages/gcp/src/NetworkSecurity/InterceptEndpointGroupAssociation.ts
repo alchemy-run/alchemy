@@ -419,13 +419,11 @@ export const InterceptEndpointGroupAssociationProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsInterceptEndpointGroupAssociations({
+            interceptEndpointGroup,
+            network,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             interceptEndpointGroupAssociationId,
-            body: {
-              interceptEndpointGroup,
-              network,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -454,12 +452,9 @@ export const InterceptEndpointGroupAssociationProvider = () =>
       if (labelsChanged) {
         const operation =
           yield* networksecurity.patchProjectsLocationsInterceptEndpointGroupAssociations({
+            labels: desiredLabels,
             name: current.name ?? name,
             updateMask: "labels",
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);

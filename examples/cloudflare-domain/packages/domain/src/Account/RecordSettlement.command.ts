@@ -1,6 +1,6 @@
 import * as Domain from "@alchemy.run/domain";
 import * as Schema from "effect/Schema";
-import { Cents } from "../Money.ts";
+import { Amount, Cents } from "../Money.ts";
 import { AccountId } from "./Account.id.ts";
 
 export class SettlementReceived extends Domain.Event("SettlementReceived", {
@@ -17,6 +17,6 @@ export class SettlementOnClosedAccount extends Domain.Event("SettlementOnClosedA
 
 /** Reports a fact that already happened, so it never rejects. */
 export class RecordSettlement extends Domain.Command("RecordSettlement", {
-  input: { accountId: AccountId, settlementId: Schema.String, amount: Cents },
+  input: { accountId: AccountId, settlementId: Schema.String, amount: Amount },
   events: [SettlementReceived, SettlementOnClosedAccount],
 }) {}

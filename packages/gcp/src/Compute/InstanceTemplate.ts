@@ -558,12 +558,10 @@ export const InstanceTemplateProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertInstanceTemplates({
+            name: templateName,
+            description: news.description,
+            properties: toProperties(news, desiredLabels),
             project: env.project,
-            body: {
-              name: templateName,
-              description: news.description,
-              properties: toProperties(news, desiredLabels),
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>

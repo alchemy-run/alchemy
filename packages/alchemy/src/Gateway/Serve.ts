@@ -42,7 +42,7 @@ import {
   ErrorTag,
   RPC_STREAM_HEADER,
 } from "../Rpc.ts";
-import { reifyBoundConfigProvider } from "../Runtime.ts";
+import { runtimeConfigProvider } from "../Runtime.ts";
 import { entrypointLayer, stackFromEnv } from "../Runtime/Bootstrap.ts";
 import { unpackEnvValue } from "../RuntimeContext.ts";
 
@@ -160,12 +160,7 @@ export const serve = (
       Layer.provideMerge(stackFromEnv),
       Layer.provideMerge(FetchHttpClient.layer),
       Layer.provideMerge(options?.services ?? Layer.empty),
-      Layer.provideMerge(
-        Layer.succeed(
-          ConfigProvider.ConfigProvider,
-          reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
-        ),
-      ),
+      Layer.provideMerge(Layer.succeed(ConfigProvider.ConfigProvider, runtimeConfigProvider())),
     ) as unknown as Layer.Layer<never>;
     // The scope lives as long as the gateway instance.
     return Effect.runPromise(

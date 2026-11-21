@@ -18,6 +18,7 @@ import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
 import { gateExclusive, InputGate } from "alchemy/Workers/InputGate";
+import { storageCallbacks } from "alchemy/Workers/StorageCallbacks";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -35,7 +36,6 @@ import type { WorkflowEngine } from "effect/workflow";
  * @module
  */
 import {
-  alarmCallbacks,
   type Attachment,
   className,
   type Host,
@@ -47,6 +47,7 @@ import {
   type ObjectStateShape,
   type ObjectStorage,
   parseMultiplexedName,
+  runtimeClaim,
   type Stub,
   SUBSCRIPTION_HEADER,
 } from "../DurableObjects.ts";
@@ -189,14 +190,6 @@ export class DomainClassNotHosted extends Data.TaggedError("Rivet.DomainClassNot
   readonly message: string;
 }> {}
 
-/** The class names this host class claims, keyed by its id. */
-const claims = new Map<string, object>();
-const claimOf = (name: string) => {
-  let claim = claims.get(name);
-  if (claim === undefined) claims.set(name, (claim = {}));
-  return claim;
-};
-
 /**
  * Every class of a model on one Rivet class: the object `Bank.AccountAggregate`
  * named `a-1` is the instance `Bank.AccountAggregate/a-1`. `declare` hands the
@@ -218,7 +211,7 @@ const multiplexed = (
       }),
     lookup: ({ modelName }, cls) => remote(className(modelName, cls)),
     connect: connectTo,
-    claimKey: Effect.succeed(claimOf(name)),
+    claimKey: runtimeClaim(name),
   };
   // Sagas run on the workflow engine over the same class: each execution
   // is the instance `<Workflow>/<executionId>`, its journal in that
@@ -280,7 +273,7 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
         );
       }
       const storage = objectStorage(state.storage);
-      const callbacks = alarmCallbacks(storage, {
+      const callbacks = storageCallbacks(storage, {
         set: (at) => state.storage.setAlarm(at),
         get: state.storage.getAlarm(),
       });

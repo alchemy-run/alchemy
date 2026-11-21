@@ -26,14 +26,10 @@ const servingProbes = Effect.gen(function* () {
   const search = yield* GCP.Retail.Search(Serving);
   const predict = yield* GCP.Retail.Predict(Serving);
   return {
-    search: search({
-      body: { visitorId: "alchemy-visitor", query: "tee", pageSize: 5 },
-    }),
+    search: search({ visitorId: "alchemy-visitor", query: "tee", pageSize: 5 }),
     predict: predict({
-      body: {
-        validateOnly: true,
-        userEvent: { eventType: "detail-page-view", visitorId: "visitor-1" },
-      },
+      validateOnly: true,
+      userEvent: { eventType: "detail-page-view", visitorId: "visitor-1" },
     }),
   };
 });

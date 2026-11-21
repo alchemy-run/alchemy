@@ -223,11 +223,9 @@ export const IssueModelsIssueProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsIssueModelsIssues({
+            displayName,
+            displayDescription,
             parent: news.parent,
-            body: {
-              displayName,
-              displayDescription,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -254,6 +252,8 @@ export const IssueModelsIssueProvider = () =>
 
       if (displayChanged || descriptionChanged) {
         current = yield* cci.patchProjectsLocationsIssueModelsIssues({
+          displayName,
+          displayDescription,
           name,
           updateMask: [
             displayChanged ? "display_name" : undefined,
@@ -261,11 +261,6 @@ export const IssueModelsIssueProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            displayDescription,
-          },
         });
       }
 
