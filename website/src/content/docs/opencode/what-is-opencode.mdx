@@ -7,7 +7,7 @@ import Tree from "../../../components/diagrams/Tree.astro";
 
 OpenCode is a coding agent built as a server. The server keeps **sessions**, each a transcript on its own disk. It ships its own tools, which read and change files and run commands on the machine it is on. For each answer it calls a model provider over HTTP. It is a program that needs a machine, so on Alchemy each session's OpenCode runs in a sandbox of its own, and the Durable Object that owns the session drives it from outside.
 
-Take one small app: a `Coder` Durable Object with a session `pr-142`. The session's sandbox on Boat runs OpenCode and a small **bridge**. OpenCode's own `bash` runs in the sandbox. Its model requests, and its calls to your `deploy` tool, go to the bridge, and the harness answers them from the Durable Object, where the `Fast` model's Layer and the tool's handler are.
+Take one small app: a `Coder` Durable Object with a session `pr-142`. The session's sandbox on Boat runs OpenCode and a small **bridge**. OpenCode's own `shell` runs in the sandbox. Its model requests, and its calls to your `deploy` tool, go to the bridge, and the harness answers them from the Durable Object, where the `Fast` model's Layer and the tool's handler are.
 
 <Tree
   nodes={[
@@ -25,7 +25,7 @@ Take one small app: a `Coder` Durable Object with a session `pr-142`. The sessio
     { id: "bridge", label: "bridge", type: "127.0.0.1", parent: "sandbox", icon: "cable" },
     {
       id: "opencode", label: "OpenCode", type: "server", parent: "sandbox", icon: "brand:opencode",
-      specs: [["runs", "bash · read · edit"], ["session", "on this disk"]],
+      specs: [["runs", "shell · read · edit"], ["session", "on this disk"]],
     },
   ]}
   areas={["coder sandbox"]}

@@ -22,7 +22,13 @@ export default class OpenCodeApi extends Cloudflare.Worker<OpenCodeApi>()(
         switch (action) {
           case "prompt":
             return yield* HttpServerResponse.json({
-              text: yield* session.prompt(name!, body.text, body.tools, body.requestId),
+              text: yield* session.prompt(
+                name!,
+                body.text,
+                body.tools,
+                body.requestId,
+                body.codeMode === true,
+              ),
             });
           case "tools":
             return yield* HttpServerResponse.json(yield* session.toolsUsed(name!));

@@ -24,7 +24,7 @@ const reply = yield* session.prompt("Why does the login test fail?");
 return reply.text;
 ```
 
-`reply.text` is the answer's text. `reply.parts` is the whole message as OpenCode stores it: text, reasoning and each tool call.
+`reply.text` is the answer's text. `reply.messages` is what the prompt added to the transcript, as OpenCode stores it: the prompt, each step of the answer with its text, reasoning and tool calls, and an `idle` entry that ends it.
 
 ## Choose what a prompt runs with
 
@@ -87,16 +87,20 @@ yield* session.abort;
 
 ## Read the transcript
 
-`messages` is every message of the session, oldest first, as OpenCode stores them:
+`messages` is the session's transcript, oldest first, as OpenCode stores it. Each entry has a `type`; an `assistant` entry is one step of an answer, and its `content` holds the step's text and tool calls:
 
 ```typescript
 const messages = yield* session.messages;
 const calls = messages.flatMap((message) =>
-  message.parts.flatMap((part) => (part.type === "tool" ? [part.tool] : [])),
+  message.type === "assistant"
+    ? (message as OpenCode.AssistantMessage).content.flatMap((content) =>
+        content.type === "tool" ? [content.name] : [],
+      )
+    : [],
 );
 ```
 
-A `tool` part has the tool's name as OpenCode knows it and its `state`: `pending`, `running`, `completed` with an `output`, or `error`.
+A `tool` entry has the tool's name as OpenCode knows it and its `state`: `running`, `completed` with its `content`, or `error` with its `error`. In code mode the call is `execute`, and `state.metadata.toolCalls` lists the calls its program made.
 
 ## Use one of OpenCode's agents
 

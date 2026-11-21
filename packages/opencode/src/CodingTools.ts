@@ -2,8 +2,8 @@ import * as AI from "@alchemy.run/ai";
 import * as Layer from "effect/Layer";
 import { ENGINE } from "./Tool.ts";
 
-/** OpenCode's own `bash` as `AI.Bash`. OpenCode runs it in the session's sandbox. */
-export const Bash = AI.Bash.native(ENGINE, "bash");
+/** OpenCode's own `shell` as `AI.Bash`. OpenCode runs it in the session's sandbox. */
+export const Bash = AI.Bash.native(ENGINE, "shell");
 /** OpenCode's own `read` as `AI.Read`. */
 export const Read = AI.Read.native(ENGINE, "read");
 /** OpenCode's own `edit` as `AI.Edit`. */

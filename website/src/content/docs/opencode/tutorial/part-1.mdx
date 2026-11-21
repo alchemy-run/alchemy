@@ -102,7 +102,7 @@ export default class Issue extends Cloudflare.DurableObject<Issue>()(
 ) {}
 ```
 
-`AI.CodingTools` names `bash`, `read`, `edit`, `write`, `grep` and `glob`, and `OpenCode.CodingTools` says they are OpenCode's own, which OpenCode runs in the sandbox. `DurableObjectInstance` keys sandboxes on this object's id, so two issues never share one.
+`AI.CodingTools` names `bash`, `read`, `edit`, `write`, `grep` and `glob`, and `OpenCode.CodingTools` says they are OpenCode's own (its `shell` for `bash`), which OpenCode runs in the sandbox. `DurableObjectInstance` keys sandboxes on this object's id, so two issues never share one.
 
 ## Prompt a session
 
@@ -195,10 +195,10 @@ export default Alchemy.Stack(
 The first deploy builds the snapshot, which takes a couple of minutes. Then ask the session to run a command:
 
 ```sh
-curl -X POST "$URL/issues/7" -d "Run uname -a with bash and tell me the kernel version."
+curl -X POST "$URL/issues/7" -d "Run uname -a in the shell and tell me the kernel version."
 ```
 
-The first prompt on a new issue waits for its sandbox and for OpenCode to install. The answer comes from OpenCode's `bash`, run in the sandbox, with the model answering from your Durable Object.
+The first prompt on a new issue waits for its sandbox and for OpenCode to install. The answer comes from OpenCode's `shell`, run in the sandbox, with the model answering from your Durable Object.
 
 ## Next
 

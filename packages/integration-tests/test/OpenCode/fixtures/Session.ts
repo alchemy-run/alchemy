@@ -112,33 +112,40 @@ export default class OpenCodeSession extends Cloudflare.DurableObject<OpenCodeSe
       });
 
       return {
-        /** Prompt with exactly `tools`; answers with the reply's text. */
+        /** Prompt with exactly `tools`, from a program or one call at a time; answers with the reply's text. */
         prompt: Effect.fn(function* (
           name: string,
           text: string,
           tools: ReadonlyArray<keyof typeof toolsByName>,
           requestId: string,
+          codeMode: boolean,
         ) {
-          const reply = yield* harness
-            .session(name)
-            .prompt(text, { tools: tools.map((tool) => toolsByName[tool]), requestId });
+          const reply = yield* harness.session(name).prompt(text, {
+            tools: tools.map((tool) => toolsByName[tool]),
+            requestId,
+            codeMode,
+          });
           return reply.text;
         }),
         /** Every tool call the session made, as OpenCode names and reports it. */
         toolsUsed: Effect.fn(function* (name: string) {
           const messages = yield* harness.session(name).messages;
           return messages.flatMap((message) =>
-            message.parts.flatMap((part) =>
-              part.type === "tool"
-                ? [
-                    {
-                      tool: part.tool,
-                      status: part.state?.status,
-                      output: part.state?.output ?? part.state?.error ?? "",
-                    },
-                  ]
-                : [],
-            ),
+            message.type === "assistant"
+              ? (message as OpenCode.AssistantMessage).content.flatMap((content) =>
+                  content.type === "tool"
+                    ? [
+                        {
+                          tool: content.name,
+                          status: content.state?.status,
+                          output:
+                            content.state?.error?.message ??
+                            (content.state?.content ?? []).map((item) => item.text ?? "").join(""),
+                        },
+                      ]
+                    : [],
+                )
+              : [],
           );
         }),
         readFile: Effect.fn(function* (name: string, path: string) {
