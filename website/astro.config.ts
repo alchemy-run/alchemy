@@ -53,6 +53,7 @@ function providersSidebarEntry() {
       { label: "Pi", link: "/pi" },
       { label: "OpenCode", link: "/opencode" },
       { label: "Yielded Agent", link: "/yielded-agent" },
+      { label: "clanka", link: "/clanka" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -2618,6 +2619,28 @@ export default defineConfig({
               items: [
                 { label: "Sandboxes", link: "/yielded-agent/sandboxes" },
                 { label: "Surviving eviction", link: "/yielded-agent/eviction" },
+              ],
+            },
+          ],
+        },
+        {
+          label: "clanka",
+          items: [
+            { label: "Overview", link: "/clanka" },
+            { label: "What is clanka?", link: "/clanka/what-is-clanka" },
+            { label: "Setup", link: "/clanka/setup" },
+            {
+              label: "Conversations",
+              items: [
+                { label: "Conversations & prompts", link: "/clanka/conversations" },
+                { label: "Tools", link: "/clanka/tools" },
+              ],
+            },
+            {
+              label: "Hosting",
+              items: [
+                { label: "The executor & sandbox", link: "/clanka/sandbox" },
+                { label: "Surviving eviction", link: "/clanka/eviction" },
               ],
             },
           ],

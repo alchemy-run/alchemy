@@ -1,0 +1,74 @@
+---
+title: clanka
+description: Run the clanka coding agent with Alchemy. Its agent loop in a Durable Object on your models, its executor in a sandbox for each conversation.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+[clanka](https://github.com/Effectful-Tech/clanka) is a coding agent built with Effect. Its model has one tool: it writes JavaScript, and an executor runs that script, which reads and edits files, runs commands and calls your tools. Alchemy runs clanka's agent loop in a Durable Object on a model you declare, and its executor in a sandbox for each conversation. Models, tools and sandboxes are the ones you declare with [`@alchemy.run/ai`](/ai).
+
+**New to clanka?** Start with [What is clanka?](/clanka/what-is-clanka).
+
+## A quick example
+
+A model, and where sandboxes run. The snapshot has clanka installed:
+
+```typescript title="src/agent.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AIBoat from "@alchemy.run/ai/Boat";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Boat from "@alchemy.run/boat";
+import * as Clanka from "@alchemy.run/clanka";
+
+export class Smart extends AI.Model<Smart>()("smart") {}
+
+export const SmartLive = AICloudflare.Model(Smart, {
+  model: "@cf/moonshotai/kimi-k2.6",
+});
+
+export const Base = Boat.Snapshot("Base", { run: [Clanka.installCommand] });
+
+export const Sandbox = AIBoat.Sandboxes(Base);
+```
+
+A Durable Object yields the harness and prompts a conversation by name:
+
+```typescript title="src/Coder.ts"
+import * as Boat from "@alchemy.run/boat";
+import * as Clanka from "@alchemy.run/clanka";
+import * as ClankaCloudflare from "@alchemy.run/clanka/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Sandbox, Smart, SmartLive } from "./agent.ts";
+
+const HarnessLive = Layer.mergeAll(
+  SmartLive,
+  Sandbox,
+  ClankaCloudflare.DurableObjectStore,
+).pipe(Layer.provideMerge(Boat.CreateSandboxHttp));
+
+export default class Coder extends Cloudflare.DurableObject<Coder>()(
+  "Coder",
+  Effect.gen(function* () {
+    const harness = yield* Clanka.Harness({ models: [Smart] });
+
+    return Effect.gen(function* () {
+      return {
+        prompt: (name: string, text: string) =>
+          harness.conversation(name).prompt(text).pipe(Effect.orDie),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+## Where to start
+
+**Want to build?** Follow [Setup](/clanka/setup), then [Conversations & prompts](/clanka/conversations).
+
+**Looking for something specific?** Every section of these docs is listed below. Models, tools and sandboxes are shared by every harness, and are covered in the [AI docs](/ai).
+
+## The docs
+
+<HubMap />

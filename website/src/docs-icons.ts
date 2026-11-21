@@ -63,6 +63,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Pi: b("pi"),
   OpenCode: b("opencode"),
   "Yielded Agent": l("bot"),
+  clanka: l("terminal"),
   // The Sandboxes dropdown's link to the AWS hub's Nitro Sandboxes page.
   "AWS Nitro": b("aws"),
   Prisma: b("prisma"),
