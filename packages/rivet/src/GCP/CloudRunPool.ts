@@ -10,7 +10,6 @@ import {
   makePoolLayer,
   nodeDockerfile,
   nodeEnvironment,
-  RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -250,7 +249,7 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
             : {
                 ...program,
                 dockerfile: {
-                  content: nodeDockerfile(options.rivetkitVersion ?? RIVETKIT_VERSION),
+                  content: nodeDockerfile(options.rivetkitVersion ?? nodes.rivetkitVersion),
                 },
               }),
           ...(location === undefined ? {} : { location }),
