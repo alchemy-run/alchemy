@@ -580,11 +580,19 @@ export const layerEntities = <PoolReq>(
           : parseMultiplexedName(id);
         const build = parsed === undefined ? undefined : classes.get(parsed.className);
         if (build === undefined) {
-          return yield* Effect.die(
-            new DomainClassNotHosted({
-              message: `Cluster.Entity '${name}' hosts no Domain class for '${id}'.`,
-            }),
-          );
+          // A class this code no longer hosts, like a consumer's earlier
+          // generation after a version bump. Its persisted wake-ups are
+          // dropped: dying here would redeliver them forever. Only older
+          // code calls it, and those calls fail.
+          const notHosted = new DomainClassNotHosted({
+            message: `Cluster.Entity '${name}' hosts no Domain class for '${id}'.`,
+          });
+          return objects.of({
+            Call: () => Effect.die(notHosted),
+            Live: () =>
+              Stream.make({ _tag: "Close", code: 1011, reason: notHosted.message } as const),
+            Wake: () => Effect.void,
+          });
         }
         const gate = yield* makeInputGate;
         // The instance's own object where the pool gives it one; otherwise
