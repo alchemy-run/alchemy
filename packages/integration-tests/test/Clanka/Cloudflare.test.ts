@@ -115,3 +115,40 @@ test(
   }),
   { tags, timeout: 600_000 },
 );
+
+test(
+  "a submitted prompt cut off by a crashed instance is run again from the alarm",
+  Effect.gen(function* () {
+    const object = `user-${Date.now()}`;
+    const submit = {
+      text: 'Run exactly this script with the execute tool, unchanged:\n\nawait sleep(8000);\nawait writeFile({ path: "/home/user/slow.txt", content: "slow-4242" });\nawait taskComplete("slow-4242");',
+      requestId: "slow-1",
+    };
+    yield* Effect.gen(function* () {
+      yield* call(`/${object}/slow/submit`, submit);
+      // Submitting again is the same prompt.
+      yield* call(`/${object}/slow/submit`, submit);
+      expect((yield* call(`/${object}/slow/submitted`, { requestId: "slow-1" })).run.status).toBe(
+        "running",
+      );
+
+      // Kill the instance while the script sleeps. Nothing calls it again but its alarm.
+      yield* Effect.sleep("6 seconds");
+      yield* call(`/${object}/slow/crash`, {}).pipe(Effect.ignore);
+
+      const { run } = yield* call(`/${object}/slow/submitted`, { requestId: "slow-1" }).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (result: { run: { status: string } }) => result.run.status !== "running",
+          times: 36,
+        }),
+      );
+      // Comparing the whole run shows a failure's message.
+      expect(run).toEqual({ status: "done", summary: "slow-4242" });
+      const file = yield* call(`/${object}/slow/file`, { path: "/home/user/slow.txt" });
+      expect(file.text).toContain("slow-4242");
+      // A failed assertion must not leave a sandbox running.
+    }).pipe(Effect.ensuring(Effect.ignore(call(`/${object}/slow/remove`, {}))));
+  }),
+  { tags, timeout: 420_000 },
+);

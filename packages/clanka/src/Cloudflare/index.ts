@@ -3,6 +3,7 @@
  *
  * @module
  */
+import { DurableObjectCallbacks } from "@alchemy.run/cloudflare/Workers/AlarmCallback";
 import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -22,8 +23,8 @@ interface KeyValue {
 /**
  * Conversations in the Durable Object's own storage. A conversation is
  * saved after every prompt, so it continues after the instance is evicted
- * or redeployed. A prompt cut off before it finishes leaves the
- * conversation as it was and is not resumed: send it again.
+ * or redeployed. A submitted prompt (`conversation.submit`) that an
+ * instance did not live to finish is run again from the object's alarm.
  *
  * **Example:** A harness whose conversations outlive the instance
  * ```typescript
@@ -52,6 +53,13 @@ export const DurableObjectStore: Layer.Layer<Store> = Layer.succeed(Store, {
     const store: InstanceStore = {
       // At plan time the state is a stand-in with no id, and nothing reads the store.
       id: Option.match(state, { onNone: () => "", onSome: (state) => state.id?.toString() ?? "" }),
+      ...(Option.isSome(state)
+        ? {
+            callbacks: DurableObjectCallbacks.pipe(
+              Layer.provide(Layer.succeed(DurableObjectState, state.value)),
+            ),
+          }
+        : {}),
       get: (key) =>
         use("get", async (storage) => {
           const count = await storage.get(`${prefix(key)}n`);

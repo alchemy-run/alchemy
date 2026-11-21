@@ -28,6 +28,13 @@ export default class ClankaApi extends Cloudflare.Worker<ClankaApi>()(
             return yield* HttpServerResponse.json(yield* conversations.prompt(name, body.text));
           case "parts":
             return yield* HttpServerResponse.json(yield* conversations.parts(name, body.text));
+          case "submit":
+            yield* conversations.submit(name, body.text, body.requestId);
+            return yield* HttpServerResponse.json({ ok: true });
+          case "submitted":
+            return yield* HttpServerResponse.json({
+              run: yield* conversations.submitted(name, body.requestId),
+            });
           case "history":
             return yield* HttpServerResponse.json(yield* conversations.history(name));
           case "file":

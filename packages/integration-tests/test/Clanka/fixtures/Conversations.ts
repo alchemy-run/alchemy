@@ -74,6 +74,13 @@ export default class ClankaConversations extends Cloudflare.DurableObject<Clanka
             ...(part._tag === "ScriptOutput" ? { output: part.output } : {}),
           }));
         }, Effect.orDie),
+        /** Accept a prompt and return at once. */
+        submit: Effect.fn(function* (name: string, text: string, requestId: string) {
+          yield* harness.conversation(name).submit(text, { requestId });
+        }, Effect.orDie),
+        submitted: Effect.fn(function* (name: string, requestId: string) {
+          return (yield* harness.conversation(name).submitted(requestId)) ?? null;
+        }, Effect.orDie),
         history: Effect.fn(function* (name: string) {
           const prompt = yield* harness.conversation(name).history;
           return (yield* encodePrompt(prompt)) as {

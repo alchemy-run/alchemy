@@ -1,4 +1,5 @@
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
+import { makeRuns } from "@alchemy.run/ai/Runs";
 import { Sandbox, SandboxError, Sandboxes, sandboxOf } from "@alchemy.run/ai/Sandbox";
 import { ToolCall, toolKind, type ToolHandler, type ToolSpec } from "@alchemy.run/ai/Tool";
 import type { Agent } from "@yielded/agent";
@@ -76,6 +77,25 @@ export interface HarnessOptions<
    * harness is yielded, unless it carries its handler.
    */
   readonly tools?: Tools;
+  /**
+   * The agents `submit` can run. A submitted run may be finished by another
+   * instance, which finds the agent here by its id.
+   */
+  readonly agents?: ReadonlyArray<ExecutableAgent>;
+}
+
+/** Where a submitted run stands. */
+export type SubmittedRun<A extends ExecutableAgent> =
+  | { readonly status: "running" }
+  | { readonly status: "done"; readonly output: Agent.Output<A> }
+  | { readonly status: "failed"; readonly message: string };
+
+export interface SubmitOptions<Models extends ReadonlyArray<AnyModel>> extends RunOptions<Models> {
+  /**
+   * Identifies the run. Submitting it again is the same run: it is not
+   * started twice.
+   */
+  readonly requestId: string;
 }
 
 /** A Yielded Agent harness: Yielded's runtime with history, models, tools and sandboxes supplied. */
@@ -102,6 +122,23 @@ export interface Harness<
     input: NoInfer<Agent.EncodedInput<A>>,
     options: RunOptions<Models>,
   ) => Stream.Stream<RunEvent, Effect.Error<RunOf<A>> | YieldedAgentError, Remaining<A, Tools>>;
+  /**
+   * Accept a run and return: it runs in the background and survives the
+   * instance. If the instance is evicted or redeployed before the run
+   * ends, the next one starts it again from the beginning, so its tools
+   * may be called more than once. The agent must be one the harness lists
+   * in `agents`.
+   */
+  readonly submit: <A extends ExecutableAgent>(
+    agent: A,
+    input: NoInfer<Agent.EncodedInput<A>>,
+    options: SubmitOptions<Models>,
+  ) => Effect.Effect<void, YieldedAgentError, RuntimeContext>;
+  /** Where a submitted run stands, or `undefined` when nothing was submitted under that id. */
+  readonly submitted: <A extends ExecutableAgent>(
+    agent: A,
+    requestId: string,
+  ) => Effect.Effect<SubmittedRun<A> | undefined, YieldedAgentError, RuntimeContext>;
   /** What a Thread holds: the messages the next run's model would be given. Empty before its first run. */
   readonly history: (
     thread: string,
@@ -348,7 +385,77 @@ export const Harness = <
               ),
             );
 
+    const agentId = (agent: ExecutableAgent): string =>
+      String("definition" in agent ? agent.definition.id : agent.id);
+    const outputOf = (agent: ExecutableAgent): Schema.Codec<unknown, unknown> =>
+      ("definition" in agent ? agent.definition.output : agent.output) as never;
+    const agents = new Map((options.agents ?? []).map((agent) => [agentId(agent), agent]));
+
+    /** Submitted runs: recorded before they start, and started again by the instance's callback. */
+    const runs = yield* makeRuns<
+      {
+        readonly agent: string;
+        readonly input: unknown;
+        readonly thread: string;
+        readonly model?: string;
+      },
+      unknown
+    >({
+      name: "yielded-agent",
+      store: instance.runs,
+      ...(instance.callbacks === undefined ? {} : { callbacks: instance.callbacks }),
+      execute: (payload) =>
+        Effect.gen(function* () {
+          const agent = agents.get(payload.agent);
+          if (agent === undefined) {
+            return yield* new YieldedAgentError({
+              message: `The agent "${payload.agent}" is not one this harness lists in agents.`,
+            });
+          }
+          const model = models.find(({ model }) => model.modelName === payload.model)?.model;
+          const services = yield* servicesFor({
+            thread: payload.thread,
+            ...(model === undefined ? {} : { model }),
+          });
+          const result = (yield* AgentRuntime.run(agent, payload.input as never, {
+            threadId: yield* threadId(payload.thread),
+          }).pipe(Effect.provideContext(services as never))) as { readonly output: unknown };
+          return yield* Schema.encodeUnknownEffect(outputOf(agent))(result.output);
+        }).pipe(Effect.mapError((cause) => ({ message: messageOf(cause) }))) as Effect.Effect<
+          unknown,
+          { readonly message: string },
+          RuntimeContext
+        >,
+    });
+
     const harness: Harness<Models, Tools> = {
+      submit: (agent, input, submit) =>
+        agents.has(agentId(agent))
+          ? runs
+              .submit(submit.requestId, {
+                agent: agentId(agent),
+                input,
+                thread: submit.thread,
+                ...(submit.model === undefined ? {} : { model: submit.model.modelName }),
+              })
+              .pipe(Effect.mapError((cause) => new YieldedAgentError({ message: cause.message })))
+          : Effect.fail(
+              new YieldedAgentError({
+                message: `Submitting needs the agent "${agentId(agent)}" listed in the harness's agents.`,
+              }),
+            ),
+      submitted: (agent, requestId) =>
+        runs.status(requestId).pipe(
+          Effect.flatMap((status): Effect.Effect<unknown, Schema.SchemaError> =>
+            status === undefined || status.status !== "done"
+              ? Effect.succeed(status)
+              : Effect.map(Schema.decodeUnknownEffect(outputOf(agent))(status.value), (output) => ({
+                  status: "done" as const,
+                  output,
+                })),
+          ),
+          Effect.mapError((cause) => new YieldedAgentError({ message: messageOf(cause) })),
+        ) as never,
       run: (agent, input, options) =>
         Effect.gen(function* () {
           const services = yield* servicesFor(options);

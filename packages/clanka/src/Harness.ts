@@ -1,4 +1,5 @@
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
+import { makeRuns } from "@alchemy.run/ai/Runs";
 import { Sandbox, Sandboxes, sandboxOf } from "@alchemy.run/ai/Sandbox";
 import { ToolCall, toolKind, type ToolHandler, type ToolSpec } from "@alchemy.run/ai/Tool";
 import {
@@ -62,6 +63,12 @@ export interface PromptOptions<Models extends ReadonlyArray<AnyModel>> {
   readonly instructions?: string;
 }
 
+/** Where a submitted prompt stands. */
+export type SubmittedPrompt =
+  | { readonly status: "running" }
+  | { readonly status: "done"; readonly summary: string }
+  | { readonly status: "failed"; readonly message: string };
+
 /** A named conversation with clanka: its history, and its sandbox. */
 export interface Conversation<Models extends ReadonlyArray<AnyModel>> {
   readonly name: string;
@@ -88,6 +95,21 @@ export interface Conversation<Models extends ReadonlyArray<AnyModel>> {
     text: string,
     options?: PromptOptions<Models>,
   ) => Stream.Stream<AgentOutput.Output, ClankaError, RuntimeContext>;
+  /**
+   * Accept a prompt and return: it runs in the background and survives the
+   * instance. If the instance is evicted or redeployed before the agent
+   * finishes, the next one sends the prompt again to the conversation as it
+   * was last saved, so the agent's scripts may run more than once.
+   * `requestId` identifies the prompt: submitting it again is the same one.
+   */
+  readonly submit: (
+    text: string,
+    options: PromptOptions<Models> & { readonly requestId: string },
+  ) => Effect.Effect<void, ClankaError, RuntimeContext>;
+  /** Where a submitted prompt stands, or `undefined` when nothing was submitted under that id. */
+  readonly submitted: (
+    requestId: string,
+  ) => Effect.Effect<SubmittedPrompt | undefined, ClankaError, RuntimeContext>;
   /** The conversation so far: the messages the next prompt's model is given. */
   readonly history: Effect.Effect<Prompt.Prompt, ClankaError, RuntimeContext>;
   /** Forget the conversation. Its sandbox is left as it is. */
@@ -221,6 +243,31 @@ export const Harness = <
     };
 
     let runs = 0;
+    /** Submitted prompts: recorded before they start, and started again by the instance's callback. */
+    const submitted = yield* makeRuns<
+      {
+        readonly conversation: string;
+        readonly text: string;
+        readonly model?: string;
+        readonly instructions?: string;
+      },
+      string
+    >({
+      name: "clanka",
+      store: {
+        get: (key) => store.get(`submitted:${key}`),
+        put: (key, value) => store.put(`submitted:${key}`, value),
+        delete: (key) => store.delete(`submitted:${key}`),
+      },
+      ...(store.callbacks === undefined ? {} : { callbacks: store.callbacks }),
+      execute: (payload) => {
+        const model = models.find(({ model }) => model.modelName === payload.model)?.model;
+        return conversation(payload.conversation).prompt(payload.text, {
+          ...(model === undefined ? {} : { model }),
+          ...(payload.instructions === undefined ? {} : { instructions: payload.instructions }),
+        });
+      },
+    });
     const conversation = (name: string): Conversation<Models> => {
       const key = sandboxKey(store.id, name);
       const load = store
@@ -332,6 +379,24 @@ export const Harness = <
                   )
                 : Effect.succeed(summary),
             ),
+          ),
+        submit: (text, prompt) =>
+          submitted
+            .submit(`${name}:${prompt.requestId}`, {
+              conversation: name,
+              text,
+              ...(prompt.model === undefined ? {} : { model: prompt.model.modelName }),
+              ...(prompt.instructions === undefined ? {} : { instructions: prompt.instructions }),
+            })
+            .pipe(Effect.mapError(failed)),
+        submitted: (requestId) =>
+          submitted.status(`${name}:${requestId}`).pipe(
+            Effect.map((status) =>
+              status === undefined || status.status !== "done"
+                ? status
+                : { status: "done" as const, summary: status.value },
+            ),
+            Effect.mapError(failed),
           ),
         history: Effect.map(load, (saved) => saved?.history ?? Prompt.empty),
         reset: store.delete(name),
