@@ -62,7 +62,8 @@ describe.concurrent(
                 Effect.repeat({
                   schedule: Schedule.spaced("1 second"),
                   times: 10,
-                  until: ({ version }) =>
+                  until: ({ deployment, version }) =>
+                    deployment?.versions[0]?.versionId === worker.versionId &&
                     version.annotations?.workersTag === tag &&
                     version.annotations?.workersMessage === message,
                 }),
@@ -75,6 +76,12 @@ describe.concurrent(
               expect(worker.versionId).toEqual(deployment?.versions[0].versionId);
               expect(version.annotations?.workersTag).toEqual(tag);
               expect(version.annotations?.workersMessage).toEqual(message);
+              const uploaded = yield* workers.getScriptVersion({
+                accountId,
+                scriptName: worker.workerName,
+                versionId: worker.versionId!,
+              });
+              expect(uploaded.id).toEqual(worker.versionId);
             }
 
             yield* stack.destroy();
