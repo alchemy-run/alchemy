@@ -1,0 +1,77 @@
+---
+title: OpenCode
+description: Run the OpenCode coding agent with Alchemy. A sandbox for each session, your models and tools answered from your own runtime, and no API key in the sandbox.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+[OpenCode](https://opencode.ai) is an open-source coding agent that runs as a server: it keeps sessions, runs its own tools on the machine it is on, and asks a model provider for each answer. Alchemy runs it in a sandbox for each session, and answers its model requests and its calls to your tools from your Durable Object. The sandbox holds no API key. Models, tools, skills and sandboxes are the ones you declare with [`@alchemy.run/ai`](/ai).
+
+**New to OpenCode?** Start with [What is OpenCode?](/opencode/what-is-opencode).
+
+## A quick example
+
+A model, and where sandboxes run:
+
+```typescript title="src/agent.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as AIBoat from "@alchemy.run/ai/Boat";
+import * as Boat from "@alchemy.run/boat";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AICloudflare.Model(Fast, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+});
+
+export const Sandbox = AIBoat.Sandboxes(
+  Boat.Snapshot("Base", { run: ["npm install --global pnpm"] }),
+);
+```
+
+A Durable Object yields the harness and prompts a session by name:
+
+```typescript title="src/Coder.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as OpenCode from "@alchemy.run/opencode";
+import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive, Sandbox } from "./agent.ts";
+
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  Sandbox,
+  OpenCode.CodingTools,
+  OpenCodeCloudflare.DurableObjectInstance,
+);
+
+export default class Coder extends Cloudflare.DurableObject<Coder>()(
+  "Coder",
+  Effect.gen(function* () {
+    const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools] });
+
+    return Effect.gen(function* () {
+      return {
+        prompt: Effect.fn(function* (name: string, text: string, requestId: string) {
+          const reply = yield* harness.session(name).prompt(text, { requestId });
+          return reply.text;
+        }),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+## Where to start
+
+**Want to build?** Follow [Setup](/opencode/setup), then the [tutorial](/opencode/tutorial/part-1): a bot that answers issues on a GitHub repository.
+
+**Looking for something specific?** Every section of these docs is listed below. Models, tools, skills, MCP servers and sandboxes are shared by every harness, and are covered in the [AI docs](/ai).
+
+## The docs
+
+<HubMap />

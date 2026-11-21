@@ -12,7 +12,7 @@ import { createServer } from "node:http";
 import { networkInterfaces } from "node:os";
 import { NodeClusterHttp, NodeHttpServer, NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
-import { reifyBoundConfigProvider } from "alchemy/Runtime";
+import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
   entrypointLayer,
   entrypointTag,
@@ -27,7 +27,6 @@ import {
   RunnerAddress,
   Singleton,
 } from "effect/cluster";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -218,15 +217,7 @@ export const bootstrap = (
     NodeServices.layer,
     FetchHttpClient.layer,
     Logger.layer([Logger.consolePretty()]),
-  ).pipe(
-    Layer.provideMerge(stackFromEnv),
-    Layer.provideMerge(
-      Layer.succeed(
-        ConfigProvider.ConfigProvider,
-        reifyBoundConfigProvider(ConfigProvider.fromEnv(), process.env),
-      ),
-    ),
-  );
+  ).pipe(Layer.provideMerge(stackFromEnv), Layer.provideMerge(RuntimeConfigProviderLive));
 
   const program = Effect.gen(function* () {
     type Hosted = HostedEntity | HostedWorkflow | HostedSingleton | HostedCron;

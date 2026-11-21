@@ -132,14 +132,21 @@ ENTRYPOINT ["node", "/app/runner.mjs"]
 
 /**
  * A pool Layer: `network` narrows the database's network to the one this
- * host can join; `gateway` names where callers reach the pool;
- * `nodes` declares the service that runs them.
+ * host can join; `ownNetwork` is the network runners join when the
+ * database is on none (a public URL, `Cluster.Database.fromUrl`);
+ * `gateway` names where callers reach the pool; `nodes` declares the
+ * service that runs them.
  */
 export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGateway>(options: {
   readonly label: string;
   readonly id: string;
   readonly settings: PoolSettings;
   readonly network: (database: DatabaseShape) => Network | undefined;
+  /**
+   * The network runners join when the database is on none: one the user
+   * passed, or one the pool declares. Without it, such a database is refused.
+   */
+  readonly ownNetwork?: Effect.Effect<Network | undefined, never, Req | Stack>;
   readonly expected: string;
   /** The longest runner name the host accepts. @default 63 */
   readonly nameLength?: number;
@@ -165,11 +172,19 @@ export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGa
           deployExternal: () => Effect.void,
         } satisfies PoolHost["Service"];
       }
-      const network = options.network(database);
+      const network =
+        database.network === undefined
+          ? options.ownNetwork === undefined
+            ? undefined
+            : yield* options.ownNetwork
+          : options.network(database);
       if (network === undefined) {
         return yield* Effect.die(
           new DatabaseNetworkMismatch({
-            message: `${options.label} runs runners on ${options.expected}, and its database is not on one.`,
+            message:
+              database.network === undefined
+                ? `${options.label} runs runners on ${options.expected}, and its database is on no network: pass the pool a \`network\`.`
+                : `${options.label} runs runners on ${options.expected}, and its database is on a ${database.network.kind} network.`,
           }),
         );
       }

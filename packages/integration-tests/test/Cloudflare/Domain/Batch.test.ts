@@ -11,6 +11,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
 import makeStack from "./fixtures/batches-stack.ts";
+import type { Answer, Reset } from "./fixtures/batches.ts";
 
 /** A route answered with something other than 200. */
 class BatchRequestFailed extends Data.TaggedError("BatchRequestFailed")<{
@@ -57,8 +58,17 @@ describe.concurrent.each([
     const base = url.replace(/\/+$/, "");
     const group = yield* Effect.sync(() => crypto.randomUUID());
     return {
-      ping: (id: string, slow = false) =>
-        call(HttpClientRequest.post(`${base}/ping/${group}/${id}${slow ? "?slow=true" : ""}`)),
+      ping: (
+        id: string,
+        options: { readonly slow?: boolean; readonly reset?: Reset; readonly answer?: Answer } = {},
+      ) => {
+        const query = new URLSearchParams({
+          slow: String(options.slow ?? false),
+          reset: options.reset ?? "none",
+          answer: options.answer ?? "none",
+        });
+        return call(HttpClientRequest.post(`${base}/ping/${group}/${id}?${query}`));
+      },
       pongs: call(HttpClientRequest.get(`${base}/pongs/${group}`)).pipe(
         Effect.map((body) => JSON.parse(body) as string[]),
       ),
@@ -106,7 +116,7 @@ describe.concurrent.each([
       const started = yield* Clock.currentTimeMillis;
       // The slow ping's batch waits 5 seconds, then the drain's own callback
       // runs it for 12.
-      yield* ping("slow", true);
+      yield* ping("slow", { slow: true });
       // Halfway through that run, a second ping arrives. The drain finds it
       // when the slow run ends, younger than the batch wait, and waits for it
       // from inside its own callback.
@@ -125,5 +135,47 @@ describe.concurrent.each([
       expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(32_000);
     }),
     { tags, timeout: 150_000 },
+  );
+
+  /** The pongs of the answers the policy sent to `id`: one per run of its reaction. */
+  const answersTo = (entries: ReadonlyArray<string>, id: string) =>
+    entries.filter((entry) => entry.startsWith(`${id}-answer-`));
+
+  test(
+    "a projection whose object resets during a batch runs the batch once the lease ends",
+    Effect.gen(function* () {
+      const { ping, pongs } = yield* group;
+      // The batch runs after its 5-second wait; the projection's object resets
+      // in it, holding the batch's lease. The next object runs it when the
+      // lease ends, 60 seconds after it was taken.
+      yield* ping("reset-projection", { reset: "projection" });
+      const answered = yield* pongs.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (entries) => entries.length > 0,
+          times: 70,
+        }),
+      );
+      expect(answered).toEqual(["reset-projection"]);
+    }),
+    { tags, timeout: 180_000 },
+  );
+
+  test(
+    "a policy whose object resets during a reaction runs it once the lease ends",
+    Effect.gen(function* () {
+      const { ping, pongs } = yield* group;
+      yield* ping("reset-policy", { reset: "policy", answer: "now" });
+      const answered = yield* pongs.pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (entries) => answersTo(entries, "reset-policy").length > 0,
+          times: 70,
+        }),
+      );
+      expect(answersTo(answered, "reset-policy")).toHaveLength(1);
+      expect(answered).toContain("reset-policy");
+    }),
+    { tags, timeout: 180_000 },
   );
 });

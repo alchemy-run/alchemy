@@ -4,8 +4,8 @@ import * as Effect from "effect/Effect";
 import {
   isImageProgram,
   makePoolLayer,
-  nodeEnvironment,
-  NODE_DOCKERFILE,
+  secretNodeEnvironment,
+  nodeDockerfile,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -94,14 +94,20 @@ export const DeploymentPool = (id: string, options: DeploymentPoolOptions = {}) 
         yield* Kubernetes.Deployment(`${id}Nodes`, {
           ...(isImageProgram(nodes.program)
             ? nodes.program
-            : { ...nodes.program, dockerfile: { content: NODE_DOCKERFILE } }),
+            : {
+                ...nodes.program,
+                dockerfile: {
+                  content: nodeDockerfile(options.rivetkitVersion ?? nodes.rivetkitVersion),
+                },
+              }),
           cluster,
           namespace: options.namespace ?? network.namespace ?? "default",
           replicas: options.replicas ?? 1,
           serviceType: "ClusterIP",
           ...(options.resources === undefined ? {} : { resources: options.resources }),
           ...(options.architecture === undefined ? {} : { architecture: options.architecture }),
-          env: nodeEnvironment(nodes, endpoint),
+          // The token stays Redacted: the Deployment keeps it in its Secret.
+          env: secretNodeEnvironment(nodes, endpoint),
         });
       }),
   });

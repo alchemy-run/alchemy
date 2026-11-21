@@ -254,12 +254,10 @@ export const CollectionsDataStoresSiteSearchEngineTargetSiteProvider = () =>
       if (current === undefined) {
         const created = yield* discoveryengine
           .createProjectsLocationsCollectionsDataStoresSiteSearchEngineTargetSites({
+            providedUriPattern,
+            type,
+            exactMatch: exactMatch ? true : undefined,
             parent,
-            body: {
-              providedUriPattern,
-              type,
-              exactMatch: exactMatch ? true : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -281,15 +279,7 @@ export const CollectionsDataStoresSiteSearchEngineTargetSiteProvider = () =>
       if (typeChanged || patternChanged) {
         const patched =
           yield* discoveryengine.patchProjectsLocationsCollectionsDataStoresSiteSearchEngineTargetSites(
-            {
-              name: resource,
-              body: {
-                name: resource,
-                providedUriPattern,
-                type,
-                exactMatch: current.exactMatch,
-              },
-            },
+            { providedUriPattern, type, exactMatch: current.exactMatch, name: resource },
           );
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(resource);

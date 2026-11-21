@@ -453,19 +453,17 @@ export const VpcFlowLogsConfigProvider = () =>
       if (current === undefined) {
         const created = yield* networkmanagement
           .createProjectsLocationsVpcFlowLogsConfigs({
+            description: news.description,
+            labels: desiredLabels,
+            state: createState,
+            aggregationInterval,
+            flowSampling,
+            metadata,
+            metadataFields: metadataFields.length > 0 ? metadataFields : undefined,
+            filterExpr,
+            ...target,
             parent: parentOf(env.project, location),
             vpcFlowLogsConfigId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              state: createState,
-              aggregationInterval,
-              flowSampling,
-              metadata,
-              metadataFields: metadataFields.length > 0 ? metadataFields : undefined,
-              filterExpr,
-              ...target,
-            },
           })
           .pipe(
             Effect.retry({
@@ -506,19 +504,16 @@ export const VpcFlowLogsConfigProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkmanagement.patchProjectsLocationsVpcFlowLogsConfigs({
+          labels: desiredLabels,
+          description: news.description,
+          state,
+          aggregationInterval,
+          flowSampling,
+          metadata,
+          metadataFields,
+          filterExpr,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            state,
-            aggregationInterval,
-            flowSampling,
-            metadata,
-            metadataFields,
-            filterExpr,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

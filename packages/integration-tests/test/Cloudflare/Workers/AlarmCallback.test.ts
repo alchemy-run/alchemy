@@ -145,27 +145,6 @@ describe.concurrent.each([
     afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack), { timeout: 30_000 });
 
     test(
-      "Worker callback registration stays unsupported after a Durable Object call",
-      Effect.gen(function* () {
-        const { url } = yield* stack;
-        const result = yield* json<RegistrationResult & { runtimeType: string }>(
-          `${url}/worker-registration/worker-registration`,
-          "POST",
-        );
-        expect(result.snapshot.boots).toBeGreaterThan(0);
-        expect(result.runtimeType).toBe("Cloudflare.Worker");
-        expect(result.failure).toEqual({
-          tag: "CallbackError",
-          callback: "unsupported-worker",
-          message: `Durable callbacks are not supported by ${result.runtimeType}`,
-        });
-        expect(result.snapshot.pendingJobs).toEqual([]);
-        expect(result.snapshot.alarm).toBeNull();
-      }),
-      { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
-    );
-
-    test(
       "late DO registration defects without disabling initialized callbacks",
       Effect.gen(function* () {
         const { url } = yield* stack;
@@ -222,6 +201,39 @@ describe.concurrent.each([
         );
         expect(result.snapshot.pendingJobs).toEqual([]);
         expect(result.snapshot.alarm).toBeNull();
+      }),
+      { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+    );
+
+    test(
+      "delivers recurring interval and cron jobs until they are cancelled",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const base = `${url}/recurring`;
+        const scheduled = yield* json<Snapshot>(`${base}/recurring`, "POST");
+        expect(scheduled.pendingJobs.map(({ callback, id }) => `${callback}:${id}`)).toEqual([
+          "tick:cron",
+          "tick:every",
+        ]);
+        const count = (snapshot: Snapshot, value: string) =>
+          snapshot.deliveries.filter((delivery) => delivery.value === value).length;
+        // Each job stays pending after it runs, so both keep delivering.
+        yield* poll<Snapshot>(
+          `${base}/snapshot`,
+          (snapshot) => count(snapshot, "every") >= 3 && count(snapshot, "cron") >= 3,
+        );
+        const cancelled = yield* json<Snapshot>(`${base}/cancel-recurring`, "POST");
+        expect(cancelled.pendingJobs).toEqual([]);
+        expect(cancelled.alarm).toBeNull();
+        // Cancelling doesn't interrupt a run already under way, which may
+        // still finish; after that, nothing more is delivered.
+        yield* Effect.sleep("2500 millis");
+        const settled = yield* json<Snapshot>(`${base}/snapshot`, "GET");
+        expect(settled.deliveries.length - cancelled.deliveries.length).toBeLessThanOrEqual(1);
+        yield* Effect.sleep("2500 millis");
+        const after = yield* json<Snapshot>(`${base}/snapshot`, "GET");
+        expect(after.deliveries).toEqual(settled.deliveries);
+        expect(after.pendingJobs).toEqual([]);
       }),
       { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
     );

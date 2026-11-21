@@ -266,15 +266,13 @@ export const EvaluationItemProvider = () =>
       if (current === undefined) {
         current = yield* aiplatform
           .createProjectsLocationsEvaluationItems({
+            displayName,
+            evaluationItemType: news.evaluationItemType,
+            gcsUri: news.gcsUri,
+            evaluationRequest: news.evaluationRequest,
+            metadata: news.metadata,
+            labels: desiredLabels,
             parent: `projects/${env.project}/locations/${location}`,
-            body: {
-              displayName,
-              evaluationItemType: news.evaluationItemType,
-              gcsUri: news.gcsUri,
-              evaluationRequest: news.evaluationRequest,
-              metadata: news.metadata,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, location)));
       }

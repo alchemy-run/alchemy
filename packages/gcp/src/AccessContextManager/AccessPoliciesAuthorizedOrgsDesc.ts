@@ -292,14 +292,12 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
       if (current === undefined) {
         const created = yield* acm
           .createAccessPoliciesAuthorizedOrgsDescs({
+            name,
+            authorizationDirection: news.authorizationDirection,
+            assetType: news.assetType,
+            authorizationType: news.authorizationType,
+            orgs: desiredOrgs.length > 0 ? desiredOrgs : undefined,
             parent: policy,
-            body: {
-              name,
-              authorizationDirection: news.authorizationDirection,
-              assetType: news.assetType,
-              authorizationType: news.authorizationType,
-              orgs: desiredOrgs.length > 0 ? desiredOrgs : undefined,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -321,12 +319,9 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
 
       if (!sameStringList(current.orgs, desiredOrgs)) {
         const operation = yield* acm.patchAccessPoliciesAuthorizedOrgsDescs({
+          orgs: desiredOrgs,
           name: current.name ?? name,
           updateMask: "orgs",
-          body: {
-            name: current.name ?? name,
-            orgs: desiredOrgs,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

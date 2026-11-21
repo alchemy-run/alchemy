@@ -64,14 +64,12 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertRegionCompositeHealthChecks({
+          name: "alchemy-chc-probe",
+          description: "alchemy entitlement probe",
+          healthDestination: `projects/${project}/regions/${region}/forwardingRules/does-not-exist`,
+          healthSources: [`projects/${project}/regions/${region}/healthSources/does-not-exist`],
           project,
           region,
-          body: {
-            name: "alchemy-chc-probe",
-            description: "alchemy entitlement probe",
-            healthDestination: `projects/${project}/regions/${region}/forwardingRules/does-not-exist`,
-            healthSources: [`projects/${project}/regions/${region}/healthSources/does-not-exist`],
-          },
         }),
       );
       expect(error._tag).toEqual("NotFound");

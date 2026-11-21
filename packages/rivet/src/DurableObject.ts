@@ -13,7 +13,7 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import { makeFetchRpcStub, type RpcCallError } from "alchemy/Rpc";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
-import { RuntimeContext, sanitizeKey } from "alchemy/RuntimeContext";
+import { packEnvValueKeepRedacted, RuntimeContext, sanitizeKey } from "alchemy/RuntimeContext";
 import type { Self } from "alchemy/Self";
 import type * as ConfigError from "effect/Config";
 import * as Config from "effect/Config";
@@ -92,8 +92,16 @@ export type DurableObjectStub<Shape> = Shape & {
 export interface DurableObjectNamespace<Shape> {
   /** The actor name: the class's logical id. */
   readonly name: string;
-  /** The instance called `name`, created on first use. */
+  /** The instance called `name`, created on first use: its key is the one part `name`. */
   getByName(name: string): DurableObjectStub<Shape>;
+  /**
+   * The instance whose key is `key`, created on first use. Each element is
+   * one part of the key RivetKit's `getOrCreate` takes, so an actor a
+   * RivetKit program created under `["a", "b"]` is reached with
+   * `getByKey(["a", "b"])`, and the instance reads the same parts from
+   * `DurableObjectState.key`.
+   */
+  getByKey(key: ReadonlyArray<string>): DurableObjectStub<Shape>;
 }
 
 export interface DurableObject extends Resource<
@@ -108,6 +116,19 @@ export interface DurableObject extends Resource<
 export interface DurableObjectShape {
   fetch?: HttpEffect<DurableObjectState | RuntimeContext>;
   alarm?: () => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /**
+   * Runs when the instance is about to sleep, within RivetKit's sleep grace
+   * period: finish or hand off work in flight. It does not run for an
+   * instance that took no call since it woke.
+   */
+  onSleep?: () => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
+  /**
+   * Runs when the instance is destroyed, after `DurableObjectState.destroy`
+   * or a delete from the control plane, so it can release what it owns
+   * outside its storage. It does not run for an instance that took no call
+   * since it woke.
+   */
+  onDestroy?: () => Effect.Effect<void, never, RuntimeContext | DurableObjectState | Scope>;
   /** A message on a WebSocket this instance accepted with `Rivet.upgrade()`. */
   webSocketMessage?: (
     socket: WebSocket,
@@ -274,6 +295,14 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
   const ctx: DurableObjectRuntimeContext = {
     ...base,
     Type: DurableObjectTypeId,
+    // A Redacted the class reads stays Redacted in the pool's env, so a host
+    // that keeps secrets apart (a Kubernetes Secret, Secret Manager) can.
+    set: (bindingId: string, output: Output.Output) =>
+      Effect.sync(() => {
+        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        base.env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
+        return key;
+      }),
     // The class phase returns the instance constructor rather than a
     // handler shape: always hand it to `serve`.
     alwaysServe: true,
@@ -562,9 +591,8 @@ const namespaceOf = (name: string, declaration: Effect.Effect<DurableObject, nev
 export const makeNamespace = (
   name: string,
   target: Omit<GatewayTarget, "name" | "key"> | undefined,
-): DurableObjectNamespace<any> => ({
-  name,
-  getByName: (key: string) => {
+): DurableObjectNamespace<any> => {
+  const getByKey = (key: ReadonlyArray<string>) => {
     if (target === undefined) {
       const outside = Effect.die(
         new DurableObjectCalledOutsideRuntime({
@@ -585,8 +613,19 @@ export const makeNamespace = (
         fetch: (request: HttpServerRequest.HttpServerRequest) => fetcher.fetch(request),
       },
     }) as DurableObjectStub<any>;
-  },
-});
+  };
+  return { name, getByName: (instance: string) => getByKey([instance]), getByKey };
+};
+
+/**
+ * The namespace of the Durable Object class named `name`, reached through the
+ * gateway at `target`: for callers Alchemy didn't build, which have no
+ * bindings to read it from.
+ */
+export const namespaceAt = <Shape>(
+  name: string,
+  target: Omit<GatewayTarget, "name" | "key">,
+): DurableObjectNamespace<Shape> => makeNamespace(name, target);
 
 /** A namespace yielded outside any runtime was called. */
 export class DurableObjectCalledOutsideRuntime extends Data.TaggedError(

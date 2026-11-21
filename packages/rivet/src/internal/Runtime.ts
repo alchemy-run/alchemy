@@ -13,6 +13,7 @@ import {
 } from "alchemy/Workers/DurableObjectBridge";
 import { EventLifetime } from "alchemy/Workers/EventLifetime";
 import type { WorkerBuild } from "alchemy/Workers/Worker";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -24,6 +25,10 @@ import * as Stream from "effect/Stream";
 import type { HostedDurableObject } from "../DurableObject.ts";
 import {
   ALARM_ACTION,
+  CallStorage,
+  CALLBACKS_ACTION,
+  type CallbackWakeHandler,
+  clearCallbackWake,
   DurableObjectState,
   makeDurableObjectState,
   migrateStorage,
@@ -53,24 +58,54 @@ interface ActivationVars {
   instance: DurableObjectInstance | undefined;
   activation: Activation | undefined;
   sockets: SocketRegistry | undefined;
+  /** What runs when the instance's callbacks are due. */
+  callbacks: CallbackWakeHandler;
 }
 
 type ActivationContext = ActorContextLike & {
   readonly vars: ActivationVars;
+  /** Aborted once the actor starts to stop: it's going to sleep, being destroyed, or its node is shutting down. */
+  readonly abortSignal: AbortSignal;
   /** The request a WebSocket was opened with. */
   readonly request?: Request | undefined;
 };
 
-/** Read a RivetKit setting the pool put in the node's environment. */
-const env = (name: string): string | undefined => process.env[name];
+/**
+ * Where a node connects when its process wasn't given that in the
+ * environment, and how its registry runs.
+ */
+export interface NodeConnectionSettings {
+  readonly endpoint: string;
+  readonly token: string;
+  readonly namespace: string;
+  readonly pool: string;
+  /** Further RivetKit registry settings, such as message size limits. */
+  readonly registry?: Readonly<Record<string, unknown>>;
+  /** RivetKit actor options by actor name. */
+  readonly options?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+  /** Registry shutdown settings; signal handling stays with the process. */
+  readonly shutdown?: { readonly gracePeriodMs?: number };
+  /** Runs once the node is registered with the control plane. */
+  readonly connected?: Effect.Effect<void>;
+}
 
 const deadlock = (message: string) => new Response(message, { status: DEADLOCK_STATUS });
+
+/**
+ * A call whose storage failed while the actor stopped: RivetKit closed it
+ * under the call. What it returned can't be trusted (a Domain object
+ * reports the failure as data), so answer it as a call that never arrived,
+ * which the caller sends again to the next activation.
+ */
+const stopped = () =>
+  new Response("This Durable Object stopped while it served the call.", { status: 503 });
 
 /** Serve one actor request through the instance's `fetch` (and fetch-RPC). */
 const handleRequest = (
   instance: DurableObjectInstance,
   activation: Activation,
   request: Request,
+  stopping: AbortSignal,
 ) => {
   const awaiting = receive(request.headers.get(AWAITING_HEADER));
   // The instance's construction waits on this call, and the call can't
@@ -82,6 +117,8 @@ const handleRequest = (
       ),
     );
   }
+  // Marked if one of this call's storage operations fails.
+  const storage = { failed: false };
   return instance.execute(
     (shape) =>
       Effect.gen(function* () {
@@ -110,15 +147,23 @@ const handleRequest = (
           );
         }
         return HttpServerResponse.toWeb(response, { context });
-      }).pipe(Effect.provideService(Awaiting, awaiting)),
+      }).pipe(
+        Effect.provideContext(
+          Context.make(Awaiting, awaiting).pipe(Context.add(CallStorage, storage)),
+        ),
+      ),
     async (exit) =>
-      Exit.isSuccess(exit)
-        ? (exit.value as Response)
-        : isDeadlock(exit.cause)
-          ? deadlock(
-              "A transaction on this Durable Object waits on this call, which needs its storage.",
-            )
-          : new Response("Internal Server Error", { status: 500 }),
+      // Checked once the call ends: a write can fail an instant before
+      // RivetKit marks the actor as stopping.
+      storage.failed && stopping.aborted
+        ? stopped()
+        : Exit.isSuccess(exit)
+          ? (exit.value as Response)
+          : isDeadlock(exit.cause)
+            ? deadlock(
+                "A transaction on this Durable Object waits on this call, which needs its storage.",
+              )
+            : new Response("Internal Server Error", { status: 500 }),
   );
 };
 
@@ -214,18 +259,22 @@ const handleWebSocket = async (
 };
 
 /**
- * Host every Durable Object class as a RivetKit actor and connect this node
- * to the control plane. Runs for the life of the node.
+ * Each Durable Object class as the RivetKit actor that hosts it, by actor
+ * name, for a registry to run. `optionsOf` gives a class its RivetKit actor
+ * options.
  */
-export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObject>) =>
+const durableObjectActors = (
+  durableObjects: ReadonlyArray<HostedDurableObject>,
+  optionsOf: (name: string) => Readonly<Record<string, unknown>> | undefined,
+) =>
   Effect.gen(function* () {
-    if (durableObjects.length === 0) return yield* Effect.never;
-    const { actor, setup } = yield* Effect.promise(() => import("rivetkit"));
+    const { actor } = yield* Effect.promise(() => import("rivetkit"));
     const { db } = yield* Effect.promise(() => import("rivetkit/db"));
 
     const use: Record<string, unknown> = {};
     for (const hosted of durableObjects) {
       const name = hosted.name;
+      const options = optionsOf(name);
       const build: WorkerBuild<DurableObjectExport, unknown> = {
         // The services the class phase ran with.
         context: hosted.context as Context.Context<any>,
@@ -256,7 +305,7 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
             // instance from the bridge.
             services: Context.make(
               DurableObjectState,
-              makeDurableObjectState(c, activation, sockets),
+              makeDurableObjectState(c, activation, sockets, c.vars.callbacks),
             ).pipe(
               // Construction runs under the activation's construction
               // section; each call replaces it with what it was sent.
@@ -286,19 +335,46 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
               return fn(shape);
             }, onExit)
             .finally(constructed);
-        return { instance: { ...instance, execute }, activation, sockets: c.vars.sockets! };
+        // `onSleep` and `onDestroy` are RivetKit's hooks, not methods a
+        // caller can run over fetch-RPC.
+        const fetch: DurableObjectInstance["fetch"] = (shape, request) => {
+          const { onSleep: _onSleep, onDestroy: _onDestroy, ...methods } = shape;
+          return instance.fetch(methods, request);
+        };
+        return { instance: { ...instance, execute, fetch }, activation, sockets: c.vars.sockets! };
       };
 
+      // A hook runs on the instance this activation built; an activation that
+      // took no call has nothing to wind down.
+      const runLifecycle = (c: ActivationContext, hook: "onSleep" | "onDestroy") =>
+        c.vars.instance === undefined
+          ? Promise.resolve()
+          : instanceOf(c).instance.execute((shape) => {
+              const handler = shape[hook];
+              return (
+                typeof handler === "function" ? Effect.suspend(() => handler()) : Effect.void
+              ).pipe(
+                Effect.provideService(Awaiting, receive(undefined)),
+                Effect.catchCause((cause) =>
+                  Effect.logError(`Durable Object ${hook} could not run`, cause),
+                ),
+              );
+            });
+
       use[name] = actor({
+        ...(options === undefined ? {} : { options }),
         db: db({ onMigrate: (database) => migrateStorage(database) }),
         createVars: (): ActivationVars => ({
           instance: undefined,
           activation: undefined,
           sockets: undefined,
+          callbacks: { fire: undefined },
         }),
+        onSleep: (c: ActivationContext) => runLifecycle(c, "onSleep"),
+        onDestroy: (c: ActivationContext) => runLifecycle(c, "onDestroy"),
         onRequest: (c: ActivationContext, request: Request) => {
           const { instance, activation } = instanceOf(c);
-          return handleRequest(instance, activation, request);
+          return handleRequest(instance, activation, request, c.abortSignal);
         },
         // A WebSocket through the gateway: the instance's `fetch` accepts it
         // with `Rivet.upgrade()`.
@@ -307,14 +383,36 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
           return handleWebSocket(instance, activation, sockets, c.request, ws);
         },
         actions: {
+          // Due callbacks run as an alarm does, kept awake until they're done.
+          // Building the instance registers them, so a wake that started the
+          // actor finds them.
+          [CALLBACKS_ACTION]: (c: ActivationContext) => {
+            const { instance } = instanceOf(c);
+            void c.keepAwake(
+              instance.execute(() =>
+                Effect.gen(function* () {
+                  yield* clearCallbackWake(c);
+                  const fire = c.vars.callbacks.fire;
+                  if (fire !== undefined) yield* fire;
+                }).pipe(
+                  Effect.provideService(Awaiting, receive(undefined)),
+                  Effect.catchCause((cause) =>
+                    Effect.logError("Durable Object callbacks could not run", cause),
+                  ),
+                ),
+              ),
+            );
+          },
           // RivetKit times an action out after 60 seconds, and an alarm can
           // wait out a transaction before its handler runs as long as it
           // takes: the action only starts it, kept awake until it's done.
           [ALARM_ACTION]: (c: ActivationContext, token: unknown) => {
+            const { instance, activation } = instanceOf(c);
             void c.keepAwake(
-              instanceOf(c).instance.execute((shape) =>
+              instance.execute((shape) =>
                 runFiredAlarm(
                   c,
+                  activation,
                   token,
                   typeof shape.alarm === "function"
                     ? Effect.suspend(() => (shape.alarm as () => Effect.Effect<void>)())
@@ -331,17 +429,48 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
         },
       } as never);
     }
+    return use;
+  });
 
+/**
+ * Host every Durable Object class as a RivetKit actor and connect this node
+ * to the control plane. Runs for the life of the node. A node Alchemy built
+ * reads its connection from the environment its pool set; any other process
+ * passes `connection`.
+ */
+export const runDurableObjects = (
+  durableObjects: ReadonlyArray<HostedDurableObject>,
+  connection?: NodeConnectionSettings,
+) =>
+  Effect.gen(function* () {
+    if (durableObjects.length === 0) return yield* Effect.never;
+    const { setup } = yield* Effect.promise(() => import("rivetkit"));
+    const use = yield* durableObjectActors(durableObjects, (name) => connection?.options?.[name]);
+
+    // A node Alchemy built has its connection in the environment its pool set.
+    const fromEnvironment = yield* Config.all({
+      endpoint: Config.option(Config.String("RIVET_ENDPOINT")),
+      token: Config.option(Config.String("RIVET_TOKEN")),
+      namespace: Config.option(Config.String("RIVET_NAMESPACE")),
+      pool: Config.option(Config.String("RIVET_POOL")),
+    }).pipe(Effect.orDie);
     const registry = setup({
+      ...connection?.registry,
       use,
-      endpoint: env("RIVET_ENDPOINT"),
-      token: env("RIVET_TOKEN"),
-      namespace: env("RIVET_NAMESPACE"),
-      envoy: { poolName: env("RIVET_POOL") },
+      endpoint: connection?.endpoint ?? Option.getOrUndefined(fromEnvironment.endpoint),
+      token: connection?.token ?? Option.getOrUndefined(fromEnvironment.token),
+      namespace: connection?.namespace ?? Option.getOrUndefined(fromEnvironment.namespace),
+      node: { poolName: connection?.pool ?? Option.getOrUndefined(fromEnvironment.pool) },
+      // A process given its connection owns its signals, and stops the node
+      // by interrupting it.
+      ...(connection === undefined
+        ? {}
+        : { shutdown: { ...connection.shutdown, disableSignalHandlers: true } }),
       noWelcome: true,
     } as never) as { startAndWait(): Promise<void>; shutdown(): Promise<void> };
 
     yield* Effect.promise(() => registry.startAndWait());
+    if (connection?.connected !== undefined) yield* connection.connected;
     yield* Effect.logInfo(
       `Rivet node connected: ${durableObjects.map((hosted) => hosted.name).join(", ")}`,
     );

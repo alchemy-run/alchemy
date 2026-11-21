@@ -18,7 +18,8 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type { AccountID } from "../Environment.ts";
+import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { managedPolicyArn, type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { eksConnectionOf, makeEksTransport } from "./KubernetesAdapter.ts";
@@ -26,6 +27,16 @@ import { eksConnectionOf, makeEksTransport } from "./KubernetesAdapter.ts";
 export class EKSClusterUnexpectedResponse extends Data.TaggedError("EKSClusterUnexpectedResponse")<{
   readonly message: string;
   readonly cause?: unknown;
+}> {}
+
+/**
+ * Deletion was refused because the cluster has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy
+ * (or turn it off in the console) before deleting it.
+ */
+export class EKSClusterDeletionProtected extends Data.TaggedError("EKSClusterDeletionProtected")<{
+  readonly clusterName: string;
+  readonly message: string;
 }> {}
 
 export class EKSClusterInvalidProps extends Data.TaggedError("EKSClusterInvalidProps")<{
@@ -44,7 +55,7 @@ export class EKSClusterOperationFailed extends Data.TaggedError("EKSClusterOpera
 }> {}
 
 export type ClusterName = string;
-export type ClusterArn = `arn:aws:eks:${RegionID}:${AccountID}:cluster/${ClusterName}`;
+export type ClusterArn = `arn:${Partition}:eks:${RegionID}:${AccountID}:cluster/${ClusterName}`;
 
 export interface ClusterProps {
   /**
@@ -316,17 +327,17 @@ const getDesiredKubernetesObjects = (
     )
     .map((binding) => binding.data.object);
 
-const autoClusterManagedPolicyArns = [
-  "arn:aws:iam::aws:policy/AmazonEKSClusterPolicy",
-  "arn:aws:iam::aws:policy/AmazonEKSComputePolicy",
-  "arn:aws:iam::aws:policy/AmazonEKSBlockStoragePolicy",
-  "arn:aws:iam::aws:policy/AmazonEKSLoadBalancingPolicy",
-  "arn:aws:iam::aws:policy/AmazonEKSNetworkingPolicy",
+const autoClusterManagedPolicies = [
+  "AmazonEKSClusterPolicy",
+  "AmazonEKSComputePolicy",
+  "AmazonEKSBlockStoragePolicy",
+  "AmazonEKSLoadBalancingPolicy",
+  "AmazonEKSNetworkingPolicy",
 ];
 
-const autoNodeManagedPolicyArns = [
-  "arn:aws:iam::aws:policy/AmazonEKSWorkerNodeMinimalPolicy",
-  "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly",
+const autoNodeManagedPolicies = [
+  "AmazonEKSWorkerNodeMinimalPolicy",
+  "AmazonEC2ContainerRegistryPullOnly",
 ];
 
 /**
@@ -902,6 +913,7 @@ export const ClusterProvider = () =>
           // cluster. Physical names are cached in the output so re-runs and
           // updates converge on the same roles.
           const auto = news.compute === "auto";
+          const { partition } = yield* AWSEnvironment.current;
           let managedClusterRoleName = output?.managedClusterRoleName;
           let managedNodeRoleName = output?.managedNodeRoleName;
           let roleArn = news.roleArn;
@@ -915,7 +927,9 @@ export const ClusterProvider = () =>
               roleName: managedClusterRoleName,
               service: "eks.amazonaws.com",
               actions: ["sts:AssumeRole", "sts:TagSession"],
-              managedPolicyArns: autoClusterManagedPolicyArns,
+              managedPolicyArns: autoClusterManagedPolicies.map((name) =>
+                managedPolicyArn(partition, name),
+              ),
               userTags: news.tags,
             });
           } else if (roleArn) {
@@ -932,7 +946,9 @@ export const ClusterProvider = () =>
               roleName: managedNodeRoleName,
               service: "ec2.amazonaws.com",
               actions: ["sts:AssumeRole"],
-              managedPolicyArns: autoNodeManagedPolicyArns,
+              managedPolicyArns: autoNodeManagedPolicies.map((name) =>
+                managedPolicyArn(partition, name),
+              ),
               userTags: news.tags,
             });
           } else if (nodeRoleArn) {
@@ -1080,8 +1096,21 @@ export const ClusterProvider = () =>
             kubernetesObjects,
           };
         }),
-        delete: Effect.fn(function* ({ output }) {
+        delete: Effect.fn(function* ({ output, force }) {
           const random = yield* SecureRandom.SecureRandom;
+          // Deletion protection, set by this stack or outside it, refuses the
+          // delete — before any Kubernetes object is removed. Only an
+          // account-wide nuke (`force`) lifts it.
+          const observedProtection = yield* eks.describeCluster({ name: output.clusterName }).pipe(
+            Effect.map((response) => response.cluster?.deletionProtection === true),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(false)),
+          );
+          if (observedProtection && force !== true) {
+            return yield* new EKSClusterDeletionProtected({
+              clusterName: output.clusterName,
+              message: `EKS cluster '${output.clusterName}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+            });
+          }
           if ((output.kubernetesObjects ?? []).length > 0) {
             yield* deleteObjects({
               transport: yield* getKubernetesTransport(output),
@@ -1089,7 +1118,7 @@ export const ClusterProvider = () =>
             });
           }
 
-          if (output.deletionProtection) {
+          if (observedProtection) {
             const disableDeletionProtection = yield* eks.updateClusterConfig({
               name: output.clusterName,
               deletionProtection: false,

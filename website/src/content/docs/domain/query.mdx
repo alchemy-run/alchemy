@@ -247,10 +247,10 @@ For its history, or to follow it live, read a [view](/domain/view) of it instead
 
 ## Read your own write
 
-A projection writes its store after the command commits, so a plain read can be a moment behind. Right after its own command, a client passes the command's receipt as `atLeast`, and the query waits until that write is in the store before it reads:
+A projection writes its store after the command commits, often in batches, so a plain read can be a moment behind. Even a [strong](/domain/command#choose-when-it-answers) command doesn't wait for it. Right after its own command, a client passes the command's receipt as `atLeast`, and the query waits until that write is in the store before it reads:
 
 ```typescript
-const receipt = yield* bank.WithdrawMoney(accountId, { amount: 30 }, mfa);
+const receipt = yield* bank.WithdrawMoney({ accountId, amount: 30 }, mfa);
 // receipt: { stream: "Account/a-1", version: 7 }
 const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt });
 ```
@@ -276,7 +276,7 @@ export class BranchActivity extends Domain.Query("BranchActivity", {
   waitsFor: [Ledger, BranchTotals],
 }) {}
 
-const receipt = yield* bank.DepositMoney(accountId, { amount: 100, branchId: "b-9" });
+const receipt = yield* bank.DepositMoney({ accountId, amount: 100, branchId: "b-9" });
 const page = yield* bank.BranchActivity({ branch: "b-9" }, { atLeast: receipt });
 ```
 
@@ -299,8 +299,8 @@ The handler then reads `summaries.get(ref)` and `cards.peek(ref)` plainly: the e
 After commands to two aggregate instances, pass both receipts. The query waits for each, through every projection in `waitsFor`:
 
 ```typescript
-const out = yield* bank.WithdrawMoney(checking, { amount: 30 }, mfa);
-const into = yield* bank.DepositMoney(savings, { amount: 30 });
+const out = yield* bank.WithdrawMoney({ accountId: checking, amount: 30 }, mfa);
+const into = yield* bank.DepositMoney({ accountId: savings, amount: 30 });
 const total = yield* bank.CombinedBalance({ accounts: [checking, savings] }, { atLeast: [out, into] });
 ```
 

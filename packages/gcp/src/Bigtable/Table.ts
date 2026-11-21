@@ -66,7 +66,8 @@ export type TableProps = {
   columnFamilies?: Record<string, ColumnFamily>;
   /**
    * Protect the table (and its instance) from Admin API deletes.
-   * Disabled automatically on destroy.
+   * While it is on, `destroy` and replacement fail until it is turned off and
+   * deployed.
    * @default false
    */
   deletionProtection?: boolean;
@@ -121,6 +122,18 @@ export type Table = Resource<
  * Props for {@link Table.lookup}: find a table this stack doesn't manage by
  * its identifiers, in the ambient project unless `project` names another.
  */
+/**
+ * Deletion was refused because the Bigtable table has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class TableDeletionProtected extends Data.TaggedError(
+  "GCP.Bigtable.TableDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
 export interface TableLookup {
   /**
    * Table id (the `{table}` segment of
@@ -390,25 +403,23 @@ export const TableProvider = () =>
       if (current === undefined) {
         const created = yield* bigtable
           .createProjectsInstancesTables({
-            parent,
-            body: {
-              tableId,
-              table: {
-                granularity: news.granularity ? normalizeGranularity(news.granularity) : undefined,
-                columnFamilies:
-                  families === undefined
-                    ? undefined
-                    : Object.fromEntries(
-                        Object.entries(families).map(([familyId, family]) => [
-                          familyId,
-                          toFamilyBody(family),
-                        ]),
-                      ),
-                deletionProtection: desiredProtection,
-                changeStreamConfig: news.changeStreamConfig,
-                automatedBackupPolicy: news.automatedBackupPolicy,
-              },
+            tableId,
+            table: {
+              granularity: news.granularity ? normalizeGranularity(news.granularity) : undefined,
+              columnFamilies:
+                families === undefined
+                  ? undefined
+                  : Object.fromEntries(
+                      Object.entries(families).map(([familyId, family]) => [
+                        familyId,
+                        toFamilyBody(family),
+                      ]),
+                    ),
+              deletionProtection: desiredProtection,
+              changeStreamConfig: news.changeStreamConfig,
+              automatedBackupPolicy: news.automatedBackupPolicy,
             },
+            parent,
           })
           .pipe(
             Effect.catchTag("Conflict", (error) =>
@@ -436,16 +447,16 @@ export const TableProvider = () =>
         if (mods.length > 0) {
           if (current.deletionProtection === true) {
             const unlocked = yield* bigtable.patchProjectsInstancesTables({
+              deletionProtection: false,
               name,
               updateMask: "deletion_protection",
-              body: { deletionProtection: false },
             });
             yield* waitForOperation(unlocked);
             current = (yield* getByName(name)) ?? current;
           }
           current = yield* bigtable.modifyColumnFamiliesProjectsInstancesTables({
+            modifications: mods,
             name,
-            body: { modifications: mods },
           });
         }
       }
@@ -473,9 +484,9 @@ export const TableProvider = () =>
 
       if (mask.length > 0) {
         const patched = yield* bigtable.patchProjectsInstancesTables({
+          ...patchBody,
           name,
           updateMask: mask.join(","),
-          body: patchBody,
         });
         yield* waitForOperation(patched);
         current = yield* getByName(name);
@@ -487,14 +498,22 @@ export const TableProvider = () =>
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getByName(output.name);
       if (current === undefined) return;
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.deletionProtection === true) {
+        if (force !== true) {
+          return yield* new TableDeletionProtected({
+            resourceName: output.name,
+            message: `Bigtable table '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         const patched = yield* bigtable.patchProjectsInstancesTables({
+          deletionProtection: false,
           name: output.name,
           updateMask: "deletion_protection",
-          body: { deletionProtection: false },
         });
         yield* waitForOperation(patched);
       }

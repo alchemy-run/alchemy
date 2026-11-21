@@ -80,6 +80,18 @@ export type InstancesLogicalView = Resource<
  * view this stack doesn't manage by its identifiers, in the ambient project
  * unless `project` names another.
  */
+/**
+ * Deletion was refused because the Bigtable logical view has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class LogicalViewDeletionProtected extends Data.TaggedError(
+  "GCP.Bigtable.LogicalViewDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
 export interface InstancesLogicalViewLookup {
   /**
    * Logical view id (the `{logical_view}` segment of
@@ -211,9 +223,10 @@ const waitUntilGone = (name: string) =>
 const unprotect = (name: string, etag: string | undefined) =>
   Effect.gen(function* () {
     const patched = yield* bigtable.patchProjectsInstancesLogicalViews({
+      deletionProtection: false,
+      etag,
       name,
       updateMask: "deletion_protection",
-      body: { deletionProtection: false, etag },
     });
     yield* waitForOperation(patched);
   });
@@ -301,12 +314,10 @@ export const InstancesLogicalViewProvider = () =>
       if (current === undefined) {
         const created = yield* bigtable
           .createProjectsInstancesLogicalViews({
+            query,
+            deletionProtection: desiredProtection,
             parent,
             logicalViewId,
-            body: {
-              query,
-              deletionProtection: desiredProtection,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -324,13 +335,11 @@ export const InstancesLogicalViewProvider = () =>
         ].filter((field): field is string => field !== undefined);
         const patched = yield* bigtable
           .patchProjectsInstancesLogicalViews({
+            query,
+            deletionProtection: desiredProtection,
+            etag: current.etag,
             name,
             updateMask: mask.join(","),
-            body: {
-              query,
-              deletionProtection: desiredProtection,
-              etag: current.etag,
-            },
           })
           .pipe(
             Effect.retry({
@@ -349,10 +358,18 @@ export const InstancesLogicalViewProvider = () =>
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const current = yield* getByName(output.name);
       if (current === undefined) return;
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (current.deletionProtection === true) {
+        if (force !== true) {
+          return yield* new LogicalViewDeletionProtected({
+            resourceName: output.name,
+            message: `Bigtable logical view '${output.name}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* unprotect(output.name, current.etag);
       }
       yield* bigtable

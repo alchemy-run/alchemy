@@ -1,0 +1,118 @@
+---
+title: What is an agent harness?
+description: The concepts behind an agent harness — the loop, models, tools, coding tools, skills, MCP servers and sandboxes — and how @alchemy.run/ai models each of them.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+A language model only writes text. An **agent harness** is the program around it: it sends the model a conversation and a list of tools, runs the tools the model asks for, appends their results, and asks again, until the model answers without asking for a tool. Claude Code, Codex, OpenCode and Pi are harnesses.
+
+Take one small app: a bot that fixes failing tests. A `Coder` Durable Object runs a harness. The harness asks the `Smart` model, which calls `bash` to run the tests in the conversation's sandbox, `edit` to change a file there, and `deploy`, a tool of your own that uploads the build to an R2 Bucket.
+
+<Tree
+  nodes={[
+    {
+      id: "coder", label: "Coder", type: "Durable Object", icon: "box",
+      areas: ["harness smart", "harness deploy", "harness coding"],
+      phoneAreas: ["smart smart", "harness harness", "coding deploy"],
+      colGap: 4.5,
+    },
+    { id: "harness", label: "harness", type: "the loop", parent: "coder", tone: "accent", icon: "refresh-cw" },
+    { id: "smart", label: "Smart", type: "model", parent: "coder", icon: "sparkles" },
+    { id: "deploy", label: "deploy", type: "your tool", parent: "coder", icon: "wrench" },
+    { id: "coding", label: "bash · edit", type: "coding tools", parent: "coder", icon: "square-terminal" },
+    { id: "sandbox", label: "pr-142", type: "sandbox", icon: "box", specs: [["files", "~/repo"]] },
+    { id: "bucket", label: "Releases", type: "R2 Bucket", icon: "hard-drive" },
+  ]}
+  areas={["coder bucket", "coder sandbox"]}
+  phoneAreas={["coder coder", "sandbox bucket"]}
+  colGap={4}
+  links={[
+    { from: "harness", to: "smart", label: "asks" },
+    { from: "harness", to: "deploy", label: "calls" },
+    { from: "harness", to: "coding", label: "calls" },
+    { from: "deploy", to: "bucket", label: "puts" },
+    { from: "coding", to: "sandbox", label: "runs in" },
+  ]}
+  caption="The harness runs in the Coder Durable Object. It asks the Smart model, and calls the tools the model asks for: deploy writes to the Releases Bucket, and the coding tools run in the sandbox of the conversation pr-142."
+/>
+
+## The loop
+
+One turn of the **loop** is one model request. The harness sends the conversation so far and the tools the model may use. The model answers with text, or with tool calls. The harness runs each call, appends the result, and asks again.
+
+Each harness names the loop's pieces its own way. Pi has conversations and submissions; OpenCode has sessions and prompts. What they loop over is the same, and that is what `@alchemy.run/ai` declares.
+
+## Models
+
+A **model** is a name the harness runs conversations on. The LLM behind the name is an Effect AI `LanguageModel` Layer, so the same harness runs on Workers AI, Bedrock or any other provider by changing one Layer.
+
+```typescript
+export class Smart extends AI.Model<Smart>()("smart") {}
+```
+
+See [Models](/ai/models).
+
+## Tools
+
+A **tool** is a function the model can call. Its declaration says what it takes and returns, and the model sees that as a description and a JSON Schema. Its handler is an Effect that runs in the harness, so it can use any binding the Durable Object has.
+
+```typescript
+export class Deploy extends AI.Tool<Deploy>()("deploy", {
+  description: "Upload a release archive.",
+  parameters: Schema.Struct({ version: Schema.String }),
+  success: Schema.Struct({ url: Schema.String }),
+}) {}
+```
+
+See [Tools](/ai/tools).
+
+## Coding tools
+
+Every coding agent has the same few tools for working in a codebase: run a command, read a file, edit a file, write a file, search. `@alchemy.run/ai` names them (`AI.Bash`, `AI.Read`, `AI.Edit`, `AI.Write`, `AI.Grep`, `AI.Glob`) and each harness implements them its own way. You can replace any of them with your own.
+
+```typescript
+const harness = yield* Pi.Harness({ models: [Smart], tools: [AI.CodingTools, Deploy] });
+```
+
+See [Coding tools](/ai/coding-tools).
+
+## Sandboxes
+
+A Durable Object has no file system and can't run a process, so tools that need either work in a **sandbox**: a Linux machine on E2B, Daytona, Modal, Boat or Archil. The harness opens one for each conversation. A tool reaches it through `AI.Sandbox` and never names a sandbox or a platform.
+
+```typescript
+const sandbox = yield* AI.Sandbox;
+const result = yield* sandbox.exec(["npm", "test"]);
+```
+
+See [Sandboxes](/ai/sandboxes).
+
+## MCP servers
+
+An **MCP server** offers tools over the Model Context Protocol. You name the server once and say how to reach it; the harness asks it for its tools and gives them to the model beside your own.
+
+```typescript
+export class Docs extends AI.McpServer<Docs>()("docs") {}
+```
+
+See [MCP servers](/ai/mcp-servers).
+
+## Skills
+
+A **skill** is instructions the model loads only when a task calls for them. The model always sees the skill's name and description, and reads the rest, with any files the skill brings, when it decides the skill applies.
+
+```typescript
+export class Releasing extends AI.Skill<Releasing>()("releasing", {
+  description: "Cut and upload a release. Use when the user asks to ship.",
+  instructions: "Run the tests, bump the version, build, then call deploy.",
+}) {}
+```
+
+See [Skills](/ai/skills).
+
+## How @alchemy.run/ai models these concepts
+
+Each concept is a declaration with a name: `AI.Model`, `AI.Tool`, `AI.McpServer` and `AI.Skill`. A harness lists the declarations it uses, and each one that needs an implementation becomes a requirement of the harness: a model's Layer, a tool's Layer, an MCP server's client, and `AI.Sandboxes` when a tool works in a sandbox. A harness with a Layer missing does not compile. The harness itself is yielded in a Durable Object's outer Effect, where those Layers are provided and where the bindings they declare are known at deploy.
+
+Next: build an issue bot with [Pi](/pi/tutorial/part-1) or [OpenCode](/opencode/tutorial/part-1).

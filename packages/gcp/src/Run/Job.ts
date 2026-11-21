@@ -928,16 +928,14 @@ export const JobProvider = () =>
       if (current === undefined) {
         const created = yield* cloudrun
           .createProjectsLocationsJobs({
+            labels: desiredLabels,
+            annotations:
+              Object.keys(desiredAnnotations).length > 0 ? desiredAnnotations : undefined,
+            launchStage: news.launchStage,
+            binaryAuthorization: news.binaryAuthorization,
+            template: desiredTemplate(effectiveNews, undefined),
             parent: `projects/${env.project}/locations/${location}`,
             jobId,
-            body: {
-              labels: desiredLabels,
-              annotations:
-                Object.keys(desiredAnnotations).length > 0 ? desiredAnnotations : undefined,
-              launchStage: news.launchStage,
-              binaryAuthorization: news.binaryAuthorization,
-              template: desiredTemplate(effectiveNews, undefined),
-            },
           })
           .pipe(
             retryActAs,
@@ -1020,15 +1018,12 @@ export const JobProvider = () =>
         executionAnnotationsChanged
       ) {
         const operation = yield* cloudrun.patchProjectsLocationsJobs({
+          labels: desiredLabels,
+          annotations: news.annotations !== undefined ? desiredAnnotations : current.annotations,
+          launchStage: news.launchStage ?? current.launchStage,
+          binaryAuthorization: news.binaryAuthorization ?? current.binaryAuthorization,
+          template: desiredTemplate(effectiveNews, current),
           name,
-          body: {
-            name,
-            labels: desiredLabels,
-            annotations: news.annotations !== undefined ? desiredAnnotations : current.annotations,
-            launchStage: news.launchStage ?? current.launchStage,
-            binaryAuthorization: news.binaryAuthorization ?? current.binaryAuthorization,
-            template: desiredTemplate(effectiveNews, current),
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(name);

@@ -456,17 +456,15 @@ export const LakesTaskProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsLakesTasks({
+            description: news.description,
+            displayName: news.displayName,
+            labels: desiredLabels,
+            triggerSpec,
+            executionSpec,
+            spark: news.spark,
+            notebook: news.notebook,
             parent: lake,
             taskId,
-            body: {
-              description: news.description,
-              displayName: news.displayName,
-              labels: desiredLabels,
-              triggerSpec,
-              executionSpec,
-              spark: news.spark,
-              notebook: news.notebook,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -508,17 +506,15 @@ export const LakesTaskProvider = () =>
           notebookChanged ? "notebook" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* dataplex.patchProjectsLocationsLakesTasks({
+          description: news.description,
+          displayName: news.displayName,
+          labels: desiredLabels,
+          triggerSpec,
+          executionSpec,
+          spark: news.spark,
+          notebook: news.notebook,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            description: news.description,
-            displayName: news.displayName,
-            labels: desiredLabels,
-            triggerSpec,
-            executionSpec,
-            spark: news.spark,
-            notebook: news.notebook,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);

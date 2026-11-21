@@ -13,8 +13,12 @@ import cloudflareVitePlugin from "../../plugin.ts";
 const COMPATIBILITY_DATE = "2026-03-17";
 const FLAGS = ["nodejs_compat"];
 
-// Wrangler's deploy configuration, not part of the build output Alchemy reads.
-const WRANGLER_OUTPUTS = new Set([".dev.vars", "wrangler.json", ".assetsignore"]);
+// v2 writes Build Output for `cf deploy`, which Alchemy doesn't use: each
+// environment goes to its own directory under `.cloudflare/output/v1`, beside
+// deploy metadata. Alchemy keeps Vite's `dist/<environment>` layout, so each
+// directory is compared with the `dist` directory it replaces.
+const BUILD_OUTPUT_WORKER = ".cloudflare/output/v1/workers/default";
+const OFFICIAL_DIRECTORIES = { client: "assets", ssr: "bundle" } as const;
 
 const WORKER = [
   `import { Buffer } from "node:buffer";`,
@@ -45,7 +49,19 @@ interface Shape {
   files: Record<string, string>;
   /** Whether the project has a Worker entry. */
   worker: boolean;
+  config?: vite.InlineConfig;
 }
+
+const ASSET_WORKER_FILES = {
+  ...WORKER_FILES,
+  "src/index.ts": `import logo from "./logo.svg?url";\nexport default { fetch: () => new Response(logo) };`,
+  "src/logo.svg": `<svg xmlns="http://www.w3.org/2000/svg"></svg>`,
+};
+
+/** A framework's `buildApp` that builds only the Worker, as some do first. */
+const buildWorkerOnly = async (builder: vite.ViteBuilder) => {
+  await builder.build(builder.environments.ssr!);
+};
 
 const SHAPES: ReadonlyArray<Shape> = [
   {
@@ -58,13 +74,26 @@ const SHAPES: ReadonlyArray<Shape> = [
     worker: true,
     files: { ...WORKER_FILES, "public/robots.txt": "User-agent: *" },
   },
+  { name: "a Worker importing an asset by URL", worker: true, files: ASSET_WORKER_FILES },
   {
-    name: "a Worker importing an asset by URL",
+    name: "a Worker importing an emitted asset",
     worker: true,
-    files: {
-      ...WORKER_FILES,
-      "src/index.ts": `import logo from "./logo.svg?url";\nexport default { fetch: () => new Response(logo) };`,
-      "src/logo.svg": `<svg xmlns="http://www.w3.org/2000/svg"></svg>`,
+    files: ASSET_WORKER_FILES,
+    config: { build: { assetsInlineLimit: 0 } },
+  },
+  {
+    name: "a framework's builder.buildApp building the Worker first",
+    worker: true,
+    files: { ...ASSET_WORKER_FILES, ...CLIENT },
+    config: { build: { assetsInlineLimit: 0 }, builder: { buildApp: buildWorkerOnly } },
+  },
+  {
+    name: "a framework's buildApp hook building the Worker first",
+    worker: true,
+    files: { ...ASSET_WORKER_FILES, ...CLIENT },
+    config: {
+      build: { assetsInlineLimit: 0 },
+      plugins: [{ name: "framework", buildApp: buildWorkerOnly }],
     },
   },
   { name: "a Worker only", worker: true, files: WORKER_FILES },
@@ -92,27 +121,32 @@ const project = async (files: Record<string, string>) => {
   return root;
 };
 
-const build = async (root: string, plugins: vite.PluginOption) => {
+const build = async (root: string, plugins: vite.PluginOption, config: vite.InlineConfig = {}) => {
   const builder = await vite.createBuilder({
+    ...config,
     configFile: false,
     root,
     logLevel: "silent",
-    plugins: [plugins],
+    plugins: [plugins, ...(config.plugins ?? [])],
   });
   await builder.buildApp();
 };
 
 const official = (shape: Shape) =>
   officialCloudflare({
-    viteEnvironment: { name: "ssr" },
     inspectorPort: false,
     persistState: false,
-    config: {
-      name: "worker",
-      ...(shape.worker ? { main: "./src/index.ts" } : {}),
-      compatibility_date: COMPATIBILITY_DATE,
-      compatibility_flags: FLAGS,
-    },
+    types: { generate: false },
+    config: (loaded) => ({
+      ...loaded,
+      worker: {
+        ...loaded.worker,
+        name: "worker",
+        ...(shape.worker ? { entrypoint: "./src/index.ts" } : {}),
+        compatibilityDate: COMPATIBILITY_DATE,
+        compatibilityFlags: FLAGS,
+      },
+    }),
   });
 
 const alchemy = (shape: Shape) =>
@@ -122,25 +156,52 @@ const alchemy = (shape: Shape) =>
     compatibilityFlags: FLAGS,
   });
 
-/** Every output file, relative to `dist`, with content hashes normalized. */
-const outputs = async (root: string) => {
-  const dist = NodePath.join(root, "dist");
-  const files = await NodeFs.readdir(dist, { recursive: true, withFileTypes: true }).catch(
-    () => [],
+type Plugin = "official" | "alchemy";
+
+type Environment = keyof typeof OFFICIAL_DIRECTORIES;
+
+/**
+ * Where a plugin writes an environment's output. Without a Worker, Alchemy's
+ * client is Vite's only environment and builds straight to `dist`.
+ */
+const outDir = (root: string, plugin: Plugin, environment: Environment, worker = true) =>
+  plugin === "official"
+    ? NodePath.join(root, BUILD_OUTPUT_WORKER, OFFICIAL_DIRECTORIES[environment])
+    : worker
+      ? NodePath.join(root, "dist", environment)
+      : environment === "client"
+        ? NodePath.join(root, "dist")
+        : undefined;
+
+/** Every output file, as `<environment>/<path>`, with content hashes normalized. */
+const outputs = async (root: string, plugin: Plugin, worker: boolean) => {
+  const environments = Object.keys(OFFICIAL_DIRECTORIES) as Array<Environment>;
+  const files = await Promise.all(
+    environments.map(async (environment) => {
+      const directory = outDir(root, plugin, environment, worker);
+      if (directory === undefined) return [];
+      const entries = await NodeFs.readdir(directory, {
+        recursive: true,
+        withFileTypes: true,
+      }).catch(() => []);
+      return entries
+        .filter((file) => file.isFile())
+        .map((file) =>
+          NodePath.join(
+            environment,
+            NodePath.relative(directory, NodePath.join(file.parentPath, file.name)),
+          )
+            .replaceAll("\\", "/")
+            .replace(/-[\w-]{8}(?=\.)/g, "-[hash]"),
+        );
+    }),
   );
-  return files
-    .filter((file) => file.isFile() && !WRANGLER_OUTPUTS.has(file.name))
-    .map((file) =>
-      NodePath.relative(dist, NodePath.join(file.parentPath, file.name))
-        .replaceAll("\\", "/")
-        .replace(/-[\w-]{8}(?=\.)/g, "-[hash]"),
-    )
-    .sort();
+  return files.flat().sort();
 };
 
 // The exported names; the local bindings behind them are the bundler's.
-const exportedNames = (root: string) =>
-  NodeFs.readFile(NodePath.join(root, "dist/ssr/index.js"), "utf8").then((code) =>
+const exportedNames = (root: string, plugin: Plugin) =>
+  NodeFs.readFile(NodePath.join(outDir(root, plugin, "ssr")!, "index.js"), "utf8").then((code) =>
     [...code.matchAll(/export\s*\{([^}]*)\}/g)]
       .flatMap((match) => match[1]!.split(","))
       .map((specifier) =>
@@ -163,21 +224,33 @@ describe.each(SHAPES)("build output matches @cloudflare/vite-plugin for $name", 
       project(shape.files),
       project(shape.files),
     ]);
-    await build(officialRoot, official(shape));
-    await build(alchemyRoot, alchemy(shape));
+    await build(officialRoot, official(shape), shape.config);
+    await build(alchemyRoot, alchemy(shape), shape.config);
     return { officialRoot, alchemyRoot };
   })();
 
   it("emits the same files", async () => {
     const { officialRoot, alchemyRoot } = await built;
-    expect(await outputs(alchemyRoot)).toEqual(await outputs(officialRoot));
+    expect(await outputs(alchemyRoot, "alchemy", shape.worker)).toEqual(
+      await outputs(officialRoot, "official", shape.worker),
+    );
+    // Only the environment directories: anything else under `dist/` would be
+    // deployed without being compared above.
+    if (shape.worker) {
+      const stray = (await NodeFs.readdir(NodePath.join(alchemyRoot, "dist"))).filter(
+        (entry) => entry !== "client" && entry !== "ssr",
+      );
+      expect(stray).toEqual([]);
+    }
   }, 120_000);
 
   it.skipIf(!shape.worker)(
     "keeps the same entry chunk exports",
     async () => {
       const { officialRoot, alchemyRoot } = await built;
-      expect(await exportedNames(alchemyRoot)).toEqual(await exportedNames(officialRoot));
+      expect(await exportedNames(alchemyRoot, "alchemy")).toEqual(
+        await exportedNames(officialRoot, "official"),
+      );
     },
     120_000,
   );

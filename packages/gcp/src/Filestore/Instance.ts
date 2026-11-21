@@ -355,6 +355,18 @@ export type Instance = Resource<
  * manage by its identifiers, in the ambient project unless `project` names
  * another.
  */
+/**
+ * Deletion was refused because the Filestore instance has deletion protection on, set
+ * through `deletionProtectionEnabled` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class InstanceDeletionProtected extends Data.TaggedError(
+  "GCP.Filestore.InstanceDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
 export interface InstanceLookup {
   /**
    * Instance id (the `{instance}` segment of
@@ -1132,9 +1144,9 @@ export const InstanceProvider = () =>
       if (current === undefined) {
         const created = yield* file
           .createProjectsLocationsInstances({
+            ...toCreateBody(news, desiredLabels, tier, protocol),
             parent: `projects/${env.project}/locations/${location}`,
             instanceId,
-            body: toCreateBody(news, desiredLabels, tier, protocol),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -1192,17 +1204,14 @@ export const InstanceProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const patched = yield* file.patchProjectsLocationsInstances({
+          labels: desiredLabels,
+          description: news.description,
+          fileShares: sharesForPatch(nextShares, observedShares).map(toApiShare),
+          performanceConfig: toApiPerformance(news.performanceConfig),
+          deletionProtectionEnabled: desiredProtection,
+          deletionProtectionReason: news.deletionProtectionReason,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            labels: desiredLabels,
-            description: news.description,
-            fileShares: sharesForPatch(nextShares, observedShares).map(toApiShare),
-            performanceConfig: toApiPerformance(news.performanceConfig),
-            deletionProtectionEnabled: desiredProtection,
-            deletionProtectionReason: news.deletionProtectionReason,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilReady(name);
@@ -1211,20 +1220,25 @@ export const InstanceProvider = () =>
       return toAttrs(current, env.project);
     }),
 
-    delete: Effect.fn(function* ({ output }) {
+    delete: Effect.fn(function* ({ output, force }) {
       const existing = yield* getByName(output.name);
       if (existing === undefined) return;
 
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
       if (existing.deletionProtectionEnabled === true) {
+        if (force !== true) {
+          return yield* new InstanceDeletionProtected({
+            resourceName: output.name,
+            message: `Filestore instance '${output.name}' has deletion protection on. Set \`deletionProtectionEnabled: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         const patched = yield* file
           .patchProjectsLocationsInstances({
+            deletionProtectionEnabled: false,
+            deletionProtectionReason: "",
             name: output.name,
             updateMask: "deletion_protection_enabled,deletion_protection_reason",
-            body: {
-              name: output.name,
-              deletionProtectionEnabled: false,
-              deletionProtectionReason: "",
-            },
           })
           .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (patched !== undefined) {
