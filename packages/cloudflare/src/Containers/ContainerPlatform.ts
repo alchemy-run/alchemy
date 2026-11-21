@@ -3,7 +3,7 @@ import * as Output from "alchemy/Output";
 import { Platform } from "alchemy/Platform";
 import { serveRpc } from "alchemy/Rpc";
 import type { ProcessContext } from "alchemy/Runtime/Process";
-import { packEnvValueKeepRedacted, unpackEnvValue } from "alchemy/RuntimeContext";
+import { envStrings, packEnvValueKeepRedacted, unpackEnvValue } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -29,19 +29,9 @@ import { declareDurableObjectApplication } from "./DurableObjectApplication.ts";
  * handle parses at `start()`. Redacted values ship unwrapped inside it, as
  * a fleet application's environment variables do.
  */
-const containerEnvSecret = (env: Record<string, string | Redacted.Redacted<string>> | undefined) =>
-  env === undefined
-    ? undefined
-    : Redacted.make(
-        JSON.stringify(
-          Object.fromEntries(
-            Object.entries(env).map(([name, value]) => [
-              name,
-              Redacted.isRedacted(value) ? Redacted.value(value) : value,
-            ]),
-          ),
-        ),
-      );
+const containerEnvSecret = (env: Record<string, unknown> | undefined) =>
+  // The same strings a fleet deployment's environment carries.
+  env === undefined ? undefined : Redacted.make(JSON.stringify(envStrings(env)));
 
 const toHttpUrl = (url: string) =>
   url.startsWith("https:") ? `http:${url.slice("https:".length)}` : url;
