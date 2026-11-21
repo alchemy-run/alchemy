@@ -1,0 +1,35 @@
+---
+title: Setup
+description: Connect alchemy to a Slack workspace — the app, its bot token, and an app configuration token.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Install `@alchemy.run/slack`:
+
+<PackageManagers add="@alchemy.run/slack" />
+
+Register the provider next to your cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as Slack from "@alchemy.run/slack";
+
+providers: Layer.mergeAll(Cloudflare.providers(), Slack.providers()),
+```
+
+## A bot token
+
+Slack only issues a token once a person installs an app into a workspace. Create an app at [api.slack.com/apps](https://api.slack.com/apps), add the bot scopes your stack needs under **OAuth & Permissions** (`channels:manage`, `channels:read`, `chat:write`, …), and install it. Copy the **Bot User OAuth Token** (`xoxb-…`).
+
+## An app configuration token
+
+`Slack.App` and `Slack.consumeEvents` create apps through Slack's App Manifest API, which takes an app configuration token instead of a bot token. Under **Your App Configuration Tokens** on [api.slack.com/apps](https://api.slack.com/apps), generate one for the workspace and copy its **refresh token**. Configuration tokens expire after 12 hours; Alchemy rotates the pair and saves the new one to your profile.
+
+## Save them in a profile
+
+Run `alchemy profile edit --add Slack` and paste the bot token and the configuration refresh token. They are saved under `~/.alchemy/credentials/<profile>/`.
+
+In CI (`CI=true`), profiles are bypassed. Set `SLACK_BOT_TOKEN`; `SLACK_APP_CONFIG_TOKEN` (an access token, since CI can't save a rotated pair), `SLACK_USER_TOKEN` and `SLACK_API_URL` are optional.
+
+See [Profiles](/environments/profiles) for how credentials are stored and switched.

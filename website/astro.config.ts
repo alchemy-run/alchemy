@@ -56,6 +56,7 @@ function providersSidebarEntry() {
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
+      { label: "Slack", link: "/slack" },
       { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
       { label: "Kubernetes", link: "/kubernetes" },
@@ -2133,6 +2134,14 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Axiom"),
+          ],
+        },
+        {
+          label: "Slack",
+          items: [
+            { label: "Overview", link: "/slack" },
+            { label: "Setup", link: "/slack/setup" },
+            providerResourcesEntry("Slack"),
           ],
         },
         {

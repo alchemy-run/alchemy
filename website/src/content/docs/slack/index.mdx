@@ -1,0 +1,52 @@
+---
+title: Slack
+description: Slack apps, channels, user groups and canvases as Stack resources, with messaging bindings and Events API delivery for your Workers.
+---
+
+`@alchemy.run/slack` manages a Slack workspace's configuration from your stack and gives your runtimes typed access to Slack's Web API.
+
+A channel is a resource. The bot of your Slack app creates it, joins it, and archives it when the stack is destroyed:
+
+```typescript
+import * as Slack from "@alchemy.run/slack";
+
+const alerts = yield* Slack.Channel("Alerts", {
+  topic: "Production alerts",
+  purpose: "Pages from the on-call rotation land here.",
+});
+```
+
+A Worker posts to it through a binding. Each binding targets one channel and runs as your app's bot:
+
+```typescript
+const post = yield* Slack.PostMessage(alerts);
+yield* post({ text: "Deploy finished :rocket:" });
+```
+
+`Slack.consumeEvents` receives Events API deliveries in a Worker. It creates the Slack app, points its Events API URL at the Worker, and verifies every delivery's signature:
+
+```typescript
+yield* Slack.consumeEvents(
+  "Bot",
+  {
+    manifest: {
+      features: { bot_user: { display_name: "helper" } },
+      oauth_config: { scopes: { bot: ["app_mentions:read", "chat:write"] } },
+    },
+    events: ["app_mention"],
+  },
+  Effect.fn(function* (delivery) {
+    yield* Effect.log(`${delivery.event.user}: ${delivery.event.text}`);
+  }),
+);
+```
+
+## Resources
+
+`Slack.App` manages an app from its manifest. `Slack.Channel`, `Slack.ChannelMember`, `Slack.Bookmark`, `Slack.Canvas` and `Slack.ChannelCanvas` shape a channel. `Slack.UserGroup` manages a mentionable group such as `@oncall`. `Slack.BotToken` captures the bot token a runtime calls Slack with.
+
+## Out of scope
+
+Slack's Enterprise Grid admin API (`admin.*`) needs an org admin's user token, and the search, stars, reminders and do-not-disturb APIs act on one person's own data, so neither is part of the provider. Slack's own function runtime and Workflow Builder are deployed with the Slack CLI, not an API.
+
+See [Setup](/slack/setup) to connect a workspace.
