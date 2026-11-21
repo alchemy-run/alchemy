@@ -1,14 +1,16 @@
 import { fileURLToPath } from "node:url";
 import * as Command from "effect/cli/Command";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { resolveStackEntrypoint } from "../../Alchemist/Entrypoint.ts";
-import * as Contributions from "../../Contributions.ts";
+import * as DevTrust from "../../Local/DevTrust.ts";
 import { SPAWNER_URL_ENV_KEY } from "../../Local/RpcProviderProxy.ts";
 import * as RpcSpawner from "../../Local/RpcSpawner.ts";
 import { LOG_FD_ENV, parseRecord, replayRecord } from "../../Util/LogRecord.ts";
@@ -30,18 +32,6 @@ import {
   resolveStackArgs,
 } from "./flags.ts";
 import { logCommandFailure, VersionCheck } from "./instrument.ts";
-
-/**
- * Trust the Floci emulator CA in `alchemy dev` so cross-cloud data planes
- * terminated by the emulator's self-signed cert (e.g. an AWS Lambda MicroVM
- * bound to a local Cloudflare Worker) are reachable from local workerd. workerd
- * reads its trusted certificates from `NODE_EXTRA_CA_CERTS` at runtime init, so
- * this must be present in the env of every spawned child (the exec worker, the
- * RPC sidecar, and the workerd instances they start). `ensureFloci` refreshes
- * the bundle at this stable path (and sets the variable itself once written);
- * never clobber a value the caller set, and don't point at a missing file —
- * Node/Bun warn about it on every startup.
- */
 
 export const devCommand = Command.make(
   "dev",
@@ -66,20 +56,22 @@ export const devCommand = Command.make(
       // A missing entry is this process's error to report, not a stack
       // trace out of the exec child.
       yield* resolveStackEntrypoint(options.main);
-      // Providers' dev environment (e.g. a local emulator's CA bundle). Set on
-      // THIS process, so the RPC spawner's sidecars (and the workerd they
-      // launch) inherit it — they are forked from here, not from the exec
-      // child below.
-      const env = yield* Contributions.devEnv().pipe(
-        Effect.catchTag("ContributionError", (error) =>
-          Effect.logWarning(error.message).pipe(Effect.as({})),
+      // Every CA the stack's local runtimes trust, handed to the processes
+      // this one spawns (the RPC sidecars and the exec child) instead of set
+      // on this process: workerd reads the files each time it starts, and
+      // Node processes read one bundle at startup.
+      const trust = yield* DevTrust.env();
+      // Lives in the command scope and survives every exec child restart.
+      const spawner = Context.get(
+        yield* Layer.build(
+          RpcSpawner.layerServer({
+            profile: rawArgs.profile,
+            envFile: Option.getOrUndefined(rawArgs.envFile),
+            env: trust,
+          }),
         ),
+        RpcSpawner.RpcSpawner,
       );
-      for (const [key, value] of Object.entries(env)) {
-        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports provider dev env onto this process for spawned sidecars, not config reading
-        process.env[key] ??= value;
-      }
-      const spawner = yield* RpcSpawner.RpcSpawner;
       // Neither runtime uses its native `--watch`: those hard-restart the exec
       // child with no teardown, leaving the previous generation's widget in
       // scrollback and never saying what changed. exec.ts watches the user's
@@ -109,8 +101,6 @@ export const devCommand = Command.make(
       const consoleSettings = yield* currentConsoleSettings;
       // The child's records and spans join this command's trace.
       const traceEnv = yield* traceParentEnv;
-      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- forwards this process's env (mutated above) to the exec child, not config reading
-      const extraCaCerts = process.env.NODE_EXTRA_CA_CERTS;
       const runChild = ChildProcess.make(command[0], command.slice(1), {
         stdin: "inherit",
         stdout: "inherit",
@@ -121,7 +111,7 @@ export const devCommand = Command.make(
           [LOG_FD_ENV]: "3",
           // The exec child renders the run's logs but never sees this argv.
           ...consoleSettingsEnv(consoleSettings),
-          ...(extraCaCerts ? { NODE_EXTRA_CA_CERTS: extraCaCerts } : {}),
+          ...trust,
           [SPAWNER_URL_ENV_KEY]: spawner.url,
           ...traceEnv,
         },
@@ -179,15 +169,7 @@ export const devCommand = Command.make(
         until: (code) => code !== DEV_RELOAD_EXIT_CODE,
       });
     },
-    (effect, args) =>
-      Effect.andThen(
-        Effect.flatten(VersionCheck),
-        Effect.provide(
-          RpcSpawner.layerServer({
-            profile: args.profile,
-            envFile: Option.getOrUndefined(args.envFile),
-          }),
-        )(effect),
-      ).pipe(logCommandFailure),
+    (effect) =>
+      Effect.andThen(Effect.flatten(VersionCheck), Effect.scoped(effect)).pipe(logCommandFailure),
   ),
 ).pipe(Command.withDescription("Develop a stack with live reload"));

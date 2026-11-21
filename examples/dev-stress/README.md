@@ -41,8 +41,8 @@ VM speaks (typed RPC and a raw HTTPS route), and terminates it again.
 
 The cross-cloud hop is real: local `workerd` fetches the Lambda's function
 URL, which under `alchemy dev` is served by the floci emulator behind a
-self-signed certificate. It only resolves because `alchemy dev` puts the
-emulator's CA on `NODE_EXTRA_CA_CERTS` for every process it spawns.
+self-signed certificate. It only resolves because `alchemy dev` adds the
+emulator's CA to the trust store of every local Worker.
 
 ## The two reload paths
 
