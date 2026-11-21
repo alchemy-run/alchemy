@@ -22,6 +22,7 @@ import EksHostApi, { EKS_GCP_MESSAGE, EksHostEvents } from "./fixtures/deploymen
 import {
   destroyKindStack,
   KindTestCluster,
+  decodeBase64,
   kubectlGet,
   removeRbac,
   restrictedConnection,
@@ -93,34 +94,73 @@ describe(
     );
 
     test.provider(
-      "Redacted env values reach the container unwrapped",
+      "Redacted env values live in the workload's own Secret, read by reference",
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
-          const token = "deployment-token-sentinel";
           const nested = "deployment-nested-sentinel";
-          yield* stack.deploy(
-            Kubernetes.Deployment("SecretEnv", {
-              cluster: cluster.connection,
-              name: "secret-env",
-              image,
-              port: 8080,
-              serviceType: "ClusterIP",
-              env: {
-                TOKEN: Redacted.make(token),
-                CONFIG: Redacted.make({ nested }),
-              },
-            }),
-          );
+          const deploy = (token: string) =>
+            stack.deploy(
+              Kubernetes.Deployment("SecretEnv", {
+                cluster: cluster.connection,
+                name: "secret-env",
+                image,
+                port: 8080,
+                serviceType: "ClusterIP",
+                env: {
+                  TOKEN: Redacted.make(token),
+                  CONFIG: Redacted.make({ nested }),
+                  PLAIN: "visible",
+                  POD_NAME: { valueFrom: { fieldRef: { fieldPath: "metadata.name" } } },
+                },
+              }),
+            );
+          const read = Effect.gen(function* () {
+            const { deployment } = yield* objectsOf("secret-env");
+            const template = deployment.spec.template;
+            return {
+              env: Object.fromEntries(
+                (
+                  template.spec.containers[0].env as {
+                    name: string;
+                    value?: string;
+                    valueFrom?: any;
+                  }[]
+                ).map((entry) => [entry.name, entry]),
+              ),
+              digest: template.metadata.annotations?.["alchemy.run/env-secret-digest"],
+              secret: yield* kubectlGet(cluster, ["secret", "secret-env-env", ...ns]),
+            };
+          });
 
-          const { deployment } = yield* objectsOf("secret-env");
-          const env = Object.fromEntries(
-            (
-              deployment.spec.template.spec.containers[0].env as { name: string; value: string }[]
-            ).map((entry) => [entry.name, entry.value]),
+          yield* deploy("deployment-token-sentinel-a");
+          const first = yield* read;
+          // The pod template names the Secret; no value appears in it.
+          expect(JSON.stringify(first.env)).not.toContain("sentinel");
+          expect(first.env.TOKEN).toEqual({
+            name: "TOKEN",
+            valueFrom: { secretKeyRef: { name: "secret-env-env", key: "TOKEN" } },
+          });
+          expect(first.env.CONFIG.valueFrom.secretKeyRef).toEqual({
+            name: "secret-env-env",
+            key: "CONFIG",
+          });
+          expect(first.env.PLAIN).toEqual({ name: "PLAIN", value: "visible" });
+          expect(first.env.POD_NAME.valueFrom).toEqual({
+            fieldRef: { apiVersion: "v1", fieldPath: "metadata.name" },
+          });
+          expect(yield* decodeBase64(first.secret.data.TOKEN)).toBe("deployment-token-sentinel-a");
+          expect(yield* decodeBase64(first.secret.data.CONFIG)).toBe(JSON.stringify({ nested }));
+          expect(first.secret.data.PLAIN).toBeUndefined();
+
+          // A rotated secret updates the Secret and rolls the pods.
+          yield* deploy("deployment-token-sentinel-b");
+          const rotated = yield* read;
+          expect(yield* decodeBase64(rotated.secret.data.TOKEN)).toBe(
+            "deployment-token-sentinel-b",
           );
-          expect(env.TOKEN).toBe(token);
-          expect(env.CONFIG).toBe(JSON.stringify({ nested }));
+          expect(rotated.digest).toMatch(/^[0-9a-f]{16}$/);
+          expect(rotated.digest).not.toBe(first.digest);
 
           yield* stack.destroy();
           expect(yield* objectsOf("secret-env")).toEqual({
@@ -128,6 +168,7 @@ describe(
             deployment: undefined,
             service: undefined,
           });
+          expect(yield* kubectlGet(cluster, ["secret", "secret-env-env", ...ns])).toBeUndefined();
         }),
       { timeout: 120_000 },
     );
