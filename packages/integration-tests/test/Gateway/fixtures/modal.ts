@@ -27,10 +27,12 @@ export default class ModalHost extends Cloudflare.Worker<ModalHost>()(
         const sandbox = yield* sandboxes.create({ timeout: "5 minutes" });
         const body = yield* Effect.gen(function* () {
           const port = yield* sandbox.getTcpPort();
-          const response = yield* port
-            .fetch(HttpClientRequest.get("/"))
-            // The program needs a few seconds to start listening after boot.
-            .pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 20 }));
+          const response = yield* (
+            port
+              .fetch(HttpClientRequest.get("/"))
+              // The program needs a few seconds to start listening after boot.
+              .pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 20 }))
+          );
           return { status: response.status, text: yield* response.text };
         }).pipe(Effect.ensuring(Effect.ignore(sandbox.terminate())));
         return HttpServerResponse.text(body.text, {
