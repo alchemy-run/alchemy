@@ -96,7 +96,7 @@ const byName = (records: ReadonlyArray<DNS.DnsRecord>) =>
 
 const withDns = makeUrlCloud();
 testFor(withDns).test.provider(
-  "a site with domain and dns saves a RoutingUrl and publishes its TXT and CNAME",
+  "a site with domain and dns publishes its TXT and CNAME and deploys once its RoutingUrl serves",
   (stack) =>
     Effect.gen(function* () {
       withDns.reset();
@@ -104,7 +104,7 @@ testFor(withDns).test.provider(
 
       const url = yield* stack.deploy(siteDomain({ name: SITE_HOST, dns: TEST_DNS }));
 
-      expect(url.status).toBe("pending");
+      expect(url.status).toBe("active");
       expect(url.logicalId).toBe(`Site/${WEBSITE_ROUTING_URL_ID}`);
       expect(byName(withDns.zone.records)).toEqual(byName(recordsFor(SITE_HOST)));
       expect(domainsRoutes(withDns)).toEqual([]);
@@ -374,14 +374,20 @@ const waitForAuthoritativeCnames = (records: ReadonlyArray<{ name: string; value
     );
   });
 
-/** Asks Prisma to check the RoutingUrl until it is `active`, at most 5 minutes. */
-const checkUntilActive = (id: string) =>
+/**
+ * For a hostname whose records were published by hand: asks Prisma to check
+ * it once, then reads it every 15 seconds until it is `active`, at most 6
+ * minutes. A check on a failed certificate orders a new one, and a workspace
+ * may order only 10 an hour, so the check is never repeated.
+ */
+const checkOnceThenPollUntilActive = (id: string) =>
   createUrlCheck({ id }).pipe(
+    Effect.andThen(getUrl({ id })),
     Effect.map(({ data }) => data),
     Effect.repeat({
-      schedule: Schedule.spaced("10 seconds"),
+      schedule: Schedule.spaced("15 seconds"),
       until: (data) => data.status === "active",
-      times: 30,
+      times: 24,
     }),
   );
 
@@ -445,8 +451,7 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
       ]);
       expect(all.every((record) => record.proxied !== true)).toBe(true);
 
-      yield* waitForAuthoritativeCnames([{ name: HOSTNAME, value: switchboard }]);
-      expect((yield* checkUntilActive(domain.routingUrlId)).status).toBe("active");
+      expect(domain.status).toBe("active");
 
       const client = yield* HttpClient.HttpClient;
       const body = yield* client.get(`https://${HOSTNAME}/`).pipe(
@@ -548,7 +553,7 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
 
       yield* stack.deploy(siteStack(domain.records));
       yield* waitForAuthoritativeCnames(domain.records.filter((record) => record.type === "CNAME"));
-      expect((yield* checkUntilActive(domain.routingUrlId)).status).toBe("active");
+      expect((yield* checkOnceThenPollUntilActive(domain.routingUrlId)).status).toBe("active");
 
       yield* stack.destroy();
 

@@ -5,10 +5,12 @@ import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as Prisma from "@alchemy.run/prisma";
 import {
   RoutingUrl,
+  RoutingUrlCertificateLimitReached,
   type RoutingUrlHostnameChangeRefused,
   RoutingUrlHostnameTaken,
   RoutingUrlInvalidHostname,
   RoutingUrlLogicalIdTaken,
+  RoutingUrlNotActive,
   RoutingUrlOperationFailed,
   RoutingUrlQuotaExceeded,
   RoutingUrlServiceNotOnABranch,
@@ -33,10 +35,12 @@ import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import * as TestClock from "effect/testing/TestClock";
 import * as pathe from "pathe";
 import {
   AuthoritativeRecordCheck,
@@ -75,10 +79,12 @@ import {
   makeUrlCloud,
   recordsFor,
   routingUrl,
+  servesWhenPublished,
   TEST_DNS,
   testFor,
   TXT,
   type UrlCloud,
+  type WireRoutingUrl,
 } from "./fixtures/RoutingUrlCloud.ts";
 
 const urlStack = (hostname = HOSTNAME) => RoutingUrl("Url", { app: "svc-1", hostname });
@@ -111,7 +117,7 @@ const ownershipWrites = (cloud: UrlCloud) =>
 
 const withDns = makeUrlCloud();
 testFor(withDns).test.provider(
-  "with dns, publishes the TXT and CNAME, keeps them once the row is active, and destroy removes them",
+  "with dns, publishes the TXT and CNAME, waits for them before the create, returns once the row is active, and destroy removes them",
   (stack) =>
     Effect.gen(function* () {
       withDns.reset();
@@ -121,12 +127,18 @@ testFor(withDns).test.provider(
 
       expect(withDns.zone.records).toEqual(recordsFor(HOSTNAME));
       expect(url.logicalId).toBe("Url");
-      expect(url.status).toBe("pending");
+      expect(url.status).toBe("active");
       const create = withDns.fake.captured.find((request) => request.method === "POST");
       expect(create?.bodyJson).toEqual({ hostname: HOSTNAME, logicalId: "Url" });
       expect(ownershipWrites(withDns)).toEqual([]);
+      expect(withDns.state.txtChecked).toEqual([
+        { type: "TXT", name: `_prisma-verification.${HOSTNAME}`, value: TXT.value },
+      ]);
+      expect(withDns.state.txtAttempts).toEqual(["until-seen"]);
+      expect(
+        withDns.state.checked.map(([expected, options]) => [expected.name, options.attempts]),
+      ).toEqual([[HOSTNAME, "until-seen"]]);
 
-      withDns.rows.set(url.routingUrlId, routingUrl(url.routingUrlId, { status: "active" }));
       withDns.fake.captured.length = 0;
       yield* stack.deploy(dnsStack());
 
@@ -142,6 +154,198 @@ testFor(withDns).test.provider(
       expect(withDns.routes().some((route) => route.includes("domain-ownerships"))).toBe(false);
       expect(withDns.zone.records).toEqual([]);
       expect(withDns.rows.size).toBe(0);
+    }),
+  { tags },
+);
+
+const URL_READS = (cloud: UrlCloud) =>
+  cloud.routes().filter((route) => /^GET \/v1\/urls\/[^/]+$/.test(route));
+
+/**
+ * Runs `deploy` on the test clock, moving it 10 seconds at a time until the
+ * deploy finishes.
+ */
+const onTestClock = <A, E, R>(deploy: Effect.Effect<A, E, R>, clock = { steps: 0 }) =>
+  Effect.gen(function* () {
+    const fiber = yield* deploy.pipe(Effect.result, Effect.forkChild({ startImmediately: true }));
+    yield* TestClock.withLive(Effect.sleep("5 millis")).pipe(
+      Effect.andThen(TestClock.adjust("10 seconds")),
+      Effect.andThen(
+        Effect.sync(() => {
+          clock.steps++;
+        }),
+      ),
+      Effect.repeat({ until: () => fiber.pollUnsafe() !== undefined, times: 200 }),
+    );
+    return yield* Fiber.join(fiber);
+  }).pipe(Effect.provide(TestClock.layer()));
+
+/** A pending row Prisma has not yet served, stuck on its certificate. */
+const issuing = (row: WireRoutingUrl, customDomainSyncError: string | null = null) => ({
+  ...row,
+  firstUnmetCondition: "certificateActive",
+  customDomainSyncError,
+});
+
+const CERTIFICATE_LIMIT_ERROR =
+  "The workspace has reached its hourly limit of 10 new certificates. The limit resets at 2026-11-21T01:00:00.000Z.";
+
+const slowCertificate = makeUrlCloud();
+testFor(slowCertificate).test.provider(
+  "with dns, polls the RoutingUrl until Prisma serves it",
+  (stack) =>
+    Effect.gen(function* () {
+      slowCertificate.reset();
+      yield* stack.destroy();
+      let reads = 0;
+      slowCertificate.state.progress = (row, zone) =>
+        reads++ < 3 ? issuing(row) : servesWhenPublished(row, zone);
+
+      const deployed = yield* onTestClock(stack.deploy(dnsStack()));
+
+      expect(Result.isSuccess(deployed) && deployed.success.status).toBe("active");
+      expect(URL_READS(slowCertificate).length).toBe(3);
+      expect(slowCertificate.routes().filter((route) => route.startsWith("POST"))).toHaveLength(1);
+      expect(slowCertificate.routes().some((route) => route.endsWith("/check"))).toBe(false);
+
+      slowCertificate.state.progress = servesWhenPublished;
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const throttled = makeUrlCloud();
+testFor(throttled).test.provider(
+  "with dns, waits as long as Prisma's Retry-After asks on the create and on every poll",
+  (stack) =>
+    Effect.gen(function* () {
+      throttled.reset();
+      yield* stack.destroy();
+      const clock = { steps: 0 };
+      const polledAt: number[] = [];
+      throttled.state.progress = (row, zone) => {
+        polledAt.push(clock.steps);
+        return polledAt.length < 2 ? issuing(row) : servesWhenPublished(row, zone);
+      };
+      throttled.state.throttle = [
+        { route: "POST /v1/services/svc-1/urls", retryAfter: 1 },
+        { route: "GET /v1/urls/url-1", retryAfter: 40 },
+      ];
+
+      const deployed = yield* onTestClock(stack.deploy(dnsStack()), clock);
+
+      expect(Result.isSuccess(deployed) && deployed.success.status).toBe("active");
+      expect(throttled.routes().filter((route) => route.startsWith("POST"))).toHaveLength(2);
+      expect(throttled.rows.size).toBe(1);
+      expect(URL_READS(throttled)).toHaveLength(2);
+      // One 10-second poll interval, then the 40 seconds Prisma asked for.
+      expect(polledAt[1]! - polledAt[0]!).toBeGreaterThanOrEqual(5);
+
+      throttled.state.progress = servesWhenPublished;
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const neverServes = makeUrlCloud();
+testFor(neverServes).test.provider(
+  "with dns, fails with the first unmet condition and Prisma's error when the hostname does not serve in time, and the next deploy finds the same row",
+  (stack) =>
+    Effect.gen(function* () {
+      neverServes.reset();
+      yield* stack.destroy();
+      neverServes.state.progress = (row) => issuing(row, "Foundry did not answer");
+
+      const timedOut = yield* onTestClock(failuresOf(stack.deploy(dnsStack())));
+
+      const error = timedOut.pipe(
+        Result.map(({ errors }) =>
+          errors.find((each): each is RoutingUrlNotActive => each instanceof RoutingUrlNotActive),
+        ),
+        Result.getOrUndefined,
+      );
+      expect(error?.firstUnmetCondition).toBe("certificateActive");
+      expect(error?.customDomainSyncError).toBe("Foundry did not answer");
+      expect(error?.message).toContain(
+        "did not become active within 6 minutes: its first unmet condition is certificateActive",
+      );
+      expect(error?.message).toContain('Prisma reports: "Foundry did not answer"');
+      expect(URL_READS(neverServes).length).toBe(36);
+      expect(neverServes.routes().some((route) => route.endsWith("/check"))).toBe(false);
+      const [saved] = neverServes.rows.keys();
+
+      neverServes.state.progress = servesWhenPublished;
+      neverServes.fake.captured.length = 0;
+      const url = yield* stack.deploy(dnsStack());
+
+      expect(url.routingUrlId).toBe(saved);
+      expect(url.status).toBe("active");
+      expect(neverServes.rows.size).toBe(1);
+      expect(neverServes.routes().some((route) => route.startsWith("POST"))).toBe(false);
+      expect(PATCHES(neverServes)).toEqual([]);
+
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const certificateLimit = makeUrlCloud();
+testFor(certificateLimit).test.provider(
+  "with dns, fails at once when the workspace reached its hourly limit of new certificates",
+  (stack) =>
+    Effect.gen(function* () {
+      certificateLimit.reset();
+      yield* stack.destroy();
+      certificateLimit.state.progress = (row) => issuing(row, CERTIFICATE_LIMIT_ERROR);
+
+      const { errors } = yield* failuresOf(stack.deploy(dnsStack()));
+
+      const error = errors.find(
+        (each): each is RoutingUrlCertificateLimitReached =>
+          each instanceof RoutingUrlCertificateLimitReached,
+      );
+      expect(error?.limit).toBe(10);
+      expect(error?.resetAt).toBe("2026-11-21T01:00:00.000Z");
+      expect(error?.message).toContain("hourly limit of 10 new certificates");
+      expect(error?.message).toContain("resets at 2026-11-21T01:00:00.000Z");
+      expect(error?.message).toContain("Prisma continues on its own");
+      expect(URL_READS(certificateLimit)).toEqual([]);
+      expect(certificateLimit.routes().some((route) => route.endsWith("/check"))).toBe(false);
+
+      certificateLimit.state.progress = servesWhenPublished;
+      yield* stack.destroy();
+    }),
+  { tags },
+);
+
+const heldElsewhere = makeUrlCloud();
+testFor(heldElsewhere).test.provider(
+  "with dns, fails at once when a RoutingUrl in another workspace holds the hostname",
+  (stack) =>
+    Effect.gen(function* () {
+      heldElsewhere.reset();
+      yield* stack.destroy();
+      heldElsewhere.state.progress = (row) => ({
+        ...issuing(row),
+        firstUnmetCondition: "customDomainBound",
+        heldBy: {
+          workspaceId: null,
+          projectId: null,
+          serviceId: null,
+          message: "held by another workspace",
+        },
+      });
+
+      const { errors } = yield* failuresOf(stack.deploy(dnsStack()));
+
+      const error = errors.find(
+        (each): each is RoutingUrlNotActive => each instanceof RoutingUrlNotActive,
+      );
+      expect(error?.message).toContain("is held by another workspace");
+      expect(URL_READS(heldElsewhere)).toEqual([]);
+
+      heldElsewhere.state.progress = servesWhenPublished;
+      yield* stack.destroy();
     }),
   { tags },
 );
@@ -1005,17 +1209,31 @@ live.test.provider(
 
 const ZONE = "alchemy-test-2.us";
 
-/** Asks Prisma to check the RoutingUrl until it is `active`, at most 5 minutes. */
-const checkUntilActive = (id: string) =>
-  createUrlCheck({ id }).pipe(
+/** Reads the RoutingUrl every 15 seconds until it is `active`, at most 6 minutes. */
+const pollUntilActive = (id: string) =>
+  getUrl({ id }).pipe(
     Effect.map(({ data }) => data),
-    Effect.tap((data) =>
-      Effect.logInfo(`RoutingUrl ${data.status}; first unmet: ${data.firstUnmetCondition}`),
-    ),
     Effect.repeat({
-      schedule: Schedule.spaced("10 seconds"),
+      schedule: Schedule.spaced("15 seconds"),
       until: (data) => data.status === "active",
-      times: 30,
+      times: 24,
+    }),
+  );
+
+/**
+ * For a hostname whose records were published by hand: asks Prisma to check
+ * it once, then reads it every 15 seconds until it is `active`, at most 6
+ * minutes. A check on a failed certificate orders a new one, and a workspace
+ * may order only 10 an hour, so the check is never repeated.
+ */
+const checkOnceThenPollUntilActive = (id: string) =>
+  createUrlCheck({ id }).pipe(
+    Effect.andThen(getUrl({ id })),
+    Effect.map(({ data }) => data),
+    Effect.repeat({
+      schedule: Schedule.spaced("15 seconds"),
+      until: (data) => data.status === "active",
+      times: 24,
     }),
   );
 
@@ -1086,7 +1304,8 @@ liveDns.test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true
         });
 
       const { site, url } = yield* stack.deploy(urlStack(first));
-      expect((yield* checkUntilActive(url.routingUrlId)).status).toBe("active");
+      // The CNAME is published in the same deploy, possibly after Prisma first looked.
+      expect((yield* checkOnceThenPollUntilActive(url.routingUrlId)).status).toBe("active");
 
       const refused = yield* refusalOf(stack.deploy(urlStack(second)));
       expect(refused?.switchboardDns).toBe("absent");
@@ -1098,7 +1317,8 @@ liveDns.test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true
       const moved = yield* stack.deploy(urlStack(second, addresses));
       expect(moved.url.hostname).toBe(second);
       expect((yield* getUrl({ id: url.routingUrlId })).data.hostname).toBe(second);
-      const serving = yield* checkUntilActive(url.routingUrlId);
+      // The change was saved only once the new records were seen.
+      const serving = yield* pollUntilActive(url.routingUrlId);
       expect(serving.firstUnmetCondition).not.toBe("dnsPointsAtSwitchboard");
       expect(serving.status).toBe("active");
 

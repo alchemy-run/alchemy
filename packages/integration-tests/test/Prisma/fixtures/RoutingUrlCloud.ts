@@ -1,8 +1,10 @@
 import { CustomDomain, CustomDomainProvider } from "@alchemy.run/prisma/CustomDomain";
 import { RoutingUrlProvider, RoutingUrlResources } from "@alchemy.run/prisma/RoutingUrl";
 import * as Test from "@alchemy.run/test/Alchemy";
+import { Retry } from "@distilled.cloud/prisma";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
+import * as DeployRetry from "alchemy/DeployRetry";
 import * as DNS from "alchemy/DNS/Adapter";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -58,6 +60,13 @@ export const service = (id: string) => ({
 
 export type Condition = "met" | "unmet" | "unknown";
 
+export interface HeldBy {
+  workspaceId: string | null;
+  projectId: string | null;
+  serviceId: string | null;
+  message: string | null;
+}
+
 export const routingUrl = (
   id: string,
   options: {
@@ -87,7 +96,7 @@ export const routingUrl = (
       customDomainBound: met(active),
       certificateActive: met(active),
     },
-    firstUnmetCondition: active ? null : "ownershipVerified",
+    firstUnmetCondition: (active ? null : "ownershipVerified") as string | null,
     ownershipExpiry: null,
     records: active
       ? []
@@ -101,7 +110,7 @@ export const routingUrl = (
             ttl: 300,
           },
         ],
-    heldBy: null,
+    heldBy: null as HeldBy | null,
     customDomain:
       options.customDomainId === undefined
         ? null
@@ -114,7 +123,7 @@ export const routingUrl = (
             certificateRetryRequestedAt: null,
             certificateIssuanceStuck: false,
           },
-    customDomainSyncError: null,
+    customDomainSyncError: null as string | null,
     switchboardDns: null,
     setupUrl: active ? null : `https://console.prisma.test/urls/${id}`,
     createdAt: WIRE_CREATED_AT,
@@ -174,6 +183,14 @@ export interface CloudState {
   txtOptions: CheckOptions[];
   /** The DNS host's records when Prisma received a PATCH. */
   zoneAtPatch: DNS.DnsRecord[] | undefined;
+  /**
+   * How Prisma moves a saved row on, applied to each create, update and read
+   * of one. By default a pending row becomes `active` once the DNS host
+   * publishes both of its records.
+   */
+  progress: (row: WireRoutingUrl, zone: Zone) => WireRoutingUrl;
+  /** Requests, as `METHOD /path`, that Prisma answers once with 429 and `Retry-After` seconds. */
+  throttle: Array<{ route: string; retryAfter: number }>;
 }
 
 /** One DNS host's records, as the test DNS adapter publishes them. */
@@ -189,6 +206,24 @@ export interface Zone {
 
 export const sameRecord = (a: DNS.DnsRecord) => (b: DNS.DnsRecord) =>
   a.name === b.name && a.type === b.type && a.value === b.value;
+
+/** The row as Prisma shows it once it serves. */
+export const served = (row: WireRoutingUrl): WireRoutingUrl => ({
+  ...routingUrl(row.id, {
+    hostname: row.hostname,
+    serviceId: row.serviceId,
+    logicalId: row.logicalId,
+    status: "active",
+  }),
+  customDomain: row.customDomain,
+});
+
+/** Prisma serves a pending row once the DNS host publishes both of its records. */
+export const servesWhenPublished = (row: WireRoutingUrl, zone: Zone) =>
+  row.status === "pending" &&
+  recordsFor(row.hostname).every((record) => zone.records.some(sameRecord(record)))
+    ? served(row)
+    : row;
 
 export const makeUrlCloud = () => {
   const rows = new Map<string, WireRoutingUrl>();
@@ -206,11 +241,32 @@ export const makeUrlCloud = () => {
     txtAttempts: [],
     txtOptions: [],
     zoneAtPatch: undefined,
+    progress: servesWhenPublished,
+    throttle: [],
   };
   let next = 0;
+  const progressed = (row: WireRoutingUrl) => {
+    const moved = state.progress(row, zone);
+    rows.set(moved.id, moved);
+    return moved;
+  };
   const fake: FakeManagementApi = makeFakeManagementApi((request) => {
     const path = request.pathname;
     const body = request.bodyJson as Record<string, unknown> | undefined;
+    const throttled = state.throttle.find((each) => each.route === `${request.method} ${path}`);
+    if (throttled) {
+      state.throttle = state.throttle.filter((each) => each !== throttled);
+      return new Response(
+        JSON.stringify({ error: { code: "rate-limited", message: "Too many requests" } }),
+        {
+          status: 429,
+          headers: {
+            "content-type": "application/json",
+            "retry-after": String(throttled.retryAfter),
+          },
+        },
+      );
+    }
     const domainsMatch = /^\/v1\/services\/([^/]+)\/domains$/.exec(path);
     if (domainsMatch) {
       const serviceId = domainsMatch[1]!;
@@ -261,8 +317,7 @@ export const makeUrlCloud = () => {
         serviceId: serviceMatch[1],
         logicalId: (body?.logicalId as string | undefined) ?? null,
       });
-      rows.set(created.id, created);
-      return data(created, { status: 201 });
+      return data(progressed(created), { status: 201 });
     }
     if (path === "/v1/projects/proj-1/branches/br-1/urls") {
       const logicalId = new URLSearchParams(request.search).get("logicalId");
@@ -308,7 +363,7 @@ export const makeUrlCloud = () => {
     if (urlMatch) {
       const row = rows.get(urlMatch[1]!);
       if (row === undefined) return notFound("RoutingUrl not found");
-      if (request.method === "GET") return data(row);
+      if (request.method === "GET") return data(progressed(row));
       if (request.method === "DELETE") {
         rows.delete(row.id);
         return noContent();
@@ -328,8 +383,7 @@ export const makeUrlCloud = () => {
           // Prisma changes only the fields it is given; a new hostname loses the custom domain.
           customDomain: hostname === row.hostname ? row.customDomain : null,
         };
-        rows.set(row.id, updated);
-        return data(updated);
+        return data(progressed(updated));
       }
     }
     return unhandled(request);
@@ -354,6 +408,8 @@ export const makeUrlCloud = () => {
         txtAttempts: [],
         txtOptions: [],
         zoneAtPatch: undefined,
+        progress: servesWhenPublished,
+        throttle: [],
       },
       options,
     );
@@ -523,6 +579,7 @@ export const testFor = (cloud: UrlCloud, options: { dev?: boolean } = {}) =>
       Layer.provide(
         Layer.succeed(AlchemyContext, { dotAlchemy: ".alchemy-test", dev: false, adopt: false }),
       ),
+      Layer.provideMerge(Layer.succeed(Retry.Retry, DeployRetry.policy)),
       Layer.provideMerge(cloud.fake.layer),
     ),
   });

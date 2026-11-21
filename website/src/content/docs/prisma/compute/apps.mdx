@@ -114,7 +114,7 @@ export default Prisma.Compute(
 
 ## Routing URLs
 
-`Prisma.RoutingUrl` saves a hostname for an app before its DNS exists. The deploy succeeds at once, and the resource reports the records still to publish:
+`Prisma.RoutingUrl` saves a hostname for an app before its DNS exists. Without `dns`, the deploy succeeds at once, and the resource reports the records still to publish:
 
 ```typescript
 const url = yield* Prisma.RoutingUrl("api", {
@@ -128,7 +128,7 @@ const url = yield* Prisma.RoutingUrl("api", {
 
 Prisma makes the RoutingUrl `active` once both records are published. It also creates the domain ownership the `TXT` record proves; destroying the RoutingUrl leaves that domain ownership in place.
 
-Pass `dns` to publish both records through a [DNS adapter](/infrastructure-as-code/dns-adapters) in the same deploy. Destroy removes them:
+Pass `dns` to publish both records through a [DNS adapter](/infrastructure-as-code/dns-adapters) in the same deploy, and to wait for the hostname to serve. Destroy removes them:
 
 ```typescript
 const url = yield* Prisma.RoutingUrl("api", {
@@ -141,10 +141,20 @@ const url = yield* Prisma.RoutingUrl("api", {
 The records are published DNS-only, even when the adapter proxies aliases, so Prisma can see the `CNAME`. `dns` needs `hostname` as a plain string. Nothing is published under `alchemy dev`.
 
 - Removing `dns` removes the records it published. To publish them with another tool instead, publish them there first; copy them from your DNS host, because `records` is empty once the RoutingUrl is `active`.
-- The deploy does not wait for the RoutingUrl to become `active`. A hostname that serves from another host today stops serving there as soon as its `CNAME` is replaced, until Prisma can serve it. To move such a hostname, publish the records yourself.
+- A hostname that serves from another host today stops serving there as soon as its `CNAME` is replaced, until Prisma can serve it. To move such a hostname, publish the records yourself.
 - A create Prisma refuses leaves both records published until you change or remove the RoutingUrl.
 - A record already published with the same value is treated as the RoutingUrl's own, and destroy removes it.
 - A zone apex needs a DNS host that flattens a `CNAME` at the apex. At any other host, omit `dns` and publish an ALIAS or ANAME yourself.
+
+With `dns`, the deploy waits for the hostname to serve, so `url.status` is `active` when it finishes. It waits up to about a minute for the records to appear at the hostname's nameservers before Prisma checks them, then up to 6 minutes for the RoutingUrl to become `active`. A certificate normally takes about 20 seconds, and Prisma looks at it again 3 minutes after ordering it.
+
+- When the wait runs out, the deploy fails with `RoutingUrlNotActive`. Its message names the first condition not met and quotes Prisma's last sync error. Prisma keeps working on the hostname; redeploy to wait again.
+- When the workspace has reached its hourly limit of new certificates, the deploy fails at once with `RoutingUrlCertificateLimitReached`, which says when the limit resets. Prisma continues on its own at that time, and a redeploy after then waits for the hostname.
+- A deploy that failed while waiting has saved the RoutingUrl. The next deploy finds it and does not create another.
+
+### How many hostnames you can add
+
+A workspace can add about 10 custom hostnames an hour, because each one needs a new certificate. Every RoutingUrl a deploy or a test creates counts, also one created again after it was deleted. Count CI reruns and parallel jobs that deploy to the same workspace. A hostname that waits for the limit serves on its own once the limit resets.
 
 A RoutingUrl is identified on its Branch by `logicalId`, which defaults to the resource's fully qualified name: `Prisma.RoutingUrl("Url", …)` declared inside a `Prisma.Website` named `Site` gets `Site/Url`. Without state, a RoutingUrl takes over a row on its own app that has its `logicalId`, or one with no `logicalId` and its hostname, such as the row Prisma made for a custom domain. A row with its `logicalId` on another app belongs to another stage or stack sharing the Branch, and is taken over only with `--adopt`. Changing the hostname of an `active` RoutingUrl fails before anything changes, until the workspace is shown to own the new hostname and every authoritative nameserver for it answers with either a `CNAME` to the regional switchboard or, with no `CNAME`, A or AAAA records that include a switchboard address. A `CNAME` to any other name does not pass, even when that name has the switchboard's addresses. Ownership is shown by a verified domain ownership that covers the hostname, or by its `TXT` record at every authoritative nameserver, which Prisma verifies when it saves the change. The error lists the records still missing, so publishing them and redeploying lets the change through. With `dns`, the new hostname's records are published in the same deploy, and the old hostname's records are removed only once the change is saved.
 

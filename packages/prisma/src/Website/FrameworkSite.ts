@@ -77,11 +77,13 @@ export interface FrameworkSiteProps {
   /** Native framework development server options, including external-server mode. */
   dev?: ServerDevProps;
   /**
-   * Custom hostname, saved as a `Prisma.RoutingUrl`. The deploy does not wait
-   * for it to serve: `domain.status` is `pending` and `domain.records` lists
-   * the `TXT` and `CNAME` to publish until Prisma finds them. Set `dns` (e.g.
+   * Custom hostname, saved as a `Prisma.RoutingUrl`. Without `dns`, the
+   * deploy does not wait for it to serve: `domain.status` is `pending` and
+   * `domain.records` lists the `TXT` and `CNAME` to publish until Prisma
+   * finds them. Set `dns` (e.g.
    * `{ name: "www.example.com", dns: Cloudflare.DNS.Adapter() }`) to publish
-   * them through the DNS host. See
+   * them through the DNS host; the deploy then waits up to 6 minutes for the
+   * hostname to serve. See
    * [DNS Adapters](/infrastructure-as-code/dns-adapters).
    */
   domain?: WebsiteDomain;

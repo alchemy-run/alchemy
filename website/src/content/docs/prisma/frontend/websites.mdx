@@ -183,7 +183,7 @@ const site = yield* Prisma.Website.Astro("Web", {
 
 `domain` saves the hostname as a [`Prisma.RoutingUrl`](/prisma/compute/apps#routing-urls) and changes `site.url` to `https://app.example.com` from the first deploy.
 
-The deploy does not wait for the hostname to serve. `site.domain` is the RoutingUrl: its `status` is `pending` until Prisma finds the hostname's DNS records, and its `records` lists the `TXT` record that proves your workspace owns the hostname and the `CNAME` to the regional switchboard. Publish them with your DNS host; Prisma makes the RoutingUrl `active` once it finds them.
+Without `dns`, the deploy does not wait for the hostname to serve. `site.domain` is the RoutingUrl: its `status` is `pending` until Prisma finds the hostname's DNS records, and its `records` lists the `TXT` record that proves your workspace owns the hostname and the `CNAME` to the regional switchboard. Publish them with your DNS host; Prisma makes the RoutingUrl `active` once it finds them.
 
 :::note
 A site whose DNS is not ready now deploys and reports `pending`. Before, the deploy failed until the DNS was published.
@@ -198,6 +198,8 @@ const site = yield* Prisma.Website.Astro("Web", {
   domain: { name: "app.example.com", dns: Cloudflare.DNS.Adapter() },
 });
 ```
+
+With `dns`, the deploy waits up to 6 minutes for the hostname to serve, and fails with an error that says what is missing if it does not. A workspace can add about 10 custom hostnames an hour; see [How many hostnames you can add](/prisma/compute/apps#how-many-hostnames-you-can-add).
 
 `AWS.Route53.Adapter()` and `Hetzner.DNS.Adapter()` work the same way. See [DNS Adapters](/infrastructure-as-code/dns-adapters) and [Routing URLs](/prisma/compute/apps#routing-urls) for what `dns` publishes and when.
 
