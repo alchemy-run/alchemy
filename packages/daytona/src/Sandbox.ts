@@ -408,7 +408,8 @@ export type SandboxRuntimeContext = HostRuntimeContext;
  */
 export const Sandbox: Platform<Sandbox, SandboxServices, SandboxShape, SandboxRuntimeContext> &
   LookupMethod<Sandbox> = Platform("Daytona.Sandbox", {
-  createRuntimeContext: createHostRuntimeContext("Daytona.Sandbox"),
+  createRuntimeContext: (id) =>
+    Object.assign(createHostRuntimeContext("Daytona.Sandbox")(id), { sandbox: true }),
   // A declaration passed as a prop (`snapshot: Base`) is an Effect until
   // yielded. Yield it here so it is registered and the prop resolves to
   // its attributes, as with `yield* Snapshot(...)` inside Effect.gen.

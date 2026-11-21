@@ -326,8 +326,11 @@ if (mode === "follow") {
 } else if (mode === "wait") {
   for (let attempt = 0; attempt < 240; attempt++) {
     try {
-      const health = await (await fetch(BRIDGE + "/_health")).json();
-      if (health.epoch === args[0] && (await fetch(OPENCODE + "/global/health")).ok) {
+      // A server that accepts a connection before it can answer would hold
+      // the request, and this command, for as long as it likes.
+      const get = (url) => fetch(url, { signal: AbortSignal.timeout(2000) });
+      const health = await (await get(BRIDGE + "/_health")).json();
+      if (health.epoch === args[0] && (await get(OPENCODE + "/global/health")).ok) {
         out({ status: 200, body: "ready" });
         process.exit(0);
       }

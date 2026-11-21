@@ -24,6 +24,8 @@ export * from "./Issue.ts";
 export * from "./RepositoryEventSourceLive.ts";
 export * from "./Errors.ts";
 export * from "./PersonalAccessToken.ts";
+export * from "./PushRepository.ts";
+export * from "./PushRepositoryHttp.ts";
 export * from "./CreateIssue.ts";
 export * from "./CreateIssueHttp.ts";
 export * from "./CreateIssueLocal.ts";

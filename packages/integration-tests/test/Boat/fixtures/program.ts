@@ -1,9 +1,11 @@
 import * as Boat from "@alchemy.run/boat";
+import * as Gateway from "alchemy/Gateway";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 
 /**
  * A sandbox that runs an Effect program: it reads its environment, writes
@@ -39,5 +41,10 @@ export default class Agent extends Boat.Sandbox<Agent>()(
         return yield* HttpServerResponse.json({ greeting, node });
       }).pipe(Effect.orDie),
     };
-  }).pipe(Effect.provide(Boat.CreateSandboxHttp)),
+  }).pipe(
+    Effect.provide(
+      // The sandbox runs this program only, so its key may live in it.
+      Layer.mergeAll(Boat.CreateSandboxHttp, Gateway.Unprotected),
+    ),
+  ),
 ) {}

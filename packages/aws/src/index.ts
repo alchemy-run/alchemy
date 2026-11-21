@@ -4,6 +4,7 @@ export * from "./AssetsBucket.ts";
 export * from "./Environment.ts";
 export * as AWSBindings from "./AWSBindings.ts";
 export * from "./Providers.ts";
+export * from "./SandboxSigner.ts";
 export * from "./StateStore/index.ts";
 
 export { Region } from "@distilled.cloud/aws/Region";
