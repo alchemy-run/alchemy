@@ -598,9 +598,9 @@ const PROVIDERS = [
       <div class="v2-split v2-split--narrow">
         <CodeBlock filename="src/BankWorker.ts" code={WIRING_SRC} compact />
       </div>
-      <h3 class="v2-h3" data-copy>Type-checked IAM policies and bindings</h3>
+      <h3 class="v2-h3" data-copy>Let the code write its own IAM policy</h3>
       <p class="v2-lede" data-copy>
-        The program declares what it needs in its type, and so does each Layer: the resources it creates, the access it grants, and the services it calls. Leave one out and it doesn't compile, so a broken stack fails in your editor in milliseconds, before anything deploys.
+        Each binding grants one permission and returns a client that can only make that call. Alchemy generates the policy from the bindings, so it never grants more than the code uses. Reach for an operation you didn't bind and the code doesn't compile: a missing permission shows up in your editor, not as an AccessDenied in production.
       </p>
       <TypePolicy client:visible />
     </div>
