@@ -167,7 +167,7 @@ export const ReleaseProvider = () =>
 
       if (current === undefined) {
         const created = yield* firebaserules
-          .createProjectsReleases({ rulesetName: desiredRuleset, name: parent })
+          .createProjectsReleases({ parent, name, rulesetName: desiredRuleset })
           .pipe(Effect.catchTag("Conflict", () => getRelease(name)));
         current = created ?? undefined;
       }
