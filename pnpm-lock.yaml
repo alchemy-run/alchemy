@@ -797,6 +797,7 @@ overrides:
   drizzle-orm: 1.0.0-rc.5
   mysql2: 3.24.5
   zod: 4.5.4
+  jose: 6.2.8
   rolldown: 1.2.16
   glob@<11: ^13.0.6
 
@@ -11225,6 +11226,9 @@ importers:
       '@alchemy.run/modal':
         specifier: workspace:*
         version: link:../modal
+      '@alchemy.run/nanocode':
+        specifier: workspace:*
+        version: link:../nanocode
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../neon
@@ -11410,7 +11414,7 @@ importers:
         version: 8.5.0(react-router@8.5.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(typescript@7.1.0-beta)
       '@rivetkit/effect':
         specifier: 3.0.0
-        version: 3.0.0(effect@4.1.4)(rivetkit@3.0.0(7f2c5cba85f95c8ca25c38aa44bcb0dc))
+        version: 3.0.0(effect@4.1.4)(rivetkit@3.0.0(b4627923ac407450dd1a147fbc06a924))
       '@solidjs/router':
         specifier: 'catalog:'
         version: 1.0.0(solid-js@1.9.17)
@@ -11534,6 +11538,9 @@ importers:
       isbot:
         specifier: 'catalog:'
         version: 5.2.2
+      nanocode-ts:
+        specifier: https://github.com/nanocodexyz/nanocode-ts/releases/download/build-887f3cc/nanocode-ts-887f3cc.tgz
+        version: https://github.com/nanocodexyz/nanocode-ts/releases/download/build-887f3cc/nanocode-ts-887f3cc.tgz(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.5.4))(@pierre/highlights@0.2.0)(@vercel/oidc@3.2.0)(express@5.2.1(supports-color@10.2.2))(hono@4.13.13)(next@16.4.3(@babel/core@7.29.7(supports-color@10.2.2))(@opentelemetry/api@1.10.0)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)(typescript@7.1.0-beta)(zod@4.5.4)
       next:
         specifier: 'catalog:'
         version: 16.4.3(@babel/core@7.29.7(supports-color@10.2.2))(@opentelemetry/api@1.10.0)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -11575,7 +11582,7 @@ importers:
         version: 19.3.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(webpack@5.105.0(cssnano@9.9.0(postcss@8.5.31))(csso@5.0.5)(esbuild@0.28.2)(lightningcss@1.33.0)(postcss@8.5.31))
       rivetkit:
         specifier: 3.0.0
-        version: 3.0.0(7f2c5cba85f95c8ca25c38aa44bcb0dc)
+        version: 3.0.0(b4627923ac407450dd1a147fbc06a924)
       rolldown:
         specifier: 1.2.16
         version: 1.2.16
@@ -11692,6 +11699,31 @@ importers:
       effect:
         specifier: 4.1.4
         version: 4.1.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-beta
+
+  packages/nanocode:
+    dependencies:
+      '@alchemy.run/ai':
+        specifier: workspace:*
+        version: link:../ai
+    devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../cloudflare
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      nanocode-ts:
+        specifier: https://github.com/nanocodexyz/nanocode-ts/releases/download/build-887f3cc/nanocode-ts-887f3cc.tgz
+        version: https://github.com/nanocodexyz/nanocode-ts/releases/download/build-887f3cc/nanocode-ts-887f3cc.tgz(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.5.4))(@pierre/highlights@0.2.0)(@vercel/oidc@3.2.0)(express@5.2.1(supports-color@10.2.2))(hono@4.13.13)(next@16.4.3(@babel/core@7.29.7(supports-color@10.2.2))(@opentelemetry/api@1.10.0)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)(typescript@7.1.0-beta)(zod@4.5.4)
       typescript:
         specifier: 'catalog:'
         version: 7.1.0-beta
@@ -14437,6 +14469,9 @@ packages:
   '@1password/sdk@0.5.0':
     resolution: {integrity: sha512-k6kov3pcA7PRg2tev9CgTfEf/3JSyAp11BPQNCEsqAD32QbqM032OXC1rfjyC8Ba0sfH+NHYZxcifUZToyGyYA==}
 
+  '@adraffy/ens-normalize@1.11.1':
+    resolution: {integrity: sha512-nhCBV3quEgesuf7c7KYfperqSS14T8bYuvJ8PcLJp6znkZpFc0AuW4qBtr8eKVyPPe/8RSr7sglCWPU5eaxwKQ==}
+
   '@ai-sdk/anthropic@3.0.118':
     resolution: {integrity: sha512-5j8Cc9owORxhhZxFtpznXPTdLxeWm6bPCVbndM0e+NdvGVxe9GDgNqQq1V0KqOV54hZ6hyQVEXHkgTRPyXzcQg==}
     engines: {node: '>=18'}
@@ -15406,7 +15441,7 @@ packages:
       '@cloudflare/workers-types': 5.20261117.1
       '@opentelemetry/api': ^1.9.0
       better-call: 1.3.7
-      jose: ^6.1.0
+      jose: 6.2.8
       kysely: ^0.28.5 || ^0.29.0
       nanostores: ^1.0.1
     peerDependenciesMeta:
@@ -15423,7 +15458,7 @@ packages:
       '@cloudflare/workers-types': 5.20261117.1
       '@opentelemetry/api': ^1.9.0
       better-call: 1.3.7
-      jose: ^6.1.0
+      jose: 6.2.8
       kysely: ^0.28.5 || ^0.29.0
       nanostores: ^1.0.1
     peerDependenciesMeta:
@@ -15439,7 +15474,7 @@ packages:
       '@better-fetch/fetch': 1.3.2
       '@opentelemetry/api': ^1.9.0
       better-call: 1.4.0
-      jose: ^6.1.0
+      jose: 6.2.8
       kysely: ^0.28.5 || ^0.29.0
       nanostores: ^1.0.1
     peerDependenciesMeta:
@@ -18035,9 +18070,21 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@noble/ciphers@1.3.0':
+    resolution: {integrity: sha512-2I0gnIVPtfnMw9ee9h1dJG7tp81+8Ob3OJb3Mv37rx5L40/b0i7djjCVvGOVqc9AEIQyvyu1i6ypKdFw8R8gQw==}
+    engines: {node: ^14.21.3 || >=16}
+
   '@noble/ciphers@2.3.0':
     resolution: {integrity: sha512-Clu/xdfgVTf9o7ngLOURaxePwR0j8sjclKEtVij10/jGulwFsPWCvvRgG/XjUVf8Nei+jLG6uwyXzUTGY1DQrw==}
     engines: {node: '>= 20.19.0'}
+
+  '@noble/curves@1.9.1':
+    resolution: {integrity: sha512-k11yZxZg+t+gWvBbIswW0yoJlu8cHOC7dhunwOzoWH/mXGBiYyR4YY6hAEK/3EUs4UpB8la1RfdRpeGsFHkWsA==}
+    engines: {node: ^14.21.3 || >=16}
+
+  '@noble/hashes@1.8.0':
+    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
+    engines: {node: ^14.21.3 || >=16}
 
   '@noble/hashes@2.3.0':
     resolution: {integrity: sha512-oN+QwyX7VSHotibwubG3kpzbwKrfnyR6OOO+3Nk/53ADL7FmgHHz4TgrbaYKvvOw09u6QTx0oiH1cNCIOuN0CQ==}
@@ -21073,6 +21120,15 @@ packages:
     resolution: {integrity: sha512-cKuSCjczuCbpR9vd2HlI5J5khoHSD2Rqjn1jkL4Ucc7FY4IdKWYJbTfQE6hrbfB0wFK7/U1kwltW6YDfYsxpcw==}
     engines: {node: '>=22'}
 
+  '@scure/base@1.2.6':
+    resolution: {integrity: sha512-g/nm5FgUa//MCj1gV09zTJTaM6KBAHqLN907YVQqf7zC49+DcO4B1so4ZX07Ef10Twr6nuqYEH9GEggFXA4Fmg==}
+
+  '@scure/bip32@1.7.0':
+    resolution: {integrity: sha512-E4FFX/N3f4B80AKWp5dP6ow+flD1LQZo/w8UnLGYZO674jS6YnYeepycOOksv+vLPSpgN35wgKgy+ybfTb2SMw==}
+
+  '@scure/bip39@1.6.0':
+    resolution: {integrity: sha512-+lF0BbLiJNwVlev4eKelw1WWLaiKXw7sSl8T6FvBlWkdX+94aGJ4o8XjUdlyhTCjd8c+B3KT3JfS8P0bLRNU6A==}
+
   '@sec-ant/readable-stream@0.4.1':
     resolution: {integrity: sha512-831qok9r2t8AlxLko40y2ebgSDhenenCatLVeW/uBtnHPyhHOvG0C7TvfgecV+wHzIm5KUICgzmVpWS+IMEAeg==}
 
@@ -23385,6 +23441,28 @@ packages:
     resolution: {integrity: sha512-AO2ac6pjRB3SJmGJo+v5/aK6Omggp6fsLrs6wN9bd35ulu4cCwaAU9+7ZhXjeqHVkaHThLuzH0nZr0YpCDhygg==}
     engines: {node: ^18.17.0 || >=20.5.0}
 
+  abitype@1.2.3:
+    resolution: {integrity: sha512-Ofer5QUnuUdTFsBRwARMoWKOH1ND5ehwYhJ3OJ/BQO+StkwQjHw0XyVh4vDttzHB7QOFhPHa/o413PJ82gU/Tg==}
+    peerDependencies:
+      typescript: '>=5.0.4'
+      zod: 4.5.4
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+      zod:
+        optional: true
+
+  abitype@1.3.0:
+    resolution: {integrity: sha512-fk6Te+bojIFrMvMZrnOO+SxCB+RUksTGOzq/60ZRvs1L+BVzvi2bqt9L3W/17ZLdZsyM1FuYf65P5nlmoiH1Bg==}
+    peerDependencies:
+      typescript: '>=5.0.4'
+      zod: 4.5.4
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+      zod:
+        optional: true
+
   abort-controller@3.0.0:
     resolution: {integrity: sha512-h8lQ8tacZYnR3vNQTgibj+tODHI5/+l06Au2Pcriv/Gmet0eaj4TwWH41sO9wnHDiQsEj19q0drzdWdeAHtweg==}
     engines: {node: '>=6.5'}
@@ -23392,6 +23470,30 @@ packages:
   accepts@2.0.0:
     resolution: {integrity: sha512-5cvg6CtKwfgdmVqY1WIiXKc3Q1bkRqGLi+2W/6ao+6Y7gu/RCwRuAhGEzh5B4KlszSuTLgZYuqFqo5bImjNKng==}
     engines: {node: '>= 0.6'}
+
+  accounts@1.0.0-alpha.20261117214203-d38fbea:
+    resolution: {integrity: sha512-p3zzx23UJsGWYMgVsdmRyr7Nv+9exSNsGQF4KL5RNM2THFaUDgNRm5BRbRN1CxfSbqqYgSHi6D7w3D1mB3s/VQ==}
+    peerDependencies:
+      '@wagmi/core': ^3.6.7
+      expo-secure-store: '>=14'
+      expo-web-browser: '>=14'
+      mppx: '>=0.19.0'
+      react: '>=18'
+      react-native-get-random-values: '>=1'
+      viem: ^2.57.19
+    peerDependenciesMeta:
+      '@wagmi/core':
+        optional: true
+      expo-secure-store:
+        optional: true
+      expo-web-browser:
+        optional: true
+      mppx:
+        optional: true
+      react:
+        optional: true
+      react-native-get-random-values:
+        optional: true
 
   acorn-import-attributes@1.9.5:
     resolution: {integrity: sha512-n02Vykv5uA3eHGM/Z2dQrcD56kL8TyDb2p1+0P83PClMnC/nc+anbQRhIOWnSq4Ke/KvDPrY3C9hDtC/A3eHnQ==}
@@ -25407,6 +25509,9 @@ packages:
     resolution: {integrity: sha512-i/2XbnSz/uxRCU6+NdVJgKWDTM427+MqYbkQzD321DuCQJUqOuJKIA0IM2+W2xtYHdKOmZ4dR6fExsd4SXL+WQ==}
     engines: {node: '>=6'}
 
+  eventemitter3@5.0.1:
+    resolution: {integrity: sha512-GWkBvjiSZK87ELrYOSESUYeVIc9mvLLf/nXalMOS5dYrgZq9o5OVkbZAVM06CVxYsCwH9BDZFPlQTlPA1j4ahA==}
+
   eventemitter3@5.0.4:
     resolution: {integrity: sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==}
 
@@ -26340,6 +26445,11 @@ packages:
     resolution: {integrity: sha512-FFUtZMpoZ8RqHS3XeXEmHWLA4thH+ZxCv2lOiPIn1Xc7CxrqhWzNSDzD+/chS/zbYezmiwWLdQC09JdQKmthOw==}
     engines: {node: '>=20'}
 
+  isows@1.0.7:
+    resolution: {integrity: sha512-I1fSfDCZL5P0v33sVqeTDSpcstAg/N+wF5HS033mogOVIp4B+oHC7oOCsA3axAbBSGTJ8QubbNmnIRN/h8U7hg==}
+    peerDependencies:
+      ws: '*'
+
   itty-time@2.0.2:
     resolution: {integrity: sha512-95U9Xo3Qggz/e82ewZQJw8x76HgiMvbrijzoPy6nCTae4FZEwbcVJgrB57Kvddf8Q5pQdgJKTX6euFJpDr6Low==}
 
@@ -26353,9 +26463,6 @@ packages:
 
   jju@1.4.0:
     resolution: {integrity: sha512-8wb9Yw966OSxApiCt0K3yNJL8pnNeIv+OEq2YMidz4FKP6nonSRoOXc80iXY4JaN2FC11B9qsNmDsm+ZOfMROA==}
-
-  jose@6.2.5:
-    resolution: {integrity: sha512-2E5L2yRp03FnwreJLJX8/r7mHiZICCf8kG7fAsTWkSQTDAcc46NIZoQLKy+EJ8sPoJlxyS4OQR5H70LjIZZlIQ==}
 
   jose@6.2.8:
     resolution: {integrity: sha512-Bsdjwm3Qsd/P0jR+BHDe3LytDfY7WBq2HmCCLIwuVRHMuEC9ae7/R474GIUdF1NgCyZjzVo/A9DOiOBtXq8ZoQ==}
@@ -27163,6 +27270,46 @@ packages:
       socks:
         optional: true
 
+  mppx@0.20.1:
+    resolution: {integrity: sha512-qn1gC2cEwxuEw4g2rJEhb+41LOteq0ZzNuNT5HhXz/haFOSPpTIJc/0YjT1ACRLtqW4uMu8NplkKBv/aYeqQnw==}
+    hasBin: true
+    peerDependencies:
+      '@modelcontextprotocol/sdk': '>=1.25.0'
+      '@stripe/agent-identity': '>=0.3.0'
+      '@x402/core': '>=2.22.0'
+      '@x402/express': '>=2.22.0'
+      '@x402/hono': '>=2.22.0'
+      '@x402/mcp': '>=2.22.0'
+      '@x402/next': '>=2.22.0'
+      elysia: '>=1.2.0'
+      express: '>=5'
+      hono: '>=4.12.25'
+      next: '>=16.2.6'
+      viem: '>=2.57.19'
+    peerDependenciesMeta:
+      '@modelcontextprotocol/sdk':
+        optional: true
+      '@stripe/agent-identity':
+        optional: true
+      '@x402/core':
+        optional: true
+      '@x402/express':
+        optional: true
+      '@x402/hono':
+        optional: true
+      '@x402/mcp':
+        optional: true
+      '@x402/next':
+        optional: true
+      elysia:
+        optional: true
+      express:
+        optional: true
+      hono:
+        optional: true
+      next:
+        optional: true
+
   mri@1.2.0:
     resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
     engines: {node: '>=4'}
@@ -27202,6 +27349,34 @@ packages:
   named-placeholders@1.1.6:
     resolution: {integrity: sha512-Tz09sEL2EEuv5fFowm419c1+a/jSMiBjI9gHxVLrVdbUkkNUUfjsVYs9pVZu5oCon/kmRh9TfLEObFtkVxmY0w==}
     engines: {node: '>=8.0.0'}
+
+  nanocode-ts@https://github.com/nanocodexyz/nanocode-ts/releases/download/build-887f3cc/nanocode-ts-887f3cc.tgz:
+    resolution: {integrity: sha512-9jxWKtgLyNUgUv8kWoGxHeHUbnNhTgRsHVjC3nlqvbH0gZAkOYjQnpYkVvV/VWZQ+TPeZjlvINROO8w2yVR0bQ==, tarball: https://github.com/nanocodexyz/nanocode-ts/releases/download/build-887f3cc/nanocode-ts-887f3cc.tgz}
+    version: 0.1.0
+    peerDependencies:
+      '@pierre/highlights': ^0.2.0
+      '@vercel/oidc': ^3.2.0
+      '@vercel/sandbox': ^3.9.0
+      durable-harness: 0.0.1-beta.6
+      postgres: ^4.1.1
+      react: ^19.0.0
+    peerDependenciesMeta:
+      '@pierre/highlights':
+        optional: true
+      '@vercel/oidc':
+        optional: true
+      '@vercel/sandbox':
+        optional: true
+      durable-harness:
+        optional: true
+      postgres:
+        optional: true
+      react:
+        optional: true
+    bundledDependencies:
+      - '@cloudflare/containers'
+      - nanocode-egress
+      - undici
 
   nanoid@3.3.20:
     resolution: {integrity: sha512-uKdg2G3GNCKQn9byYOpxbGqrT2fGO5KRt5J/8b3pok8rT6qxGWF6hxMyJiEYtAf+FVyYuD9hRaDqX5uPFYJ4ZQ==}
@@ -27581,6 +27756,22 @@ packages:
 
   outvariant@1.4.0:
     resolution: {integrity: sha512-AlWY719RF02ujitly7Kk/0QlV+pXGFDHrHf9O2OKqyqgBieaPOIeuSkL8sRK6j2WK+/ZAURq2kZsY0d8JapUiw==}
+
+  ox@0.14.65:
+    resolution: {integrity: sha512-K7oj+jvEP4Gf78ZOYuWAWzKEX/g5z7p6ukj84gdbFnezmFSt6SpprEp9tH5tymXsywSqRdeqk+8JL4+9o0Schw==}
+    peerDependencies:
+      typescript: '>=5.4.0'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
+  ox@0.14.67:
+    resolution: {integrity: sha512-6v6UlwgsmiyTujZp0aVDuN8uIBAtl/QZadBADFRZ2zp1+CM9TqDzd+rPKJ5PYvWPlCvz8JvoO9dTr42+1PhBhA==}
+    peerDependencies:
+      typescript: '>=5.4.0'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   oxc-parser@0.120.0:
     resolution: {integrity: sha512-WyPWZlcIm+Fkte63FGfgFB8mAAk33aH9h5N9lphXVOHSXEBFFsmYdOBedVKly363aWABjZdaj/m9lBfEY4wt+w==}
@@ -28399,6 +28590,9 @@ packages:
   rehype-format@5.0.1:
     resolution: {integrity: sha512-zvmVru9uB0josBVpr946OR8ui7nJEdzZobwLOOqHb/OOD88W0Vk2SqLwoVOj0fM6IPCCO6TaV9CvQvJMWwukFQ==}
 
+  rehype-harden@1.1.8:
+    resolution: {integrity: sha512-Qn7vR1xrf6fZCrkm9TDWi/AB4ylrHy+jqsNm1EHOAmbARYA6gsnVJBq/sdBh6kmT4NEZxH5vgIjrscefJAOXcw==}
+
   rehype-parse@9.0.1:
     resolution: {integrity: sha512-ksCzCD0Fgfh7trPDxr2rSylbwq9iYDkSn8TCDmEJ49ljEUBxDVCzCHv7QNzZOfODanX4+bWQ4WZqLCRWYLfhag==}
 
@@ -29063,6 +29257,10 @@ packages:
 
   structured-clone-es@2.0.1:
     resolution: {integrity: sha512-10ZL5r77LhknxlP1FBiCW+VdnuWOEFLdSS2SKtjyEV+L4qP1hUEIMIZW94LC3jKxRmT/Dj7KkD1mqh/IY6lhKQ==}
+
+  structured-headers@2.1.0:
+    resolution: {integrity: sha512-ClzykN+XQVaSW5UfpOdEWfDplZ1Th7mISdaFvaC2+GjLTeBhGMJw83D/Rw9jPkHOml4oYd3EXaZhbz3gnE5nBQ==}
+    engines: {node: '>=18', npm: '>=6'}
 
   style-loader@4.0.0:
     resolution: {integrity: sha512-1V4WqhhZZgjVAVJyt7TdDPZoPBPNHbekX4fWnCJL1yQukhCeZhJySUL+gL9y6sNdN95uEOS83Y55SqHcP7MzLA==}
@@ -30039,6 +30237,17 @@ packages:
     resolution: {integrity: sha512-uDiJnyjsNKgFrE96mONSh/z5wlNvmgUBJ3VAEqiZcE3ozIGNszGziqcCeMyZxDzA5/tdMKvUc3IAxWqi5xsaHA==}
     hasBin: true
 
+  viem@2.57.19:
+    resolution: {integrity: sha512-ULAHSwef42oL1reV41Os40iR34PF9BFNIX/RBapHLAJL1X6VmrgQikS4q4ulZ7/8GqlFLqrRI5GoNms3hcxsHw==}
+    peerDependencies:
+      mppx: '>=0.17.0'
+      typescript: '>=5.0.4'
+    peerDependenciesMeta:
+      mppx:
+        optional: true
+      typescript:
+        optional: true
+
   vike-react@0.6.31:
     resolution: {integrity: sha512-xkaFc3wUCGwtNwnVRYrTVilqGs3KkwwumGj3eMg7IkLm4nL4PzhYbho5OgE39Tn48V8HqKIYlkvYCO9+UF87bQ==}
     peerDependencies:
@@ -30782,6 +30991,9 @@ packages:
     resolution: {integrity: sha512-bx8Q1STctnNaaDymWnkfQLKofs0mGNN7rLLapJlGuV3VlvegD7Ls4ggMjE3aUSWItCCzU0PEv45lI87iSigiCA==}
     engines: {node: '>=20.0'}
 
+  xstate@5.33.3:
+    resolution: {integrity: sha512-AnDRjS/GyKHmbA1PyhVCYBqYsA7EGe3KGgeD0ht3NFsXzoz7leX/HQDFX9QlHFJ/ltLHPsgChJYwPzRvB/0b4g==}
+
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
     engines: {node: '>=0.4'}
@@ -30909,6 +31121,8 @@ snapshots:
   '@1password/sdk@0.5.0':
     dependencies:
       '@1password/sdk-core': 0.5.0
+
+  '@adraffy/ens-normalize@1.11.1': {}
 
   '@ai-sdk/anthropic@3.0.118(zod@4.5.4)':
     dependencies:
@@ -35226,7 +35440,7 @@ snapshots:
       '@neondatabase/auth-ui': 0.3.0-beta(885ca06357aa4b1437da8cfc3c42b16d)
       '@supabase/auth-js': 2.79.0
       better-auth: 1.6.23(a4b3cf119e288c46c141f255f9a3246d)
-      jose: 6.2.5
+      jose: 6.2.8
       zod: 4.5.4
     optionalDependencies:
       next: 16.4.3(@babel/core@8.0.7)(@opentelemetry/api@1.10.0)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -35385,7 +35599,15 @@ snapshots:
   '@next/swc-win32-x64-msvc@16.4.3':
     optional: true
 
+  '@noble/ciphers@1.3.0': {}
+
   '@noble/ciphers@2.3.0': {}
+
+  '@noble/curves@1.9.1':
+    dependencies:
+      '@noble/hashes': 1.8.0
+
+  '@noble/hashes@1.8.0': {}
 
   '@noble/hashes@2.3.0': {}
 
@@ -39435,10 +39657,10 @@ snapshots:
 
   '@rivetkit/bare-ts@0.6.2': {}
 
-  '@rivetkit/effect@3.0.0(effect@4.1.4)(rivetkit@3.0.0(7f2c5cba85f95c8ca25c38aa44bcb0dc))':
+  '@rivetkit/effect@3.0.0(effect@4.1.4)(rivetkit@3.0.0(b4627923ac407450dd1a147fbc06a924))':
     dependencies:
       effect: 4.1.4
-      rivetkit: 3.0.0(7f2c5cba85f95c8ca25c38aa44bcb0dc)
+      rivetkit: 3.0.0(b4627923ac407450dd1a147fbc06a924)
 
   '@rivetkit/engine-api-full@3.0.0':
     dependencies:
@@ -40130,6 +40352,19 @@ snapshots:
       yaml: 2.9.1
     transitivePeerDependencies:
       - typescript
+
+  '@scure/base@1.2.6': {}
+
+  '@scure/bip32@1.7.0':
+    dependencies:
+      '@noble/curves': 1.9.1
+      '@noble/hashes': 1.8.0
+      '@scure/base': 1.2.6
+
+  '@scure/bip39@1.6.0':
+    dependencies:
+      '@noble/hashes': 1.8.0
+      '@scure/base': 1.2.6
 
   '@sec-ant/readable-stream@0.4.1': {}
 
@@ -43376,6 +43611,16 @@ snapshots:
 
   abbrev@3.0.1: {}
 
+  abitype@1.2.3(typescript@7.1.0-beta)(zod@4.5.4):
+    optionalDependencies:
+      typescript: 7.1.0-beta
+      zod: 4.5.4
+
+  abitype@1.3.0(typescript@7.1.0-beta)(zod@4.5.4):
+    optionalDependencies:
+      typescript: 7.1.0-beta
+      zod: 4.5.4
+
   abort-controller@3.0.0:
     dependencies:
       event-target-shim: 5.0.1
@@ -43384,6 +43629,19 @@ snapshots:
     dependencies:
       mime-types: 3.0.2
       negotiator: 1.0.0
+
+  accounts@1.0.0-alpha.20261117214203-d38fbea(mppx@0.20.1)(react@19.3.1)(typescript@7.1.0-beta)(viem@2.57.19)(zod@4.5.4):
+    dependencies:
+      jose: 6.2.8
+      ox: 0.14.67(typescript@7.1.0-beta)(zod@4.5.4)
+      viem: 2.57.19(mppx@0.20.1)(typescript@7.1.0-beta)(zod@4.5.4)
+      xstate: 5.33.3
+    optionalDependencies:
+      mppx: 0.20.1(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.5.4))(express@5.2.1(supports-color@10.2.2))(hono@4.13.13)(next@16.4.3(@babel/core@7.29.7(supports-color@10.2.2))(@opentelemetry/api@1.10.0)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(typescript@7.1.0-beta)(viem@2.57.19)
+      react: 19.3.1
+    transitivePeerDependencies:
+      - typescript
+      - zod
 
   acorn-import-attributes@1.9.5(acorn@8.18.0):
     dependencies:
@@ -45447,6 +45705,8 @@ snapshots:
 
   event-target-shim@5.0.1: {}
 
+  eventemitter3@5.0.1: {}
+
   eventemitter3@5.0.4: {}
 
   events-universal@1.0.1:
@@ -46579,6 +46839,10 @@ snapshots:
 
   isexe@4.0.0: {}
 
+  isows@1.0.7(ws@8.21.0):
+    dependencies:
+      ws: 8.21.0
+
   itty-time@2.0.2: {}
 
   jest-worker@27.5.1:
@@ -46590,8 +46854,6 @@ snapshots:
   jiti@2.7.0: {}
 
   jju@1.4.0: {}
-
-  jose@6.2.5: {}
 
   jose@6.2.8: {}
 
@@ -47640,6 +47902,20 @@ snapshots:
       '@aws-sdk/credential-providers': 3.1136.0
       socks: 2.8.9
 
+  mppx@0.20.1(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.5.4))(express@5.2.1(supports-color@10.2.2))(hono@4.13.13)(next@16.4.3(@babel/core@7.29.7(supports-color@10.2.2))(@opentelemetry/api@1.10.0)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(typescript@7.1.0-beta)(viem@2.57.19):
+    dependencies:
+      ox: 0.14.65(typescript@7.1.0-beta)(zod@4.5.4)
+      structured-headers: 2.1.0
+      viem: 2.57.19(mppx@0.20.1)(typescript@7.1.0-beta)(zod@4.5.4)
+      zod: 4.5.4
+    optionalDependencies:
+      '@modelcontextprotocol/sdk': 1.32.2(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.5.4)
+      express: 5.2.1(supports-color@10.2.2)
+      hono: 4.13.13
+      next: 16.4.3(@babel/core@7.29.7(supports-color@10.2.2))(@opentelemetry/api@1.10.0)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+    transitivePeerDependencies:
+      - typescript
+
   mri@1.2.0: {}
 
   mrmime@2.0.1: {}
@@ -47698,6 +47974,46 @@ snapshots:
   named-placeholders@1.1.6:
     dependencies:
       lru.min: 1.1.4
+
+  nanocode-ts@https://github.com/nanocodexyz/nanocode-ts/releases/download/build-887f3cc/nanocode-ts-887f3cc.tgz(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.5.4))(@pierre/highlights@0.2.0)(@vercel/oidc@3.2.0)(express@5.2.1(supports-color@10.2.2))(hono@4.13.13)(next@16.4.3(@babel/core@7.29.7(supports-color@10.2.2))(@opentelemetry/api@1.10.0)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)(typescript@7.1.0-beta)(zod@4.5.4):
+    dependencies:
+      accounts: 1.0.0-alpha.20261117214203-d38fbea(mppx@0.20.1)(react@19.3.1)(typescript@7.1.0-beta)(viem@2.57.19)(zod@4.5.4)
+      hast-util-to-jsx-runtime: 2.3.6(supports-color@10.2.2)
+      mdast-util-gfm: 3.1.0(supports-color@10.2.2)
+      micromark-extension-gfm: 3.0.0
+      mppx: 0.20.1(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.5.4))(express@5.2.1(supports-color@10.2.2))(hono@4.13.13)(next@16.4.3(@babel/core@7.29.7(supports-color@10.2.2))(@opentelemetry/api@1.10.0)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(typescript@7.1.0-beta)(viem@2.57.19)
+      ox: 0.14.65(typescript@7.1.0-beta)(zod@4.5.4)
+      rehype-harden: 1.1.8
+      rehype-sanitize: 6.0.0
+      remark-parse: 11.0.0(supports-color@10.2.2)
+      remark-rehype: 11.1.2
+      unified: 11.0.5
+      viem: 2.57.19(mppx@0.20.1)(typescript@7.1.0-beta)(zod@4.5.4)
+    optionalDependencies:
+      '@pierre/highlights': 0.2.0
+      '@vercel/oidc': 3.2.0
+      react: 19.3.1
+    transitivePeerDependencies:
+      - '@modelcontextprotocol/sdk'
+      - '@stripe/agent-identity'
+      - '@wagmi/core'
+      - '@x402/core'
+      - '@x402/express'
+      - '@x402/hono'
+      - '@x402/mcp'
+      - '@x402/next'
+      - bufferutil
+      - elysia
+      - expo-secure-store
+      - expo-web-browser
+      - express
+      - hono
+      - next
+      - react-native-get-random-values
+      - supports-color
+      - typescript
+      - utf-8-validate
+      - zod
 
   nanoid@3.3.20: {}
 
@@ -49527,6 +49843,36 @@ snapshots:
 
   outvariant@1.4.0: {}
 
+  ox@0.14.65(typescript@7.1.0-beta)(zod@4.5.4):
+    dependencies:
+      '@adraffy/ens-normalize': 1.11.1
+      '@noble/ciphers': 1.3.0
+      '@noble/curves': 1.9.1
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
+      abitype: 1.3.0(typescript@7.1.0-beta)(zod@4.5.4)
+      eventemitter3: 5.0.1
+    optionalDependencies:
+      typescript: 7.1.0-beta
+    transitivePeerDependencies:
+      - zod
+
+  ox@0.14.67(typescript@7.1.0-beta)(zod@4.5.4):
+    dependencies:
+      '@adraffy/ens-normalize': 1.11.1
+      '@noble/ciphers': 1.3.0
+      '@noble/curves': 1.9.1
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
+      abitype: 1.3.0(typescript@7.1.0-beta)(zod@4.5.4)
+      eventemitter3: 5.0.1
+    optionalDependencies:
+      typescript: 7.1.0-beta
+    transitivePeerDependencies:
+      - zod
+
   oxc-parser@0.120.0(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3):
     dependencies:
       '@oxc-project/types': 0.120.0
@@ -50620,6 +50966,10 @@ snapshots:
       '@types/hast': 3.0.5
       hast-util-format: 1.1.0
 
+  rehype-harden@1.1.8:
+    dependencies:
+      unist-util-visit: 5.1.0
+
   rehype-parse@9.0.1:
     dependencies:
       '@types/hast': 3.0.5
@@ -50882,7 +51232,7 @@ snapshots:
       - typebox
       - valibot
 
-  rivetkit@3.0.0(7f2c5cba85f95c8ca25c38aa44bcb0dc):
+  rivetkit@3.0.0(b4627923ac407450dd1a147fbc06a924):
     dependencies:
       '@hono/zod-openapi': 1.6.3(hono@4.13.13)(zod@4.5.4)
       '@opentelemetry/api': 1.10.0
@@ -51716,6 +52066,8 @@ snapshots:
       '@tokenizer/token': 0.3.0
 
   structured-clone-es@2.0.1: {}
+
+  structured-headers@2.1.0: {}
 
   style-loader@4.0.0(webpack@5.105.0(cssnano@9.9.0(postcss@8.5.31))(csso@5.0.5)(esbuild@0.28.1)(lightningcss@1.33.0)(postcss@8.5.31)):
     dependencies:
@@ -52780,6 +53132,24 @@ snapshots:
       fs-extra: 11.4.1
       import-meta-resolve: 4.2.0
       zod: 4.5.4
+
+  viem@2.57.19(mppx@0.20.1)(typescript@7.1.0-beta)(zod@4.5.4):
+    dependencies:
+      '@noble/curves': 1.9.1
+      '@noble/hashes': 1.8.0
+      '@scure/bip32': 1.7.0
+      '@scure/bip39': 1.6.0
+      abitype: 1.2.3(typescript@7.1.0-beta)(zod@4.5.4)
+      isows: 1.0.7(ws@8.21.0)
+      ox: 0.14.65(typescript@7.1.0-beta)(zod@4.5.4)
+      ws: 8.21.0
+    optionalDependencies:
+      mppx: 0.20.1(@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.5.4))(express@5.2.1(supports-color@10.2.2))(hono@4.13.13)(next@16.4.3(@babel/core@7.29.7(supports-color@10.2.2))(@opentelemetry/api@1.10.0)(@playwright/test@1.64.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(typescript@7.1.0-beta)(viem@2.57.19)
+      typescript: 7.1.0-beta
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+      - zod
 
   vike-react@0.6.31(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vike@0.4.268(@cloudflare/workers-types@5.20261117.1)(h3@1.15.11)(hono@4.13.13)(react-streaming@0.4.21(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(srvx@1.0.5)(supports-color@10.2.2)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))):
     dependencies:
@@ -54283,6 +54653,8 @@ snapshots:
       '@oozcitak/infra': 2.0.2
       '@oozcitak/util': 10.0.0
       js-yaml: 4.3.1
+
+  xstate@5.33.3: {}
 
   xtend@4.0.2: {}
 

@@ -308,6 +308,9 @@ overrides:
   # packages so TypeScript sees one drizzle-orm identity.
   mysql2: 3.24.5
   zod: 4.5.4
+  # nanocode-ts brings a newer jose; a second copy splits better-auth's
+  # peer graph into two type identities.
+  jose: 6.2.8
   rolldown: 1.2.16
   # Old glob majors are deprecated; their dependents (archiver-utils,
   # @node-minify/core) only use `sync`/`globSync`, which glob 13 keeps.

@@ -232,6 +232,7 @@ export default defineConfig({
         "packages/pi/src/**",
         "packages/yielded-agent/src/**",
         "packages/clanka/src/**",
+        "packages/nanocode/src/**",
         "packages/domain/src/**",
         "packages/effect-cluster/src/**",
         "packages/gcp/src/GCPBindings.ts",

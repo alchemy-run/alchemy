@@ -1,5 +1,6 @@
 import { isMcpServer, type AnyMcpServer, type McpServerService } from "@alchemy.run/ai/McpServer";
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
+import { complete, type ChatRequest } from "@alchemy.run/ai/OpenAiChat";
 import { Sandbox, Sandboxes, sandboxOf, type SandboxHandle } from "@alchemy.run/ai/Sandbox";
 import type { AnySkill } from "@alchemy.run/ai/Skill";
 import {
@@ -24,7 +25,6 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { NotOnHarness, OpenCodeError } from "./Errors.ts";
 import { Instance } from "./Instance.ts";
-import { complete, type ChatRequest } from "./internal/chat.ts";
 import { BRIDGE, CALL, CLIENT, INSTALL, LAUNCH, OPENCODE, PORTS } from "./internal/scripts.ts";
 import {
   ENGINE,
