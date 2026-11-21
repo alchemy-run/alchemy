@@ -49,15 +49,16 @@ const publishVerificationRecord = (
   });
 
 /**
- * Proof that a Prisma workspace owns a wildcard domain, so every
- * `Prisma.RoutingUrl` under it can serve without a `TXT` record of its own. A
- * RoutingUrl with `dns` still publishes its own `TXT`, which does no harm.
+ * A domain ownership: Prisma's record that a workspace has proved it owns a
+ * domain, which is an exact hostname or a wildcard. A hostname serves only
+ * once a verified domain ownership covers it.
  *
- * A RoutingUrl needs no domain ownership declared: Prisma creates one for its
- * exact hostname. Declare this resource to prove a wildcard such as
- * `*.example.com` once for many hostnames. Don't declare it for the exact
- * hostname of a RoutingUrl: it takes over the domain ownership Prisma created
- * for that RoutingUrl and deletes it on destroy.
+ * Prisma creates the domain ownership for a `Prisma.RoutingUrl`'s exact
+ * hostname itself. Don't declare this resource for that same hostname: it
+ * takes over the domain ownership Prisma created and deletes it on destroy.
+ * A wildcard such as `*.example.com` covers every hostname under it, so a
+ * RoutingUrl there serves without a `TXT` record of its own; one with `dns`
+ * still publishes its own `TXT`, which does no harm.
  *
  * The proof is a `TXT` record named `_prisma-verification.{domain}` whose
  * value is the same for every domain in the workspace; a wildcard and its apex
@@ -68,8 +69,8 @@ const publishVerificationRecord = (
  * domain; an unchanged redeploy does not check again. Destroying the resource
  * removes the ownership and the record.
  *
- * ### Proving a Wildcard
- * **Example:** Prove a wildcard once for many hostnames
+ * ### Proving a Domain
+ * **Example:** Prove a wildcard for the hostnames under it
  * ```typescript
  * yield* Prisma.DomainOwnership("example.com", {
  *   project,

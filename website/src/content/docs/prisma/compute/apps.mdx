@@ -171,9 +171,9 @@ Before Prisma looks at the hostname, the deploy waits up to 3 minutes for the `T
 
 Prisma orders a certificate for each new hostname once its records are published, for each hostname change, and again when an order fails or is stuck. A workspace may order 10 an hour. A RoutingUrl created again after it was deleted counts again, so count CI reruns and parallel jobs that deploy to the same workspace. At the limit, the hostname stays `pending` until the limit resets, and Prisma then continues on its own. A deploy with `dns` times out meanwhile, with Prisma's sentence and the reset time in `customDomainSyncError`, and a later deploy picks the hostname up.
 
-### Proving a wildcard once
+### Domain ownership
 
-Prisma creates the domain ownership for each RoutingUrl's exact hostname. To serve many hostnames under one domain without a `TXT` record for each, prove a wildcard once with `Prisma.DomainOwnership`:
+A domain ownership is Prisma's record that a workspace has proved it owns a domain, which is an exact hostname or a wildcard. A hostname serves only once a verified domain ownership covers it. Prisma creates the one for each RoutingUrl's exact hostname itself. `Prisma.DomainOwnership` declares one directly. For example, a wildcard covers every hostname under it, so those hostnames need no `TXT` record of their own:
 
 ```typescript
 yield* Prisma.DomainOwnership("example.com", {
