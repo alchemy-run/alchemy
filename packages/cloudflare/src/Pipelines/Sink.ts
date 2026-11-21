@@ -1,9 +1,10 @@
 import * as pipelines from "@distilled.cloud/cloudflare/pipelines";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
@@ -299,6 +300,28 @@ export type SinkLookup =
 export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers, SinkLookup>;
 
 /**
+ * A Basin Catalog sink cannot be recreated against an existing Iceberg table.
+ * Fail during plan instead of deleting the working sink and then discovering
+ * that Cloudflare refuses to recreate it. Migrate to a new table instead.
+ */
+export class CatalogSinkRecreationUnsupported extends Data.TaggedError(
+  "Cloudflare.Pipelines.CatalogSinkRecreationUnsupported",
+)<{
+  readonly bucket: string;
+  readonly namespace: string;
+  readonly tableName: string;
+}> {
+  override get message() {
+    return (
+      `Cannot replace a Basin Catalog sink targeting existing table ` +
+      `'${this.namespace}.${this.tableName}' in bucket '${this.bucket}': ` +
+      "Cloudflare refuses to create sinks for existing Iceberg tables. " +
+      "Choose a new table or keep the existing sink unchanged."
+    );
+  }
+}
+
+/**
  * A Cloudflare Pipelines sink — the destination of the Pipelines product
  * (also exported as `Cloudflare.Basin.Sink`). A SQL {@link Pipeline}
  * reads events from a {@link Stream} and writes them to a sink, which
@@ -310,16 +333,21 @@ export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers,
  * Equivalent spellings never replace — `basin_catalog` ⇄
  * `r2_data_catalog`, the `config` form ⇄ the `catalog` / `table` form,
  * omitted ⇄ explicit defaults. With engine-generated names a replacement
- * is seamless (the new sink gets a fresh name before the old one is
- * deleted); with an explicit `name` it collides, so prefer generated
- * names.
+ * is create-before-delete (the new sink gets a fresh name before the old one is
+ * deleted); an unchanged explicit `name` requires Alchemy to delete the
+ * old sink first, temporarily interrupting ingestion. Prefer generated
+ * names for create-before-delete.
+ * A Basin Catalog sink cannot be recreated against the same Iceberg table,
+ * even after its sink is deleted. Attempts to replace it while retaining
+ * the table fail at plan time with {@link CatalogSinkRecreationUnsupported}
+ * rather than deleting the active sink.
  *
  * Credentials (`credentials`, `token`) are write-only and are not part of
  * the replacement diff, so rotating them never recreates the sink — a
  * catalog sink could not be recreated anyway, because Cloudflare refuses
  * to create sinks for existing Iceberg tables. The sink keeps the
- * credentials it was created with; to move it onto new ones, rename it
- * (which replaces it).
+ * credentials it was created with. For a raw R2 sink, rename it to rotate
+ * credentials (which replaces it). A Basin Catalog sink needs a new table.
  *
  * Pipelines is ingest-only — to react to files the sink writes, subscribe
  * to its bucket with `Cloudflare.R2.BucketEventNotification`.
@@ -353,6 +381,16 @@ export type Sink = Resource<TypeId, SinkProps, SinkAttributes, never, Providers,
  *   config: { bucket, credentials },
  *   format: { type: "parquet", compression: "zstd" },
  * });
+ * ```
+ *
+ * **Example:** R2 sink with a fixed physical name
+ * ```typescript
+ * const sink = yield* Cloudflare.Basin.Sink("Archive", {
+ *   name: "events_archive",
+ *   type: "r2",
+ *   config: { bucket, credentials, path: "archive" },
+ * });
+ * // Later changes to path, format or rolling policy delete this sink first.
  * ```
  *
  * ### Basin Catalog
@@ -429,11 +467,41 @@ export const SinkProvider = () =>
       // spellings and credential rotation never replace.
       const newName = yield* sinkName(id, news.name);
       const oldName = output?.name ?? (yield* sinkName(id, o.name));
+      const configChanged = !stableEquals(canonicalSink(news), canonicalSink(o));
+      if (
+        output !== undefined &&
+        (newName !== oldName || configChanged) &&
+        news.type !== "r2" &&
+        o.type !== "r2"
+      ) {
+        const previous = catalogTarget(o);
+        const desired = catalogTarget(news);
+        // Cloudflare creates the Iceberg table with its catalog sink and
+        // explicitly rejects new sinks pointed at an existing table.
+        // A delete-first replacement would strand a live table without its
+        // ingestion sink; reject it before the engine mutates anything.
+        if (
+          previous.bucket === desired.bucket &&
+          previous.tableName === desired.tableName &&
+          (previous.namespace ?? "default") === (desired.namespace ?? "default")
+        ) {
+          return yield* new CatalogSinkRecreationUnsupported({
+            bucket: desired.bucket,
+            namespace: desired.namespace ?? "default",
+            tableName: desired.tableName,
+          });
+        }
+      }
       if (newName !== oldName) {
         return { action: "replace" } as const;
       }
-      if (!stableEquals(canonicalSink(news), canonicalSink(o))) {
-        return { action: "replace" } as const;
+      if (configChanged) {
+        // Reconcile's by-name recovery must not adopt the generation that
+        // replacement GC will delete. Unique explicit names require
+        // delete-before-create; generated replacement names do not.
+        return news.name !== undefined && news.name === oldName
+          ? ({ action: "replace", deleteFirst: true } as const)
+          : ({ action: "replace" } as const);
       }
       return { action: "noop" } as const;
     }),
@@ -446,20 +514,26 @@ export const SinkProvider = () =>
           : yield* findSinkByName(accountId, props.name);
       return observed ? toAttributes(observed, accountId) : undefined;
     }),
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
       if (output?.sinkId) {
         const observed = yield* getSink(acct, output.sinkId);
         if (observed) return toAttributes(observed, acct);
       }
-      // Cold read — sink names are unique per account; a generated-name
-      // match is proof of ownership, an explicit name is not.
+      // A generated name is proof of ownership; an explicit name requires
+      // adoption unless it identifies this replacement's old generation.
       const name = yield* sinkName(id, olds?.name);
       const match = yield* findSinkByName(acct, name);
       if (match) {
         const attrs = toAttributes(match, acct);
-        return olds?.name !== undefined ? Unowned(attrs) : attrs;
+        return olds?.name !== undefined
+          ? unownedUnlessPrevious(
+              attrs,
+              previous?.accountId === acct ? previous : undefined,
+              "sinkId",
+            )
+          : attrs;
       }
       return undefined;
     }),

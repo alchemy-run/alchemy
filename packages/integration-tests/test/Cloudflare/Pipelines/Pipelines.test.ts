@@ -63,6 +63,21 @@ const r2Credentials = Effect.gen(function* () {
   };
 });
 
+// Physical names are account-wide. Include the file-scoped scratch stack
+// identity so different tests sharing one stage never claim each other's
+// streams, sinks or pipelines.
+const namedTestResource = (prefix: string, stack: Test.ScratchStack) =>
+  Effect.sync(
+    () =>
+      `${prefix}_${crypto
+        .createHash("sha256")
+        .update(stack.name)
+        .update("\0")
+        .update(stack.stage)
+        .digest("hex")
+        .slice(0, 16)}`,
+  );
+
 const getStream = (accountId: string, streamId: string) =>
   pipelines.getStream({ accountId, streamId }).pipe(Effect.retry(forbiddenBlips));
 
@@ -148,18 +163,17 @@ test.provider(
       expect(liveUpdated.http.cors?.origins).toEqual(["https://example.com"]);
 
       // The schema is immutable — declaring one triggers a replacement.
-      const replaced = yield* retryAuthBlip(
-        stack.deploy(
-          Cloudflare.Pipelines.Stream("Stream", {
-            schema: {
-              fields: [
-                { type: "string", name: "url", required: true },
-                { type: "timestamp", name: "ts", unit: "millisecond" },
-              ],
-            },
-          }),
-        ),
-      );
+      const nextStream = Cloudflare.Pipelines.Stream("Stream", {
+        schema: {
+          fields: [
+            { type: "string", name: "url", required: true },
+            { type: "timestamp", name: "ts", unit: "millisecond" },
+          ],
+        },
+      });
+      const planned = yield* retryAuthBlip(stack.plan(nextStream));
+      expect(planned.resources.Stream).toMatchObject({ action: "replace", deleteFirst: false });
+      const replaced = yield* retryAuthBlip(stack.deploy(nextStream));
 
       expect(replaced.streamId).not.toEqual(initial.streamId);
       yield* expectStreamGone(accountId, initial.streamId);
@@ -176,9 +190,122 @@ test.provider(
   },
 );
 
+test.provider(
+  "stream: replacing a schema keeps an explicitly named stream alive",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name = yield* namedTestResource("named_stream", stack);
+
+      yield* stack.destroy();
+
+      const initial = yield* retryAuthBlip(
+        stack.deploy(
+          Cloudflare.Pipelines.Stream("NamedStream", {
+            name,
+            schema: { fields: [{ type: "string", name: "url", required: true }] },
+          }),
+        ),
+      );
+
+      const changed = Cloudflare.Pipelines.Stream("NamedStream", {
+        name,
+        schema: {
+          fields: [
+            { type: "string", name: "url", required: true },
+            { type: "string", name: "path" },
+          ],
+        },
+      });
+      const planned = yield* retryAuthBlip(stack.plan(changed));
+      expect(planned.resources.NamedStream).toMatchObject({
+        action: "replace",
+        deleteFirst: true,
+      });
+      const replaced = yield* retryAuthBlip(stack.deploy(changed));
+
+      expect(replaced.name).toEqual(name);
+      expect(replaced.streamId).not.toEqual(initial.streamId);
+      const live = yield* getStream(accountId, replaced.streamId);
+      expect(live.name).toEqual(name);
+      expect(live.schema?.fields?.some((field) => field.name === "path")).toBe(true);
+      yield* expectStreamGone(accountId, initial.streamId);
+
+      const noop = yield* retryAuthBlip(stack.deploy(changed));
+      expect(noop.streamId).toEqual(replaced.streamId);
+
+      yield* stack.destroy();
+      yield* expectStreamGone(accountId, replaced.streamId);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:pipelines", "live"],
+    timeout: 300_000,
+  },
+);
+
+test.provider(
+  "sink: replacing a rolling policy keeps an explicitly named R2 sink alive",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const creds = yield* r2Credentials;
+      const name = yield* namedTestResource("named_sink", stack);
+
+      const desired = (intervalSeconds: number) =>
+        Effect.gen(function* () {
+          const bucket = yield* Cloudflare.R2.Bucket("NamedSinkBucket", {
+            forceDestroy: true,
+          });
+          return yield* Cloudflare.Pipelines.Sink("NamedSink", {
+            name,
+            type: "r2",
+            config: {
+              bucket,
+              credentials: creds,
+              path: "named-sink",
+              rollingPolicy: { intervalSeconds },
+            },
+          });
+        });
+
+      yield* stack.destroy();
+
+      const initial = yield* retryAuthBlip(stack.deploy(desired(10)));
+      const planned = yield* retryAuthBlip(stack.plan(desired(20)));
+      expect(planned.resources.NamedSink).toMatchObject({
+        action: "replace",
+        deleteFirst: true,
+      });
+      const replaced = yield* retryAuthBlip(stack.deploy(desired(20)));
+
+      expect(replaced.name).toEqual(name);
+      expect(replaced.sinkId).not.toEqual(initial.sinkId);
+      const live = yield* getSink(accountId, replaced.sinkId);
+      expect(live.name).toEqual(name);
+      expect(live.config?.rollingPolicy?.intervalSeconds).toEqual(20);
+      yield* expectSinkGone(accountId, initial.sinkId);
+
+      const noop = yield* retryAuthBlip(stack.deploy(desired(20)));
+      expect(noop.sinkId).toEqual(replaced.sinkId);
+
+      yield* stack.destroy();
+      yield* expectSinkGone(accountId, replaced.sinkId);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:pipelines",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 300_000,
+  },
+);
+
 interface EtlOpts {
   path?: string;
   where?: string;
+  pipelineName?: string;
 }
 
 // One program deploying the whole Pipelines topology: an R2 destination
@@ -208,10 +335,56 @@ const etl = (
       },
     });
     const pipeline = yield* Cloudflare.Pipelines.Pipeline("Etl", {
+      name: opts.pipelineName,
       sql: Output.interpolate`INSERT INTO ${sink.name} SELECT * FROM ${stream.name}${opts.where ? ` WHERE ${opts.where}` : ""}`,
     });
     return { bucket, stream, sink, pipeline };
   });
+
+test.provider(
+  "pipeline: changing SQL preserves an explicitly named replacement",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const creds = yield* r2Credentials;
+      const name = yield* namedTestResource("named_pipeline", stack);
+
+      yield* stack.destroy();
+
+      const initial = yield* retryAuthBlip(stack.deploy(etl(creds, { pipelineName: name })));
+      const planned = yield* retryAuthBlip(
+        stack.plan(etl(creds, { pipelineName: name, where: "1 = 1" })),
+      );
+      expect(planned.resources.Etl).toMatchObject({ action: "replace", deleteFirst: true });
+      const replaced = yield* retryAuthBlip(
+        stack.deploy(etl(creds, { pipelineName: name, where: "1 = 1" })),
+      );
+
+      expect(replaced.pipeline.name).toEqual(name);
+      expect(replaced.pipeline.pipelineId).not.toEqual(initial.pipeline.pipelineId);
+      const live = yield* getPipeline(accountId, replaced.pipeline.pipelineId);
+      expect(live.name).toEqual(name);
+      expect(live.sql).toContain("WHERE 1 = 1");
+      yield* expectPipelineGone(accountId, initial.pipeline.pipelineId);
+
+      const noop = yield* retryAuthBlip(
+        stack.deploy(etl(creds, { pipelineName: name, where: "1 = 1" })),
+      );
+      expect(noop.pipeline.pipelineId).toEqual(replaced.pipeline.pipelineId);
+
+      yield* stack.destroy();
+      yield* expectPipelineGone(accountId, replaced.pipeline.pipelineId);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:pipelines",
+      "provider:cloudflare:r2",
+      "live",
+    ],
+    timeout: 600_000,
+  },
+);
 
 test.provider(
   "end-to-end: stream → sql pipeline → r2 sink, replacement on sink change",
