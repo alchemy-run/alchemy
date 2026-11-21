@@ -35,6 +35,7 @@ import type { Credentials } from "../Credentials.ts";
 import { buildAndPushEcrImage } from "../ECR/Image.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+import { managedPolicyArn } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
 
@@ -1298,6 +1299,7 @@ await bootstrap(entrypoint);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, bindings, output, session }) {
+          const { partition } = yield* AWSEnvironment.current;
           const name = output?.serviceName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
@@ -1342,7 +1344,7 @@ await bootstrap(entrypoint);
                 roleName: accessRoleName,
                 principal: "build.apprunner.amazonaws.com",
                 managedPolicyArns: [
-                  "arn:aws:iam::aws:policy/service-role/AWSAppRunnerServicePolicyForECRAccess",
+                  managedPolicyArn(partition, "service-role/AWSAppRunnerServicePolicyForECRAccess"),
                 ],
               }));
 

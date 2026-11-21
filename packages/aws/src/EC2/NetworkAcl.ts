@@ -10,6 +10,7 @@ import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { nameTagFilter, single } from "../internal/Lookup.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
@@ -24,7 +25,7 @@ export const NetworkAclId = <ID extends string>(id: ID): ID & NetworkAclId<ID> =
   `acl-${id}` as ID & NetworkAclId<ID>;
 
 export type NetworkAclArn<ID extends NetworkAclId = NetworkAclId> =
-  `arn:aws:ec2:${RegionID}:${AccountID}:network-acl/${ID}`;
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:network-acl/${ID}`;
 
 export interface NetworkAclProps {
   /**
@@ -224,7 +225,7 @@ export const NetworkAclProvider = () =>
         return {
           networkAclId: acl.NetworkAclId as NetworkAclId,
           networkAclArn:
-            `arn:aws:ec2:${region}:${accountId}:network-acl/${acl.NetworkAclId}` as NetworkAclArn,
+            `arn:${partitionOf(region)}:ec2:${region}:${accountId}:network-acl/${acl.NetworkAclId}` as NetworkAclArn,
           vpcId: acl.VpcId as VpcId,
           isDefault: acl.IsDefault ?? false,
           ownerId: acl.OwnerId!,

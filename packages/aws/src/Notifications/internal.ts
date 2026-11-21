@@ -1,18 +1,16 @@
 import * as notifications from "@distilled.cloud/aws/notifications";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
-import { Region } from "../Region.ts";
+import { withGlobalRegion } from "../Region.ts";
 
 /**
  * AWS User Notifications is managed from a single control-plane region.
- * Every management API call must target `us-east-1` regardless of the
- * ambient stack region (other regions reject with "API ...Activity cannot
- * be called in us-west-2. Use us-east-1 instead"), so we pin the region on
- * every distilled operation.
+ * Every management API call must target the partition's global region
+ * (`us-east-1` in `aws`) regardless of the ambient stack region (other
+ * regions reject with "API ...Activity cannot be called in us-west-2. Use
+ * us-east-1 instead"), so we pin the region on every distilled operation.
  */
-const US_EAST_1 = "us-east-1";
-export const pinNotificationsRegion = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  effect.pipe(Effect.provideService(Region, Effect.succeed(US_EAST_1)));
+export const pinNotificationsRegion = withGlobalRegion;
 
 /**
  * Read the observed tags on a User Notifications resource, tolerating a

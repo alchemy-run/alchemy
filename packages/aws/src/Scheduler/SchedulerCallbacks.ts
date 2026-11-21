@@ -24,6 +24,7 @@ import * as AWSBindings from "../AWSBindings.ts";
 import { Role } from "../IAM/Role.ts";
 import type { Key } from "../KMS/Key.ts";
 import { eventSourceHost } from "../Lambda/Function.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import {
   accountArn,
@@ -273,7 +274,9 @@ export const SchedulerCallbacks = <R = never>(options: SchedulerCallbacksOptions
           },
         },
       });
-      const roleArn = accountArn((accountId) => `arn:aws:iam::${accountId}:role/${roleName}`);
+      const roleArn = accountArn(
+        (accountId, region) => `arn:${partitionOf(region)}:iam::${accountId}:role/${roleName}`,
+      );
       const RoleArn = yield* bindAccountArn(roleArn, `${host.LogicalId}.callbacksRoleArn`);
       const FunctionArn = yield* selfFunctionArn(host);
       const GroupName = yield* group.scheduleGroupName;
