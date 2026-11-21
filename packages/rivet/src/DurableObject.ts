@@ -609,6 +609,16 @@ export const makeNamespace = (
   return { name, getByName: (instance: string) => getByKey([instance]), getByKey };
 };
 
+/**
+ * The namespace of the Durable Object class named `name`, reached through the
+ * gateway at `target`: for callers Alchemy didn't build, which have no
+ * bindings to read it from.
+ */
+export const namespaceAt = <Shape>(
+  name: string,
+  target: Omit<GatewayTarget, "name" | "key">,
+): DurableObjectNamespace<Shape> => makeNamespace(name, target);
+
 /** A namespace yielded outside any runtime was called. */
 export class DurableObjectCalledOutsideRuntime extends Data.TaggedError(
   "Rivet.DurableObjectCalledOutsideRuntime",
