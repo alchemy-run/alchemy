@@ -947,6 +947,18 @@ Yielded Agent on Alchemy: schema-defined agents, Threads in a Durable Object, to
 - [Sandboxes](https://alchemy.run/yielded-agent/sandboxes) — Give each Yielded Thread a sandbox. A tool that uses AI.Sandbox gets its Thread's sandbox, opened by the first call that needs it.
 - [Surviving eviction](https://alchemy.run/yielded-agent/eviction) — A Durable Object can be evicted or redeployed at any time. Thread history is kept in its SQLite, and a submitted run is started again from the object's alarm.
 
+## clanka
+
+clanka on Alchemy: its agent loop in a Durable Object, its executor in a sandbox, conversations, tools and prompts that survive eviction.
+
+- [clanka](https://alchemy.run/clanka) — Run the clanka coding agent with Alchemy. Its agent loop in a Durable Object on your models, its executor in a sandbox for each conversation.
+- [What is clanka?](https://alchemy.run/clanka/what-is-clanka) — The concepts behind clanka on Alchemy — the agent loop, scripts, the executor, conversations and tools — and how @alchemy.run/clanka runs the loop in a Durable Object and the executor in a sandbox.
+- [Setup](https://alchemy.run/clanka/setup) — Install @alchemy.run/clanka and @alchemy.run/ai, choose a sandbox platform, and add a clanka harness to a Cloudflare Durable Object.
+- [Conversations & prompts](https://alchemy.run/clanka/conversations) — Name a clanka conversation, prompt it, follow the scripts it writes, choose the model, and read or reset its history.
+- [Tools](https://alchemy.run/clanka/tools) — clanka's own functions run in the sandbox. An AI.Tool listed on the harness is a function scripts call the same way, with its handler in your Durable Object.
+- [The executor & sandbox](https://alchemy.run/clanka/sandbox) — clanka's executor runs in the conversation's sandbox. Install clanka into a snapshot, choose the working directory, and suspend or remove the sandbox.
+- [Surviving eviction](https://alchemy.run/clanka/eviction) — A Durable Object can be evicted or redeployed at any time. A clanka conversation is saved after every prompt, and a submitted prompt is run again from the object's alarm.
+
 ## Boat
 
 Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.
@@ -1392,4 +1404,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~290 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~292 KB) — only fetch it when you need to locate a specific resource's reference page.
