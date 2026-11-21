@@ -73,14 +73,12 @@ export interface Activation {
   readonly construction: string;
   readonly open: Set<string>;
   next: number;
-  /** RivetKit closed the activation's storage while calls still ran. */
-  storageClosed: boolean;
 }
 
 export const makeActivation = (): Activation => {
   const id = crypto.randomUUID();
   const construction = `${id}:construct`;
-  return { id, construction, open: new Set([construction]), next: 0, storageClosed: false };
+  return { id, construction, open: new Set([construction]), next: 0 };
 };
 
 /** Open a section on `activation`; close it by deleting its token. */
