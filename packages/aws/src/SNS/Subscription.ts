@@ -192,8 +192,25 @@ export const SubscriptionProvider = () =>
               InvalidParameterException: () => Effect.undefined,
             }),
           );
-        if (observed) {
+        // A cached subscription on another topic or endpoint is stale: diff
+        // cannot see a topic replacement while the new ARN is unresolved.
+        const current =
+          observed?.Attributes?.TopicArn === topicArn &&
+          (endpoint === undefined || observed.Attributes?.Endpoint === endpoint);
+        if (observed && current) {
           subscriptionArn = output.subscriptionArn;
+        } else if (observed) {
+          yield* sns.unsubscribe({ SubscriptionArn: output.subscriptionArn }).pipe(
+            Effect.catchTags({
+              NotFoundException: () => Effect.void,
+              InvalidParameterException: () => Effect.void,
+            }),
+          );
+          subscriptionArn = yield* findSubscription({
+            topicArn,
+            protocol,
+            endpoint,
+          });
         }
       } else {
         subscriptionArn = yield* findSubscription({
