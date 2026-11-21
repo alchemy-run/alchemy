@@ -56,11 +56,9 @@ export default class TranscoderBindingsHost extends GCP.Function<TranscoderBindi
         createJob: Effect.gen(function* () {
           const bucket = yield* bucketName;
           const job = yield* createJob({
-            body: {
-              inputUri: `gs://${bucket}/inputs/file.mp4`,
-              outputUri: `gs://${bucket}/outputs/`,
-              ttlAfterCompletionDays: 1,
-            },
+            inputUri: `gs://${bucket}/inputs/file.mp4`,
+            outputUri: `gs://${bucket}/outputs/`,
+            ttlAfterCompletionDays: 1,
           });
           return {
             name: job.name,

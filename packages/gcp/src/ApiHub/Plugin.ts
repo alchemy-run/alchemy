@@ -338,19 +338,17 @@ export const PluginProvider = () =>
       if (current === undefined) {
         const created = yield* apihub
           .createProjectsLocationsPlugins({
+            displayName,
+            description,
+            documentation: news.documentation,
+            pluginCategory: categoryOf(news),
+            gatewayType: news.gatewayType,
+            actionsConfig: actionsOf(news),
+            hostingService: news.hostingService,
+            configTemplate: news.configTemplate,
+            type: news.type,
             parent,
             pluginId,
-            body: {
-              displayName,
-              description,
-              documentation: news.documentation,
-              pluginCategory: categoryOf(news),
-              gatewayType: news.gatewayType,
-              actionsConfig: actionsOf(news),
-              hostingService: news.hostingService,
-              configTemplate: news.configTemplate,
-              type: news.type,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? (yield* getByName(name));

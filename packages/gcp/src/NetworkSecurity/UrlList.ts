@@ -289,12 +289,10 @@ export const UrlListProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsUrlLists({
+            description: desiredDescription,
+            values: desiredValues,
             parent: parentOf(env.project, location),
             urlListId,
-            body: {
-              description: desiredDescription,
-              values: desiredValues,
-            },
           })
           .pipe(
             Effect.retry({
@@ -323,13 +321,10 @@ export const UrlListProvider = () =>
           valuesChanged ? "values" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* networksecurity.patchProjectsLocationsUrlLists({
+          description: desiredDescription,
+          values: desiredValues,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            description: desiredDescription,
-            values: desiredValues,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(current.name ?? name);

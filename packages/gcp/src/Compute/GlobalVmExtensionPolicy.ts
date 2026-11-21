@@ -369,19 +369,14 @@ export const GlobalVmExtensionPolicyProvider = () =>
       let current = yield* getByName(env.project, policyName);
 
       if (current === undefined) {
-        yield* compute
-          .insertGlobalVmExtensionPolicies({
-            project: env.project,
-            body: desired,
-          })
-          .pipe(
-            Effect.flatMap((operation) =>
-              waitGlobalOperation(env.project, operation, {
-                ignore: ["RESOURCE_ALREADY_EXISTS"],
-              }),
-            ),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        yield* compute.insertGlobalVmExtensionPolicies({ ...desired, project: env.project }).pipe(
+          Effect.flatMap((operation) =>
+            waitGlobalOperation(env.project, operation, {
+              ignore: ["RESOURCE_ALREADY_EXISTS"],
+            }),
+          ),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* awaitResource(env.project, policyName);
       }
 
@@ -392,9 +387,9 @@ export const GlobalVmExtensionPolicyProvider = () =>
       if (needsUpdate(current, desired)) {
         yield* compute
           .updateGlobalVmExtensionPolicies({
+            ...desired,
             project: env.project,
             globalVmExtensionPolicy: policyName,
-            body: desired,
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, policyName);
@@ -413,9 +408,10 @@ export const GlobalVmExtensionPolicyProvider = () =>
       const requestDelete = (retryUuid?: string) =>
         compute
           .deleteGlobalVmExtensionPolicies({
+            predefinedRolloutPlan: "FAST_ROLLOUT",
+            retryUuid,
             project: env.project,
             globalVmExtensionPolicy: output.policyName,
-            body: { predefinedRolloutPlan: "FAST_ROLLOUT", retryUuid },
           })
           .pipe(
             Effect.retry({

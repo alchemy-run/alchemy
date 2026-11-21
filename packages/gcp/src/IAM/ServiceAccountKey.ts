@@ -109,8 +109,8 @@ export const ServiceAccountKeyProvider = () =>
       // for a few seconds after the account is created.
       const key = yield* iam
         .createProjectsServiceAccountsKeys({
+          privateKeyType: "TYPE_GOOGLE_CREDENTIALS_FILE",
           name: `projects/-/serviceAccounts/${news.serviceAccount}`,
-          body: { privateKeyType: "TYPE_GOOGLE_CREDENTIALS_FILE" },
         })
         .pipe(
           Effect.retry({

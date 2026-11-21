@@ -118,6 +118,13 @@ export interface PoolSettings extends Pick<
    * @default "3.0.0"
    */
   rivetkitVersion?: string;
+  /**
+   * Version the nodes report to the control plane (`RIVET_NODE_VERSION`).
+   * Raise it on a deploy that changes the nodes: with `drainOnVersionUpgrade`
+   * the control plane moves actors off older nodes once a newer one connects.
+   * @default the RivetKit default (1)
+   */
+  version?: number;
 }
 
 /** A JavaScript node program: its entry and bundler settings, run with RivetKit beside it. */
@@ -158,6 +165,7 @@ export interface PoolNodes<Network> {
     readonly RIVET_TOKEN: ClusterShape["token"];
     readonly RIVET_NAMESPACE: ClusterShape["namespace"];
     readonly RIVET_POOL: Pool["name"];
+    readonly RIVET_NODE_VERSION?: string;
   };
 }
 
@@ -245,6 +253,9 @@ const makeHost = <Network, Req>(options: {
           RIVET_TOKEN: cluster.token,
           RIVET_NAMESPACE: cluster.namespace,
           RIVET_POOL: pool.name,
+          ...(options.settings.version === undefined
+            ? {}
+            : { RIVET_NODE_VERSION: String(options.settings.version) }),
         },
       });
     });
@@ -324,12 +335,8 @@ const makeHost = <Network, Req>(options: {
 const output = <T>(value: Input<T>): Output.Output<T> =>
   (Output.isOutput(value) ? value : Output.literal(value)) as Output.Output<T>;
 
-/**
- * Every value a node needs, as plain strings, for hosts whose environments
- * hold no `Redacted` (AWS task and instance environments, Kubernetes env).
- * `endpoint` overrides the control plane URL nodes connect to.
- */
-export const nodeEnvironment = (
+/** Every value a node needs, its token left `Redacted`. */
+const nodeValues = (
   { pool, environment }: PoolNodes<unknown>,
   endpoint: Input<string> = environment.RIVET_ENDPOINT,
 ) =>
@@ -343,10 +350,62 @@ export const nodeEnvironment = (
     Output.map(([env, url, token, namespace, poolName]) => ({
       ...env,
       RIVET_ENDPOINT: url,
-      RIVET_TOKEN: Redacted.value(token),
+      RIVET_TOKEN: token,
       RIVET_NAMESPACE: namespace,
       RIVET_POOL: poolName,
+      ...(environment.RIVET_NODE_VERSION === undefined
+        ? {}
+        : { RIVET_NODE_VERSION: environment.RIVET_NODE_VERSION }),
     })),
+  );
+
+const unwrap = (value: unknown) => (Redacted.isRedacted(value) ? Redacted.value(value) : value);
+
+/**
+ * Every value a node needs, as plain strings, for hosts whose environments
+ * hold no `Redacted` (AWS task and instance environments): the token and any
+ * secret a class reads as config are unwrapped.
+ * `endpoint` overrides the control plane URL nodes connect to.
+ */
+export const nodeEnvironment = (nodes: PoolNodes<unknown>, endpoint?: Input<string>) =>
+  nodeValues(nodes, endpoint).pipe(
+    Output.map(
+      (values) =>
+        Object.fromEntries(
+          Object.entries(values).map(([name, value]) => [name, unwrap(value)]),
+        ) as Omit<typeof values, "RIVET_TOKEN"> & { RIVET_TOKEN: string },
+    ),
+  );
+
+/**
+ * Every value a node needs, the token and any secret a class reads as config
+ * still `Redacted`, for hosts that keep secrets apart (`Kubernetes.Deployment`
+ * reads them from a Secret).
+ */
+export const secretNodeEnvironment = nodeValues;
+
+export { SECRET_ENV } from "./SecretEnv.ts";
+
+/**
+ * A node's environment split for hosts that hand secrets over as one value
+ * (a Secret Manager secret): `secrets` holds every secret a class reads as
+ * config, unwrapped, for the host to keep in its secret store and pass as
+ * {@link SECRET_ENV}; `plain` holds the rest, the token unwrapped.
+ */
+export const splitNodeEnvironment = (nodes: PoolNodes<unknown>, endpoint?: Input<string>) =>
+  nodeValues(nodes, endpoint).pipe(
+    Output.map((values) => {
+      const plain: Record<string, string> = {};
+      const secrets: Record<string, string> = {};
+      for (const [name, value] of Object.entries(values)) {
+        if (Redacted.isRedacted(value) && name !== "RIVET_TOKEN") {
+          secrets[name] = String(Redacted.value(value));
+        } else {
+          plain[name] = String(unwrap(value));
+        }
+      }
+      return { plain, secrets };
+    }),
   );
 
 /**

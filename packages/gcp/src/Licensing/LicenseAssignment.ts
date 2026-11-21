@@ -237,11 +237,7 @@ export const LicenseAssignmentProvider = () =>
 
       if (current === undefined) {
         const created = yield* licensing
-          .insertLicenseAssignments({
-            productId,
-            skuId,
-            body: { userId },
-          })
+          .insertLicenseAssignments({ userId, productId, skuId })
           .pipe(
             Effect.catchTag("Conflict", () =>
               observeAssignment({
@@ -270,7 +266,6 @@ export const LicenseAssignmentProvider = () =>
           productId,
           skuId: observedSku,
           userId: current.userId ?? userId,
-          body: { skuId },
         });
       }
 

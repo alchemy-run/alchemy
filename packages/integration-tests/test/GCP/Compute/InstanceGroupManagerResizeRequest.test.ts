@@ -63,14 +63,12 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const error = yield* Effect.flip(
         compute.insertInstanceGroupManagerResizeRequests({
+          name: "alchemy-rr-probe",
+          description: "alchemy entitlement probe",
+          resizeBy: 1,
           project,
           zone,
           instanceGroupManager: "does-not-exist",
-          body: {
-            name: "alchemy-rr-probe",
-            description: "alchemy entitlement probe",
-            resizeBy: 1,
-          },
         }),
       );
       expect(error._tag).toEqual("NotFound");

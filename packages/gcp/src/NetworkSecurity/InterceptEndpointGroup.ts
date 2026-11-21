@@ -397,13 +397,11 @@ export const InterceptEndpointGroupProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsInterceptEndpointGroups({
+            interceptDeploymentGroup,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             interceptEndpointGroupId,
-            body: {
-              interceptDeploymentGroup,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.retry({
@@ -434,13 +432,10 @@ export const InterceptEndpointGroupProvider = () =>
           descriptionChanged ? "description" : undefined,
         ].filter((field): field is string => field !== undefined);
         const operation = yield* networksecurity.patchProjectsLocationsInterceptEndpointGroups({
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);
