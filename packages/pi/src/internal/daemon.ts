@@ -13,6 +13,7 @@
  */
 import type { SandboxHandle as DaemonSandbox } from "@alchemy.run/ai/Sandbox";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Scope from "effect/Scope";
@@ -99,9 +100,9 @@ export const openDaemon =
       );
     };
     /** The daemon ended, or can no longer be reached. */
-    const lost = () => {
+    const lost = (reason?: string) => {
       close();
-      handlers.onClose();
+      handlers.onClose(reason);
     };
 
     // Nothing is sent before the script says the FIFO exists.
@@ -123,8 +124,10 @@ export const openDaemon =
             if (result.exitCode !== 0) throw new Error(`pi-env input exited ${result.exitCode}`);
           }
         }
-      } catch {
-        lost();
+      } catch (error) {
+        lost(
+          `its input could not be written (${error instanceof Error ? error.message : String(error)})`,
+        );
       } finally {
         sending = false;
       }
@@ -153,8 +156,14 @@ export const openDaemon =
             if (chunk.fd === "stdout") receive(chunk.data);
           }),
         ),
-        Effect.ensuring(Effect.sync(lost)),
-        Effect.ignore,
+        Effect.exit,
+        Effect.map((exit) =>
+          lost(
+            Exit.isFailure(exit)
+              ? `its output ended (${Cause.pretty(exit.cause).split("\n")[0]})`
+              : undefined,
+          ),
+        ),
       ),
     );
 

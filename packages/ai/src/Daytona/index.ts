@@ -6,6 +6,7 @@
 import * as Daytona from "@alchemy.run/daytona";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schedule from "effect/Schedule";
 import { Sandboxes as SandboxesService } from "../Sandbox.ts";
 
 /** Options of {@link Sandboxes}. */
@@ -50,18 +51,27 @@ export const Sandboxes = <E, R>(
       const sandboxes = yield* Daytona.CreateSandbox(yield* base);
 
       return {
-        open: Effect.fn(function* (key) {
-          const existing = yield* sandboxes.get(key);
-          if (existing === undefined) {
-            return yield* sandboxes.create({
-              name: key,
-              autoStopInterval: options.autoStopInterval ?? 15,
-              autoDeleteInterval: options.autoDeleteInterval ?? 24 * 60,
-            });
-          }
-          yield* existing.startSandbox();
-          return existing;
-        }),
+        open: (key) =>
+          Effect.gen(function* () {
+            const existing = yield* sandboxes.get(key);
+            if (existing === undefined) {
+              return yield* sandboxes.create({
+                name: key,
+                autoStopInterval: options.autoStopInterval ?? 15,
+                autoDeleteInterval: options.autoDeleteInterval ?? 24 * 60,
+              });
+            }
+            yield* existing.startSandbox();
+            return existing;
+          }).pipe(
+            // A removed sandbox keeps its name until Daytona has destroyed it,
+            // and another caller may have just created it: look again.
+            Effect.retry({
+              while: (error) => error._tag === "SandboxAlreadyExists",
+              schedule: Schedule.spaced("1 second"),
+              times: 60,
+            }),
+          ),
         suspend: Effect.fn(function* (key) {
           const existing = yield* sandboxes.get(key);
           if (existing === undefined) return;

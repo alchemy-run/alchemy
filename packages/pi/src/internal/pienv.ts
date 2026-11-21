@@ -38,7 +38,10 @@ export interface DaemonPipe {
  */
 export type OpenDaemon = (
   token: string,
-  handlers: { readonly onData: (bytes: Uint8Array) => void; readonly onClose: () => void },
+  handlers: {
+    readonly onData: (bytes: Uint8Array) => void;
+    readonly onClose: (reason?: string) => void;
+  },
 ) => Promise<DaemonPipe>;
 
 const encoder = new TextEncoder();
@@ -200,7 +203,11 @@ export class StreamConnection {
     this.#session = session;
     session.pipe = await this.#open(session.token, {
       onData: (bytes) => this.#onData(session, bytes),
-      onClose: () => this.#teardown(session, lost("pi-env exited")),
+      onClose: (reason) =>
+        this.#teardown(
+          session,
+          lost(reason === undefined ? "pi-env exited" : `pi-env exited: ${reason}`),
+        ),
     }).catch((error: unknown) => {
       session.live = false;
       throw new RemoteError({ code: "spawn_error", message: String(error), lost: true });
