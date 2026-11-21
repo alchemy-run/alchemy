@@ -26,7 +26,9 @@
  *   fresh session with state rows but no registered watcher forces an
  *   `update` (converges the emulator and restarts the watcher), and
  *   structurally-equal props (spec `normalizeProps`) are a `noop` because
- *   content-only changes are the watch loop's job.
+ *   content-only changes are the watch loop's job. A `main` file URL is
+ *   compared without the `alchemy-import-namespace` query that every stack
+ *   reload gives `import.meta.url`.
  * - **Serialized reconciles** — engine reconciles, watcher-triggered
  *   re-reconciles ({@link DevWatchContext.rerunReconcile}), and deletes are
  *   serialized per logical id, so a rebuild-and-swap never interleaves with
@@ -48,6 +50,18 @@ import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import { flociServices } from "./FlociServices.ts";
 import { withProviderContext } from "./ProviderContext.ts";
+
+/**
+ * `alchemy dev` imports the stack under a new `alchemy-import-namespace`
+ * query on every reload, which ends up in `main: import.meta.url`.
+ */
+const withoutImportNamespace = <P>(props: P): P => {
+  const main = (props as { main?: unknown } | undefined)?.main;
+  if (typeof main !== "string" || !main.startsWith("file:")) return props;
+  const url = new URL(main);
+  url.searchParams.delete("alchemy-import-namespace");
+  return { ...props, main: url.href };
+};
 
 /**
  * The AWS provider group module ([Local.ts](./Local.ts)) — every
@@ -330,7 +344,7 @@ export const makeDevWatchProvider = <
             );
 
       const ensureWatch = Effect.fn(function* (input: any, attrs: any) {
-        const strippedNews = stripEffects(input.news);
+        const strippedNews = withoutImportNamespace(stripEffects(input.news));
         const configHash = yield* canonicalHash(
           spec.watchConfigOf(strippedNews as Props, attrs as Attrs),
         );
@@ -434,8 +448,11 @@ export const makeDevWatchProvider = <
         }
       });
 
-      const normalize = (props: Props | undefined): object | undefined =>
-        props === undefined ? undefined : ((spec.normalizeProps?.(props) ?? props) as object);
+      const normalize = (props: Props | undefined): object | undefined => {
+        if (props === undefined) return undefined;
+        const plain = withoutImportNamespace(props);
+        return (spec.normalizeProps?.(plain) ?? plain) as object;
+      };
 
       const provider: any = {
         // read / precreate / list / tail / logs / stables delegate to the
