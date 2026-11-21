@@ -188,7 +188,7 @@ Without `dns`, the deploy does not wait for the hostname to serve. `site.domain`
 :::note
 A site whose DNS is not ready now deploys and reports `pending`. Before, the deploy failed until the DNS was published.
 
-`site.domain` is now the hostname's `Prisma.RoutingUrl`, not a `Prisma.CustomDomain`. Read `records` where you read `dnsRecords`, `status` (`pending` or `active`) and `firstUnmetCondition` where you read `foundryStatus` and `failureReason`, and `routingUrlId` where you read `customDomainId`.
+`site.domain` is now the hostname's `Prisma.RoutingUrl`, not a `Prisma.CustomDomain`. Read `records` where you read `dnsRecords`, `status` (`pending` or `active`), `state` (what the hostname is doing now, such as `waiting_for_dns` or `certificate_failed`) and `firstUnmetCondition` where you read `foundryStatus` and `failureReason`, and `routingUrlId` where you read `customDomainId`.
 :::
 
 To publish both records in the same deploy, pass the DNS host as `dns`:

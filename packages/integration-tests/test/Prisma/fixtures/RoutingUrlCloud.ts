@@ -89,6 +89,7 @@ export const routingUrl = (
     hostname,
     logicalId: options.logicalId === undefined ? "Url" : options.logicalId,
     status: active ? "active" : "pending",
+    state: (active ? "active" : "not_verified") as string,
     conditions: {
       ownershipVerified: met(active),
       servicePresent: "met" as Condition,

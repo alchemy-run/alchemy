@@ -128,6 +128,7 @@ testFor(plain).test.provider(
       const url = yield* stack.deploy(siteDomain(SITE_HOST));
 
       expect(url.status).toBe("pending");
+      expect(url.state).toBe("not_verified");
       expect(url.records.map((record) => record.type)).toEqual(["TXT", "CNAME"]);
       expect(plain.zone.publishes).toBe(0);
       expect(plain.zone.records).toEqual([]);

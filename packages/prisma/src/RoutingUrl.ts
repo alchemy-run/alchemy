@@ -250,6 +250,8 @@ export interface RoutingUrl extends Resource<
     logicalId: string | null;
     /** `pending` until every condition is met, then `active`. As last read. */
     status: ApiRoutingUrl["status"];
+    /** What the hostname is doing now, such as `waiting_for_dns` or `certificate_failed`. As last read. */
+    state: ApiRoutingUrl["state"];
     /** What the hostname needs to serve, each `met`, `unmet` or `unknown`. As last read. */
     conditions: ApiRoutingUrl["conditions"];
     /** The first condition not met, or null when all are. */
@@ -425,6 +427,7 @@ const attrsFrom = (url: ApiRoutingUrl): RoutingUrl["Attributes"] => ({
   hostname: url.hostname,
   logicalId: url.logicalId,
   status: url.status,
+  state: url.state,
   conditions: url.conditions,
   firstUnmetCondition: url.firstUnmetCondition,
   records: url.records,
@@ -541,10 +544,10 @@ const certificateLimitOf = (url: ApiRoutingUrl) => {
   return match ? { limit: Number(match[1]), resetAt: match[2]! } : undefined;
 };
 
-const holderOf = (heldBy: NonNullable<ApiRoutingUrl["heldBy"]>) =>
-  heldBy.serviceId === null
-    ? (heldBy.message ?? "held by another RoutingUrl")
-    : `held by Prisma service '${heldBy.serviceId}'`;
+const holderOf = (heldBy: ApiRoutingUrl["heldBy"]) =>
+  heldBy?.serviceId
+    ? `held by Prisma service '${heldBy.serviceId}'`
+    : (heldBy?.message ?? "held by another RoutingUrl");
 
 const notActive = (url: ApiRoutingUrl) => {
   const reported =
@@ -555,7 +558,7 @@ const notActive = (url: ApiRoutingUrl) => {
       ? "every condition is met, but Prisma has not marked it active yet"
       : `its first unmet condition is ${url.firstUnmetCondition}`;
   const reason =
-    url.heldBy !== null
+    url.state === "in_use_elsewhere"
       ? `is ${holderOf(url.heldBy)}, so it cannot become active until that RoutingUrl gives it up.${reported}`
       : certificateFailed
         ? `has a failed certificate: ${url.customDomain?.failureReason ?? "Prisma gave no reason"}.${reported} A redeploy does not retry it. Retry it in the Console${url.setupUrl === null ? "" : ` at ${url.setupUrl}`}; a retry orders a new certificate, which counts toward the workspace's hourly limit.`
@@ -598,7 +601,11 @@ const untilActive = (
         message: `Prisma RoutingUrl '${url.hostname}' cannot get its certificate yet: the workspace reached its hourly limit of ${limited.limit} new certificates, which resets at ${limited.resetAt}. Prisma continues on its own at that time; a redeploy after then waits for the hostname to serve.`,
       });
     }
-    if (url.heldBy !== null || url.customDomain?.status === "failed" || pollsLeft <= 0) {
+    if (
+      url.state === "in_use_elsewhere" ||
+      url.customDomain?.status === "failed" ||
+      pollsLeft <= 0
+    ) {
       return yield* notActive(url);
     }
     yield* Effect.sleep(ACTIVE_POLL_INTERVAL);
@@ -612,9 +619,7 @@ const untilActive = (
  * custom domain there is nothing to retry, so one check per deploy is safe.
  */
 const checkedOnceIfDnsMissed = (url: ApiRoutingUrl) =>
-  url.customDomain === null &&
-  (url.firstUnmetCondition === "ownershipVerified" ||
-    url.firstUnmetCondition === "dnsPointsAtSwitchboard")
+  url.customDomain === null && (url.state === "not_verified" || url.state === "waiting_for_dns")
     ? createUrlCheck({ id: url.id }).pipe(Effect.map((response): ApiRoutingUrl => response.data))
     : Effect.succeed(url);
 
@@ -853,6 +858,7 @@ const ProviderLocal = () =>
     hostname: normalizeHostname(String(news.hostname)),
     logicalId: news.logicalId ?? id,
     status: "active" as const,
+    state: "active" as const,
     conditions: {
       ownershipVerified: "met" as const,
       servicePresent: "met" as const,

@@ -122,6 +122,7 @@ const url = yield* Prisma.RoutingUrl("api", {
   hostname: "api.example.com",
 });
 // url.status: "pending"
+// url.state: what the hostname is doing now, such as "not_verified" or "waiting_for_dns"
 // url.records: the TXT record that proves ownership and the CNAME to the switchboard
 // url.setupUrl: the Console page that shows what to do next
 ```

@@ -132,6 +132,7 @@ testFor(withDns).test.provider(
       expect(withDns.zone.records).toEqual(recordsFor(HOSTNAME));
       expect(url.logicalId).toBe("Url");
       expect(url.status).toBe("active");
+      expect(url.state).toBe("active");
       const create = withDns.fake.captured.find((request) => request.method === "POST");
       expect(create?.bodyJson).toEqual({ hostname: HOSTNAME, logicalId: "Url" });
       expect(ownershipWrites(withDns)).toEqual([]);
@@ -193,6 +194,7 @@ const issuing = (row: WireRoutingUrl, customDomainSyncError: string | null = nul
     dnsPointsAtSwitchboard: "met" as const,
     customDomainBound: "met" as const,
   },
+  state: "provisioning_certificate",
   firstUnmetCondition: "certificateActive",
   records: [],
   customDomain: {
@@ -439,6 +441,7 @@ testFor(failedCertificate).test.provider(
           const ordered = issuing(row);
           return {
             ...ordered,
+            state: "certificate_failed",
             customDomain: {
               ...ordered.customDomain,
               status: "failed",
@@ -480,7 +483,8 @@ testFor(certificateLimit).test.provider(
         fromZone: true,
         progress: (row) => ({
           ...row,
-          firstUnmetCondition: "customDomainBound",
+          state: "updating",
+          firstUnmetCondition: "dnsPointsAtSwitchboard",
           customDomainSyncError: CERTIFICATE_LIMIT_ERROR,
         }),
       });
@@ -525,7 +529,12 @@ testFor(heldElsewhere).test.provider(
       };
       heldElsewhere.reset({
         fromZone: true,
-        progress: (row) => ({ ...row, firstUnmetCondition: "customDomainBound", heldBy }),
+        progress: (row) => ({
+          ...row,
+          state: "in_use_elsewhere",
+          firstUnmetCondition: "customDomainBound",
+          heldBy,
+        }),
       });
       yield* stack.destroy();
 
