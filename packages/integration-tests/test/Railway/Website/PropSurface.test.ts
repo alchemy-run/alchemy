@@ -17,6 +17,7 @@ describe(
         }),
       () =>
         Railway.Website.Vite("V", {
+          name: "web",
           assets: { notFoundHandling: "single-page-application" },
           vite: { outDir: "build" },
         }),
