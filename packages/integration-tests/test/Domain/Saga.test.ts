@@ -306,6 +306,49 @@ const checks = Story.make(Checks, {
   stub: [Sanctions],
 });
 
+// A saga whose compensation dies after the saga rejected: the run has no
+// result to store unless the engine stores the defect.
+// https://github.com/alchemy-run/alchemy/issues/3595
+class Refused extends Domain.Rejection("Refused") {}
+
+class Unwind extends Domain.Saga("Unwind", {
+  key: Schema.String,
+  input: {},
+  rejects: [Refused],
+}) {}
+
+const UnwindLive = Unwind.toLayer(
+  Effect.succeed(
+    Effect.fn(function* () {
+      yield* Activity.make({ name: "step", execute: Effect.void }).pipe(
+        Unwind.withCompensation(() => Effect.die(new Error("compensation failed"))),
+      );
+      return yield* new Refused();
+    }),
+  ),
+);
+
+class StartUnwind extends Domain.Policy("StartUnwind", {
+  from: Transfer,
+  on: [Requested],
+}) {}
+const StartUnwindLive = StartUnwind.toLayer(
+  Effect.gen(function* () {
+    const unwinds = yield* Unwind;
+    return Effect.fn(function* ({ source }) {
+      yield* unwinds.start(source, {});
+    });
+  }),
+);
+
+class Unwinding extends Domain.Model("Unwinding", {
+  aggregates: [Transfer],
+  policies: [StartUnwind],
+  sagas: [Unwind],
+}) {}
+
+const unwinding = Story.make(Unwinding, { layer: Layer.mergeAll(StartUnwindLive, UnwindLive) });
+
 describe("Domain.Saga", { tags: ["unit", "local"] }, () => {
   it.effect("a policy starts a saga that debits and credits", () =>
     story(
@@ -393,6 +436,23 @@ describe("Domain.Saga", { tags: ["unit", "local"] }, () => {
       Effect.flip,
       Effect.map((failure) =>
         expect(failure.message).toMatch(/saga Explode run t-1 died with Error: boom/),
+      ),
+    ),
+  );
+
+  it.effect("a saga whose compensation dies reads as Died", () =>
+    unwinding(
+      Story.when(request(40)),
+      Story.then(transfer, requested(40)),
+      Story.saga(Unwind, "t-1", { _tag: "Died" }),
+    ),
+  );
+
+  it.effect("a saga whose compensation dies is reported as a death", () =>
+    unwinding(Story.when(request(40))).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(failure.message).toMatch(/saga Unwind run t-1 died with Error: compensation failed/),
       ),
     ),
   );
