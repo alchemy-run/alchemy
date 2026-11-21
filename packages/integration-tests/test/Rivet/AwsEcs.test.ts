@@ -7,9 +7,11 @@ import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
+import { instanceUserData, serviceContainers } from "./fixtures/aws-checks.ts";
 import { Cluster } from "./fixtures/aws/ecs-cluster.ts";
 import { CounterLive } from "./fixtures/aws/ecs-counter-live.ts";
 import Front from "./fixtures/aws/ecs-front.ts";
+import { CLASS_SECRET, CLASS_SECRET_NAME, ClassSecretConfig } from "./fixtures/class-secret.ts";
 import { expectDurableStream } from "./fixtures/durable-stream-check.ts";
 import { expectRustCounter, RustActors, rustTarget, type RustTarget } from "./fixtures/rust.ts";
 
@@ -40,7 +42,7 @@ describe.skipIf(!!process.env.FAST)(
             const front = yield* Front;
             const actors = yield* RustActors().pipe(Effect.provide(RustPool));
             return { url: front.functionUrl, rust: rustTarget(actors) };
-          }).pipe(Effect.provide(CounterLive)),
+          }).pipe(Effect.provide(CounterLive.pipe(Layer.provide(ClassSecretConfig)))),
         );
         const url = out.url;
         rust = out.rust as RustTarget;
@@ -58,6 +60,40 @@ describe.skipIf(!!process.env.FAST)(
       "Durable Streams: the front appends to and reads a stream on its cloud's Services pool",
       Effect.suspend(() => expectDurableStream(baseUrl)),
       { timeout: 180_000 },
+    );
+
+    test(
+      "the token and a class's secret stay out of task definitions and user data",
+      Effect.gen(function* () {
+        const { containers, instances } = yield* Core.withProviders(
+          Effect.all({
+            containers: serviceContainers(sharedStack),
+            instances: instanceUserData(sharedStack),
+          }),
+          testOptions,
+          sharedStack.name,
+        );
+        // The engines read the admin token as a secret, Services the pool token.
+        const engines = containers.filter(
+          (container) => "RIVET__AUTH__ADMIN_TOKEN" in container.secrets,
+        );
+        expect(engines.length).toBeGreaterThan(0);
+        expect(containers.filter((container) => "RIVET_TOKEN" in container.secrets)).toHaveLength(
+          1,
+        );
+        for (const container of containers) {
+          expect(container.environment).not.toHaveProperty("RIVET__AUTH__ADMIN_TOKEN");
+          expect(container.environment).not.toHaveProperty("RIVET_TOKEN");
+        }
+        // EC2 nodes read their env from an S3 object with their role, not user data.
+        expect(instances.length).toBeGreaterThan(0);
+        for (const { userData } of instances) {
+          expect(userData).not.toContain("RIVET_TOKEN=");
+          expect(userData).not.toContain(CLASS_SECRET);
+        }
+        expect(JSON.stringify(containers)).not.toContain(CLASS_SECRET);
+      }),
+      { timeout: 120_000 },
     );
 
     test(

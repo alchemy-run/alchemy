@@ -6,7 +6,7 @@ import {
   nodeDockerfile,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
-import { nodeEnvironment, poolNetworkOf, resolvePoolNetwork } from "./internal/Pool.ts";
+import { ecsNodeEnvironment, poolNetworkOf, resolvePoolNetwork } from "./internal/Pool.ts";
 
 export interface EcsPoolOptions extends PoolSettings {
   /**
@@ -81,6 +81,7 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
         const { program } = nodes;
         const network = yield* resolvePoolNetwork(id, nodes.network, options.cidrBlock);
         const cluster = yield* ECS.Cluster(`${id}Cluster`, {});
+        const { env, secrets } = yield* ecsNodeEnvironment(id, nodes);
         // Every class the pool hosts is bundled into its node image.
         // A Rust program is its own image, built from its staged crate.
         yield* ECS.Service(`${id}Nodes`, {
@@ -104,7 +105,9 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
           subnets: [...network.subnetIds],
           securityGroups: [network.securityGroupId],
           assignPublicIp: true,
-          env: nodeEnvironment(nodes),
+          env,
+          // The token and class secrets come from Secrets Manager.
+          secrets,
         });
       }),
   });
