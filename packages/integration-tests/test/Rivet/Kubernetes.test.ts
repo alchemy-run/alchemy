@@ -36,8 +36,10 @@ const baseUrl = `http://localhost:${FRONT_PORT}`;
 let rust: RustTarget;
 let kind: KindCluster;
 
-// A Rust Durable Object on a pool of its own.
-const RustPool = RivetKubernetes.DeploymentPool("Rust").pipe(Layer.provide(Cluster));
+// A Rust Durable Object on a pool of its own, reporting node version 2.
+const RustPool = RivetKubernetes.DeploymentPool("Rust", { version: 2 }).pipe(
+  Layer.provide(Cluster),
+);
 
 // The engine conformance spec, run against Rivet Durable Objects on a
 // control plane and a pool on a local kind cluster, called from a
@@ -114,6 +116,25 @@ describe.skipIf(!!process.env.FAST)(
             key: "RIVET_TOKEN",
           });
         }
+      }).pipe(Effect.provide(PlatformServices)),
+      { timeout: 60_000 },
+    );
+
+    test(
+      "a pool's nodes report the version it sets, and only that pool's",
+      Effect.gen(function* () {
+        const deployments = (yield* kubectlGet(kind, ["deployments", "--namespace", "default"]))
+          .items as Array<{
+          metadata: { name: string };
+          spec: { template: { spec: { containers: Array<{ env?: Array<any> }> } } };
+        }>;
+        // Physical names are hashed: tell the pools' nodes apart by their env.
+        const versions = deployments
+          .map((deployment) => deployment.spec.template.spec.containers[0]?.env ?? [])
+          .filter((env) => env.some((entry) => entry.name === "RIVET_TOKEN"))
+          .map((env) => env.find((entry) => entry.name === "RIVET_NODE_VERSION")?.value);
+        // Default, Services and Rust: only the Rust pool sets a version.
+        expect(versions.sort()).toEqual(["2", undefined, undefined]);
       }).pipe(Effect.provide(PlatformServices)),
       { timeout: 60_000 },
     );
