@@ -95,6 +95,7 @@ build:*
 !packages/e2b/src/globals.d.ts
 !packages/modal/src/globals.d.ts
 !packages/github/src/globals.d.ts
+!packages/slack/src/globals.d.ts
 !packages/stripe/src/globals.d.ts
 !packages/hetzner/src/globals.d.ts
 !packages/convex/src/globals.d.ts
