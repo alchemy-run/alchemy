@@ -12,7 +12,11 @@ import {
   type WebsiteNotFoundHandling,
 } from "alchemy/Website/assets";
 import { packSiteExtraFiles } from "alchemy/Website/packExtraFiles";
-import { Server as FrameworkServer, type ServerDevProps } from "alchemy/Website/Server";
+import {
+  Server as FrameworkServer,
+  type ServerDevProps,
+  withSiteRoute,
+} from "alchemy/Website/Server";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -249,7 +253,7 @@ const envRecord = (
 };
 
 const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
-  _id: string,
+  id: string,
   props: FrameworkSiteProps,
   config: FrameworkSiteConfig,
 ) {
@@ -267,7 +271,7 @@ const runFrameworkSite = Effect.fn("Fly.Website.FrameworkSite")(function* (
     env: envRecord(props.env),
     options: config.options,
     memo: props.memo,
-    dev: props.dev,
+    dev: withSiteRoute(id, props.dev),
   });
 
   if (isLocal) {
