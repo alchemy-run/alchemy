@@ -23,6 +23,7 @@ import type { HttpEffect } from "alchemy/Http";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeInputGate } from "alchemy/Workers/InputGate";
+import { storageCallbacks } from "alchemy/Workers/StorageCallbacks";
 import {
   CurrentActivity,
   decodeResult,
@@ -59,7 +60,6 @@ import { SqlClient } from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 import { type Activity, DurableDeferred, Workflow, WorkflowEngine } from "effect/workflow";
 import {
-  alarmCallbacks,
   type Attachment,
   className,
   type Host,
@@ -605,7 +605,7 @@ export const layerEntities = <PoolReq>(
           : objectStorage(yield* sql, `${name}/${id}`, gate);
         const instanceScope = yield* Scope.Scope;
         const wakes = yield* objects.client;
-        const callbacks = alarmCallbacks(storage, {
+        const callbacks = storageCallbacks(storage, {
           set: (at) =>
             Effect.gen(function* () {
               yield* storage.put("~alarm", at);

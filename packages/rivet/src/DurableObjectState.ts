@@ -1,5 +1,6 @@
 import { EventLifetime } from "alchemy/Workers/EventLifetime";
 import { gateExclusive, gateStorage } from "alchemy/Workers/InputGate";
+import type { Alarm, CallbackStorage } from "alchemy/Workers/StorageCallbacks";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -155,6 +156,8 @@ export interface DurableObjectStateShape {
    * `tag`, only those accepted with it.
    */
   getWebSockets(tag?: string): Effect.Effect<ReadonlyArray<WebSocket>>;
+  /** @internal */
+  readonly [CallbackHostId]: CallbackHost;
 }
 
 /** The running Durable Object instance's state. */
@@ -166,8 +169,39 @@ export class DurableObjectState extends Context.Service<
 /** The action RivetKit calls when an object's alarm comes due. @internal */
 export const ALARM_ACTION = "__alchemy_alarm";
 
+/** The action RivetKit calls when an object's callbacks are due. @internal */
+export const CALLBACKS_ACTION = "__alchemy_callbacks";
+
+/**
+ * The key of an instance's {@link CallbackHost} on its state.
+ *
+ * @internal For `DurableObjectCallbacks`.
+ */
+export const CallbackHostId: unique symbol = Symbol.for("@alchemy.run/rivet/CallbackHost");
+
+/**
+ * Where an instance's durable callbacks keep their jobs, and how they wake
+ * it: a table of their own, and a RivetKit schedule of their own, apart from
+ * the instance's storage and its one alarm.
+ *
+ * @internal For `DurableObjectCallbacks`.
+ */
+export interface CallbackHost {
+  readonly storage: CallbackStorage;
+  readonly wake: Alarm;
+  /** Run `fire` when a wake comes due. */
+  readonly onWake: (fire: Effect.Effect<void>) => void;
+}
+
+/** What runs when an instance's callbacks are due. @internal */
+export interface CallbackWakeHandler {
+  fire: Effect.Effect<void> | undefined;
+}
+
 const KV_TABLE = "_alchemy_kv";
 const META_TABLE = "_alchemy_meta";
+const CALLBACKS_TABLE = "_alchemy_callbacks";
+const CALLBACKS_WAKE_KEY = "callbacks_wake";
 const ALARM_KEY = "alarm";
 
 /**
@@ -207,6 +241,9 @@ export const migrateStorage = async (db: ActorContextLike["db"]) => {
   );
   await db.execute(
     `CREATE TABLE IF NOT EXISTS ${META_TABLE} (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)`,
+  );
+  await db.execute(
+    `CREATE TABLE IF NOT EXISTS ${CALLBACKS_TABLE} (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL)`,
   );
 };
 
@@ -385,10 +422,77 @@ const setAlarm = (c: ActorContextLike, at: number, retries?: number) =>
   });
 
 /** Build the state for one actor activation. @internal */
+/**
+ * Forget the wake that came due, before its callbacks run: they set the next
+ * one, and a wake left set would hide it.
+ *
+ * @internal
+ */
+export const clearCallbackWake = (c: ActorContextLike) =>
+  Effect.asVoid(query(c, `DELETE FROM ${META_TABLE} WHERE key = ?`, CALLBACKS_WAKE_KEY));
+
+const makeCallbackHost = (c: ActorContextLike, handler: CallbackWakeHandler): CallbackHost => ({
+  storage: {
+    get: <T>(key: string) =>
+      query<{ value: string }>(c, `SELECT value FROM ${CALLBACKS_TABLE} WHERE key = ?`, key).pipe(
+        Effect.flatMap((rows) =>
+          rows[0] === undefined ? Effect.undefined : decode<T>(rows[0].value),
+        ),
+      ),
+    put: (key, value) =>
+      Effect.gen(function* () {
+        yield* query(
+          c,
+          `INSERT INTO ${CALLBACKS_TABLE} (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+          key,
+          yield* encode(value),
+        );
+      }),
+    delete: (key) =>
+      query(c, `DELETE FROM ${CALLBACKS_TABLE} WHERE key = ? RETURNING key`, key).pipe(
+        Effect.map((rows) => rows.length > 0),
+      ),
+    list: <T>({ prefix }: { readonly prefix: string }) =>
+      Effect.gen(function* () {
+        const rows = yield* query<{ key: string; value: string }>(
+          c,
+          `SELECT key, value FROM ${CALLBACKS_TABLE} WHERE substr(key, 1, ?) = ? ORDER BY key`,
+          prefix.length,
+          prefix,
+        );
+        const entries = new Map<string, T>();
+        for (const row of rows) entries.set(row.key, yield* decode<T>(row.value));
+        return entries;
+      }),
+  },
+  wake: {
+    // A wake set and then replaced still fires; it finds nothing due.
+    set: (at) =>
+      Effect.gen(function* () {
+        yield* query(
+          c,
+          `INSERT INTO ${META_TABLE} (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+          CALLBACKS_WAKE_KEY,
+          String(at),
+        );
+        yield* Effect.promise(() => c.schedule.at(at, CALLBACKS_ACTION));
+      }),
+    get: query<{ value: string }>(
+      c,
+      `SELECT value FROM ${META_TABLE} WHERE key = ?`,
+      CALLBACKS_WAKE_KEY,
+    ).pipe(Effect.map((rows) => (rows[0] === undefined ? null : Number(rows[0].value)))),
+  },
+  onWake: (fire) => {
+    handler.fire = fire;
+  },
+});
+
 export const makeDurableObjectState = (
   c: ActorContextLike,
   activation: Activation,
   sockets: SocketRegistry,
+  callbacks: CallbackWakeHandler = { fire: undefined },
 ): DurableObjectStateShape => {
   const name = c.key[0] ?? "";
 
@@ -557,6 +661,7 @@ export const makeDurableObjectState = (
     sleep: () => Effect.sync(() => c.sleep()),
     destroy: () => Effect.sync(() => c.destroy()),
     getWebSockets: (tag) => Effect.sync(() => sockets.all(tag)),
+    [CallbackHostId]: makeCallbackHost(c, callbacks),
     // As on Cloudflare: the work runs with the caller's context and a scope
     // of its own, and the call's scope stays open until it settles.
     waitUntil: (effect) =>

@@ -24,6 +24,9 @@ import * as Stream from "effect/Stream";
 import type { HostedDurableObject } from "../DurableObject.ts";
 import {
   ALARM_ACTION,
+  CALLBACKS_ACTION,
+  type CallbackWakeHandler,
+  clearCallbackWake,
   DurableObjectState,
   makeDurableObjectState,
   migrateStorage,
@@ -53,6 +56,8 @@ interface ActivationVars {
   instance: DurableObjectInstance | undefined;
   activation: Activation | undefined;
   sockets: SocketRegistry | undefined;
+  /** What runs when the instance's callbacks are due. */
+  callbacks: CallbackWakeHandler;
 }
 
 type ActivationContext = ActorContextLike & {
@@ -256,7 +261,7 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
             // instance from the bridge.
             services: Context.make(
               DurableObjectState,
-              makeDurableObjectState(c, activation, sockets),
+              makeDurableObjectState(c, activation, sockets, c.vars.callbacks),
             ).pipe(
               // Construction runs under the activation's construction
               // section; each call replaces it with what it was sent.
@@ -318,6 +323,7 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
           instance: undefined,
           activation: undefined,
           sockets: undefined,
+          callbacks: { fire: undefined },
         }),
         onSleep: (c: ActivationContext) => runLifecycle(c, "onSleep"),
         onDestroy: (c: ActivationContext) => runLifecycle(c, "onDestroy"),
@@ -332,6 +338,26 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
           return handleWebSocket(instance, activation, sockets, c.request, ws);
         },
         actions: {
+          // Due callbacks run as an alarm does, kept awake until they're done.
+          // Building the instance registers them, so a wake that started the
+          // actor finds them.
+          [CALLBACKS_ACTION]: (c: ActivationContext) => {
+            const { instance } = instanceOf(c);
+            void c.keepAwake(
+              instance.execute(() =>
+                Effect.gen(function* () {
+                  yield* clearCallbackWake(c);
+                  const fire = c.vars.callbacks.fire;
+                  if (fire !== undefined) yield* fire;
+                }).pipe(
+                  Effect.provideService(Awaiting, receive(undefined)),
+                  Effect.catchCause((cause) =>
+                    Effect.logError("Durable Object callbacks could not run", cause),
+                  ),
+                ),
+              ),
+            );
+          },
           // RivetKit times an action out after 60 seconds, and an alarm can
           // wait out a transaction before its handler runs as long as it
           // takes: the action only starts it, kept awake until it's done.
