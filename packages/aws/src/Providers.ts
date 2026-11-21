@@ -706,6 +706,7 @@ export const providers = () =>
         LakeFormation.Permissions,
         LakeFormation.Resource,
         Lambda.Alias,
+        Lambda.CapacityProvider,
         Lambda.EventSourceMapping,
         Lambda.Function,
         Lambda.LayerVersion,
@@ -1386,6 +1387,8 @@ export const providers = () =>
           flociDual(LakeFormation.Permissions, () => LakeFormation.PermissionsProvider()),
           flociDual(LakeFormation.Resource, () => LakeFormation.ResourceProvider()),
           flociDual(Lambda.Alias, () => Lambda.AliasProvider()),
+          // No floci emulation: managed instances run only on real EC2.
+          Lambda.CapacityProviderProvider(),
           // Requires the alchemy floci fork ≥ 1.6.0-alchemy.2: the
           // reconciler's ownership scan calls lambda ListTags on
           // `event-source-mapping:` ARNs, which stock floci 1.6.0 rejects.

@@ -1,4 +1,4 @@
-import { CurrentActivity, makeCurrentActivity } from "alchemy/WorkflowEncoding";
+import { CurrentActivity, intoStoredResult, makeCurrentActivity } from "alchemy/WorkflowEncoding";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -102,7 +102,7 @@ export const make = (host: Host): WorkflowEngine.WorkflowEngine["Service"] => {
           instance.suspended = false;
           return Effect.withFiber((fiber) => fiber.pipe(Fiber.interrupt, Effect.interruptible));
         }),
-        Workflow.intoResult,
+        intoStoredResult,
         Effect.provide(
           Layer.mergeAll(
             Layer.succeed(WorkflowEngine.WorkflowInstance, instance),

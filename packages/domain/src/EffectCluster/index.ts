@@ -1,3 +1,4 @@
+import { databaseMaxConnections } from "@alchemy.run/effect-cluster/Database";
 import {
   Entity,
   type EntityNamespace,
@@ -22,6 +23,7 @@ import type { Providers } from "@alchemy.run/effect-cluster/Providers";
 import { PgClient } from "@effect/sql-pg";
 import type { Callbacks } from "alchemy/Callback";
 import type { HttpEffect } from "alchemy/Http";
+import { decodeRpcArgs, encodeRpcArgs } from "alchemy/Rpc";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeInputGate } from "alchemy/Workers/InputGate";
@@ -52,11 +54,13 @@ import * as Option from "effect/Option";
 import * as PrimaryKey from "effect/PrimaryKey";
 import * as Queue from "effect/Queue";
 import * as Random from "effect/Random";
+import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import { Rpc } from "effect/rpc";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Socket from "effect/socket/Socket";
 import { SqlClient } from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
@@ -254,6 +258,56 @@ type InstanceBuild = Effect.Effect<
   ObjectState | RuntimeContext | Callbacks | Scope.Scope
 >;
 
+/**
+ * One storage pool per database for the life of the process, opened by
+ * `open` on first use. Concurrent first uses open it once; an open that
+ * fails isn't kept, so the next use tries again.
+ */
+const makeStoragePools = (
+  open: (url: Redacted.Redacted<string>) => Effect.Effect<SqlClient>,
+): ((url: Redacted.Redacted<string>) => Effect.Effect<SqlClient>) => {
+  const pools = new Map<string, SqlClient>();
+  const opening = Semaphore.makeUnsafe(1);
+  const opened = (url: Redacted.Redacted<string>) => pools.get(Redacted.value(url));
+  return (url) =>
+    Effect.suspend(() => {
+      const pool = opened(url);
+      if (pool !== undefined) return Effect.succeed(pool);
+      return opening.withPermits(1)(
+        Effect.suspend(() => {
+          const raced = opened(url);
+          if (raced !== undefined) return Effect.succeed(raced);
+          return Effect.tap(open(url), (client) =>
+            Effect.sync(() => pools.set(Redacted.value(url), client)),
+          );
+        }),
+      );
+    });
+};
+
+/**
+ * The runner's pool to the storage table. Every model the runner hosts
+ * shares it, so a runner holds one storage pool however many models it
+ * hosts, of at most the pool's `databaseConnections`
+ * (`CLUSTER_DATABASE_MAX_CONNECTIONS`). It lives as long as the runner.
+ */
+const storagePool = makeStoragePools((url) => {
+  const scope = Scope.makeUnsafe();
+  return Effect.gen(function* () {
+    const maxConnections = yield* databaseMaxConnections;
+    const context = yield* Layer.buildWithScope(
+      PgClient.layer({ url, maxConnections }),
+      scope,
+    ).pipe(Effect.orDie);
+    const client = Context.get(context, SqlClient);
+    yield* migrate(client);
+    return client;
+  }).pipe(
+    // A pool that didn't open isn't kept: close what it opened.
+    Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(scope, exit) : Effect.void)),
+  );
+});
+
 /** A Domain host entity was asked for an object of a class it doesn't host. */
 export class DomainClassNotHosted extends Data.TaggedError("Cluster.DomainClassNotHosted")<{
   readonly message: string;
@@ -294,7 +348,7 @@ const remote =
                 : (...args: ReadonlyArray<unknown>) =>
                     Effect.flatMap(namespace.getByName(`${cls}/${key}`), (client) =>
                       client
-                        .Call({ method: String(method), args: JSON.stringify(args) })
+                        .Call({ method: String(method), args: encodeRpcArgs(args) })
                         .pipe(Effect.map((result) => JSON.parse(result) as unknown)),
                     ),
         },
@@ -611,19 +665,10 @@ export const layerEntities = <PoolReq>(
         });
       const classes = new Map<string, InstanceBuild>();
       const workflows = new Map<string, Workflow.Any>();
-      // Lives as long as the runner: the model's Layer is the entity's.
-      const scope = yield* Scope.make();
       // One Postgres pool per runner, opened on the first instance.
-      const sql = yield* Effect.cached(
-        Effect.gen(function* () {
-          const url = yield* Config.Redacted("CLUSTER_DATABASE_URL").pipe(Effect.orDie);
-          const context = yield* Layer.buildWithScope(PgClient.layer({ url }), scope).pipe(
-            Effect.orDie,
-          );
-          const client = Context.get(context, SqlClient);
-          yield* migrate(client);
-          return client;
-        }),
+      const sql = Effect.flatMap(
+        Config.Redacted("CLUSTER_DATABASE_URL").pipe(Effect.orDie),
+        storagePool,
       );
       // Completed once the runner has joined the cluster; a call made
       // before then waits for it.
@@ -729,8 +774,13 @@ export const layerEntities = <PoolReq>(
               Effect.suspend(() => {
                 const method = record[payload.method];
                 return typeof method === "function"
-                  ? (method as (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(
-                      ...(JSON.parse(payload.args) as ReadonlyArray<unknown>),
+                  ? decodeRpcArgs(payload.args).pipe(
+                      Effect.orDie,
+                      Effect.flatMap((args) =>
+                        (method as (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown>)(
+                          ...args,
+                        ),
+                      ),
                     )
                   : Effect.die(new Error(`${id} has no method ${payload.method}`));
               }).pipe(Effect.map((result) => JSON.stringify(result ?? null))),
