@@ -62,7 +62,9 @@ describe(
   "AWS bindings on a Fly Service",
   { tags: ["provider:aws", "provider:fly", "live"] },
   () => {
-    test.provider(
+    // The Machine runs on Fly and can't reach an emulator on this machine, so
+    // its token would go to real STS for a role only the emulator has.
+    test.provider.skipIf(!!process.env.AWS_ENDPOINT_URL)(
       "S3 PutObject + GetObject with a Fly OIDC token",
       (_stack) =>
         Effect.gen(function* () {

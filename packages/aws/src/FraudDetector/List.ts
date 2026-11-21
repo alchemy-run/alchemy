@@ -9,12 +9,13 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
-import { readFraudDetectorTags, syncFraudDetectorTags } from "./internal.ts";
+import { readFraudDetectorTags, snakeName, syncFraudDetectorTags } from "./internal.ts";
 
 export interface ListProps {
   /**
-   * Name of the list. If omitted, a unique lowercase name is generated from
-   * the app, stage, and logical ID. Changing the name replaces the list.
+   * Name of the list: lowercase letters, digits and underscores. If omitted,
+   * a unique name is generated from the app, stage, and logical ID. Changing
+   * the name replaces the list.
    */
   name?: string;
   /**
@@ -120,7 +121,12 @@ export const ListProvider = () =>
     List,
     Effect.gen(function* () {
       const createName = Effect.fn(function* (id: string, props: ListProps) {
-        return props.name ?? (yield* createPhysicalName({ id, maxLength: 64, lowercase: true }));
+        return (
+          props.name ??
+          snakeName(
+            yield* createPhysicalName({ id, maxLength: 64, lowercase: true, delimiter: "_" }),
+          )
+        );
       });
 
       /** Look a list's metadata up by name; typed not-found → undefined. */
