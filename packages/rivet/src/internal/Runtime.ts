@@ -24,12 +24,12 @@ import * as Stream from "effect/Stream";
 import type { HostedDurableObject } from "../DurableObject.ts";
 import {
   ALARM_ACTION,
+  CallStorage,
   DurableObjectState,
   makeDurableObjectState,
   migrateStorage,
   runFiredAlarm,
   type ActorContextLike,
-  type ActorDatabase,
 } from "../DurableObjectState.ts";
 import type { WebSocket } from "../WebSocket.ts";
 import {
@@ -70,43 +70,20 @@ const env = (name: string): string | undefined => process.env[name];
 const deadlock = (message: string) => new Response(message, { status: DEADLOCK_STATUS });
 
 /**
- * A call whose storage RivetKit closed under it as the actor stopped. What
- * it returned can't be trusted (a Domain object reports the failure as
- * data), so answer it as a call that never arrived, which the caller sends
- * again to the next activation.
+ * A call whose storage failed while the actor stopped: RivetKit closed it
+ * under the call. What it returned can't be trusted (a Domain object
+ * reports the failure as data), so answer it as a call that never arrived,
+ * which the caller sends again to the next activation.
  */
 const stopped = () =>
   new Response("This Durable Object stopped while it served the call.", { status: 503 });
-
-/**
- * `c` whose storage marks `activation` once it fails after the actor began
- * to stop, which is RivetKit closing it under the calls still running.
- */
-const watchStorage = (c: ActivationContext, activation: Activation): ActivationContext => {
-  const watch = <T>(promise: Promise<T>) =>
-    promise.catch((error: unknown) => {
-      if (c.abortSignal.aborted) activation.storageClosed = true;
-      return Promise.reject(error);
-    });
-  const db: ActorDatabase = {
-    execute: (query, ...args) => watch(c.db.execute(query, ...args)),
-    transaction: (callback, options) => watch(c.db.transaction(callback, options)),
-  };
-  // RivetKit's context keeps private fields: its methods run bound to it.
-  return new Proxy(c, {
-    get: (target, key) => {
-      if (key === "db") return db;
-      const value = Reflect.get(target, key, target);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
-};
 
 /** Serve one actor request through the instance's `fetch` (and fetch-RPC). */
 const handleRequest = (
   instance: DurableObjectInstance,
   activation: Activation,
   request: Request,
+  stopping: AbortSignal,
 ) => {
   const awaiting = receive(request.headers.get(AWAITING_HEADER));
   // The instance's construction waits on this call, and the call can't
@@ -118,6 +95,8 @@ const handleRequest = (
       ),
     );
   }
+  // Marked if one of this call's storage operations fails.
+  const storage = { failed: false };
   return instance.execute(
     (shape) =>
       Effect.gen(function* () {
@@ -146,9 +125,15 @@ const handleRequest = (
           );
         }
         return HttpServerResponse.toWeb(response, { context });
-      }).pipe(Effect.provideService(Awaiting, awaiting)),
+      }).pipe(
+        Effect.provideContext(
+          Context.make(Awaiting, awaiting).pipe(Context.add(CallStorage, storage)),
+        ),
+      ),
     async (exit) =>
-      activation.storageClosed
+      // Checked once the call ends: a write can fail an instant before
+      // RivetKit marks the actor as stopping.
+      storage.failed && stopping.aborted
         ? stopped()
         : Exit.isSuccess(exit)
           ? (exit.value as Response)
@@ -294,7 +279,7 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
             // instance from the bridge.
             services: Context.make(
               DurableObjectState,
-              makeDurableObjectState(watchStorage(c, activation), activation, sockets),
+              makeDurableObjectState(c, activation, sockets),
             ).pipe(
               // Construction runs under the activation's construction
               // section; each call replaces it with what it was sent.
@@ -361,7 +346,7 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
         onDestroy: (c: ActivationContext) => runLifecycle(c, "onDestroy"),
         onRequest: (c: ActivationContext, request: Request) => {
           const { instance, activation } = instanceOf(c);
-          return handleRequest(instance, activation, request);
+          return handleRequest(instance, activation, request, c.abortSignal);
         },
         // A WebSocket through the gateway: the instance's `fetch` accepts it
         // with `Rivet.upgrade()`.

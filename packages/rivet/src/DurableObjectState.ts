@@ -246,6 +246,23 @@ const CurrentTransaction = Context.Reference<Transaction | undefined>(
  * outlives it (handed to `waitUntil`, or forked) runs in the one around it,
  * or outside any once all have finished.
  */
+/**
+ * The call storage runs for, marked `failed` once one of its storage
+ * operations fails. Absent outside a call. @internal
+ */
+export const CallStorage = Context.Reference<{ failed: boolean } | undefined>(
+  "Rivet/DurableObjectState/CallStorage",
+  { defaultValue: () => undefined },
+);
+
+/** `effect`, a storage operation, marking the call it runs for when it fails. */
+const watched = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.onError(effect, () =>
+    Effect.map(CallStorage, (call) => {
+      if (call !== undefined) call.failed = true;
+    }),
+  );
+
 const currentTransaction = Effect.map(CurrentTransaction, (transaction) => {
   let open = transaction;
   while (open !== undefined && !open.open) open = open.parent;
@@ -259,7 +276,7 @@ const query = <Row extends Record<string, unknown>>(
 ) =>
   Effect.gen(function* () {
     const db = (yield* currentTransaction)?.db ?? c.db;
-    return yield* Effect.promise(() => db.execute<Row>(sql, ...args));
+    return yield* watched(Effect.promise(() => db.execute<Row>(sql, ...args)));
   });
 
 /** Thrown inside a RivetKit transaction to roll it back. */
@@ -513,9 +530,11 @@ export const makeDurableObjectState = (
             // comes back here fails instead of waiting on the transaction.
             const section = openSection(activation);
             const result = yield* Effect.acquireUseRelease(
-              beginTransaction(
-                parent?.db ?? c.db,
-                Duration.toMillis(timeout) + TRANSACTION_TIMEOUT_MARGIN,
+              watched(
+                beginTransaction(
+                  parent?.db ?? c.db,
+                  Duration.toMillis(timeout) + TRANSACTION_TIMEOUT_MARGIN,
+                ),
               ),
               ({ tx }) => {
                 const transaction: Transaction = { db: tx, afterCommit, parent, open: true };
@@ -539,7 +558,7 @@ export const makeDurableObjectState = (
                   ),
                 );
               },
-              ({ end }, exit) => Effect.promise(() => end(Exit.isSuccess(exit))),
+              ({ end }, exit) => watched(Effect.promise(() => end(Exit.isSuccess(exit)))),
             );
             // A nested transaction's scheduler work waits for the outermost.
             if (parent !== undefined) parent.afterCommit.push(...afterCommit);
