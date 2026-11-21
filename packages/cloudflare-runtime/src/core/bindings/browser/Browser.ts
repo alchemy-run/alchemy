@@ -29,6 +29,7 @@ import { makeRemoteBinding } from "../../remote-bindings/RemoteBindings.ts";
 import type { ConfigError } from "../../RuntimeError.shared.ts";
 import { kVoid } from "../../workerd/Config.ts";
 import type * as WorkerdConfig from "../../workerd/Config.ts";
+import { getBrowserEnvironment } from "./BrowserEnvironment.ts";
 import type { BrowserProps } from "./BrowserOptions.shared.ts";
 import {
   BINDING_BROWSER_LOOPBACK,
@@ -280,7 +281,7 @@ export async function launchBrowser({ headful }: { headful?: boolean }): Promise
     "cloudflare-runtime-browser",
     `profile-${sessionId}`,
   );
-  await NodeFs.promises.mkdir(tempUserData, { recursive: true });
+  await NodeFs.promises.mkdir(tempUserData, { recursive: true, mode: 0o700 });
 
   // https://github.com/puppeteer/puppeteer/blob/44516936ad4a878f9a89e835a9fa7b04360d6fb9/packages/puppeteer-core/src/node/ChromeLauncher.ts#L156
   const disabledFeatures = [
@@ -330,6 +331,9 @@ export async function launchBrowser({ headful }: { headful?: boolean }): Promise
   const browserProcess = launch({
     executablePath,
     args: process.env.CI ? [...args, "--no-sandbox"] : args,
+    // @puppeteer/browsers defaults to an empty environment. Chrome needs
+    // a user home for NSS and other configuration outside its profile.
+    env: getBrowserEnvironment(tempUserData),
     handleSIGTERM: false,
     dumpio: false,
     pipe: false,

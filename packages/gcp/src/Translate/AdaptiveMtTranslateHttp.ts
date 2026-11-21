@@ -1,6 +1,6 @@
 import * as translate from "@distilled.cloud/gcp/translate_v3";
 import * as Layer from "effect/Layer";
-import { AdaptiveMtTranslate } from "./AdaptiveMtTranslate.ts";
+import { AdaptiveMtTranslate, type AdaptiveMtTranslateRequest } from "./AdaptiveMtTranslate.ts";
 import { locationParentOf, makeAdaptiveMtTranslateBinding } from "./BindingHttp.ts";
 
 /**
@@ -15,12 +15,10 @@ export const AdaptiveMtTranslateHttp = Layer.effect(
     tag: "GCP.Translate.AdaptiveMtTranslate",
     operation: translate.adaptiveMtTranslateProjectsLocations,
     iam: { role: "roles/cloudtranslate.user" },
-    withBody: (name, request) => ({
+    withBody: (name, request: AdaptiveMtTranslateRequest | undefined) => ({
+      ...request?.body,
+      dataset: name,
       parent: locationParentOf(name),
-      body: {
-        ...request?.body,
-        dataset: name,
-      },
     }),
   }),
 );

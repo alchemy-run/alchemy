@@ -745,11 +745,7 @@ export const RegionNetworkEndpointGroupProvider = () =>
 
       if (current === undefined) {
         const created = yield* compute
-          .insertRegionNetworkEndpointGroups({
-            project: env.project,
-            region,
-            body: desired,
-          })
+          .insertRegionNetworkEndpointGroups({ ...desired, project: env.project, region })
           .pipe(
             Effect.flatMap((operation) =>
               waitRegionOperation(env.project, region, operation, {

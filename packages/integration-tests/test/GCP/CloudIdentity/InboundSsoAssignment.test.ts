@@ -48,12 +48,10 @@ test.provider.skipIf(!!process.env.GCP_TEST_CLOUDIDENTITY)(
 
       const error = yield* Effect.flip(
         cloudidentity.createInboundSsoAssignments({
-          body: {
-            customer,
-            targetGroup: "groups/alchemy-missing-group",
-            ssoMode: "SSO_OFF",
-            rank: 1,
-          },
+          customer,
+          targetGroup: "groups/alchemy-missing-group",
+          ssoMode: "SSO_OFF",
+          rank: 1,
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");

@@ -27,6 +27,11 @@ export const fromAuthProvider = () =>
     Credentials,
     lazyCredentials<DigitalOceanResolvedCredentials, ConfigError>()(
       DIGITALOCEAN_AUTH_PROVIDER_NAME,
-      (creds) => ({ apiKey: creds.apiToken, apiBaseUrl: creds.apiBaseUrl }),
+      (creds) => ({
+        apiKey: creds.apiToken,
+        apiBaseUrl: creds.apiBaseUrl,
+        spacesAccessKeyId: creds.spacesAccessKeyId,
+        spacesSecretAccessKey: creds.spacesSecretAccessKey,
+      }),
     ),
   );

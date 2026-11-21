@@ -252,13 +252,11 @@ export const FolderSecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
       if (current === undefined) {
         const created = yield* scc
           .createFoldersSecurityHealthAnalyticsSettingsCustomModules({
+            displayName,
+            customConfig,
+            enablementState,
+            cloudProvider,
             parent,
-            body: {
-              displayName,
-              customConfig,
-              enablementState,
-              cloudProvider,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(parent, id)));
         current = created ?? undefined;
@@ -281,9 +279,11 @@ export const FolderSecurityHealthAnalyticsSettingsCustomModuleProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* scc.patchFoldersSecurityHealthAnalyticsSettingsCustomModules({
+          displayName,
+          customConfig,
+          enablementState,
           name: currentName,
           updateMask,
-          body: { displayName, customConfig, enablementState },
         });
       }
 

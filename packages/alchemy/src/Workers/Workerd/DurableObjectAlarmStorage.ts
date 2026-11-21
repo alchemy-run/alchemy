@@ -25,7 +25,7 @@ export const ensureAlarmTables = (storage: cf.DurableObjectStorage) =>
           .exec<{ version: number }>("SELECT version FROM alchemy_alarm_schema WHERE id = 1")
           .one().version
       : 0;
-    if (version === SCHEMA_VERSION) return;
+    if (version === SCHEMA_VERSION) return ensureRecurrenceColumn(storage);
     if (version !== 0 && version !== 1) {
       throw new UnsupportedAlarmSchemaVersion({
         version,
@@ -74,8 +74,27 @@ export const ensureAlarmTables = (storage: cf.DurableObjectStorage) =>
         UPDATE alchemy_alarm_callbacks SET scheduled_at = run_at;
         UPDATE alchemy_alarm_schema SET version = 2 WHERE id = 1;
       `);
+      ensureRecurrenceColumn(storage);
     });
   });
+
+/**
+ * A recurring job's schedule, added without a version bump: releases that
+ * predate it read and write these rows unchanged, so rolling back never fails
+ * on the table. Their recurring jobs run once more and stop. The column holds
+ * the row version it was written with, so a job an older release replaced
+ * doesn't turn recurring again after rolling forward.
+ */
+const withRecurrence = new WeakSet<cf.DurableObjectStorage>();
+const ensureRecurrenceColumn = (storage: cf.DurableObjectStorage) => {
+  if (withRecurrence.has(storage)) return;
+  const columns = storage.sql
+    .exec<{ name: string }>("SELECT name FROM pragma_table_info('alchemy_alarm_callbacks')")
+    .toArray();
+  // Cached only once seen: a transaction this runs in can roll the column back.
+  if (columns.some((column) => column.name === "recurrence")) withRecurrence.add(storage);
+  else storage.sql.exec("ALTER TABLE alchemy_alarm_callbacks ADD COLUMN recurrence TEXT");
+};
 
 // Both schedulers share the Durable Object's single native alarm. Inside a
 // transaction, workerd defers the native wake to commit and rolls it back

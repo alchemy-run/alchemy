@@ -286,13 +286,11 @@ export const BackupChannelProvider = () =>
       if (current === undefined) {
         const created = yield* gkebackup
           .createProjectsLocationsBackupChannels({
+            destinationProject,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             backupChannelId,
-            body: {
-              destinationProject,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -314,13 +312,11 @@ export const BackupChannelProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* gkebackup.patchProjectsLocationsBackupChannels({
+          etag: current.etag,
+          labels: desiredLabels,
+          description: news.description,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            labels: desiredLabels,
-            description: news.description,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

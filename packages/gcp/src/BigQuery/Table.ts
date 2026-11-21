@@ -793,9 +793,9 @@ export const TableProvider = () =>
       if (current === undefined) {
         const created = yield* bigquery
           .insertTables({
+            ...toTableBody(env.project, datasetId, tableId, news, desiredLabels),
             projectId: env.project,
             datasetId,
-            body: toTableBody(env.project, datasetId, tableId, news, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => getByRef(env.project, datasetId, tableId)));
         current = created ?? undefined;
@@ -811,10 +811,11 @@ export const TableProvider = () =>
         // PATCH merges labels; removing one needs a JSON null the typed body
         // cannot carry, so replace the labels with PUT (get-modify-put).
         current = yield* bigquery.updateTables({
+          ...current,
+          labels: desiredLabels,
           projectId: env.project,
           datasetId,
           tableId,
-          body: { ...current, labels: desiredLabels },
         });
       }
       const labelsChanged = removed.length === 0 && upsert.length > 0;
@@ -882,10 +883,10 @@ export const TableProvider = () =>
           body.externalDataConfiguration = toExternal(news.externalDataConfiguration);
         }
         current = yield* bigquery.patchTables({
+          ...body,
           projectId: env.project,
           datasetId,
           tableId,
-          body,
         });
       }
 

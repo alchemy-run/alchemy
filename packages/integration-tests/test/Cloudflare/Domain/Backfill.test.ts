@@ -174,6 +174,27 @@ describe.sequential(
     );
 
     test.provider(
+      "the first deploy after a destroy waits on a backfill whose Workflow it just created, and deploying again succeeds",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          // The Worker, its backfill Workflow and the wait's instance are all new in this deploy.
+          const { worker } = yield* deployOf(stack, BenchV2);
+          const url = worker.url!.replace(/\/+$/, "");
+          yield* serving(url, "v2");
+          const history = JSON.parse(yield* call(url, "GET", "/history")) as {
+            complete: boolean;
+          };
+          expect(history.complete).toBe(true);
+
+          yield* deployOf(stack, BenchV2);
+          yield* serving(url, "v2");
+          yield* stack.destroy();
+        }),
+      { timeout: 900_000 },
+    );
+
+    test.provider(
       "a deploy that times out leaves the backfill running, and the next deploy waits for it",
       (stack) =>
         Effect.gen(function* () {

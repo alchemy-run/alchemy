@@ -665,6 +665,57 @@ const shellQuote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
 const commandLine = (command: Command) =>
   typeof command === "string" ? command : command.map(shellQuote).join(" ");
 
+/** Times a command's socket is re-attached after Archil drops it. */
+const EXEC_REATTACHES = 3;
+
+/**
+ * Run a command to completion and collect its output. Archil sometimes
+ * closes a command's socket before it reports the exit; the process keeps
+ * running, so this attaches to it again where its output left off instead
+ * of failing a command that worked.
+ */
+const execToCompletion = (sid: string, command: string, options: Process.RunOptions) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const out = new TextDecoder();
+      const err = new TextDecoder();
+      let stdout = "";
+      let stderr = "";
+      let cursor = 0;
+      const drain = (process: Process.Process) =>
+        process.output.pipe(
+          Stream.runForEach((chunk) =>
+            Effect.sync(() => {
+              cursor = chunk.offset + chunk.data.byteLength;
+              if (chunk.stream === "stdout") stdout += out.decode(chunk.data, { stream: true });
+              else stderr += err.decode(chunk.data, { stream: true });
+            }),
+          ),
+          Effect.andThen(process.exit),
+        );
+      const started = yield* Process.run(sid, command, options);
+      const exit = yield* drain(started).pipe(
+        Effect.catchTag("ProcessError", (dropped) =>
+          dropped.message === "Process connection closed before exit"
+            ? // Suspended, so each attempt resumes from the newest cursor.
+              Effect.suspend(() => Process.attach(sid, started.id, cursor)).pipe(
+                Effect.flatMap(drain),
+                Effect.retry({
+                  while: (error) => error._tag === "ProcessError",
+                  times: EXEC_REATTACHES - 1,
+                }),
+              )
+            : Effect.fail(dropped),
+        ),
+      );
+      return {
+        ...exit,
+        stdout: stdout + out.decode(),
+        stderr: stderr + err.decode(),
+      } satisfies Process.ProcessResult;
+    }),
+  );
+
 const runOptions = (options: StartOptions | undefined): Process.RunOptions => ({
   cwd: options?.cwd,
   env: options?.env === undefined ? undefined : { ...options.env },
@@ -787,7 +838,7 @@ export const makeSandboxOps = (
     refresh: () => attrs((id) => archil.getSandbox({ sid: id })),
     exec: (command, options) =>
       options?.stdin === undefined
-        ? awake((id) => Process.exec(id, commandLine(command), runOptions(options)))
+        ? awake((id) => execToCompletion(id, commandLine(command), runOptions(options)))
         : awake((id) =>
             Effect.scoped(
               Effect.gen(function* () {

@@ -242,8 +242,8 @@ export const RegionsAutoscalingPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* dataproc
           .createProjectsRegionsAutoscalingPolicies({
+            ...desired,
             parent: regionParent(env.project, region),
-            body: desired,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -259,11 +259,8 @@ export const RegionsAutoscalingPolicyProvider = () =>
 
       if (labelsChanged || policyChanged(current, desired)) {
         current = yield* dataproc.updateProjectsRegionsAutoscalingPolicies({
+          ...desired,
           name: current.name ?? name,
-          body: {
-            ...desired,
-            name: current.name ?? name,
-          },
         });
       }
 

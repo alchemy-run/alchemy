@@ -432,14 +432,12 @@ export const InstantSnapshotProvider = () =>
           error instanceof OperationFailed && error.reason === "UNSUPPORTED_OPERATION";
         yield* compute
           .insertInstantSnapshots({
+            name: instantSnapshotName,
+            sourceDisk: news.sourceDisk,
+            description: news.description,
+            labels: desiredLabels,
             project: env.project,
             zone,
-            body: {
-              name: instantSnapshotName,
-              sourceDisk: news.sourceDisk,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.undefined),
@@ -474,13 +472,11 @@ export const InstantSnapshotProvider = () =>
       const { upsert, removed } = diffLabels(observedLabels, desiredLabels);
       if (upsert.length > 0 || removed.length > 0) {
         const labeled = yield* compute.setLabelsInstantSnapshots({
+          labels: desiredLabels,
+          labelFingerprint: current.labelFingerprint,
           project: env.project,
           zone,
           resource: instantSnapshotName,
-          body: {
-            labels: desiredLabels,
-            labelFingerprint: current.labelFingerprint,
-          },
         });
         yield* waitZoneOperation(env.project, zone, labeled);
         current = yield* getByName(env.project, zone, instantSnapshotName);

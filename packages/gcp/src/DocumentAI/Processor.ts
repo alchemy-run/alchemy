@@ -378,14 +378,12 @@ export const ProcessorProvider = () =>
       if (current === undefined) {
         current = yield* retryTransient(
           documentai.createProjectsLocationsProcessors({
+            type,
+            displayName,
+            kmsKeyName: news.kmsKeyName,
+            defaultProcessorVersion: news.defaultProcessorVersion,
+            activeSchemaVersion: news.activeSchemaVersion,
             parent,
-            body: {
-              type,
-              displayName,
-              kmsKeyName: news.kmsKeyName,
-              defaultProcessorVersion: news.defaultProcessorVersion,
-              activeSchemaVersion: news.activeSchemaVersion,
-            },
           }),
         ).pipe(
           Effect.catchTag("Conflict", (error) =>
@@ -437,10 +435,8 @@ export const ProcessorProvider = () =>
       ) {
         const operation = yield* retryTransient(
           documentai.setDefaultProcessorVersionProjectsLocationsProcessors({
+            defaultProcessorVersion: news.defaultProcessorVersion,
             processor: currentName,
-            body: {
-              defaultProcessorVersion: news.defaultProcessorVersion,
-            },
           }),
         );
         yield* waitForOperation(operation);

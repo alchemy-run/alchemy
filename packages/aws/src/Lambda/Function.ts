@@ -18,7 +18,7 @@ import type { LogLine, LogsInput } from "alchemy/Provider";
 import * as Provider from "alchemy/Provider";
 import { type LookupMethod, Resource, type ResourceBinding } from "alchemy/Resource";
 import type { FunctionContext, FunctionListener } from "alchemy/Runtime/Function";
-import { packEnvValue, RuntimeContext, unpackEnvValue } from "alchemy/RuntimeContext";
+import { packEnvValue, RuntimeContext, unpackEnvValue, envStrings } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, hasAlchemyTags, hasTags } from "alchemy/Tags";
 import { buildEventTelemetry } from "alchemy/Telemetry";
@@ -44,6 +44,7 @@ import { AWSEnvironment } from "../Environment.ts";
 import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
+import { managedPolicyArn, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import {
   observeEventInvokeConfig,
@@ -379,8 +380,11 @@ export interface FunctionCommonProps extends PlatformProps {
    * Asynchronous invocation settings (retries, event age, destinations) for
    * the unqualified function. Omit to remove any existing config and fall
    * back to Lambda's defaults (2 retries, 6-hour max event age, no
-   * destinations). Use {@link AliasProps.eventInvokeConfig} to scope the
-   * config to an alias instead.
+   * destinations). The function's role is granted what it needs to send to
+   * each destination (`sqs:SendMessage`, `sns:Publish`,
+   * `lambda:InvokeFunction`, `events:PutEvents`, or `s3:PutObject`). Use
+   * {@link AliasProps.eventInvokeConfig} to scope the config to an alias
+   * instead.
    */
   eventInvokeConfig?: EventInvokeConfig;
   /**
@@ -768,6 +772,14 @@ export interface Function extends Resource<
       /** Local mount path inside the function (must begin with `/mnt/`). */
       localMountPath: string;
     }[];
+    /**
+     * Async invocation settings a binding needs (e.g. a failure destination
+     * for the events it delivers). Merged with the Function's own
+     * `eventInvokeConfig` prop and other bindings' settings; two sources
+     * that set the same field differently fail the deploy, since Lambda
+     * keeps one config per function.
+     */
+    eventInvokeConfig?: EventInvokeConfig;
   },
   Providers,
   FunctionLookup
@@ -804,6 +816,71 @@ export class FunctionAliasPublishFailed extends Data.TaggedError("FunctionAliasP
   reason: "CodeStorageExceeded" | "VersionLimitExceeded" | "AliasLimitExceeded";
   message: string;
 }> {}
+
+/**
+ * Two sources (the `eventInvokeConfig` prop and a binding, or two bindings)
+ * set the same async invocation field to different values. Lambda keeps one
+ * config per function, so they can't both apply.
+ */
+export class ConflictingEventInvokeConfig extends Data.TaggedError("ConflictingEventInvokeConfig")<{
+  readonly field: string;
+  readonly message: string;
+}> {}
+
+/**
+ * Merge the `eventInvokeConfig` prop with the settings bindings request.
+ * Each field may be set by any number of sources as long as they agree.
+ */
+const mergeEventInvokeConfig = (
+  prop: EventInvokeConfig | undefined,
+  requested: ReadonlyArray<EventInvokeConfig>,
+) =>
+  Effect.gen(function* () {
+    const sources = [...(prop ? [prop] : []), ...requested];
+    if (sources.length === 0) return undefined;
+    const pick = <A>(
+      field: string,
+      read: (config: EventInvokeConfig) => A | undefined,
+      key: (a: A) => unknown = (a) => a,
+    ) =>
+      Effect.gen(function* () {
+        const values = sources.flatMap((config) => {
+          const value = read(config);
+          return value === undefined ? [] : [value];
+        });
+        const distinct = [...new Set(values.map(key))];
+        if (distinct.length > 1) {
+          return yield* new ConflictingEventInvokeConfig({
+            field,
+            message: `eventInvokeConfig.${field} is set to ${distinct.map(String).join(" and ")} by different sources. Lambda keeps one async invocation config per function; set it in one place.`,
+          });
+        }
+        return values[0];
+      });
+    const onSuccess = yield* pick(
+      "destinationConfig.OnSuccess",
+      (c) => c.destinationConfig?.OnSuccess?.Destination,
+    );
+    const onFailure = yield* pick(
+      "destinationConfig.OnFailure",
+      (c) => c.destinationConfig?.OnFailure?.Destination,
+    );
+    return {
+      maximumRetryAttempts: yield* pick("maximumRetryAttempts", (c) => c.maximumRetryAttempts),
+      maximumEventAge: yield* pick(
+        "maximumEventAge",
+        (c) => c.maximumEventAge,
+        (age) => Duration.toMillis(age),
+      ),
+      destinationConfig:
+        onSuccess || onFailure
+          ? {
+              OnSuccess: onSuccess ? { Destination: onSuccess } : undefined,
+              OnFailure: onFailure ? { Destination: onFailure } : undefined,
+            }
+          : undefined,
+    } satisfies EventInvokeConfig;
+  });
 
 /** An event source was used inside a Lambda Web Function. */
 export class EventSourceRequiresFunction extends Data.TaggedError("EventSourceRequiresFunction")<{
@@ -1453,7 +1530,7 @@ export const Function: Platform<
         // Key is already canonical (see RuntimeContext.sanitizeKey). Read
         // straight from `process.env` — see `unpackEnvValue` for why this
         // must never resolve through `Config.String`.
-        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- must read the raw env, Config would unwrap packed values and recurse (see unpackEnvValue)
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- must read the raw env, Config would unwrap packed values (see unpackEnvValue)
         Effect.sync(() => unpackEnvValue<T>(process.env[key])),
       serve: (handler: HttpEffect) =>
         ctx.listen(
@@ -1564,6 +1641,32 @@ export const Function: Platform<
   },
 });
 
+/**
+ * What the function's role needs to deliver async invocation records to a
+ * destination: Lambda sends them as the role, so without these a configured
+ * `OnFailure` queue silently receives nothing.
+ */
+const destinationStatements = (arn: string): IAM.PolicyStatement[] => {
+  const service = arn.split(":")[2];
+  switch (service) {
+    case "sqs":
+      return [{ Effect: "Allow", Action: ["sqs:SendMessage"], Resource: [arn] }];
+    case "sns":
+      return [{ Effect: "Allow", Action: ["sns:Publish"], Resource: [arn] }];
+    case "lambda":
+      return [{ Effect: "Allow", Action: ["lambda:InvokeFunction"], Resource: [arn] }];
+    case "events":
+      return [{ Effect: "Allow", Action: ["events:PutEvents"], Resource: [arn] }];
+    case "s3":
+      return [
+        { Effect: "Allow", Action: ["s3:ListBucket"], Resource: [arn] },
+        { Effect: "Allow", Action: ["s3:PutObject"], Resource: [`${arn}/*`] },
+      ];
+    default:
+      return [];
+  }
+};
+
 export const FunctionProvider = () =>
   Provider.effect(
     Function,
@@ -1601,8 +1704,8 @@ export const FunctionProvider = () =>
             roleName,
             policyName,
             functionName: fn,
-            roleArn: `arn:aws:iam::${accountId}:role/${roleName}`,
-            functionArn: `arn:aws:lambda:${region}:${accountId}:function:${fn}`,
+            roleArn: `arn:${partitionOf(region)}:iam::${accountId}:role/${roleName}`,
+            functionArn: `arn:${partitionOf(region)}:lambda:${region}:${accountId}:function:${fn}`,
           };
         });
 
@@ -1612,12 +1715,15 @@ export const FunctionProvider = () =>
         // functionArn,
         // functionName,
         bindings,
+        destinations,
       }: {
         roleName: string;
         policyName: string;
         functionArn: string;
         functionName: string;
         bindings: ResourceBinding<Function["Binding"]>[];
+        /** Async invocation destinations, which Lambda sends to as the function's role. */
+        destinations: ReadonlyArray<string>;
       }) {
         const activeBindings = bindings.filter(
           (binding: ResourceBinding<Function["Binding"]> & { action?: string }) =>
@@ -1632,6 +1738,11 @@ export const FunctionProvider = () =>
               ...stmt,
               Sid: stmt.Sid?.replace(/[^A-Za-z0-9]+/gi, ""),
             })) ?? [],
+        );
+        policyStatements.push(
+          ...destinations
+            .flatMap(destinationStatements)
+            .map((stmt) => ({ ...stmt, Sid: undefined })),
         );
         // VPC attachments requested through the binding channel (DECISION
         // #5) — set-union across bindings; merged with the `vpc` prop in
@@ -1678,7 +1789,7 @@ export const FunctionProvider = () =>
         return { env, vpc, fileSystemConfigs };
       });
 
-      const xrayWriteAccessPolicyArn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess";
+      const xrayWriteAccessPolicyName = "AWSXRayDaemonWriteAccess";
 
       /**
        * Converge the X-Ray write managed policy on the execution role with
@@ -1696,6 +1807,8 @@ export const FunctionProvider = () =>
         tracing: FunctionProps["tracing"];
         mayHaveBeenActive: boolean;
       }) {
+        const { partition } = yield* AWSEnvironment.current;
+        const xrayWriteAccessPolicyArn = managedPolicyArn(partition, xrayWriteAccessPolicyName);
         if (tracing === "Active") {
           yield* iam.attachRolePolicy({
             RoleName: roleName,
@@ -1758,10 +1871,11 @@ export const FunctionProvider = () =>
         }
 
         yield* Effect.logDebug(`attaching policy ${id}`);
+        const { partition } = yield* AWSEnvironment.current;
         yield* iam
           .attachRolePolicy({
             RoleName: roleName,
-            PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+            PolicyArn: managedPolicyArn(partition, "service-role/AWSLambdaBasicExecutionRole"),
           })
           .pipe(Effect.tapError(Effect.logDebug), Effect.tap(Effect.logDebug));
 
@@ -1769,7 +1883,10 @@ export const FunctionProvider = () =>
           yield* iam
             .attachRolePolicy({
               RoleName: roleName,
-              PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+              PolicyArn: managedPolicyArn(
+                partition,
+                "service-role/AWSLambdaVPCAccessExecutionRole",
+              ),
             })
             .pipe(Effect.tapError(Effect.logDebug), Effect.tap(Effect.logDebug));
         }
@@ -1801,7 +1918,7 @@ export const FunctionProvider = () =>
             {
               Effect: "Deny",
               Action: "logs:CreateLogGroup",
-              Resource: `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${functionName}:*`,
+              Resource: `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:/aws/lambda/${functionName}:*`,
             },
           ],
         });
@@ -1958,12 +2075,12 @@ export const FunctionProvider = () =>
       // AWS managed policies Alchemy attaches to the execution role. Other
       // attachments (e.g. an `IAM.RolePolicyAttachment` on `roleName`) are
       // not ours to observe.
-      const managedExecutionPolicyArns = new Set([
-        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-        "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
-        "arn:aws:iam::aws:policy/AmazonElasticFileSystemClientReadWriteAccess",
-        xrayWriteAccessPolicyArn,
-      ]);
+      const managedExecutionPolicyNames = [
+        "service-role/AWSLambdaBasicExecutionRole",
+        "service-role/AWSLambdaVPCAccessExecutionRole",
+        "AmazonElasticFileSystemClientReadWriteAccess",
+        xrayWriteAccessPolicyName,
+      ];
 
       /**
        * Project the configuration `alchemy drift` compares: every setting
@@ -1985,6 +2102,10 @@ export const FunctionProvider = () =>
       }) {
         const functionName = fn.FunctionName!;
         const policyName = yield* createPolicyName(id);
+        const { partition } = yield* AWSEnvironment.current;
+        const managedExecutionPolicyArns = new Set(
+          managedExecutionPolicyNames.map((name) => managedPolicyArn(partition, name)),
+        );
         const readInlinePolicy = (PolicyName: string) =>
           iam.getRolePolicy({ RoleName: roleName, PolicyName }).pipe(
             Effect.map((policy) => JSON.parse(decodeURIComponent(policy.PolicyDocument))),
@@ -3089,7 +3210,7 @@ export const FunctionProvider = () =>
             preferUpdate: true,
           });
 
-          const functionArn = `arn:aws:lambda:${region}:${accountId}:function:${functionName}`;
+          const functionArn = `arn:${partitionOf(region)}:lambda:${region}:${accountId}:function:${functionName}`;
           // Consumers in a cycle with this Function wire the alias before
           // reconcile runs, so the alias must already exist (serving the
           // stub until reconcile advances it).
@@ -3115,6 +3236,7 @@ export const FunctionProvider = () =>
           if (isFunctionImageProps(news)) {
             yield* decodeFunctionImageSource(id, news.image);
           }
+          const { partition } = yield* AWSEnvironment.current;
           const generated = yield* createNames(id, news.functionName);
           // Prefer the deployed identifiers: regenerating would target
           // different physical resources if the generator's output for this
@@ -3140,6 +3262,16 @@ export const FunctionProvider = () =>
           yield* syncLogGroupGuard({ roleName, functionName });
           yield* ensureLogGroup({ id, functionName, retention: news.logging?.retention });
 
+          // The prop and every binding's request converge on one config.
+          const invokeConfig = yield* mergeEventInvokeConfig(
+            news.eventInvokeConfig,
+            bindings.flatMap(
+              (binding: ResourceBinding<Function["Binding"]> & { action?: string }) =>
+                binding.action !== "delete" && binding.data?.eventInvokeConfig
+                  ? [binding.data.eventInvokeConfig]
+                  : [],
+            ),
+          );
           const {
             env,
             vpc: bindingVpc,
@@ -3150,6 +3282,10 @@ export const FunctionProvider = () =>
             functionArn,
             functionName,
             bindings,
+            destinations: [
+              invokeConfig?.destinationConfig?.OnSuccess?.Destination,
+              invokeConfig?.destinationConfig?.OnFailure?.Destination,
+            ].filter((arn): arn is string => typeof arn === "string"),
           });
 
           // Both VPC paths (the `vpc` prop and binding-channel requests)
@@ -3177,7 +3313,10 @@ export const FunctionProvider = () =>
           if (vpc) {
             yield* iam.attachRolePolicy({
               RoleName: roleName,
-              PolicyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+              PolicyArn: managedPolicyArn(
+                partition,
+                "service-role/AWSLambdaVPCAccessExecutionRole",
+              ),
             });
           }
 
@@ -3220,7 +3359,10 @@ export const FunctionProvider = () =>
           if (desiredFileSystemConfigs.length > 0) {
             yield* iam.attachRolePolicy({
               RoleName: roleName,
-              PolicyArn: "arn:aws:iam::aws:policy/AmazonElasticFileSystemClientReadWriteAccess",
+              PolicyArn: managedPolicyArn(
+                partition,
+                "AmazonElasticFileSystemClientReadWriteAccess",
+              ),
             });
           }
 
@@ -3236,10 +3378,10 @@ export const FunctionProvider = () =>
             news,
             roleArn,
             code: prepared.deployment,
-            env: {
+            env: envStrings({
               ...env,
               ...news.env,
-            },
+            }),
             functionName,
             // On update an omitted VpcConfig means "leave as-is"; detach
             // explicitly so a VPC attached out-of-band is removed.
@@ -3309,7 +3451,7 @@ export const FunctionProvider = () =>
           yield* syncEventInvokeConfig({
             functionName,
             qualifier: news.alias,
-            config: news.eventInvokeConfig,
+            config: invokeConfig,
           });
           if (news.alias) {
             // The config moved to the alias; `$LATEST` falls back to defaults.
@@ -3445,7 +3587,7 @@ export const FunctionProvider = () =>
           const runTailSession = Effect.gen(function* () {
             const { accountId, region } = yield* AWSEnvironment.current;
 
-            const logGroupArn = `arn:aws:logs:${region}:${accountId}:log-group:/aws/lambda/${output.functionName}`;
+            const logGroupArn = `arn:${partitionOf(region)}:logs:${region}:${accountId}:log-group:/aws/lambda/${output.functionName}`;
             const response = yield* logs.startLiveTail({
               logGroupIdentifiers: [logGroupArn],
             });

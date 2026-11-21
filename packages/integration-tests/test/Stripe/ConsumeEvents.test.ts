@@ -2,6 +2,10 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Stripe from "@alchemy.run/stripe";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import {
+  CreateCoreEventDestinationPing,
+  GetCoreEventDestinations,
+} from "@distilled.cloud/stripe/stripe";
 import * as Alchemy from "alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -106,5 +110,53 @@ test(
       "live",
     ],
     timeout: 120_000,
+  },
+);
+
+// `test.provider` supplies Stripe credentials for the ping and the lookup.
+test.provider(
+  "consumeEvents fetches and handles a thin event delivery",
+  () =>
+    Effect.gen(function* () {
+      const { url } = yield* stack;
+      const base = url.replace(/\/+$/, "");
+      yield* getWhenReady(`${base}/last`);
+
+      const thinUrl = `${base}/webhooks/stripe/thin`;
+      const destinations = yield* GetCoreEventDestinations({
+        limit: 20,
+        include: ["webhook_endpoint.url"],
+      });
+      const destination = destinations.data.find((d) => d.webhook_endpoint?.url === thinUrl);
+      expect(destination?.event_payload).toEqual("thin");
+
+      // Ping the thin destination: Stripe delivers a thin notification, the
+      // Worker fetches the event and the handler records it under its id.
+      const ping = yield* CreateCoreEventDestinationPing({ id: destination!.id });
+      const relatedId = yield* Effect.gen(function* () {
+        const res = yield* HttpClient.execute(HttpClientRequest.get(`${base}/last/${ping.id}`));
+        if (res.status !== 200) return null;
+        const json = (yield* res.json) as { value: string | null };
+        return json.value;
+      }).pipe(
+        Effect.catch(() => Effect.succeed(null)),
+        Effect.repeat({
+          schedule: Schedule.spaced("3 seconds"),
+          until: (value) => value !== null,
+          times: 30,
+        }),
+      );
+      expect(relatedId).toEqual(destination!.id);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:worker",
+      "provider:stripe",
+      "provider:stripe:eventdestination",
+      "live",
+    ],
+    timeout: 180_000,
   },
 );

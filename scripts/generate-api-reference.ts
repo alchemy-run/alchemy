@@ -89,9 +89,19 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/boat/src",
   },
   {
+    srcRoot: "packages/1password/src",
+    providerPrefix: "1Password",
+    sourceDisplayPrefix: "packages/1password/src",
+  },
+  {
     srcRoot: "packages/turso/src",
     providerPrefix: "Turso",
     sourceDisplayPrefix: "packages/turso/src",
+  },
+  {
+    srcRoot: "packages/convex/src",
+    providerPrefix: "Convex",
+    sourceDisplayPrefix: "packages/convex/src",
   },
   {
     srcRoot: "packages/daytona/src",

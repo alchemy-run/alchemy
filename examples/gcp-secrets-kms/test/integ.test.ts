@@ -35,10 +35,7 @@ describe("gcp-secrets-kms", () => {
       // The secret is created empty on purpose — the value is an operator
       // step. Add the version the service will read.
       yield* secretmanager
-        .addVersionProjectsSecrets({
-          parent: outputs.secretName,
-          body: { payload: { data: btoa(API_KEY) } },
-        })
+        .addVersionProjectsSecrets({ payload: { data: btoa(API_KEY) }, parent: outputs.secretName })
         .pipe(Effect.orDie, Effect.provide(GcpHttp));
       return outputs;
     }),
@@ -171,10 +168,7 @@ describe("gcp-secrets-kms", () => {
 
       // The ciphertext is real KMS output: decrypt it directly with the key.
       const direct = yield* kms
-        .decryptProjectsLocationsKeyRingsCryptoKeys({
-          name: cryptoKeyName,
-          body: { ciphertext },
-        })
+        .decryptProjectsLocationsKeyRingsCryptoKeys({ ciphertext, name: cryptoKeyName })
         .pipe(Effect.orDie, Effect.provide(GcpHttp));
       expect(Buffer.from(direct.plaintext ?? "", "base64").toString("utf8")).toEqual(plaintext);
 

@@ -658,11 +658,11 @@ export const TransferConfigProvider = () =>
       if (current === undefined) {
         const created = yield* bqdt
           .createProjectsLocationsTransferConfigs({
+            ...desiredBody,
             parent,
             serviceAccountName: news.serviceAccountName,
             versionInfo: news.versionInfo,
             authorizationCode: news.authorizationCode,
-            body: desiredBody,
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(parent, id, news.dataSourceId)));
         current = created ?? undefined;
@@ -756,12 +756,12 @@ export const TransferConfigProvider = () =>
       if (mask.length > 0 || serviceAccountChanged) {
         current = yield* retryTransient(
           bqdt.patchProjectsLocationsTransferConfigs({
+            ...desiredBody,
             name,
             updateMask: mask.length > 0 ? mask.join(",") : "displayName",
             serviceAccountName: news.serviceAccountName,
             versionInfo: news.versionInfo,
             authorizationCode: news.authorizationCode,
-            body: { ...desiredBody, name },
           }),
         );
         current = (yield* getByName(name)) ?? current;

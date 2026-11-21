@@ -739,10 +739,7 @@ export const JobProvider = () =>
 
       if (current === undefined) {
         const created = yield* scheduler
-          .createProjectsLocationsJobs({
-            parent,
-            body: desiredBody,
-          })
+          .createProjectsLocationsJobs({ ...desiredBody, parent })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -795,9 +792,9 @@ export const JobProvider = () =>
       if (mask.length > 0) {
         current = yield* retryTransient(
           scheduler.patchProjectsLocationsJobs({
+            ...desiredBody,
             name,
             updateMask: mask.join(","),
-            body: desiredBody,
           }),
         );
         current = (yield* getByName(name)) ?? current;

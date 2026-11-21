@@ -44,15 +44,13 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         androiddeviceprovisioning.createCustomersConfigurations({
+          configurationName: "Alchemy Probe",
+          dpcResourcePath: `${probeParent}/dpcs/0`,
+          companyName: "Alchemy",
+          contactEmail: "alchemy-test@example.com",
+          contactPhone: "+1 555 0100",
+          isDefault: false,
           parent: probeParent,
-          body: {
-            configurationName: "Alchemy Probe",
-            dpcResourcePath: `${probeParent}/dpcs/0`,
-            companyName: "Alchemy",
-            contactEmail: "alchemy-test@example.com",
-            contactPhone: "+1 555 0100",
-            isDefault: false,
-          },
         }),
       );
       expect(error._tag).toEqual("InsufficientAuthenticationScopes");

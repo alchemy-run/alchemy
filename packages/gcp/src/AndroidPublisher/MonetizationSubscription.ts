@@ -317,10 +317,10 @@ export const MonetizationSubscriptionProvider = () =>
       if (current === undefined) {
         const created = yield* androidpublisher
           .createMonetizationSubscriptions({
+            ...desired,
             packageName,
             productId,
             "regionsVersion.version": regionsVersion,
-            body: desired,
           })
           .pipe(Effect.catchTag("Conflict", () => getSubscription(packageName, productId)));
         current = created ?? undefined;
@@ -337,12 +337,12 @@ export const MonetizationSubscriptionProvider = () =>
         const updateMask = syncMask(current, desired);
         if (updateMask.length > 0) {
           current = yield* androidpublisher.patchMonetizationSubscriptions({
+            ...desired,
             packageName,
             productId: current.productId ?? productId,
             updateMask,
             "regionsVersion.version": regionsVersion,
             latencyTolerance: news.latencyTolerance,
-            body: desired,
           });
         }
       }

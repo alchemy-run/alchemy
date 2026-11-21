@@ -24,7 +24,7 @@ export default class RecaptchaBindingsHost extends GCP.Function<RecaptchaBinding
     return {
       fetch: serveProbes({
         createAssessment: createAssessment({
-          body: { event: { token: "03AGdBq27", expectedAction: "login" } },
+          event: { token: "03AGdBq27", expectedAction: "login" },
         }).pipe(
           Effect.retry({
             // A just-created key takes a moment to propagate.

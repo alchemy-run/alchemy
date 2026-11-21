@@ -1,11 +1,13 @@
 import * as Hetzner from "@alchemy.run/hetzner";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as volumeActions from "@distilled.cloud/hetzner/volume_actions";
 import * as volumes from "@distilled.cloud/hetzner/volumes";
 import * as Provider from "alchemy/Provider";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
 import { expectFound } from "./lookup.ts";
 
 const { test } = Test.make({ providers: Hetzner.providers() });
@@ -85,6 +87,27 @@ test.provider(
       expect(refetched.volume.linux_device).toEqual(created.linuxDevice);
       expect(refetched.volume.labels.env).toEqual("prod");
       expect(refetched.volume.labels.role).toEqual("data");
+
+      // Delete protection turned on outside the stack refuses the destroy too:
+      // the provider never lifts it. Turn it off the same way, then destroy.
+      const setProtection = (enabled: boolean) =>
+        volumeActions.changeVolumeProtection({ id: updated.id, delete: enabled }).pipe(
+          Effect.andThen(
+            volumes.getVolume({ id: updated.id }).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("1 second"),
+                until: (response) => response.volume.protection.delete === enabled,
+                times: 30,
+              }),
+            ),
+          ),
+        );
+      yield* setProtection(true);
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Data",
+        tag: "Hetzner.VolumeDeleteProtected",
+      });
+      yield* setProtection(false);
 
       yield* stack.destroy();
 
