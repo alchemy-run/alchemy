@@ -52,6 +52,11 @@ export type Secret = Resource<
     createdAt: string | undefined;
     /** RFC3339 last-update timestamp. */
     updatedAt: string | undefined;
+    /**
+     * The App's secrets version after this secret's last write. Pass it as
+     * a Machine's `minSecretsVersion` so the Machine sees this value.
+     */
+    version: number | undefined;
   },
   never,
   Providers,
@@ -259,12 +264,14 @@ const toAttrs = (
   appName: string,
   secret: AppSecret,
   fallbackName: string,
+  version: number | undefined,
 ): Secret["Attributes"] => ({
   appName,
   name: secret.name ?? fallbackName,
   digest: secret.digest,
   createdAt: secret.created_at,
   updatedAt: secret.updated_at,
+  version,
 });
 
 const getByName = (appName: string, secretName: string) =>
@@ -320,7 +327,7 @@ export const SecretProvider = () =>
 
     lookup: Effect.fn(function* ({ appName, name }) {
       const found = yield* getByName(appName, name);
-      return found === undefined ? undefined : toAttrs(appName, found, name);
+      return found === undefined ? undefined : toAttrs(appName, found, name, undefined);
     }),
 
     read: Effect.fn(function* ({ id, olds, output }) {
@@ -329,7 +336,7 @@ export const SecretProvider = () =>
       const name = yield* resolveName(id, olds?.name, output?.name);
       const found = yield* getByName(appName, name);
       if (found === undefined) return undefined;
-      const attrs = toAttrs(appName, found, name);
+      const attrs = toAttrs(appName, found, name, output?.version);
       if (output !== undefined) return attrs;
       return matchesAlchemyPhysicalName(name) ? attrs : Unowned(attrs);
     }),
@@ -344,7 +351,7 @@ export const SecretProvider = () =>
               secrets.flatMap((secret) => {
                 const name = secret.name;
                 if (!matchesAlchemyPhysicalName(name)) return [];
-                return [toAttrs(app.appName, secret, name ?? "")];
+                return [toAttrs(app.appName, secret, name ?? "", undefined)];
               }),
             ),
           ),
@@ -375,14 +382,21 @@ export const SecretProvider = () =>
       }
 
       let createdThisRun = false;
+      // Kept until this run writes the value: a Machine that already saw
+      // the last write needs no newer version.
+      let version =
+        output?.appName === appName && output.name === name ? output.version : undefined;
       if (current === undefined) {
-        yield* machines
+        version = yield* machines
           .createSecret({
             app_name: appName,
             secret_name: name,
             value: desiredPlain,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.void));
+          .pipe(
+            Effect.map((created) => created.version),
+            Effect.catchTag("Conflict", () => Effect.succeed(version)),
+          );
         current = yield* getByName(appName, name);
         createdThisRun = true;
       }
@@ -399,18 +413,23 @@ export const SecretProvider = () =>
         const digestMatches = current.digest !== undefined && candidates.includes(current.digest);
         const previousPlain = olds?.value !== undefined ? unwrapSecret(olds.value) : undefined;
         const valueChanged = previousPlain === undefined || previousPlain !== desiredPlain;
-        if (!digestMatches && valueChanged) {
-          yield* machines
+        // A secret written before versions were recorded is written once
+        // more, for the version its readers wait on.
+        if ((!digestMatches && valueChanged) || version === undefined) {
+          version = yield* machines
             .updateSecrets({
               app_name: appName,
               values: { [name]: desiredPlain },
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.void));
+            .pipe(
+              Effect.map((updated) => updated.version),
+              Effect.catchTag("Conflict", () => Effect.succeed(version)),
+            );
           current = (yield* getByName(appName, name)) ?? current;
         }
       }
 
-      return toAttrs(appName, current, name);
+      return toAttrs(appName, current, name, version);
     }),
 
     delete: Effect.fn(function* ({ output }) {

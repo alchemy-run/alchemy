@@ -1,17 +1,18 @@
 import type * as Fly from "@alchemy.run/fly";
 import * as Output from "alchemy/Output";
 
-/** The Machine metadata key that carries the digests of the App secrets it reads. */
-export const SECRETS_DIGEST_KEY = "rivet.secrets-digest";
-
 /**
- * Machine metadata naming the digests of App secrets a Machine reads as
- * env. Fly never says which secrets a Machine uses, so this is what makes
- * the Machine wait for them and restart when one changes.
+ * The App-secrets version a Machine that reads `secrets` as env must
+ * reach: the newest of their last writes. Fly may start a Machine on an
+ * older vault without it, and a new value raises it, which rolls the
+ * Machines.
  *
  * @internal
  */
-export const secretsDigest = (secrets: readonly Fly.Secret[]) =>
-  Output.all(...secrets.map((secret) => secret.digest)).pipe(
-    Output.map((digests) => ({ [SECRETS_DIGEST_KEY]: digests.map((d) => d ?? "").join(",") })),
+export const minSecretsVersion = (secrets: readonly Fly.Secret[]) =>
+  Output.all(...secrets.map((secret) => secret.version)).pipe(
+    Output.map((versions) => {
+      const known = versions.filter((version): version is number => version !== undefined);
+      return known.length === 0 ? undefined : Math.max(...known);
+    }),
   );

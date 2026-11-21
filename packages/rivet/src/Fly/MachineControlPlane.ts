@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import { Cluster } from "../Cluster.ts";
 import { adminToken } from "../internal/AdminToken.ts";
-import { secretsDigest } from "../internal/FlySecrets.ts";
+import { minSecretsVersion } from "../internal/FlySecrets.ts";
 import { Namespace } from "../Namespace.ts";
 
 /** The engine release `RivetFly.MachineControlPlane` runs by default. */
@@ -130,8 +130,6 @@ export const MachineControlPlane = (id: string, props: MachineControlPlaneProps 
           RIVET__TELEMETRY__ENABLED: "false",
         })),
       );
-      // Engines start once the secrets are set, and restart when one changes.
-      const metadata = secretsDigest(secrets);
 
       const engines = [];
       for (let i = 0; i < instances; i++) {
@@ -144,7 +142,8 @@ export const MachineControlPlane = (id: string, props: MachineControlPlaneProps 
             guest: props.guest ?? { cpus: 2, memoryMb: 4096 },
             mounts: [{ path: DATA_PATH, sizeGb: props.diskSize ?? 10 }],
             env,
-            metadata,
+            // Engines start on the secrets' values, and restart when one changes.
+            minSecretsVersion: minSecretsVersion(secrets),
             restart: { policy: "always" },
             services: [
               {

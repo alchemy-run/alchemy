@@ -1,7 +1,7 @@
 import * as Fly from "@alchemy.run/fly";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import { secretsDigest } from "../internal/FlySecrets.ts";
+import { minSecretsVersion } from "../internal/FlySecrets.ts";
 import {
   makeServicesLayer,
   secretServicesEnvironment,
@@ -66,7 +66,8 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
         count: options.replicas ?? 1,
         guest: options.guest ?? { cpus: 1, memoryMb: 2048 },
         env: environment.pipe(Output.map(({ RIVET_TOKEN: _, ...env }) => env)),
-        metadata: secretsDigest([token]),
+        // Nodes start on the token, and restart when it changes.
+        minSecretsVersion: minSecretsVersion([token]),
         restart: { policy: "always" },
         // Services nodes only dial out: nothing listens for the proxy.
         services: [],
