@@ -117,28 +117,25 @@ type QueryGet = (input: {
 }) => Effect.Effect<any, IamPolicyError, GcpOpContext>;
 type BodyGet = (input: {
   resource: string;
-  body?: { options?: { requestedPolicyVersion?: number } };
+  options?: { requestedPolicyVersion?: number };
 }) => Effect.Effect<any, IamPolicyError, GcpOpContext>;
 type Set = (input: {
   resource: string;
-  body?: { policy?: any };
+  policy?: any;
 }) => Effect.Effect<any, IamPolicyError, GcpOpContext>;
 
 const queryStyle =
   (get: QueryGet, set: Set) =>
   (resource: string): IamPolicyTarget => ({
     get: get({ resource, "options.requestedPolicyVersion": 3 }),
-    set: (policy) => set({ resource, body: { policy } }),
+    set: (policy) => set({ resource, policy }),
   });
 
 const bodyStyle =
   (get: BodyGet, set: Set, policyVersion = 3) =>
   (resource: string): IamPolicyTarget => ({
-    get: get({
-      resource,
-      body: { options: { requestedPolicyVersion: policyVersion } },
-    }),
-    set: (policy) => set({ resource, body: { policy } }),
+    get: get({ resource, options: { requestedPolicyVersion: policyVersion } }),
+    set: (policy) => set({ resource, policy }),
   });
 
 const bucketName = (name: string) =>
