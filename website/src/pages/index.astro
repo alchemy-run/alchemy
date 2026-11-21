@@ -598,9 +598,9 @@ const PROVIDERS = [
       <div class="v2-split v2-split--narrow">
         <CodeBlock filename="src/BankWorker.ts" code={WIRING_SRC} compact />
       </div>
-      <h3 class="v2-h3" data-copy>Infer IAM policies from the code</h3>
+      <h3 class="v2-h3" data-copy>Guarantee least-privilege IAM at compile time</h3>
       <p class="v2-lede" data-copy>
-        Each binding grants one permission and returns a client that can only make that call. Alchemy infers the policy from the bindings, so it never grants more than the code uses. Reach for an operation you didn't bind and the code doesn't compile: a missing permission shows up in your editor, not as an AccessDenied in production.
+        Each binding grants one permission and returns a client that can only make that call. The policy is inferred from the bindings, so it grants exactly what the code uses: nothing broader slips in, and nothing the code needs is left out. Reach for an operation you didn't bind and the code doesn't compile, so a missing permission shows up in your editor, not as an AccessDenied in production.
       </p>
       <TypePolicy client:visible />
     </div>
