@@ -6,13 +6,15 @@ import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import type { HttpServer } from "../Http.ts";
+import type { Terminals } from "../Terminal.ts";
 import { RuntimeConfigProviderLive } from "../Runtime.ts";
 import { entrypointLayer, resolveProgram, runProcess, stackFromEnv } from "./Bootstrap.ts";
 
 type ProcessServices = NodeServices | HttpClient | SecureRandom.SecureRandom;
 
 export interface ContainerPlatformLayers<E = never> {
-  readonly services: Layer.Layer<NodeServices, E>;
+  /** The runtime's platform services, and the `Terminals` sandbox terminals open with. */
+  readonly services: Layer.Layer<NodeServices | Terminals, E>;
   readonly httpServer: Layer.Layer<HttpServer, E, ProcessServices>;
 }
 

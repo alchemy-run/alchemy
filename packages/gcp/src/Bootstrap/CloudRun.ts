@@ -9,6 +9,7 @@
  */
 import { BunServices } from "@effect/platform-bun";
 import { BunHttpServer } from "alchemy/Http";
+import { TerminalsBun } from "alchemy/Runtime/TerminalBun";
 import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import {
   entrypointLayer,
@@ -32,6 +33,7 @@ export const bootstrap = (entrypoint: unknown): Promise<void> => {
   }
   const platform = Layer.mergeAll(
     BunServices.layer,
+    TerminalsBun,
     FetchHttpClient.layer,
     SecureRandom.layerWebCrypto,
     Logger.layer([Logger.consolePretty()]),

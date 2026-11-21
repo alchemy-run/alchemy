@@ -666,8 +666,10 @@ const sandboxAgentMain = new URL(
 export const isImageSandbox = (
   props: TaskProps,
   bindings: ReadonlyArray<ResourceBinding<TaskBindingContract>> | undefined,
-) =>
-  (props as { main?: string }).main === undefined &&
+) => (props as { main?: string }).main === undefined && isSandbox(bindings);
+
+/** Whether a binding runs the task's containers as sandboxes. */
+const isSandbox = (bindings: ReadonlyArray<ResourceBinding<TaskBindingContract>> | undefined) =>
   (bindings ?? []).some(
     (binding: ResourceBinding<TaskBindingContract> & { action?: string }) =>
       binding.action !== "delete" && binding.data?.sandbox === true,
@@ -683,12 +685,8 @@ export const taskImageInput = (
     platform: taskImagePlatform(props.runtimePlatform),
     port: props.port,
     isExternal: props.isExternal,
-    agent: isImageSandbox(props, bindings)
-      ? {
-          main: sandboxAgentMain,
-          platformBootstrap: "@alchemy.run/aws/Bootstrap/EcsSandboxProcess",
-        }
-      : undefined,
+    agent: isImageSandbox(props, bindings) ? { main: sandboxAgentMain } : undefined,
+    terminals: isSandbox(bindings),
   };
 };
 
@@ -930,7 +928,7 @@ const withSandboxAgent = (
 ): ecs.ContainerDefinition[] => [
   {
     ...primary,
-    entryPoint: [...(agent.agentEntryPoint ?? imageAgentEntryPoint)],
+    entryPoint: [...imageAgentEntryPoint],
     command: [
       ...(primary.entryPoint ?? agent.entryPoint),
       // An entry point of the task's own drops the image's `CMD`, as Docker does.

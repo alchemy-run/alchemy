@@ -166,7 +166,7 @@ export interface BundledJobProps extends JobPropsBase {
   /**
    * Environment image used as the generated Dockerfile's `FROM`; must be
    * able to run the selected container runtime.
-   * @default "oven/bun:1"
+   * @default "node:26-slim" (the `ContainerRuntime` base image)
    */
   image?: string;
   /** Named export to load from `main`. @default "default" */

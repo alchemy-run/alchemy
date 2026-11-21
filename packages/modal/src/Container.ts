@@ -29,9 +29,10 @@ export interface ContainerProps extends PlatformProps {
    */
   name?: string;
   /**
-   * Base image the bundle runs on. It needs Bun on the `PATH`; Alchemy adds
+   * Base image the bundle runs on. It needs the `ContainerRuntime`'s
+   * executable (`node` by default) on the `PATH`; Alchemy adds
    * Python (see {@link python}).
-   * @default "oven/bun:1"
+   * @default "node:26-slim" (the `ContainerRuntime` base image)
    */
   image?: string;
   /** Dockerfile lines run on the base before the bundle is added. */

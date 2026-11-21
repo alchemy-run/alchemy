@@ -26,23 +26,6 @@ const makeContext = Effect.fn(function* (files: Record<string, string>) {
 
 layer(BunServices.layer)("E2B template plan", (test) => {
   test.effect(
-    "uses Node for the image, program and readiness probe when selected",
-    () =>
-      Effect.gen(function* () {
-        const runtime = yield* ContainerRuntime;
-        const path = yield* Path.Path;
-        const plan = yield* planSource(
-          { main: path.join(import.meta.dirname, "fixtures/async-program.mjs") },
-          { port: 8080, runtime },
-        );
-        expect(plan.fromImage).toBe("node:26-slim");
-        expect(plan.startCmd).toBe("node /app/index.mjs");
-        expect(programReadyCmd(8080, runtime.command)).toMatch(/^node -e /);
-      }).pipe(Effect.provide(ContainerRuntime.node)),
-    { tags },
-  );
-
-  test.effect(
     "lowers a Dockerfile and its context to E2B steps",
     () =>
       Effect.gen(function* () {
@@ -166,7 +149,7 @@ RUN apt-get install -y \$TOOL`,
   );
 
   test.effect(
-    "runs a main program with Bun from /app",
+    "runs a main program with Node.js from /app, and probes readiness with it",
     () =>
       Effect.gen(function* () {
         const path = yield* Path.Path;
@@ -174,8 +157,10 @@ RUN apt-get install -y \$TOOL`,
           { main: path.join(import.meta.dirname, "fixtures/async-program.mjs") },
           { port: 8080 },
         );
-        expect(lowered.fromImage).toBe("oven/bun:1");
-        expect(lowered.startCmd).toBe("bun /app/index.mjs");
+        expect(lowered.fromImage).toBe("node:26-slim");
+        expect(lowered.startCmd).toBe("node /app/index.mjs");
+        const runtime = yield* ContainerRuntime;
+        expect(programReadyCmd(8080, runtime.command)).toMatch(/^node -e /);
         expect(lowered.steps).toContainEqual(
           expect.objectContaining({ type: "COPY", args: ["__alchemy__/", "/app/", "", ""] }),
         );

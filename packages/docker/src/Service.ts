@@ -122,7 +122,7 @@ export interface BundledServiceProps extends ServicePropsBase {
    * Environment image used as the generated Dockerfile's `FROM`. Must be
    * able to run the selected container runtime.
    *
-   * @default "oven/bun:1"
+   * @default "node:26-slim" (the `ContainerRuntime` base image)
    */
   image?: string;
   /**

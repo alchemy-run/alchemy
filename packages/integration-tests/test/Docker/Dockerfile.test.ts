@@ -5,7 +5,6 @@ import {
   containerEnvPreamble,
   validateContainerImageProps,
 } from "@alchemy.run/cloudflare/Containers/ContainerBundle";
-import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import * as Dockerfile from "@alchemy.run/docker/Dockerfile";
 import { describe, expect, it, test } from "@alchemy.run/test";
 import * as Output from "alchemy/Output";
@@ -197,11 +196,11 @@ RUN apt-get install -y ffmpeg`,
         const bun = yield* resolveContainerRuntime("bun");
         const node = yield* resolveContainerRuntime("node");
         expect(buildFinalDockerfile(undefined, bun).split("\n")[0]).toBe("FROM oven/bun:1");
-        expect(buildFinalDockerfile(undefined, node).split("\n")[0]).toBe("FROM node:22-slim");
+        expect(buildFinalDockerfile(undefined, node).split("\n")[0]).toBe("FROM node:26-slim");
       }),
     );
 
-    it.effect("an explicit runtime overrides the provider runtime", () =>
+    it.effect("containers run on Node.js by default, and an explicit runtime wins", () =>
       Effect.gen(function* () {
         const inherited = yield* resolveContainerRuntime();
         const explicit = yield* resolveContainerRuntime("bun");
@@ -211,7 +210,7 @@ RUN apt-get install -y ffmpeg`,
         expect(node).toContain("RUN npm install example");
         expect(bun).toContain("FROM oven/bun:1");
         expect(bun).toContain("RUN bun add example");
-      }).pipe(Effect.provide(ContainerRuntime.node)),
+      }),
     );
 
     it.effect("validateContainerImageProps enforces exclusivity", () =>

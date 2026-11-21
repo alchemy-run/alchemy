@@ -17,12 +17,7 @@ import TracedService, { TRACED_EXTERNAL_PORT } from "./fixtures/traced.ts";
 import { ensureDockerSwarm } from "./Runtime.ts";
 
 const { test } = Test.make({
-  providers: Layer.mergeAll(
-    process.env.ALCHEMY_TEST_NODE_RUNTIME === "1"
-      ? Docker.providers().pipe(Layer.provide(Docker.ContainerRuntime.node))
-      : Docker.providers(),
-    Cloudflare.providers(),
-  ),
+  providers: Layer.mergeAll(Docker.providers(), Cloudflare.providers()),
 });
 
 // Full end-to-end for the effectful `Docker.Service` platform: bundle the

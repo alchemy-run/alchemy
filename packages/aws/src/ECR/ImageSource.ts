@@ -1,3 +1,4 @@
+import { NODE_PTY_PACKAGE, NODE_PTY_VERSION } from "alchemy/Runtime/TerminalNode";
 import {
   ContainerRuntime,
   makeContainerBootstrap,
@@ -91,8 +92,6 @@ export interface ResolvedImage {
 export interface ResolvedImageAgent {
   /** The agent's own image, `<repositoryUri>:agent-<hash>`. */
   imageUri: string;
-  /** Command that starts the mounted agent in the sandbox. */
-  agentEntryPoint?: readonly string[];
   /** The image's `ENTRYPOINT`. Empty when it has none. */
   entryPoint: string[];
   /** The image's `CMD`. Empty when it has none. */
@@ -168,6 +167,11 @@ export interface ResolveImageOptions {
   bootstrap?: (importPath: string) => string;
   runtime?: ContainerRuntimeSettings;
   /**
+   * The program serves a sandbox, so its image can open terminals. On
+   * Node.js, that installs {@link NODE_PTY_PACKAGE} beside the bundle.
+   */
+  terminals?: boolean;
+  /**
    * Publish a sandbox agent beside an image that has no `main`. The image
    * itself is not changed: the agent is an image of its own in the same
    * repository, for the platform to mount into the image's container.
@@ -219,6 +223,7 @@ export const makeImageSource = Effect.gen(function* () {
     source: S;
     bootstrap?: (importPath: string) => string;
     runtime?: ContainerRuntimeSettings;
+    terminals?: boolean;
   }) => {
     const selected = options.runtime ?? runtime;
     const handler = options.source.handler ?? "default";
@@ -232,7 +237,17 @@ export const makeImageSource = Effect.gen(function* () {
             handler,
             "server",
           ));
-    return { source: onRoleHost(options.source), runtime: selected, bootstrap };
+    const source =
+      options.terminals && options.source.main !== undefined && selected.preset === "node"
+        ? {
+            ...options.source,
+            install: [
+              ...((options.source as { install?: ReadonlyArray<string> }).install ?? []),
+              `RUN mkdir -p /app && cd /app && npm install --no-fund --no-audit ${NODE_PTY_PACKAGE}@${NODE_PTY_VERSION}`,
+            ],
+          }
+        : options.source;
+    return { source: onRoleHost(source), runtime: selected, bootstrap };
   };
 
   /**
@@ -442,7 +457,6 @@ export const makeImageSource = Effect.gen(function* () {
           ? undefined
           : {
               imageUri: resolved.agent.imageUri,
-              agentEntryPoint: resolved.agent.entryPoint,
               ...(yield* readImageProcess({
                 repositoryName: options.repositoryName,
                 imageUri: resolved.imageUri,

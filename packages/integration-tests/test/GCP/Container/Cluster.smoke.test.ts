@@ -1,4 +1,3 @@
-import { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Kubernetes from "@alchemy.run/kubernetes";
@@ -50,10 +49,7 @@ import {
 const skip = !process.env.GCP_TEST_SLOW || !!process.env.FAST;
 
 const testOptions = {
-  providers: Layer.mergeAll(
-    GCP.providers(),
-    Kubernetes.providers().pipe(Layer.provide(ContainerRuntime.node)),
-  ),
+  providers: Layer.mergeAll(GCP.providers(), Kubernetes.providers()),
 };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 // Durable (file-namespaced) state: a hard-killed run leaves resumable rows

@@ -25,13 +25,8 @@ import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type * as rolldown from "rolldown";
 import { type BuildCacheOptions, imageBuildCacheOptions } from "./BuildCache.ts";
-import { BuildHashInvalidProps, hashDockerBuildInputs } from "./BuildHash.ts";
-import {
-  containerPlatformModulePath,
-  ContainerRuntime,
-  type ContainerRuntimeSettings,
-  type PortableAgentRuntime,
-} from "./ContainerRuntime.ts";
+import { hashDockerBuildInputs } from "./BuildHash.ts";
+import { ContainerRuntime, type ContainerRuntimeSettings } from "./ContainerRuntime.ts";
 import { Docker, type RegistryCredentials } from "./Docker.ts";
 import { isInlineDockerfile, type InlineDockerfile } from "./Dockerfile.ts";
 
@@ -88,7 +83,7 @@ export interface BundledImageSource {
    * registry ref works (private non-ECR registries require docker
    * credentials on the build machine); the image must be able to run the
    * selected container runtime. Exclusive with {@link dockerfile} / {@link context}.
-   * @default "oven/bun:1"
+   * @default "node:26-slim" (the `ContainerRuntime` base image)
    */
   image?: string;
   /**
@@ -411,10 +406,12 @@ export interface ResolveContainerImageOptions {
  *
  * The image itself is never changed. The agent is bundled and pushed as an
  * image of its own, to the same repository, under an `agent-` tag. Run as a
- * container, that image copies the agent and its runtime into
+ * container, that image copies the agent and its Bun runtime into
  * {@link IMAGE_AGENT_DIR} and exits. A platform mounts a volume there, shares
  * it with the image's container, and starts that container with
- * the published agent's entry point.
+ * {@link imageAgentEntryPoint}. The agent runs on Bun whatever
+ * {@link ContainerRuntime} the image's programs use: it never shares a
+ * process with them, and its terminals need Bun.
  */
 export interface ImageAgent {
   /**
@@ -422,8 +419,6 @@ export interface ImageAgent {
    * A path or a `file:` URL.
    */
   main: string;
-  /** Module that exports `bootstrap(platform)` for runtimes with supplied Effect layers. */
-  platformBootstrap?: string;
 }
 
 /**
@@ -447,45 +442,39 @@ export const imageAgentEntryPoint: ReadonlyArray<string> = [
   `${IMAGE_AGENT_DIR}/index.mjs`,
 ];
 
+/**
+ * The image the agent's runtime comes from. The musl build of Bun runs on any
+ * Linux image once its loader and C++ runtime come with it.
+ */
+const AGENT_RUNTIME_IMAGE = "oven/bun:1-alpine";
+
+/** Where the agent's bundle sits inside its own image. */
 const AGENT_BUNDLE_DIR = "/agent";
 
-const agentDockerfile = (runtime: PortableAgentRuntime, executable: string, bun: boolean) => {
-  const setup =
-    runtime.libraries === undefined
-      ? [
-          `RUN mkdir -p /runtime/lib && cp ${runtime.executable} /runtime/${executable} && cp /lib/ld-musl-*.so.1 /runtime/ld-musl.so.1`,
-          `RUN set -o pipefail; ldd ${runtime.executable} | awk '$2 == "=>" && substr($3, 1, 1) == "/" {print $1, $3}' | while read -r name path; do cp -L "$path" "/runtime/lib/$name" || exit 1; done`,
-          `RUN /runtime/ld-musl.so.1 --library-path /runtime/lib /runtime/${executable} --version`,
-        ]
-      : [];
-  const copyRuntime =
-    runtime.libraries === undefined
-      ? [`cp -R /runtime/. ${IMAGE_AGENT_DIR}/`]
-      : [
-          `mkdir -p ${IMAGE_AGENT_DIR}/lib`,
-          `cp ${runtime.executable} ${IMAGE_AGENT_DIR}/${executable}`,
-          `cp /lib/ld-musl-*.so.1 ${IMAGE_AGENT_DIR}/ld-musl.so.1`,
-          ...(runtime.libraries.length === 0
-            ? []
-            : [`cp ${runtime.libraries.join(" ")} ${IMAGE_AGENT_DIR}/lib/`]),
-        ];
-  return `${[
-    `FROM ${runtime.baseImage}`,
-    ...setup,
-    ...(bun
-      ? [`COPY index.mjs ${AGENT_BUNDLE_DIR}/index.mjs`, `COPY *.js ${AGENT_BUNDLE_DIR}/`]
-      : [`COPY *.mjs ${AGENT_BUNDLE_DIR}/`]),
-    `ENTRYPOINT ${JSON.stringify([
-      "/bin/sh",
-      "-ec",
-      [
-        ...copyRuntime,
-        `cp ${AGENT_BUNDLE_DIR}/* ${IMAGE_AGENT_DIR}/`,
-        `chmod -R a+rX ${IMAGE_AGENT_DIR}`,
-      ].join(" && "),
-    ])}`,
-  ].join("\n")}\n`;
-};
+/**
+ * The Dockerfile of an {@link ImageAgent}'s image: the runtime's image plus
+ * the agent's bundle. Its entry point copies the runtime, the loader, the
+ * C++ runtime and the bundle into {@link IMAGE_AGENT_DIR}, where the platform
+ * mounted a volume, and exits.
+ */
+const AGENT_DOCKERFILE = `${[
+  `FROM ${AGENT_RUNTIME_IMAGE}`,
+  `COPY index.mjs ${AGENT_BUNDLE_DIR}/index.mjs`,
+  `COPY *.js ${AGENT_BUNDLE_DIR}/`,
+  `ENTRYPOINT ${JSON.stringify([
+    "/bin/sh",
+    "-ec",
+    [
+      `mkdir -p ${IMAGE_AGENT_DIR}/lib`,
+      `cp /usr/local/bin/bun ${IMAGE_AGENT_DIR}/bun`,
+      `cp /lib/ld-musl-*.so.1 ${IMAGE_AGENT_DIR}/ld-musl.so.1`,
+      `cp /usr/lib/libstdc++.so.6 /usr/lib/libgcc_s.so.1 ${IMAGE_AGENT_DIR}/lib/`,
+      `cp ${AGENT_BUNDLE_DIR}/* ${IMAGE_AGENT_DIR}/`,
+      // The image's container may run as any user.
+      `chmod -R a+rX ${IMAGE_AGENT_DIR}`,
+    ].join(" && "),
+  ])}`,
+].join("\n")}\n`;
 
 /** The generated entry of an {@link ImageAgent}: import the module and run it. */
 const agentEntry = (importPath: string) =>
@@ -672,6 +661,8 @@ export const makeContainerImageSource = Effect.gen(function* () {
   const docker = yield* Docker;
   const { dotAlchemy } = yield* AlchemyContext;
   const defaultRuntime = yield* ContainerRuntime;
+  // The sandbox agent always runs on Bun (see `ImageAgent`).
+  const agentRuntime = ContainerRuntime.pipe(Effect.provide(ContainerRuntime.bun));
   const virtualEntryPlugin = yield* Bundle.virtualEntryPlugin;
   // Pinning `packages` reads the project's lockfile through the package
   // manager; capture the spawner once so `hash` and `resolve` don't need it.
@@ -833,48 +824,22 @@ export const makeContainerImageSource = Effect.gen(function* () {
    * its image: the bundle, the Dockerfile and the platform. `resolve` and
    * `hash` share this, so the plan-time hash and the pushed tag agree.
    */
-  const bundleAgent = Effect.fn(function* (
-    agent: ImageAgent,
-    platform: string,
-    runtime: ContainerRuntimeSettings,
-  ) {
-    const portable = runtime.portableAgent;
-    if (portable === undefined) {
-      return yield* new BuildHashInvalidProps({
-        message: "Sandbox agent images require a portableAgent runtime configuration.",
-      });
-    }
-    const bun = runtime.preset === "bun";
-    const executable = portable.executable.split("/").at(-1)!;
-    const dockerfile = agentDockerfile(portable, executable, bun);
-    const entryPoint = [
-      ...imageAgentEntryPoint.slice(0, 3),
-      `${IMAGE_AGENT_DIR}/${executable}`,
-      ...runtime.command.slice(1),
-      `${IMAGE_AGENT_DIR}/index.mjs`,
-    ];
-    const bootstrap =
-      bun || agent.platformBootstrap === undefined
-        ? agentEntry
-        : () => `import { bootstrap } from ${JSON.stringify(agent.platformBootstrap)};
-import * as platform from ${JSON.stringify(containerPlatformModulePath(runtime.platformModule))};
-await bootstrap(platform);
-`;
+  const bundleAgent = Effect.fn(function* (agent: ImageAgent, platform: string) {
     const bundled = yield* bundleMainProgram({
       source: { main: agent.main },
       isExternal: false,
-      bootstrap,
-      runtime,
+      bootstrap: agentEntry,
+      runtime: yield* agentRuntime,
     });
     const hash = (yield* sha256Object({
       bundleHash: bundled.hash,
-      dockerfile,
+      dockerfile: AGENT_DOCKERFILE,
       platform,
-      ...(!bun ? { entryPoint, pty: portable.pty } : {}),
     })).slice(0, 16);
-    return { bundled, dockerfile, hash, entryPoint, pty: portable.pty };
+    return { bundled, hash };
   });
 
+  /** One hash for an image and the agent published beside it. */
   const hashWithAgent = Effect.fn(function* (environment: string, agent: string) {
     return (yield* sha256Object({ environment, agent })).slice(0, 16);
   });
@@ -1051,11 +1016,7 @@ await bootstrap(platform);
           : generateDockerfile(source as BundledImageSource, runtime, options.port, envFrom);
 
       const realMain = yield* resolveMainPath((source as BundledImageSource).main);
-      const contextDir = yield* getStableContextDir(
-        realMain,
-        dotAlchemy,
-        runtime.preset === "bun" ? `${id}-image` : `${id}-image-${codeHash}`,
-      );
+      const contextDir = yield* getStableContextDir(realMain, dotAlchemy, `${id}-image`);
       yield* docker.materialize({
         context: contextDir,
         dockerfile: finalDockerfile,
@@ -1174,7 +1135,6 @@ await bootstrap(platform);
     options: {
       id: string;
       agent: ImageAgent;
-      runtime: ContainerRuntimeSettings;
       platform: string;
       repositoryUri: string;
       session: ResolveContainerImageOptions["session"];
@@ -1186,20 +1146,16 @@ await bootstrap(platform);
   ) {
     const { id, platform, session } = options;
     yield* session.note(`Bundling ${id} sandbox agent...`);
-    const { bundled, dockerfile, hash, entryPoint, pty } = yield* bundleAgent(
-      options.agent,
-      platform,
-      options.runtime,
-    );
+    const { bundled, hash } = yield* bundleAgent(options.agent, platform);
     const tag = `agent-${hash}`;
     const imageUri = `${options.repositoryUri}:${tag}`;
     if (yield* target.hasTag(tag)) {
-      return { imageUri, hash, entryPoint, pty };
+      return { imageUri, hash };
     }
-    const contextDir = yield* getStableContextDir(dotAlchemy, dotAlchemy, `${id}-agent-${hash}`);
+    const contextDir = yield* getStableContextDir(dotAlchemy, dotAlchemy, `${id}-agent`);
     yield* docker.materialize({
       context: contextDir,
-      dockerfile,
+      dockerfile: AGENT_DOCKERFILE,
       files: bundled.files.map((file, index) => ({
         path: index === 0 ? "index.mjs" : file.path,
         content: file.content,
@@ -1208,7 +1164,7 @@ await bootstrap(platform);
     yield* session.note(`Building sandbox agent image ${imageUri}...`);
     yield* buildAndPush(target, { imageUri, context: contextDir, platform });
     yield* session.note(`Pushed ${imageUri}`);
-    return { imageUri, hash, entryPoint, pty };
+    return { imageUri, hash };
   });
 
   /**
@@ -1228,7 +1184,6 @@ await bootstrap(platform);
       {
         id: options.id,
         agent: options.agent,
-        runtime: options.runtime ?? defaultRuntime,
         platform: options.platform ?? "linux/amd64",
         repositoryUri: image.repositoryUri,
         session: options.session,
@@ -1239,7 +1194,7 @@ await bootstrap(platform);
       imageUri: image.imageUri,
       repositoryUri: image.repositoryUri,
       codeHash: yield* hashWithAgent(image.codeHash, published.hash),
-      agent: { imageUri: published.imageUri, entryPoint: published.entryPoint, pty: published.pty },
+      agent: { imageUri: published.imageUri },
     };
   });
 
@@ -1277,7 +1232,7 @@ await bootstrap(platform);
       // new agent plans an update just as a new image does.
       const environment = yield* computeStaticSourceHash(options.source, platform);
       if (environment === undefined) return undefined;
-      const agent = yield* bundleAgent(options.agent, platform, options.runtime ?? defaultRuntime);
+      const agent = yield* bundleAgent(options.agent, platform);
       return yield* hashWithAgent(environment, agent.hash);
     }
     if (kind === "main") {

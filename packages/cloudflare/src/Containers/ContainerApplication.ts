@@ -305,7 +305,7 @@ export interface EffectfulImageProps {
    * entrypoint. The image must be able to run the {@link runtime}.
    * Exclusive with {@link dockerfile}.
    *
-   * @default `oven/bun:1` for `runtime: "bun"`, `node:22-slim` for `runtime: "node"`
+   * @default `node:26-slim` for `runtime: "node"`, `oven/bun:1` for `runtime: "bun"`
    */
   image?: string;
   /**
@@ -322,10 +322,11 @@ export interface EffectfulImageProps {
    */
   handler?: string;
   /**
-   * Runtime environment for the container program. When omitted, uses the
-   * provider's `ContainerRuntime` layer.
+   * Runtime for the container program: `"node"` runs it with Node.js 26 on
+   * `node:26-slim`, `"bun"` with Bun on `oven/bun:1`. When omitted, uses the
+   * `ContainerRuntime` provided to the providers, which defaults to Node.js.
    *
-   * @default "bun"
+   * @default "node"
    */
   runtime?: "bun" | "node";
   /**

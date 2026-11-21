@@ -1,5 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { BUN_CONDITION_NAMES, NODE_CONDITION_NAMES } from "alchemy/Bundle/Bundle";
+import { NODE_PTY_PACKAGE } from "alchemy/Runtime/TerminalNode";
 import * as Context from "effect/Context";
 import * as Layer from "effect/Layer";
 import { makeJobBootstrap, makeServerBootstrap } from "./internal/ContainerBunBootstrap.ts";
@@ -13,25 +14,13 @@ export interface ContainerRuntimeConfig {
   readonly conditions: readonly string[];
   /** Runtime-provided imports, for example `["bun", "bun:*"]`. */
   readonly external?: readonly string[];
-  /** Command that installs packages the application leaves external. */
-  readonly installPackages?: readonly [string, ...string[]];
+  /** Command that installs packages the application leaves external, for example `["npm", "install"]`. */
+  readonly installPackages: readonly [string, ...string[]];
   /**
    * Absolute path or file URL to a module exporting the `services` and
    * `httpServer` Effect layers. The module is bundled into the image.
    */
   readonly platformModule: string;
-  /** Required when the runtime will be mounted into a sandbox's existing image. */
-  readonly portableAgent?: PortableAgentRuntime;
-}
-
-/** A musl-based image whose executable and libraries can be mounted into another container. */
-export interface PortableAgentRuntime {
-  readonly baseImage: string;
-  readonly executable: string;
-  /** Libraries to copy from the image. When omitted, discover them with `ldd`. */
-  readonly libraries?: readonly string[];
-  /** Interactive terminal implementation available in the portable runtime. */
-  readonly pty?: "bun";
 }
 
 export interface ContainerRuntimeSettings extends ContainerRuntimeConfig {
@@ -51,12 +40,6 @@ const bunContainerRuntime = (): ContainerRuntimeSettings => ({
   installPackages: ["bun", "add"],
   platformModule: import.meta.resolve("alchemy/Runtime/ContainerBun"),
   compatibilityBootstrap: { server: makeServerBootstrap, job: makeJobBootstrap },
-  portableAgent: {
-    baseImage: "oven/bun:1-alpine",
-    executable: "/usr/local/bin/bun",
-    libraries: ["/usr/lib/libstdc++.so.6", "/usr/lib/libgcc_s.so.1"],
-    pty: "bun",
-  },
 });
 
 const nodeContainerRuntime = (): ContainerRuntimeSettings => ({
@@ -64,29 +47,44 @@ const nodeContainerRuntime = (): ContainerRuntimeSettings => ({
   baseImage: "node:26-slim",
   command: ["node"],
   conditions: NODE_CONDITION_NAMES,
+  // Installed into the image by hosts whose program opens terminals.
+  external: [NODE_PTY_PACKAGE],
   installPackages: ["npm", "install"],
   platformModule: import.meta.resolve("alchemy/Runtime/ContainerNode"),
-  portableAgent: { baseImage: "node:26-alpine", executable: "/usr/local/bin/node" },
 });
 
 const runtime = Context.Reference<ContainerRuntimeSettings>("Docker.ContainerRuntime", {
-  defaultValue: bunContainerRuntime,
+  defaultValue: nodeContainerRuntime,
 });
 
 /**
  * Selects how Alchemy bundles and starts programs in generated container
- * images. Provide it to the Docker or Kubernetes providers.
+ * images. Programs run on Node.js 26 (`node:26-slim`) unless you provide
+ * another runtime to the providers.
+ *
+ * ```ts
+ * // Run bundled programs on Bun instead
+ * providers: Kubernetes.providers().pipe(Layer.provide(ContainerRuntime.bun)),
+ * ```
+ *
+ * The project installs the platform package of the runtime it selects:
+ * `@effect/platform-node` for Node.js, `@effect/platform-bun` for Bun.
  */
 export const ContainerRuntime = Object.assign(runtime, {
   custom: (config: ContainerRuntimeConfig) =>
     Layer.succeed(runtime, { ...config, preset: undefined, compatibilityBootstrap: undefined }),
 
-  /** Build and run the workload with Bun. */
+  /**
+   * Build and run the workload with Bun on `oven/bun:1`. The project must
+   * install `@effect/platform-bun`. Images match the ones Alchemy built
+   * before Node.js became the default, so selecting Bun keeps existing
+   * deployments from rebuilding.
+   */
   bun: Layer.sync(runtime, bunContainerRuntime),
 
   /**
-   * Build and run the workload with Node.js. The project must install
-   * `@effect/platform-node` to bundle the platform services.
+   * Build and run the workload with Node.js 26 on `node:26-slim` (the
+   * default). The project must install `@effect/platform-node`.
    */
   node: Layer.sync(runtime, nodeContainerRuntime),
 });

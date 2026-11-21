@@ -151,11 +151,7 @@ export const makeServiceImage = Effect.gen(function* () {
     }
 
     const realMain = yield* resolveMainPath(source.main);
-    const contextDir = yield* getStableContextDir(
-      realMain,
-      dotAlchemy,
-      runtime.preset === "bun" ? `${id}-image` : `${id}-image-${codeHash}`,
-    );
+    const contextDir = yield* getStableContextDir(realMain, dotAlchemy, `${id}-image`);
     yield* docker.materialize({
       context: contextDir,
       dockerfile,

@@ -62,10 +62,11 @@ export interface TemplateProps extends Omit<TemplateSteps, "env">, PlatformProps
   /**
    * A program to run in every sandbox: a module entrypoint, typically
    * `import.meta.url` in the class form. Alchemy bundles it, copies it into
-   * the template under `/app`, and starts it with the selected runtime as the template's start
-   * command, so every sandbox boots with it already serving on {@link port}.
-   * `image` / `dockerfile` are then the program's environment, which must
-   * have the selected runtime. The default is Bun on `oven/bun:1`.
+   * the template under `/app`, and starts it with the `ContainerRuntime` as
+   * the template's start command, so every sandbox boots with it already
+   * serving on {@link port}. `image` / `dockerfile` are then the program's
+   * environment, which must have that runtime: Node.js 26 on `node:26-slim`
+   * by default.
    * @default no program
    */
   main?: string;
@@ -245,8 +246,8 @@ export interface Template extends Resource<
  * Give the template a `main` and an Effect, and every sandbox from it boots
  * with the program already serving HTTP on `port`. Alchemy bundles `main`,
  * copies it into the template, and E2B snapshots the template once the
- * program answers. The program uses the provider's `ContainerRuntime`. The default is Bun on
- * `oven/bun:1`.
+ * program answers. The program runs on the `ContainerRuntime` provided to
+ * the providers: Node.js 26 on `node:26-slim` by default.
  *
  * **Example:** A program in every sandbox
  * ```typescript

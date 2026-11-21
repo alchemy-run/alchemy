@@ -217,10 +217,9 @@ export const containerEnvPreamble = (
 
 /** An explicit preset takes precedence over the provider's runtime. */
 export const resolveContainerRuntime = Effect.fnUntraced(function* (preset?: "bun" | "node") {
-  if (preset === undefined) return yield* ContainerRuntime;
-  const runtime = yield* ContainerRuntime.pipe(Effect.provide(ContainerRuntime[preset]));
-  // Preserve the base image of Cloudflare's explicit Node preset.
-  return preset === "node" ? { ...runtime, baseImage: "node:22-slim" } : runtime;
+  return preset === undefined
+    ? yield* ContainerRuntime
+    : yield* ContainerRuntime.pipe(Effect.provide(ContainerRuntime[preset]));
 });
 
 /** Build the Dockerfile for a bundled program with Cloudflare's image layout. */
@@ -232,16 +231,10 @@ export const buildFinalDockerfile = (
   install: ReadonlyArray<string> = [],
 ): string => {
   const base = envPreamble ?? `FROM ${runtime.baseImage}`;
-  const installPackages = runtime.installPackages;
-  let installStep = "";
-  if (autoInstallExternals && external.length > 0) {
-    if (installPackages === undefined) {
-      throw new Error(
-        "Configure installPackages on ContainerRuntime or disable autoInstallExternals.",
-      );
-    }
-    installStep = `RUN ${[...installPackages, ...external].join(" ")}`;
-  }
+  const installStep =
+    autoInstallExternals && external.length > 0
+      ? `RUN ${[...runtime.installPackages, ...external].join(" ")}`
+      : "";
   const command = [...runtime.command, "/app/index.mjs"]
     .map((argument) => JSON.stringify(argument))
     .join(", ");

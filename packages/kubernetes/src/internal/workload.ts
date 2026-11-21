@@ -14,6 +14,7 @@ import { sha256Object } from "alchemy/Util/sha256";
  * through the cluster adapter, binding-env collection, connection
  * identity, and container bootstrap selection.
  */
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -241,9 +242,10 @@ const workloadBootstrap = Effect.fnUntraced(function* (options: {
   }
   if (hostBootstrap !== undefined && adapter.runtimeBootstrap === undefined) {
     return yield* Effect.die(
-      new Error(
-        "This Kubernetes cluster adapter needs a runtimeBootstrap module to use a custom ContainerRuntime.",
-      ),
+      new ClusterAdapterMissingRuntimeBootstrap({
+        message:
+          "This Kubernetes cluster adapter has its own bootstrap but no runtimeBootstrap module, so it can only run Bun. Provide ContainerRuntime.bun, or give the adapter a runtimeBootstrap.",
+      }),
     );
   }
   return makeContainerBootstrap(
@@ -253,6 +255,11 @@ const workloadBootstrap = Effect.fnUntraced(function* (options: {
     mode,
   );
 });
+
+/** A cluster adapter with its own entry can't start a program on the selected runtime. */
+export class ClusterAdapterMissingRuntimeBootstrap extends Data.TaggedError(
+  "ClusterAdapterMissingRuntimeBootstrap",
+)<{ readonly message: string }> {}
 
 export interface ResolveWorkloadImageOptions {
   adapter: ClusterAdapterService;
