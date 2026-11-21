@@ -14,12 +14,13 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { retryWhileLingeringEnis } from "../EC2/LingeringEnis.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { managedPolicyArn, type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type CapacityProviderName = string;
 export type CapacityProviderArn =
-  `arn:aws:ecs:${RegionID}:${AccountID}:capacity-provider/${CapacityProviderName}`;
+  `arn:${Partition}:ecs:${RegionID}:${AccountID}:capacity-provider/${CapacityProviderName}`;
 
 /**
  * How ECS launches each instance of a Managed Instances capacity provider.
@@ -376,10 +377,8 @@ const immutableLaunchTemplate = (template: ManagedInstancesLaunchTemplate | unde
   nitroEnclavesEnabled: template?.nitroEnclavesEnabled ?? false,
 });
 
-const INSTANCE_ROLE_POLICY =
-  "arn:aws:iam::aws:policy/AmazonECSInstanceRolePolicyForManagedInstances";
-const INFRASTRUCTURE_ROLE_POLICY =
-  "arn:aws:iam::aws:policy/AmazonECSInfrastructureRolePolicyForManagedInstances";
+const INSTANCE_ROLE_POLICY = "AmazonECSInstanceRolePolicyForManagedInstances";
+const INFRASTRUCTURE_ROLE_POLICY = "AmazonECSInfrastructureRolePolicyForManagedInstances";
 
 /**
  * Instance types for Nitro Sandboxes when the launch template names none.
@@ -955,7 +954,7 @@ export const CapacityProviderProvider = () =>
               );
               yield* iam.attachRolePolicy({
                 RoleName: instanceRoleName,
-                PolicyArn: INSTANCE_ROLE_POLICY,
+                PolicyArn: managedPolicyArn(partitionOf(region), INSTANCE_ROLE_POLICY),
               });
               ec2InstanceProfileArn = yield* ensureInstanceProfile(
                 instanceProfileName,
@@ -976,7 +975,7 @@ export const CapacityProviderProvider = () =>
               );
               yield* iam.attachRolePolicy({
                 RoleName: infrastructureRoleName,
-                PolicyArn: INFRASTRUCTURE_ROLE_POLICY,
+                PolicyArn: managedPolicyArn(partitionOf(region), INFRASTRUCTURE_ROLE_POLICY),
               });
               if (instanceRoleArn !== undefined) {
                 // The managed policy only passes roles named `ecsInstanceRole*`.
@@ -1100,7 +1099,7 @@ export const CapacityProviderProvider = () =>
           }
 
           const capacityProviderArn = (existing?.capacityProviderArn ??
-            `arn:aws:ecs:${region}:${accountId}:capacity-provider/${name}`) as CapacityProviderArn;
+            `arn:${partitionOf(region)}:ecs:${region}:${accountId}:capacity-provider/${name}`) as CapacityProviderArn;
 
           // Sync tags — diff observed cloud tags against desired.
           const observedTags = fromEcsTags(existing?.tags);

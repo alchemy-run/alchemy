@@ -49,6 +49,15 @@ export const onDeployment = <A, E, R>(url: string, effect: Effect.Effect<A, E, R
 /** The fixture Convex app. */
 export const FIXTURE_DIR = NodePath.join(import.meta.dirname, "fixtures/backend");
 
+/** The fixture Convex app written with Effect declarations and Layers. */
+export const EFFECT_FIXTURE_DIR = NodePath.join(import.meta.dirname, "fixtures/effect");
+
+/** The fixture Convex app whose action binds an SQS queue. */
+export const EFFECT_BINDINGS_FIXTURE_DIR = NodePath.join(
+  import.meta.dirname,
+  "fixtures/effect-bindings",
+);
+
 /** The fixture Convex app for self-hosted backends. */
 export const SELF_HOSTED_FIXTURE_DIR = NodePath.join(import.meta.dirname, "fixtures/selfhosted");
 

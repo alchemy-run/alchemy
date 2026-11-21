@@ -3,12 +3,7 @@ import type { SecurityGroupId } from "@alchemy.run/aws/EC2/SecurityGroup";
 import type { SubnetId } from "@alchemy.run/aws/EC2/Subnet";
 import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
-import {
-  isImageProgram,
-  makePoolLayer,
-  RIVETKIT_VERSION,
-  type PoolSettings,
-} from "../internal/PoolHost.ts";
+import { isImageProgram, makePoolLayer, type PoolSettings } from "../internal/PoolHost.ts";
 import { nodeEnvironment, poolNetworkOf, resolvePoolNetwork } from "./internal/Pool.ts";
 
 export interface Ec2PoolOptions extends PoolSettings {
@@ -35,7 +30,7 @@ export interface Ec2PoolOptions extends PoolSettings {
  * `/opt/node_modules`, a parent of the program's directory. The program's
  * service restarts until it is there.
  */
-const installRivetKit = `#!/bin/bash
+const installRivetKit = (rivetkitVersion: string) => `#!/bin/bash
 set -euo pipefail
 export HOME=/root
 for attempt in 1 2 3 4 5; do
@@ -46,7 +41,7 @@ done
 mkdir -p /opt
 cd /opt
 for attempt in 1 2 3 4 5; do
-  /root/.bun/bin/bun add rivetkit@${RIVETKIT_VERSION} && break
+  /root/.bun/bin/bun add rivetkit@${rivetkitVersion} && break
   sleep 5
 done
 `;
@@ -98,7 +93,12 @@ export const Ec2Pool = (id: string, options: Ec2PoolOptions = {}) =>
           yield* EC2.Instance(`${id}Node${i}`, {
             // A Rust program is its own image, run in Docker on the
             // instance; every other program is bundled with RivetKit beside it.
-            ...(isImageProgram(program) ? program : { ...program, userData: installRivetKit }),
+            ...(isImageProgram(program)
+              ? program
+              : {
+                  ...program,
+                  userData: installRivetKit(options.rivetkitVersion ?? nodes.rivetkitVersion),
+                }),
             imageId: EC2.amazonLinux2023(),
             instanceType: options.instanceType ?? "t3.small",
             // The cluster's network carries plain strings; these are AWS ids.

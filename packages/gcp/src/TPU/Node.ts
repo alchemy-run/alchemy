@@ -683,9 +683,9 @@ export const NodeProvider = () =>
       if (current === undefined) {
         const created = yield* tpu
           .createProjectsLocationsNodes({
+            ...toNodeBody(news, desiredLabels),
             parent: `projects/${env.project}/locations/${location}`,
             nodeId,
-            body: toNodeBody(news, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -741,21 +741,18 @@ export const NodeProvider = () =>
           externalChanged && "network_config.enable_external_ips",
         ]);
         const patched = yield* tpu.patchProjectsLocationsNodes({
+          labels: desiredLabels,
+          description: news.description,
+          metadata: news.metadata ?? stringMapOf(current.metadata),
+          tags: news.networkTags ?? stringsOf(current.tags),
+          networkConfig: externalChanged
+            ? {
+                ...networkOf(current.networkConfig),
+                enableExternalIps: desiredExternal,
+              }
+            : undefined,
           name,
           updateMask,
-          body: {
-            name,
-            labels: desiredLabels,
-            description: news.description,
-            metadata: news.metadata ?? stringMapOf(current.metadata),
-            tags: news.networkTags ?? stringsOf(current.tags),
-            networkConfig: externalChanged
-              ? {
-                  ...networkOf(current.networkConfig),
-                  enableExternalIps: desiredExternal,
-                }
-              : undefined,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilExists(getByName(name), name);

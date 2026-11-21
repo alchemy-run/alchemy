@@ -33,7 +33,18 @@ export interface Row {
    * the prover does not read: the new value is not proved to pass it.
    */
   readonly unkept: ReadonlyArray<string>;
+  /**
+   * The paths on which inputs were picked and run on the real `decide` and
+   * `evolve`, and each one where the real code did not do what the prover read.
+   */
+  readonly compared: number;
+  /** The paths inputs take that could not be run: a value the prover cannot build, or one a schema it does not read refuses. */
+  readonly uncompared: number;
+  readonly differs: ReadonlyArray<string>;
 }
+
+/** The most paths of one command that are run on the real code. */
+export const MAX_COMPARED = 256;
 
 /** The checks of the state's schema no proof covers, as lines of a report. */
 export const unkept = (rows: ReadonlyArray<Row>): ReadonlyArray<string> =>
@@ -53,7 +64,8 @@ const RANK = {
   Unknown: 2,
   NotTranslated: 3,
   Unconfirmed: 4,
-  Violated: 5,
+  Misread: 5,
+  Violated: 6,
 } as const;
 
 /**
@@ -103,6 +115,9 @@ export const rows = Effect.fn(function* (
     const unkept = new Set<string>();
     let accepted: boolean | undefined = false;
     let paths = 0;
+    let compared = 0;
+    let uncompared = 0;
+    const differs: Array<string> = [];
     let prefix: ReadonlyArray<number> | undefined = [];
     while (prefix) {
       if (++paths > MAX_PATHS) {
@@ -131,6 +146,32 @@ export const rows = Effect.fn(function* (
         all(unread);
         fits = worse(fits, unread);
         accepted ||= undefined;
+      }
+      // The same inputs on the real code: a proof is about what the prover read.
+      if (
+        taken.inputs &&
+        (outcome._tag === "Changed" || outcome._tag === "Unchanged") &&
+        compared < MAX_COMPARED
+      ) {
+        const agreement = yield* Check.agree(
+          solver,
+          aggregate,
+          taken.run,
+          taken.inputs,
+          outcome._tag === "Changed"
+            ? outcome
+            : outcome.rejection
+              ? { _tag: "Rejected", rejection: outcome.rejection }
+              : { _tag: "Unchanged" },
+        );
+        if (agreement._tag !== "Skipped") compared++;
+        else if (agreement.taken) uncompared++;
+        if (agreement._tag === "Differs") {
+          differs.push(agreement.reason);
+          const misread: Verdict = { _tag: "Misread", reason: agreement.reason };
+          all(misread);
+          fits = worse(fits, misread);
+        }
       }
       if (outcome._tag !== "Changed" || !taken.inputs) continue;
       for (const check of outcome.checks) {
@@ -166,7 +207,17 @@ export const rows = Effect.fn(function* (
         accepted = taking._tag === "Sat" ? true : taking._tag === "Unknown" ? undefined : accepted;
       }
     }
-    made.push({ command: command.tag, paths, verdicts, fits, accepted, unkept: [...unkept] });
+    made.push({
+      command: command.tag,
+      paths,
+      verdicts,
+      fits,
+      accepted,
+      unkept: [...unkept],
+      compared,
+      uncompared,
+      differs,
+    });
   }
   return made;
 });
@@ -385,6 +436,9 @@ export const decisionRow = Effect.fn(function* (
     fits,
     accepted,
     unkept: [...unkept],
+    compared: 0,
+    uncompared: 0,
+    differs: [],
     own,
   };
   return row;

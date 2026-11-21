@@ -3,7 +3,22 @@ title: Deploy keys
 description: Create deploy keys for CI, and preview keys that create previews.
 ---
 
-A deploy key lets a tool act on one deployment. `Convex.Functions` makes its own short-lived key for each push, so you need `Convex.DeployKey` only for something that keeps a key, such as CI outside Alchemy.
+import Tree from "../../../../components/diagrams/Tree.astro";
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+A **deploy key** lets a tool act on one deployment, limited to the actions you allow. A **preview deploy key** belongs to a project, and creates preview deployments in it.
+
+<Tree
+  nodes={[
+    { id: "project", label: "my-app", type: "project", icon: "folder", areas: ["previews prod"], colGap: 1 },
+    { id: "previews", label: "Previews", type: "preview deploy key", parent: "project", icon: "key-round" },
+    { id: "prod", label: "prod", type: "deployment", parent: "project", icon: "server", areas: ["ci"] },
+    { id: "ci", label: "Ci", type: "deploy key", parent: "prod", tone: "accent", icon: "key-round", specs: [["allows", "deployment:deploy"]] },
+  ]}
+  caption="A deploy key lives in one deployment and can do only the actions it allows. A preview deploy key lives in the project, and creates previews there."
+/>
+
+`Convex.Functions` makes its own short-lived key for each push, so you need `Convex.DeployKey` only for something that keeps a key, such as CI outside Alchemy.
 
 ## Create a deploy key
 
@@ -26,9 +41,7 @@ const key = yield* Convex.PreviewDeployKey("Previews", { project });
 
 Use it with the Convex CLI:
 
-```sh
-CONVEX_DEPLOY_KEY=... npx convex deploy --preview-create my-branch
-```
+<PackageManagers script={`CONVEX_DEPLOY_KEY=... {run} convex deploy --preview-create my-branch`} />
 
 ## Adopt a key
 

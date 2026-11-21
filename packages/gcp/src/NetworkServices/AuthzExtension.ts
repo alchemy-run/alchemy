@@ -354,21 +354,19 @@ export const AuthzExtensionProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsAuthzExtensions({
+            labels: desiredLabels,
+            description: news.description,
+            service: news.service,
+            timeout,
+            loadBalancingScheme,
+            authority: news.authority,
+            failOpen,
+            metadata: news.metadata,
+            forwardHeaders: desiredHeaders,
+            forwardAttributes: desiredAttributes,
+            wireFormat: news.wireFormat,
             parent: parentOf(env.project, location),
             authzExtensionId,
-            body: {
-              labels: desiredLabels,
-              description: news.description,
-              service: news.service,
-              timeout,
-              loadBalancingScheme,
-              authority: news.authority,
-              failOpen,
-              metadata: news.metadata,
-              forwardHeaders: desiredHeaders,
-              forwardAttributes: desiredAttributes,
-              wireFormat: news.wireFormat,
-            },
           })
           .pipe(
             Effect.retry({
@@ -412,22 +410,19 @@ export const AuthzExtensionProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsAuthzExtensions({
+          labels: desiredLabels,
+          description: news.description,
+          service: news.service,
+          timeout,
+          loadBalancingScheme,
+          authority: news.authority,
+          failOpen,
+          metadata: news.metadata,
+          forwardHeaders: desiredHeaders,
+          forwardAttributes: desiredAttributes,
+          wireFormat: news.wireFormat,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            service: news.service,
-            timeout,
-            loadBalancingScheme,
-            authority: news.authority,
-            failOpen,
-            metadata: news.metadata,
-            forwardHeaders: desiredHeaders,
-            forwardAttributes: desiredAttributes,
-            wireFormat: news.wireFormat,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

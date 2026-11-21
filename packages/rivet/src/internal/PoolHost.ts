@@ -7,6 +7,7 @@
  * @internal
  */
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import * as Bundle from "alchemy/Bundle/Bundle";
@@ -28,17 +29,51 @@ import {
   type DurableObjectRuntimeContext,
 } from "../DurableObject.ts";
 import { PoolHost } from "../Host.ts";
-import { Pool, type PoolDurableObject } from "../Pool.ts";
+import { Pool, type PoolDurableObject, type PoolProps } from "../Pool.ts";
 import type { Providers } from "../Providers.ts";
 import { stageRustProgram } from "./RustProgram.ts";
 
-/** The RivetKit release node images install. */
-export const RIVETKIT_VERSION = "3.0.0";
+/**
+ * The RivetKit release `@alchemy.run/rivet` depends on: what node images
+ * install when no `rivetkit` resolves from the program or from this package.
+ */
+export const RIVETKIT_VERSION = "3.1.1";
 
-/** A node image environment: bun with RivetKit installed. */
-export const NODE_DOCKERFILE = `FROM oven/bun:1
+/** The version of the `rivetkit` that resolves from `from`, a file or `file:` URL. */
+const resolvedRivetKit = (from: string) =>
+  Effect.try(() => {
+    const path = from.startsWith("file:") ? fileURLToPath(from) : from;
+    // A relative entry is relative to where the deploy runs.
+    const file = /^(\/|[A-Za-z]:[\\/])/.test(path) ? path : `${process.cwd()}/${path}`;
+    const entry = createRequire(file).resolve("rivetkit").replaceAll("\\", "/");
+    const root = entry.slice(
+      0,
+      entry.lastIndexOf("/node_modules/rivetkit/") + "/node_modules/rivetkit".length,
+    );
+    const { version } = createRequire(file)(`${root}/package.json`) as { version?: unknown };
+    return typeof version === "string" ? version : undefined;
+  }).pipe(Effect.orElseSucceed(() => undefined));
+
+/**
+ * The RivetKit release a pool's nodes install for a program whose entry is
+ * `main`: the `rivetkit` the program resolves, so the nodes run the release
+ * the program was built and tested against. A program that installs none
+ * gets the one `@alchemy.run/rivet` depends on, and failing that
+ * {@link RIVETKIT_VERSION}.
+ */
+export const resolveRivetKitVersion = (main: string) =>
+  Effect.gen(function* () {
+    return (
+      (yield* resolvedRivetKit(main)) ??
+      (yield* resolvedRivetKit(import.meta.url)) ??
+      RIVETKIT_VERSION
+    );
+  });
+
+/** A node image environment: bun with RivetKit `version` installed. */
+export const nodeDockerfile = (version: string) => `FROM oven/bun:1
 WORKDIR /app
-RUN bun add rivetkit@${RIVETKIT_VERSION}
+RUN bun add rivetkit@${version}
 `;
 
 /** Packages the node image provides, kept out of the node bundle. */
@@ -101,12 +136,30 @@ export class ClusterNetworkMismatch extends Data.TaggedError("Rivet.ClusterNetwo
   readonly message: string;
 }> {}
 
-export interface PoolSettings {
+export interface PoolSettings extends Pick<
+  PoolProps,
+  "drainOnVersionUpgrade" | "actorEvictionDelay" | "actorEvictionPeriod" | "actorEvictionRate"
+> {
   /**
    * Pool name on the control plane.
    * @default ${stack}-${stage}-${id}
    */
   name?: string;
+  /**
+   * RivetKit release the nodes run a JavaScript program with. Nodes speak
+   * the control plane protocol of their release: a 3.0 node works with a
+   * 3.0 or 3.1 control plane, a 3.1 node needs a 3.1 one. A Rust program
+   * brings its own.
+   * @default the `rivetkit` the program resolves, else the one `@alchemy.run/rivet` depends on
+   */
+  rivetkitVersion?: string;
+  /**
+   * Version the nodes report to the control plane (`RIVET_NODE_VERSION`).
+   * Raise it on a deploy that changes the nodes: with `drainOnVersionUpgrade`
+   * the control plane moves actors off older nodes once a newer one connects.
+   * @default the RivetKit default (1)
+   */
+  version?: number;
 }
 
 /** A JavaScript node program: its entry and bundler settings, run with RivetKit beside it. */
@@ -141,12 +194,18 @@ export interface PoolNodes<Network> {
   readonly pool: Pool;
   /** The node program: a JavaScript bundle, or an image of its own. */
   readonly program: NodeProgram;
+  /**
+   * The RivetKit release a JavaScript program runs with: the `rivetkit` it
+   * resolves (see {@link resolveRivetKitVersion}).
+   */
+  readonly rivetkitVersion: string;
   /** Environment every node needs: the control plane, the pool, and the classes' env. */
   readonly environment: {
     readonly RIVET_ENDPOINT: ClusterShape["endpoint"];
     readonly RIVET_TOKEN: ClusterShape["token"];
     readonly RIVET_NAMESPACE: ClusterShape["namespace"];
     readonly RIVET_POOL: Pool["name"];
+    readonly RIVET_NODE_VERSION?: string;
   };
 }
 
@@ -212,12 +271,18 @@ const makeHost = <Network, Req>(options: {
       env: Record<string, unknown>,
       bindCaller: Effect.Effect<void, never, any>,
       program: (pool: Pool) => NodeProgram,
+      // The file the program's own code starts from, which its `rivetkit` resolves from.
+      source: string,
     ) {
       const pool = yield* Pool(options.id, {
         endpoint: cluster.endpoint,
         token: cluster.token,
         namespace: cluster.namespace,
         name,
+        drainOnVersionUpgrade: options.settings.drainOnVersionUpgrade,
+        actorEvictionDelay: options.settings.actorEvictionDelay,
+        actorEvictionPeriod: options.settings.actorEvictionPeriod,
+        actorEvictionRate: options.settings.actorEvictionRate,
       });
       yield* pool.bind`${object.name}`({ durableObjects: [object], env });
       yield* bindCaller;
@@ -226,11 +291,15 @@ const makeHost = <Network, Req>(options: {
         network,
         pool,
         program: program(pool),
+        rivetkitVersion: yield* resolveRivetKitVersion(source),
         environment: {
           RIVET_ENDPOINT: endpoint,
           RIVET_TOKEN: cluster.token,
           RIVET_NAMESPACE: cluster.namespace,
           RIVET_POOL: pool.name,
+          ...(options.settings.version === undefined
+            ? {}
+            : { RIVET_NODE_VERSION: String(options.settings.version) }),
         },
       });
     });
@@ -268,6 +337,7 @@ const makeHost = <Network, Req>(options: {
               },
             },
           }),
+          object.Props.main,
         ),
       );
     }
@@ -290,6 +360,7 @@ const makeHost = <Network, Req>(options: {
               },
             },
           }),
+          main,
         ).pipe(Effect.provide(services), Effect.orDie) as Effect.Effect<void>,
       deployCrate: ({ id, crate, build, resource }) =>
         // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- `bind` is typed `any`; what it needs is the providers in `context`
@@ -301,6 +372,8 @@ const makeHost = <Network, Req>(options: {
             {},
             resource.bind`Pool`(caller),
             () => image,
+            // A Rust program brings its own RivetKit.
+            crate,
           );
         }).pipe(Effect.provide(services), Effect.orDie) as Effect.Effect<void>,
       deployDockerfile: ({ id, context, dockerfile, resource }) =>
@@ -314,6 +387,8 @@ const makeHost = <Network, Req>(options: {
             {},
             resource.bind`Pool`(caller),
             () => program,
+            // An image brings its own RivetKit, as a Rust program does.
+            (yield* Path.Path).resolve(context ?? "."),
           );
         }).pipe(Effect.provide(services), Effect.orDie) as Effect.Effect<void>,
     } satisfies PoolHost["Service"];
@@ -365,12 +440,8 @@ const stageDockerfileProgram = Effect.fn(function* (
 const output = <T>(value: Input<T>): Output.Output<T> =>
   (Output.isOutput(value) ? value : Output.literal(value)) as Output.Output<T>;
 
-/**
- * Every value a node needs, as plain strings, for hosts whose environments
- * hold no `Redacted` (AWS task and instance environments, Kubernetes env).
- * `endpoint` overrides the control plane URL nodes connect to.
- */
-export const nodeEnvironment = (
+/** Every value a node needs, its token left `Redacted`. */
+const nodeValues = (
   { pool, environment }: PoolNodes<unknown>,
   endpoint: Input<string> = environment.RIVET_ENDPOINT,
 ) =>
@@ -384,10 +455,62 @@ export const nodeEnvironment = (
     Output.map(([env, url, token, namespace, poolName]) => ({
       ...env,
       RIVET_ENDPOINT: url,
-      RIVET_TOKEN: Redacted.value(token),
+      RIVET_TOKEN: token,
       RIVET_NAMESPACE: namespace,
       RIVET_POOL: poolName,
+      ...(environment.RIVET_NODE_VERSION === undefined
+        ? {}
+        : { RIVET_NODE_VERSION: environment.RIVET_NODE_VERSION }),
     })),
+  );
+
+const unwrap = (value: unknown) => (Redacted.isRedacted(value) ? Redacted.value(value) : value);
+
+/**
+ * Every value a node needs, as plain strings, for hosts whose environments
+ * hold no `Redacted` (AWS task and instance environments): the token and any
+ * secret a class reads as config are unwrapped.
+ * `endpoint` overrides the control plane URL nodes connect to.
+ */
+export const nodeEnvironment = (nodes: PoolNodes<unknown>, endpoint?: Input<string>) =>
+  nodeValues(nodes, endpoint).pipe(
+    Output.map(
+      (values) =>
+        Object.fromEntries(
+          Object.entries(values).map(([name, value]) => [name, unwrap(value)]),
+        ) as Omit<typeof values, "RIVET_TOKEN"> & { RIVET_TOKEN: string },
+    ),
+  );
+
+/**
+ * Every value a node needs, the token and any secret a class reads as config
+ * still `Redacted`, for hosts that keep secrets apart (`Kubernetes.Deployment`
+ * reads them from a Secret).
+ */
+export const secretNodeEnvironment = nodeValues;
+
+export { SECRET_ENV } from "./SecretEnv.ts";
+
+/**
+ * A node's environment split for hosts that hand secrets over as one value
+ * (a Secret Manager secret): `secrets` holds every secret a class reads as
+ * config, unwrapped, for the host to keep in its secret store and pass as
+ * {@link SECRET_ENV}; `plain` holds the rest, the token unwrapped.
+ */
+export const splitNodeEnvironment = (nodes: PoolNodes<unknown>, endpoint?: Input<string>) =>
+  nodeValues(nodes, endpoint).pipe(
+    Output.map((values) => {
+      const plain: Record<string, string> = {};
+      const secrets: Record<string, string> = {};
+      for (const [name, value] of Object.entries(values)) {
+        if (Redacted.isRedacted(value) && name !== "RIVET_TOKEN") {
+          secrets[name] = String(Redacted.value(value));
+        } else {
+          plain[name] = String(unwrap(value));
+        }
+      }
+      return { plain, secrets };
+    }),
   );
 
 /**

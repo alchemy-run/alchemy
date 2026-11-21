@@ -71,6 +71,7 @@
     "@distilled.cloud/aws": "workspace:*",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
+    "convex": "1.49.0",
     "effect": "catalog:",
     "typescript": "catalog:"
   },
@@ -79,6 +80,7 @@
     "@alchemy.run/docker": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "alchemy": "workspace:*",
+    "convex": "^1.49.0",
     "effect": "catalog:"
   },
   "peerDependenciesMeta": {

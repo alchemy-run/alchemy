@@ -1,4 +1,5 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as PrimaryIpActions from "@distilled.cloud/hetzner/primary_ip_actions";
+import * as PrimaryIps from "@distilled.cloud/hetzner/primary_ips";
 import type { GetPrimaryIpResponsePrimaryIp } from "@distilled.cloud/hetzner/primary_ips";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
@@ -282,15 +283,15 @@ const createPrimaryIpName = (id: string, name: string | undefined, existing?: st
   });
 
 const getById = (id: number) =>
-  Hetzner.primaryIps.getPrimaryIp({ id }).pipe(
+  PrimaryIps.getPrimaryIp({ id }).pipe(
     Effect.map(({ primary_ip }) => primary_ip),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>
-  Hetzner.primaryIps
-    .listPrimaryIps({ name, per_page: 50 })
-    .pipe(Effect.map(({ primary_ips }) => primary_ips[0]));
+  PrimaryIps.listPrimaryIps({ name, per_page: 50 }).pipe(
+    Effect.map(({ primary_ips }) => primary_ips[0]),
+  );
 
 const observe = Effect.fn(function* ({
   name,
@@ -315,7 +316,7 @@ const observe = Effect.fn(function* ({
 });
 
 const refresh = (id: number) =>
-  Hetzner.primaryIps.getPrimaryIp({ id }).pipe(
+  PrimaryIps.getPrimaryIp({ id }).pipe(
     Effect.map(({ primary_ip }) => primary_ip),
     Effect.retry({
       while: (e) => e._tag === "NotFound",
@@ -328,16 +329,16 @@ const refresh = (id: number) =>
   );
 
 const disableProtection = (id: number) =>
-  Hetzner.primaryIpActions
-    .changePrimaryIpProtection({ id, delete: false })
-    .pipe(Effect.flatMap(({ action }) => waitForAction(action)));
+  PrimaryIpActions.changePrimaryIpProtection({ id, delete: false }).pipe(
+    Effect.flatMap(({ action }) => waitForAction(action)),
+  );
 
 export const PrimaryIpProvider = () =>
   Provider.succeed(PrimaryIp, {
     stables: ["id", "ip", "type", "location", "locationId", "created"],
     nuke: { dependsOn: ["Hetzner.Server"] },
     list: Effect.fn(function* () {
-      const items = yield* Hetzner.primaryIps.listPrimaryIps
+      const items = yield* PrimaryIps.listPrimaryIps
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
@@ -400,31 +401,29 @@ export const PrimaryIpProvider = () =>
           });
         }
         const location = yield* findLocation(placement);
-        const created = yield* Hetzner.primaryIps
-          .createPrimaryIp({
-            name,
-            type: news.type,
-            location: location.name,
-            labels: desiredLabels,
-            auto_delete: desiredAutoDelete,
-          })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              observe({ id, name }).pipe(
-                Effect.flatMap((hit) =>
-                  hit !== undefined
-                    ? Effect.succeed({ primary_ip: hit, action: undefined })
-                    : Hetzner.primaryIps.createPrimaryIp({
-                        name,
-                        type: news.type,
-                        location: location.name,
-                        labels: desiredLabels,
-                        auto_delete: desiredAutoDelete,
-                      }),
-                ),
+        const created = yield* PrimaryIps.createPrimaryIp({
+          name,
+          type: news.type,
+          location: location.name,
+          labels: desiredLabels,
+          auto_delete: desiredAutoDelete,
+        }).pipe(
+          Effect.catchTag("Conflict", () =>
+            observe({ id, name }).pipe(
+              Effect.flatMap((hit) =>
+                hit !== undefined
+                  ? Effect.succeed({ primary_ip: hit, action: undefined })
+                  : PrimaryIps.createPrimaryIp({
+                      name,
+                      type: news.type,
+                      location: location.name,
+                      labels: desiredLabels,
+                      auto_delete: desiredAutoDelete,
+                    }),
               ),
             ),
-          );
+          ),
+        );
         if (created.action) {
           yield* waitForAction(created.action);
         }
@@ -441,7 +440,7 @@ export const PrimaryIpProvider = () =>
         upsert.length > 0 ||
         removed.length > 0;
       if (needsUpdate) {
-        const updated = yield* Hetzner.primaryIps.updatePrimaryIp({
+        const updated = yield* PrimaryIps.updatePrimaryIp({
           id: current.id,
           name,
           auto_delete: desiredAutoDelete,
@@ -451,7 +450,7 @@ export const PrimaryIpProvider = () =>
       }
 
       if (current.protection.delete !== desiredProtection) {
-        const { action } = yield* Hetzner.primaryIpActions.changePrimaryIpProtection({
+        const { action } = yield* PrimaryIpActions.changePrimaryIpProtection({
           id: current.id,
           delete: desiredProtection,
         });
@@ -475,11 +474,11 @@ export const PrimaryIpProvider = () =>
         yield* disableProtection(current.id);
       }
       if (current.assignee_id !== null) {
-        const { action } = yield* Hetzner.primaryIpActions.unassignPrimaryIp({ id: current.id });
+        const { action } = yield* PrimaryIpActions.unassignPrimaryIp({ id: current.id });
         yield* waitForAction(action);
       }
-      yield* Hetzner.primaryIps
-        .deletePrimaryIp({ id: current.id })
-        .pipe(Effect.catchTag("NotFound", () => Effect.void));
+      yield* PrimaryIps.deletePrimaryIp({ id: current.id }).pipe(
+        Effect.catchTag("NotFound", () => Effect.void),
+      );
     }),
   });

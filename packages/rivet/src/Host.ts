@@ -50,5 +50,7 @@ export class NodeHost extends Context.Service<
   {
     /** Host a class on this node. */
     readonly host: (hosted: HostedDurableObject) => Effect.Effect<void>;
+    /** The export of the node's `main` being built: a class, or a Layer that hosts its own. */
+    readonly entrypoint: unknown;
   }
 >()("Rivet.NodeHost") {}

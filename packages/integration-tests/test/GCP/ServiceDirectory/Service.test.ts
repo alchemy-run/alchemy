@@ -59,7 +59,6 @@ test.provider(
 
       const resolved = yield* servicedirectory.resolveProjectsLocationsNamespacesServices({
         name: created.api.name,
-        body: {},
       });
       expect(resolved.service?.name).toEqual(created.api.name);
 

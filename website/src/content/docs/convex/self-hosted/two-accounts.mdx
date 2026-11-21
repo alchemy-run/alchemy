@@ -3,18 +3,40 @@ title: Two AWS accounts
 description: Keep production in its own account and give every other stage a preview in a shared development account.
 ---
 
+import PackageManagers from "../../../../components/PackageManagers.astro";
+import Tree from "../../../../components/diagrams/Tree.astro";
+
 Run production in its own account, and every other branch as a preview in a development account, from the same code.
 
 | Branch | Stage | Account | Convex API | HTTP actions |
 | --- | --- | --- | --- | --- |
 | `main` | `prod` | production | `cloud.example.com` | `site.example.com` |
 | `staging` | `staging` | development | `staging.cloud.previews.example.com` | `staging.site.previews.example.com` |
-| `dev/christian-stamati` | `christian-stamati` | development | `christian-stamati.cloud.previews.example.com` | `christian-stamati.site.previews.example.com` |
+| `dev/ana` | `ana` | development | `ana.cloud.previews.example.com` | `ana.site.previews.example.com` |
 | `feat/users`, PR 11 | `pr-11` | development | `pr-11.cloud.previews.example.com` | `pr-11.site.previews.example.com` |
 
 Each account has one platform, and each platform has one domain: `example.com` in production, `previews.example.com` in development. A backend's hosts are `[<stage>.]cloud.<domain>` and `[<stage>.]site.<domain>`, and the production backend leaves the stage out. The stage is always one label in front of a fixed name, so the certificate the platform gets once covers every stage, and a new preview never waits for one.
 
 Deploying one platform per account keeps a preview from reaching production, because the two share no network, database, role or DNS zone.
+
+<Tree
+  nodes={[
+    { id: "prodacct", label: "production", type: "AWS account", icon: "brand:aws", areas: ["prodzone", "prodplat"] },
+    { id: "prodzone", label: "example.com", type: "Route 53 zone", parent: "prodacct", dashed: true, icon: "globe" },
+    { id: "prodplat", label: "Convex", type: "Platform · Postgres", parent: "prodacct", icon: "layers", areas: ["prodbe"] },
+    { id: "prodbe", label: "prod", type: "Backend", parent: "prodplat", tone: "accent", icon: "server" },
+    { id: "devacct", label: "development", type: "AWS account", icon: "brand:aws", areas: ["devzone", "devplat"] },
+    { id: "devzone", label: "previews.example.com", type: "Route 53 zone", parent: "devacct", dashed: true, icon: "globe" },
+    { id: "devplat", label: "Convex", type: "Platform · SQLite", parent: "devacct", icon: "layers", areas: ["staging pr"], phoneAreas: ["staging pr"] },
+    { id: "staging", label: "staging", type: "Backend", parent: "devplat", icon: "server" },
+    { id: "pr", label: "pr-11", type: "Backend", parent: "devplat", icon: "server" },
+  ]}
+  areas={["prodacct devacct"]}
+  phoneAreas={["prodacct", "devacct"]}
+  colGap={4}
+  links={[{ from: "prodzone", to: "devzone", label: "delegates" }]}
+  caption="Each account has its own zone and platform. The production zone delegates previews.example.com to the development account with an NS record, so previews write DNS only in their own zone."
+/>
 
 ## Delegate the previews domain
 
@@ -36,23 +58,17 @@ Previews share `example.com` with production, so a cookie set for `.example.com`
 
 Each account needs Alchemy's assets bucket once:
 
-```sh
-alchemy provider aws bootstrap --aws-profile admin-dev --region eu-central-1
-```
+<PackageManagers run="alchemy provider aws bootstrap --aws-profile admin-dev --region eu-central-1" />
 
 ## Deploy the platforms
 
 The development platform has no database server, because previews run on SQLite:
 
-```sh
-CONVEX_DOMAIN=previews.example.com alchemy deploy stacks/platform.ts --stage dev --profile dev --yes
-```
+<PackageManagers script={`CONVEX_DOMAIN=previews.example.com {run} alchemy deploy stacks/platform.ts --stage dev --profile dev --yes`} />
 
 Production's platform has Postgres:
 
-```sh
-CONVEX_DOMAIN=example.com alchemy deploy stacks/platform.ts --stage prod --profile production --yes
-```
+<PackageManagers script={`CONVEX_DOMAIN=example.com {run} alchemy deploy stacks/platform.ts --stage prod --profile production --yes`} />
 
 The account comes from the Alchemy profile, which you set with `--profile` or `ALCHEMY_PROFILE`. `AWS_PROFILE` has no effect on a deploy, and with neither set, Alchemy uses its `default` profile.
 
@@ -76,13 +92,9 @@ Only plain values cross stacks. The database master password stays in SSM and on
 
 ## Deploy a stage
 
-```sh
-alchemy deploy --stage christian-stamati --profile dev --yes
-```
+<PackageManagers run="alchemy deploy --stage ana --profile dev --yes" />
 
-```sh
-alchemy deploy --stage prod --profile production --yes
-```
+<PackageManagers run="alchemy deploy --stage prod --profile production --yes" />
 
 ## Map branches to stages in CI
 

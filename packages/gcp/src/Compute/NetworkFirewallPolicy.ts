@@ -464,9 +464,9 @@ const syncRules = (
           project,
           networkFirewallPolicyName,
           compute.addRuleNetworkFirewallPolicies({
+            ...toRuleBody(rule),
             project,
             firewallPolicy: networkFirewallPolicyName,
-            body: toRuleBody(rule),
           }),
           { ignoreAlreadyExists: true },
         );
@@ -477,10 +477,10 @@ const syncRules = (
           project,
           networkFirewallPolicyName,
           compute.patchRuleNetworkFirewallPolicies({
+            ...toRuleBody(rule),
             project,
             firewallPolicy: networkFirewallPolicyName,
             priority,
-            body: toRuleBody(rule),
           }),
         );
       }
@@ -528,9 +528,10 @@ const syncAssociations = (
           project,
           networkFirewallPolicyName,
           compute.addAssociationNetworkFirewallPolicies({
+            name,
+            attachmentTarget: target,
             project,
             firewallPolicy: networkFirewallPolicyName,
-            body: { name, attachmentTarget: target },
           }),
           { ignoreAlreadyExists: true },
         );
@@ -541,10 +542,11 @@ const syncAssociations = (
           project,
           networkFirewallPolicyName,
           compute.addAssociationNetworkFirewallPolicies({
+            name,
+            attachmentTarget: target,
             project,
             firewallPolicy: networkFirewallPolicyName,
             replaceExistingAssociation: true,
-            body: { name, attachmentTarget: target },
           }),
         );
       }
@@ -655,12 +657,10 @@ export const NetworkFirewallPolicyProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertNetworkFirewallPolicies({
+            name: networkFirewallPolicyName,
+            description: desiredDescription,
+            policyType,
             project: env.project,
-            body: {
-              name: networkFirewallPolicyName,
-              description: desiredDescription,
-              policyType,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -678,12 +678,10 @@ export const NetworkFirewallPolicyProvider = () =>
           env.project,
           networkFirewallPolicyName,
           compute.patchNetworkFirewallPolicies({
+            description: desiredDescription,
+            fingerprint: current.fingerprint,
             project: env.project,
             firewallPolicy: networkFirewallPolicyName,
-            body: {
-              description: desiredDescription,
-              fingerprint: current.fingerprint,
-            },
           }),
         );
         current = (yield* getByName(env.project, networkFirewallPolicyName)) ?? current;

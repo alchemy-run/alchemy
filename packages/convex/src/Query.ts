@@ -1,63 +1,43 @@
-import * as functions from "@distilled.cloud/convex/functions";
-import * as Binding from "alchemy/Binding";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import { type ConvexFunctionError, onHost, unwrap } from "./BindingHttp.ts";
-import type { Deployment } from "./Deployment.ts";
-
-export type QueryError = ConvexFunctionError | functions.QueryError;
-
-/** Run a query by path, such as `messages:list`. */
-export type QueryClient = <A = unknown>(
-  path: string,
-  args?: Record<string, unknown>,
-) => Effect.Effect<A, QueryError, RuntimeContext>;
+import { declare } from "./internal/declare.ts";
 
 /**
- * Run a public Convex query from a Worker, Lambda or other host.
+ * Declare a Convex query: its path, arguments, result and failure. A query
+ * only reads, and Convex reruns it for subscribers when what it read changes.
  *
- * It needs no credentials and grants nothing: the host gets the deployment's
- * URL. A function that throws fails with `ConvexFunctionError`. Values use
- * Convex's JSON format, so `Int64` and `Bytes` arrive as tagged objects.
+ * The declaration holds no code, so a browser, Worker or Lambda can import
+ * it to call the function. Implement it with a Layer, and serve it from a
+ * file in `convex/` with {@link serve}.
  *
- * ### Calling a Function
- * **Example:** Run a query in a Worker
+ * ### Declaring a Function
+ * **Example:** A query with typed arguments and result
  * ```typescript
- * Effect.gen(function* () {
- *   const run = yield* Convex.Query(Backend);
- *   return {
- *     fetch: Effect.gen(function* () {
- *       const result = yield* run("messages:list");
- *       return yield* HttpServerResponse.json(result);
- *     }),
- *   };
- * }).pipe(Effect.provide(Convex.QueryHttp));
+ * export class ListMessages extends Convex.Query<ListMessages>()("messages:list", {
+ *   args: Schema.Struct({ channel: Schema.String }),
+ *   returns: Schema.Array(Messages.Document),
+ * }) {}
  * ```
  *
- * @binding
+ * ### Implementing It
+ * **Example:** Read a table in the handler
+ * ```typescript
+ * export const ListMessagesLive = Layer.succeed(ListMessages,
+ *   Effect.fn(function* ({ channel }) {
+ *     return yield* Messages.query((q) =>
+ *       q.withIndex("by_channel", (r) => r.eq("channel", channel)),
+ *     ).collect;
+ *   }),
+ * );
+ * ```
+ *
+ * ### Serving It
+ * The path is the file in `convex/` and the export name.
+ *
+ * **Example:** `convex/messages.ts`
+ * ```typescript
+ * export const list = Convex.serve(ListMessages, ListMessagesLive);
+ * ```
+ *
+ * @primitive
  * @product Functions
  */
-export interface Query extends Binding.Service<
-  Query,
-  "Convex.Query",
-  (deployment: Deployment) => Effect.Effect<QueryClient>
-> {}
-
-export const Query = Binding.Service<Query>("Convex.Query");
-
-/** Implementation over Convex's public HTTP API, usable from any host. */
-export const QueryHttp = Layer.effect(
-  Query,
-  Effect.succeed(
-    Effect.fn(function* (deployment: Deployment) {
-      const on = onHost(yield* deployment.url);
-      const client: QueryClient = <A = unknown>(path: string, args: Record<string, unknown> = {}) =>
-        functions.query({ path, args, format: "json" }).pipe(
-          Effect.flatMap((response) => unwrap<A>(path, response)),
-          on,
-        );
-      return client;
-    }),
-  ),
-);
+export const Query = declare("query");

@@ -13,7 +13,7 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import { makeFetchRpcStub, type RpcCallError } from "alchemy/Rpc";
 import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runtime/Process";
-import { RuntimeContext, sanitizeKey } from "alchemy/RuntimeContext";
+import { packEnvValueKeepRedacted, RuntimeContext, sanitizeKey } from "alchemy/RuntimeContext";
 import type { Self } from "alchemy/Self";
 import type * as ConfigError from "effect/Config";
 import * as Config from "effect/Config";
@@ -375,6 +375,14 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
   const ctx: DurableObjectRuntimeContext = {
     ...base,
     Type: DurableObjectTypeId,
+    // A Redacted the class reads stays Redacted in the pool's env, so a host
+    // that keeps secrets apart (a Kubernetes Secret, Secret Manager) can.
+    set: (bindingId: string, output: Output.Output) =>
+      Effect.sync(() => {
+        const key = bindingId.replaceAll(/[^a-zA-Z0-9]/g, "_");
+        base.env[key] = output.pipe(Output.map(packEnvValueKeepRedacted));
+        return key;
+      }),
     // The class phase returns the instance constructor rather than a
     // handler shape: always hand it to `serve`.
     alwaysServe: true,
@@ -763,6 +771,16 @@ export const makeNamespace = (
   };
   return { name, getByName: (instance: string) => getByKey([instance]), getByKey };
 };
+
+/**
+ * The namespace of the Durable Object class named `name`, reached through the
+ * gateway at `target`: for callers Alchemy didn't build, which have no
+ * bindings to read it from.
+ */
+export const namespaceAt = <Shape>(
+  name: string,
+  target: Omit<GatewayTarget, "name" | "key">,
+): DurableObjectNamespace<Shape> => makeNamespace(name, target);
 
 /** A namespace yielded outside any runtime was called. */
 export class DurableObjectCalledOutsideRuntime extends Data.TaggedError(

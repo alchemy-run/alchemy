@@ -3,15 +3,28 @@ import * as deployment from "@distilled.cloud/convex/deployment";
 import * as management from "@distilled.cloud/convex/management";
 import { hashDirectory, type MemoOptions } from "alchemy/Command/Memo";
 import { isResolved } from "alchemy/Diff";
+import type { InputProps } from "alchemy/Input";
+import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import {
+  type BaseRuntimeContext,
+  packEnvValueKeepRedacted,
+  RuntimeContext,
+  sanitizeKey,
+} from "alchemy/RuntimeContext";
+import { Stack } from "alchemy/Stack";
 import * as Clock from "effect/Clock";
+import type { ConfigError } from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
 import type * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
+import type * as Scope from "effect/Scope";
 import { fromDeployment } from "./Credentials.ts";
 import { adoptionAllowed } from "./internal/adopt.ts";
 import { GONE, onDeployment } from "./internal/deployment.ts";
@@ -19,6 +32,7 @@ import { type EnvChange, envHash, planEnvSync } from "./internal/env.ts";
 import { type PushTarget, runConvexDeploy } from "./internal/push.ts";
 import { createOnce } from "./internal/retry.ts";
 import type { Providers } from "./Providers.ts";
+import type { DeclarationServices } from "./Serve.ts";
 
 export { CodePushFailed, PushTargetMismatch } from "./internal/push.ts";
 export { ConvexCliNotFound } from "./internal/cli.ts";
@@ -184,7 +198,90 @@ export type Functions = Resource<
  * @resource
  * @product Functions
  */
-export const Functions = Resource<Functions>("Convex.Functions");
+const FunctionsResource = Resource<Functions>("Convex.Functions");
+
+/** The Layer of declared functions whose constructors bind resources. See {@link FunctionsDeclaration}. */
+export type FunctionsLayer = Layer.Layer<any, ConfigError, DeclarationServices>;
+
+export type FunctionsDeclaration = InputProps<FunctionsProps> & {
+  /**
+   * The Layer that implements the app's declared functions, when their
+   * constructors bind other resources, such as an action that sends to an
+   * SQS queue. Alchemy runs the constructors at deploy, creates what each
+   * binding needs, and sets the variables the binding reads on the
+   * deployment. `Config` a constructor reads is set there too.
+   *
+   * Pass the same Layer the app serves. Constructors that bind nothing
+   * don't need it.
+   */
+  functions?: FunctionsLayer;
+};
+
+/**
+ * Run the constructors of `functions` with this resource as their host, and
+ * return the props with every variable they bound added to `env`.
+ */
+const constructed = (id: string, props: FunctionsDeclaration) =>
+  Effect.gen(function* () {
+    const { functions, ...rest } = props;
+    const env: Record<string, unknown> = {};
+    const runtime: BaseRuntimeContext = {
+      Type: "Convex.Functions",
+      id,
+      env,
+      get: () => Effect.succeed(undefined),
+      set: (key, output) =>
+        Effect.sync(() => {
+          env[key] = Output.map(output, packEnvValueKeepRedacted);
+          return key;
+        }),
+    };
+    const ambient = yield* ConfigProvider.ConfigProvider;
+    // A constructor's `Config` reads the deploying machine's value, which
+    // the deployment then gets as a variable of the same name.
+    const capturing = ConfigProvider.make((path) =>
+      ambient
+        .load(path)
+        .pipe(
+          Effect.tap((node) =>
+            node?._tag === "Value"
+              ? runtime.set(sanitizeKey(path.join("_")), Output.literal(Redacted.make(node.value)))
+              : Effect.void,
+          ),
+        ),
+    );
+    // Resources a constructor declares resolve against this stack at runtime.
+    const stack = yield* Stack;
+    yield* runtime.set("ALCHEMY_STACK_NAME", Output.literal(stack.name));
+    yield* runtime.set("ALCHEMY_STAGE", Output.literal(stack.stage));
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the stack in context provides the providers and Stack the constructors name
+    yield* (Layer.build(functions!) as Effect.Effect<unknown, ConfigError, Scope.Scope>).pipe(
+      Effect.scoped,
+      Effect.provideService(RuntimeContext, runtime),
+      Effect.provideService(ConfigProvider.ConfigProvider, capturing),
+      Effect.orDie,
+    );
+    return {
+      ...rest,
+      env: Object.assign({}, rest.env as Record<string, unknown> | undefined, env),
+    } as InputProps<FunctionsProps>;
+  });
+
+export const Functions = Object.assign(
+  (id: string, props: FunctionsDeclaration) =>
+    FunctionsResource(
+      id,
+      // A declaration's Layer never reaches state: only its bound variables do.
+      (props.functions === undefined
+        ? props
+        : constructed(id, props)) as InputProps<FunctionsProps>,
+    ),
+  FunctionsResource,
+) as typeof FunctionsResource &
+  (<const Id extends string>(
+    id: Id,
+    props: FunctionsDeclaration,
+  ) => ReturnType<typeof FunctionsResource>);
 
 const plain = (env: FunctionsProps["env"]) =>
   Object.fromEntries(
@@ -242,7 +339,7 @@ const tokenOf = (target: PushTarget) =>
 
 export const FunctionsProvider = () =>
   Provider.effect(
-    Functions,
+    FunctionsResource,
     Effect.gen(function* () {
       const services = yield* Effect.context<
         FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner

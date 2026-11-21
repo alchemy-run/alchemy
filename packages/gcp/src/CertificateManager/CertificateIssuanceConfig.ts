@@ -571,9 +571,9 @@ export const CertificateIssuanceConfigProvider = () =>
         yield* Effect.gen(function* () {
           const created = yield* certificatemanager
             .createProjectsLocationsCertificateIssuanceConfigs({
+              ...toCreateBody(news, desiredLabels, caPool),
               parent: `projects/${env.project}/locations/${location}`,
               certificateIssuanceConfigId,
-              body: toCreateBody(news, desiredLabels, caPool),
             })
             .pipe(
               Effect.retry({
@@ -615,13 +615,10 @@ export const CertificateIssuanceConfigProvider = () =>
 
         const operation =
           yield* certificatemanager.patchProjectsLocationsCertificateIssuanceConfigs({
+            labels: desiredLabels,
+            description: news.description,
             name,
             updateMask: updateMask.join(","),
-            body: {
-              name,
-              labels: desiredLabels,
-              description: news.description,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);

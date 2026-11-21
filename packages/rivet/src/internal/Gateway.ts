@@ -24,6 +24,8 @@ export interface GatewayTarget {
   readonly name: string;
   /** The instance key: RivetKit's array of parts, one per element. */
   readonly key: ReadonlyArray<string>;
+  /** Headers added to every request, computed when it is sent, such as the caller's trace. */
+  readonly headers?: (() => ReadonlyArray<readonly [string, string]>) | undefined;
 }
 
 /** The header the gateway reads the caller's token from, as RivetKit's client sends it. */
@@ -125,6 +127,11 @@ export const gatewayUpgrade = (
     for (const [name, value] of Object.entries(request.headers)) {
       if (!HANDSHAKE_HEADERS.has(name.toLowerCase())) headers[name] = value;
     }
+    for (const [name, value] of target.headers?.() ?? []) {
+      if (!Object.keys(headers).some((own) => own.toLowerCase() === name.toLowerCase())) {
+        headers[name] = value;
+      }
+    }
     headers[TOKEN_HEADER] = target.token;
     const socketUrl = gatewayUrl(target, url.pathname, url.search, "websocket");
     if (typeof (globalThis as { WebSocketPair?: unknown }).WebSocketPair === "function") {
@@ -173,6 +180,55 @@ export const gatewayUpgrade = (
     );
   });
 
+/**
+ * Whether RivetKit refused a request because the actor was between
+ * activations: starting, stopping, destroyed, or stopped before it
+ * answered (`dropped_reply`, a call still running past the sleep grace
+ * period). RivetKit's own client sends a `getOrCreate` request again on
+ * each of these.
+ */
+const isActorLifecycleError = (error: unknown) => {
+  if (typeof error !== "object" || error === null) return false;
+  const { group, code } = error as { group?: unknown; code?: unknown };
+  if (group !== "actor" || typeof code !== "string") return false;
+  return (
+    code === "not_found" ||
+    code === "starting" ||
+    code === "stopping" ||
+    code === "not_configured" ||
+    code === "dropped_reply" ||
+    code === "destroying" ||
+    code.startsWith("destroyed_")
+  );
+};
+
+/**
+ * A request the actor was between activations for answers 503, as a call
+ * that never arrived, which callers send again, rather than RivetKit's 500.
+ * RivetKit names the error in a JSON body.
+ */
+const asTransitFailure = async (response: Response) => {
+  if (
+    response.status < 500 ||
+    response.status === 503 ||
+    !response.headers.get("content-type")?.includes("application/json")
+  ) {
+    return response;
+  }
+  const body = await response.text();
+  let error: unknown;
+  try {
+    error = JSON.parse(body);
+  } catch {
+    error = undefined;
+  }
+  return new Response(body, {
+    status: isActorLifecycleError(error) ? 503 : response.status,
+    statusText: isActorLifecycleError(error) ? "Service Unavailable" : response.statusText,
+    headers: response.headers,
+  });
+};
+
 /** A fetcher whose requests reach the actor's `onRequest` (and `onWebSocket`) through the gateway. */
 export const gatewayFetcher = (target: GatewayTarget): NativeFetcher => ({
   upgrade: (request) => gatewayUpgrade(target, request),
@@ -184,13 +240,18 @@ export const gatewayFetcher = (target: GatewayTarget): NativeFetcher => ({
         ? undefined
         : await request.arrayBuffer();
     const headers = new Headers(request.headers);
+    for (const [name, value] of target.headers?.() ?? []) {
+      if (!headers.has(name)) headers.set(name, value);
+    }
     headers.set(TOKEN_HEADER, target.token);
-    return fetch(gatewayUrl(target, url.pathname, url.search), {
-      method: request.method,
-      headers,
-      body: body === undefined || body.byteLength === 0 ? undefined : body,
-      signal: request.signal,
-    });
+    return asTransitFailure(
+      await fetch(gatewayUrl(target, url.pathname, url.search), {
+        method: request.method,
+        headers,
+        body: body === undefined || body.byteLength === 0 ? undefined : body,
+        signal: request.signal,
+      }),
+    );
   },
 });
 
