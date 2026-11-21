@@ -264,9 +264,11 @@ const stableSourcePath =
  * Default `sourcemapPathTransform` to {@link stableSourcePath} for a one-shot
  * build, so its source map, and with it the bundle hash, is the same wherever
  * it is built. `watch` keeps rolldown's paths: they lead from the map to the
- * files on disk, which a debugger attached to a dev session needs.
+ * files on disk, which a debugger attached to a dev session needs. A watcher
+ * that compares its builds with a deployed bundle's hash passes its output
+ * options through this, so an unchanged source hashes the same.
  */
-const withStableSourcePaths = (
+export const withStableSourcePaths = (
   inputOptions: rolldown.InputOptions,
   outputOptions?: rolldown.OutputOptions,
 ): rolldown.OutputOptions => ({
