@@ -52,7 +52,10 @@ export default class FeedsWorker extends Cloudflare.Worker<FeedsWorker>()(
         if (action === "state") return yield* HttpServerResponse.json(yield* feeds.get(id!));
         return HttpServerResponse.text("not found", { status: 404 });
       }).pipe(
-        Effect.catchCause((cause) => HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+        // The cause, so a failing call says why.
+        Effect.catchCause((cause) =>
+          Effect.succeed(HttpServerResponse.text(Cause.pretty(cause), { status: 500 })),
+        ),
       ),
     };
   }).pipe(
