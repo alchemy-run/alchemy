@@ -8,9 +8,9 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
+import { decodeActionError, decodeActionResponse, encodeActionRequest } from "./internal/Bare.ts";
 import { encodeCbor } from "./internal/Cbor.ts";
 import { gatewaySend, gatewayUrl } from "./internal/Gateway.ts";
-import { parseCompat, stringifyCompat, toBase64Url } from "./internal/JsonCompat.ts";
 import type { Software } from "./Registry.ts";
 import { Services, SERVICES_POOL } from "./Services.ts";
 
@@ -131,22 +131,11 @@ const timeoutMillis = (timeout: Duration.Input | undefined) =>
 
 const decoder = new TextDecoder();
 
-/** An action's error body, as RivetKit sends one. */
-const actionError = (action: string, status: number, text: string) => {
-  try {
-    const body = parseCompat(text) as { group?: unknown; code?: unknown; message?: unknown };
-    if (typeof body.group === "string" && typeof body.code === "string") {
-      return new SandboxActionError({
-        action,
-        group: body.group,
-        code: body.code,
-        message: typeof body.message === "string" ? body.message : `${body.group}.${body.code}`,
-      });
-    }
-  } catch {
-    // Not RivetKit's error shape: report the response as it came.
-  }
-  return new SandboxRequestError({ action, message: `${action}: HTTP ${status} ${text}`.trim() });
+/** Base64url without padding, as the gateway reads `rvt-input`. */
+const base64Url = (bytes: Uint8Array) => {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 };
 
 interface OutputPage {
@@ -176,7 +165,7 @@ const outputOf = <E>(read: (after: number | bigint | undefined) => Effect.Effect
 const makeHandle = (target: Target | undefined, template: SandboxTemplate, key: string) => {
   // The VM's create input: the template's config, read by the gateway when
   // it creates the actor and ignored after.
-  const input = toBase64Url(
+  const input = base64Url(
     encodeCbor({
       config: {
         software: template.props.software,
@@ -204,24 +193,29 @@ const makeHandle = (target: Target | undefined, template: SandboxTemplate, key: 
         try: (signal) =>
           gatewaySend(url, target.token, {
             method: "POST",
-            headers: { "content-type": "application/json", "x-rivet-encoding": "json" },
-            body: new TextEncoder().encode(stringifyCompat({ args })),
+            headers: { "content-type": "application/octet-stream", "x-rivet-encoding": "bare" },
+            body: encodeActionRequest(args),
             signal,
           }),
         catch: (cause) =>
           new SandboxRequestError({ action, message: `${action}: ${String(cause)}`, cause }),
       });
-      const text = yield* Effect.tryPromise({
-        try: () => response.text(),
+      const body = yield* Effect.tryPromise({
+        try: () => response.arrayBuffer().then((buffer) => new Uint8Array(buffer)),
         catch: (cause) =>
           new SandboxRequestError({ action, message: `${action}: ${String(cause)}`, cause }),
       });
-      if (!response.ok) return yield* actionError(action, response.status, text);
-      return yield* Effect.try({
-        try: () => (parseCompat(text) as { output: A }).output,
-        catch: (cause) =>
-          new SandboxRequestError({ action, message: `${action}: unreadable response`, cause }),
-      });
+      const unreadable = (cause: unknown) =>
+        new SandboxRequestError({
+          action,
+          message: `${action}: HTTP ${response.status}, a body that isn't RivetKit's`,
+          cause,
+        });
+      if (!response.ok) {
+        const error = yield* decodeActionError(body).pipe(Effect.mapError(unreadable));
+        return yield* new SandboxActionError({ action, ...error });
+      }
+      return (yield* decodeActionResponse(body).pipe(Effect.mapError(unreadable))) as A;
     });
 
   const v1 = <A>(action: string, input: unknown) => call<A>(`v1.${action}`, [input]);
@@ -380,6 +374,70 @@ const makeHandle = (target: Target | undefined, template: SandboxTemplate, key: 
       ),
     });
 
+  /**
+   * agentOS has no destroy action: the control plane deletes the VM's actor,
+   * found by its key. A VM that was never created has nothing to delete.
+   */
+  const destroy = () =>
+    Effect.gen(function* () {
+      if (target === undefined) {
+        return yield* new SandboxCalledOutsideRuntime({
+          message: `Rivet.CreateSandbox(${template.name}) can only be called inside a runtime.`,
+        });
+      }
+      const base = target.endpoint.replace(/\/+$/, "");
+      const engine = (method: "GET" | "DELETE", path: string) =>
+        Effect.tryPromise({
+          try: async (signal) => {
+            const response = await fetch(`${base}${path}`, {
+              method,
+              headers: { authorization: `Bearer ${target.token}` },
+              signal,
+            });
+            const text = await response.text();
+            return { ok: response.ok, status: response.status, text };
+          },
+          catch: (cause) =>
+            new SandboxRequestError({
+              action: "destroy",
+              message: `destroy: ${String(cause)}`,
+              cause,
+            }),
+        }).pipe(
+          Effect.flatMap((response) =>
+            response.ok
+              ? Effect.succeed(response.text)
+              : Effect.fail(
+                  new SandboxRequestError({
+                    action: "destroy",
+                    message: `destroy: HTTP ${response.status} ${response.text}`.trim(),
+                  }),
+                ),
+          ),
+        );
+      const query = new URLSearchParams({ namespace: target.namespace, name: ACTOR, key });
+      const listed = yield* engine("GET", `/actors?${query}`);
+      const actors = yield* Effect.try({
+        try: () =>
+          (
+            JSON.parse(listed) as {
+              actors: ReadonlyArray<{ actor_id: string; destroy_ts: unknown }>;
+            }
+          ).actors,
+        catch: (cause) =>
+          new SandboxRequestError({
+            action: "destroy",
+            message: "destroy: unreadable actor list",
+            cause,
+          }),
+      });
+      const namespace = new URLSearchParams({ namespace: target.namespace });
+      for (const actor of actors) {
+        if (actor.destroy_ts !== null && actor.destroy_ts !== undefined) continue;
+        yield* engine("DELETE", `/actors/${encodeURIComponent(actor.actor_id)}?${namespace}`);
+      }
+    });
+
   return {
     key,
     exec,
@@ -387,7 +445,7 @@ const makeHandle = (target: Target | undefined, template: SandboxTemplate, key: 
     files,
     pty,
     getTcpPort,
-    destroy: () => Effect.asVoid(call("destroy", [])),
+    destroy,
   } satisfies SandboxHandle;
 };
 
