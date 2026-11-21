@@ -1,8 +1,10 @@
 /**
  * An instance on a pool of its own, so a test can kill or stop its node
  * without touching any other fixture's calls. Its alarm handler records
- * the node running it and hangs on its first run, and finishes on every
- * run after; `writeUntilStopped` keeps writing until its storage fails.
+ * the node running it; `arm`'s hangs on its first run and finishes on
+ * every run after, and `armHeld`'s comes due while a transaction keeps it
+ * from being claimed. `writeUntilStopped` keeps writing until its storage
+ * fails.
  */
 import * as Rivet from "@alchemy.run/rivet";
 import * as Cause from "effect/Cause";
@@ -38,7 +40,15 @@ export default class AbandonedAlarm extends Rivet.DurableObject<AbandonedAlarm>(
           }),
         arm: () =>
           Effect.gen(function* () {
+            yield* state.storage.put("hang", true);
             yield* state.storage.setAlarm((yield* Effect.sync(() => Date.now())) + 100);
+          }),
+        // RivetKit fires the alarm while the transaction holds storage, so
+        // its handler can't claim it until the transaction ends.
+        armHeld: () =>
+          Effect.gen(function* () {
+            yield* state.storage.setAlarm((yield* Effect.sync(() => Date.now())) + 100);
+            yield* state.storage.transaction(Effect.sleep("25 seconds"));
           }),
         alarmState: () =>
           Effect.gen(function* () {
@@ -53,8 +63,9 @@ export default class AbandonedAlarm extends Rivet.DurableObject<AbandonedAlarm>(
           Effect.gen(function* () {
             yield* bump("runs");
             yield* state.storage.put("node", yield* node);
-            // The first run waits for its node to be killed.
-            if ((yield* read("runs")) === 1) yield* Effect.sleep("10 minutes");
+            // `arm`'s first run waits for its node to be killed.
+            const hang = (yield* state.storage.get<boolean>("hang")) === true;
+            if (hang && (yield* read("runs")) === 1) yield* Effect.sleep("10 minutes");
             yield* bump("done");
           }),
       };

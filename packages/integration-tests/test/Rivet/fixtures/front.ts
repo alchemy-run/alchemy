@@ -238,7 +238,7 @@ export default class Front extends Docker.Service<Front>()(
           });
         }
         // `/abandoned-alarm/<name>/<step>`: `arm` sets an alarm whose first
-        // run hangs, `node` names the node running the instance, `busy`
+        // run hangs, `arm-held` one that comes due inside a transaction, `node` names the node running the instance, `busy`
         // writes until storage fails, and `state` reads its runs, finished
         // runs and alarm.
         if (group === "abandoned-alarm" && name !== undefined) {
@@ -246,6 +246,10 @@ export default class Front extends Docker.Service<Front>()(
           const instance = abandonedAlarms.getByName(name);
           if (step === "arm") {
             yield* instance.arm();
+            return yield* HttpServerResponse.json({ ok: true });
+          }
+          if (step === "arm-held") {
+            yield* instance.armHeld();
             return yield* HttpServerResponse.json({ ok: true });
           }
           if (step === "node") {
