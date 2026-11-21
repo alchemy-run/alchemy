@@ -17,14 +17,14 @@ import * as Schedule from "effect/Schedule";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import NodeEcho from "./fixtures/node-echo.ts";
 
-const CONTROL_PLANE_PORT = 16470;
 const POOL = "node-test";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "RivetNode", import.meta.url);
 
-const Cluster = RivetDocker.SwarmControlPlane("RivetNode", { port: CONTROL_PLANE_PORT });
+// On a free port, so the suite runs beside itself in other worktrees.
+const Cluster = RivetDocker.SwarmControlPlane("RivetNode", { port: 0 });
 
 let connection: Required<RivetNode.NodeConnection>;
 
@@ -66,11 +66,15 @@ describe.skipIf(!!process.env.FAST)(
         const out = (yield* sharedStack.deploy(
           Effect.gen(function* () {
             const cluster = yield* Rivet.Cluster;
-            return { token: cluster.token, namespace: cluster.namespace };
+            return {
+              endpoint: cluster.endpoint,
+              token: cluster.token,
+              namespace: cluster.namespace,
+            };
           }).pipe(Effect.provide(Cluster)),
-        )) as { token: Redacted.Redacted<string>; namespace: string };
+        )) as { endpoint: string; token: Redacted.Redacted<string>; namespace: string };
         connection = {
-          endpoint: `http://localhost:${CONTROL_PLANE_PORT}`,
+          endpoint: out.endpoint,
           token: out.token,
           namespace: out.namespace,
           pool: POOL,
