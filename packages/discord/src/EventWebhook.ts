@@ -2,6 +2,7 @@ import * as discord from "@distilled.cloud/discord/discord";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import { retryUnverifiedEndpoint } from "./internal/Discord.ts";
 import type { Providers } from "./Providers.ts";
 
 /**
@@ -107,11 +108,14 @@ export const EventWebhookProvider = () =>
       ) {
         return toAttributes(app);
       }
-      const updated = yield* discord.updateMyApplication({
-        event_webhooks_url: news.url,
-        event_webhooks_status: status,
-        event_webhooks_types: types as discord.UpdateMyApplicationRequest["event_webhooks_types"],
-      });
+      // Discord answers an event URL it couldn't verify with Invalid Form Body.
+      const updated = yield* retryUnverifiedEndpoint(["InvalidFormBody"])(
+        discord.updateMyApplication({
+          event_webhooks_url: news.url,
+          event_webhooks_status: status,
+          event_webhooks_types: types as discord.UpdateMyApplicationRequest["event_webhooks_types"],
+        }),
+      );
       return toAttributes(updated);
     }),
 

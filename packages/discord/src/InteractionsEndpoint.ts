@@ -2,6 +2,7 @@ import * as discord from "@distilled.cloud/discord/discord";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
+import { retryUnverifiedEndpoint } from "./internal/Discord.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface InteractionsEndpointProps {
@@ -83,7 +84,9 @@ export const InteractionsEndpointProvider = () =>
       const app = yield* discord.getMyApplication({});
       const initialUrl = output !== undefined ? output.initialUrl : app.interactions_endpoint_url;
       if (app.interactions_endpoint_url === news.url) return toAttributes(app, initialUrl);
-      const updated = yield* discord.updateMyApplication({ interactions_endpoint_url: news.url });
+      const updated = yield* retryUnverifiedEndpoint(["InteractionsEndpointUnverified"])(
+        discord.updateMyApplication({ interactions_endpoint_url: news.url }),
+      );
       return toAttributes(updated, initialUrl);
     }),
 

@@ -6,6 +6,7 @@ import * as discord from "@distilled.cloud/discord/discord";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 
 /**
  * The application the deploy's bot token belongs to. Every application-level
@@ -195,3 +196,20 @@ export const emojiName = (id: string, instanceId: string, props: { name?: string
         delimiter: "_",
         charset: /[^A-Za-z0-9_]/g,
       });
+
+/**
+ * Retry an application update while Discord can't verify a just-deployed
+ * endpoint yet (its PING got no valid answer): a fresh Worker URL takes a few
+ * seconds to serve. `tags` are the refusals that mean "not verified"; bounded
+ * at about 50 seconds.
+ */
+export const retryUnverifiedEndpoint =
+  (tags: ReadonlyArray<string>) =>
+  <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(
+      Effect.retry({
+        while: (e) => tags.includes(e._tag),
+        schedule: Schedule.spaced("5 seconds"),
+        times: 10,
+      }),
+    );
