@@ -24,18 +24,14 @@ A harness needs at least one model. Workers AI needs nothing beyond your Cloudfl
 
 ```typescript title="src/models.ts"
 import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 export class Fast extends AI.Model<Fast>()("fast") {}
 
-export const FastLive = Layer.unwrap(
-  Effect.gen(function* () {
-    const ai = yield* Cloudflare.Workers.AI();
-    return Fast.layer(ai.model({ model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" }));
-  }),
-).pipe(Layer.provide(Cloudflare.Workers.AIBinding));
+export const FastLive = AICloudflare.WorkersAI(Fast, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+});
 ```
 
 See [Models](/ai/models) for other providers.

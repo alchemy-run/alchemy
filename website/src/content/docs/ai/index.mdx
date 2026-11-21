@@ -16,18 +16,14 @@ Name a model. Which LLM answers is the Layer behind the name:
 
 ```typescript title="src/models.ts"
 import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 
 export class Fast extends AI.Model<Fast>()("fast") {}
 
-export const FastLive = Layer.unwrap(
-  Effect.gen(function* () {
-    const ai = yield* Cloudflare.Workers.AI();
-    return Fast.layer(ai.model({ model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" }));
-  }),
-).pipe(Layer.provide(Cloudflare.Workers.AIBinding));
+export const FastLive = AICloudflare.WorkersAI(Fast, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+});
 ```
 
 Declare a tool: what it takes, what it returns, and a handler:

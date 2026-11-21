@@ -20,7 +20,45 @@ The options tell the harness what the model can take: `contextWindow` (128,000 t
 
 ## Back it with an LLM
 
-`Fast.layer` takes an Effect AI `LanguageModel` Layer. On Cloudflare, a Worker's own AI binding gives one for any Workers AI model:
+`Fast.layer` takes an Effect AI `LanguageModel` Layer, from any provider. For Workers AI, `@alchemy.run/ai/Cloudflare` does it in one call, through the Worker's own AI binding:
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AICloudflare.WorkersAI(Fast, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  parameters: { temperature: 0, maxTokens: 1024 },
+});
+```
+
+The model's key never leaves your runtime. A harness that runs its agent somewhere else, as OpenCode does in a sandbox, sends each model request back to this Layer.
+
+## Route through AI Gateway
+
+An AI Gateway logs, caches and rate-limits requests on their way to a model. `AICloudflare.Gateway` takes the gateway as well:
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+
+export const Gateway = Cloudflare.AI.Gateway("Gateway", { collectLogs: true });
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AICloudflare.Gateway(Fast, Gateway, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+});
+```
+
+See [AI Gateway](/cloudflare/ai/ai-gateway).
+
+## Use another provider
+
+`Fast.layer` takes any `LanguageModel` Layer, so a provider without a ready-made Layer is a few lines. This is `AICloudflare.WorkersAI` written out:
 
 ```typescript title="src/models.ts"
 import * as AI from "@alchemy.run/ai";
@@ -33,40 +71,12 @@ export class Fast extends AI.Model<Fast>()("fast") {}
 export const FastLive = Layer.unwrap(
   Effect.gen(function* () {
     const ai = yield* Cloudflare.Workers.AI();
-    return Fast.layer(
-      ai.model({
-        model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-        parameters: { temperature: 0, maxTokens: 1024 },
-      }),
-    );
+    return Fast.layer(ai.model({ model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" }));
   }),
 ).pipe(Layer.provide(Cloudflare.Workers.AIBinding));
 ```
 
-The model's key never leaves your runtime. A harness that runs its agent somewhere else, as OpenCode does in a sandbox, sends each model request back to this Layer.
-
-## Route through AI Gateway
-
-An AI Gateway logs, caches and rate-limits requests on their way to a provider. Its `model` is a `LanguageModel` Layer too:
-
-```typescript title="src/models.ts"
-import * as AI from "@alchemy.run/ai";
-import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-
-export const Gateway = Cloudflare.AI.Gateway("Gateway", { collectLogs: true });
-
-export class Fast extends AI.Model<Fast>()("fast") {}
-
-export const FastLive = Layer.unwrap(
-  Effect.map(Cloudflare.AI.QueryGateway(Gateway), (gateway) =>
-    Fast.layer(gateway.model({ model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" })),
-  ),
-).pipe(Layer.provide(Cloudflare.AI.QueryGatewayBinding));
-```
-
-See [AI Gateway](/cloudflare/ai/ai-gateway).
+The Effect runs where the harness is yielded, so the binding it declares is part of the deploy. See [Effect AI on Cloudflare](/cloudflare/ai/effect-ai), [Bedrock](/aws/ai/bedrock) and [Vertex AI](/gcp/ai/vertex-ai).
 
 ## List models on a harness
 
@@ -81,5 +91,3 @@ A conversation or a prompt picks one by reference:
 ```typescript
 yield* harness.configure("pr-142", { model: Smart });
 ```
-
-Any other Effect AI provider works the same way, because `layer` takes any `LanguageModel` Layer. See [Effect AI on Cloudflare](/cloudflare/ai/effect-ai), [Bedrock](/aws/ai/bedrock) and [Vertex AI](/gcp/ai/vertex-ai).

@@ -1,5 +1,6 @@
 import * as AI from "@alchemy.run/ai";
 import * as AIBoat from "@alchemy.run/ai/Boat";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Boat from "@alchemy.run/boat";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Pi from "@alchemy.run/pi";
@@ -10,16 +11,10 @@ import * as Schema from "effect/Schema";
 import { Gateway } from "./infra.ts";
 import { Fast } from "./models.ts";
 
-const ModelsLive = Layer.unwrap(
-  Effect.map(Cloudflare.AI.QueryGateway(Gateway), (gateway) =>
-    Fast.layer(
-      gateway.model({
-        model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-        parameters: { temperature: 0, maxTokens: 1024 },
-      }),
-    ),
-  ),
-);
+const ModelsLive = AICloudflare.Gateway(Fast, Gateway, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  parameters: { temperature: 0, maxTokens: 1024 },
+});
 
 /** The snapshot every sandbox boots from. */
 const Base = Boat.Snapshot("PiBase", { run: ["node --version"] });
@@ -50,9 +45,7 @@ const HarnessLive = Layer.mergeAll(
   ModelsLive,
   PiCloudflare.DurableObjectStorage,
   Pi.CodingTools.pipe(Layer.provideMerge(SandboxLive)),
-).pipe(
-  Layer.provideMerge(Layer.mergeAll(Cloudflare.AI.QueryGatewayBinding, Boat.CreateSandboxHttp)),
-);
+).pipe(Layer.provideMerge(Boat.CreateSandboxHttp));
 
 export default class PiSandboxSession extends Cloudflare.DurableObject<PiSandboxSession>()(
   "PiSandboxSession",

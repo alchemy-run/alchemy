@@ -1,5 +1,6 @@
 import * as AI from "@alchemy.run/ai";
 import * as AIBoat from "@alchemy.run/ai/Boat";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Boat from "@alchemy.run/boat";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as OpenCode from "@alchemy.run/opencode";
@@ -12,16 +13,10 @@ import { Gateway } from "./infra.ts";
 /** Llama 3.3 70B reliably returns OpenAI-shaped tool calls on Workers AI. */
 class Fast extends AI.Model<Fast>()("fast") {}
 
-const ModelsLive = Layer.unwrap(
-  Effect.map(Cloudflare.AI.QueryGateway(Gateway), (gateway) =>
-    Fast.layer(
-      gateway.model({
-        model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-        parameters: { temperature: 0, maxTokens: 1024 },
-      }),
-    ),
-  ),
-);
+const ModelsLive = AICloudflare.Gateway(Fast, Gateway, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  parameters: { temperature: 0, maxTokens: 1024 },
+});
 
 /** A tagged tool: the contract here, the implementation as a Layer. */
 class Add extends AI.Tool<Add>()("add", {
@@ -87,9 +82,7 @@ const HarnessLive = Layer.mergeAll(
   SandboxLive,
   OpenCode.CodingTools,
   OpenCodeCloudflare.DurableObjectInstance,
-).pipe(
-  Layer.provideMerge(Layer.mergeAll(Cloudflare.AI.QueryGatewayBinding, Boat.CreateSandboxHttp)),
-);
+).pipe(Layer.provideMerge(Boat.CreateSandboxHttp));
 
 const toolsByName = {
   add: Add,

@@ -1,4 +1,5 @@
 import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
@@ -10,16 +11,10 @@ import { Gateway, Notes } from "./infra.ts";
 import { Fast } from "./models.ts";
 import { Add, AddLive, Withdraw, WithdrawLive } from "./tools.ts";
 
-const ModelsLive = Layer.unwrap(
-  Effect.map(Cloudflare.AI.QueryGateway(Gateway), (gateway) =>
-    Fast.layer(
-      gateway.model({
-        model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-        parameters: { temperature: 0, maxTokens: 1024 },
-      }),
-    ),
-  ),
-);
+const ModelsLive = AICloudflare.Gateway(Fast, Gateway, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  parameters: { temperature: 0, maxTokens: 1024 },
+});
 
 const HarnessLive = Layer.mergeAll(
   ModelsLive,
@@ -28,7 +23,7 @@ const HarnessLive = Layer.mergeAll(
   Pi.CodeModeAsync.pipe(Layer.provide(PiCloudflare.EvalInline())),
   PiCloudflare.DurableObjectStorage,
   Cloudflare.KV.ReadWriteNamespaceBinding,
-).pipe(Layer.provideMerge(Cloudflare.AI.QueryGatewayBinding));
+);
 
 export default class PiSession extends Cloudflare.DurableObject<PiSession>()(
   "PiSession",

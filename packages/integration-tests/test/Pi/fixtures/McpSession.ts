@@ -1,4 +1,5 @@
 import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
@@ -13,16 +14,10 @@ import PiMcpWorker from "./McpWorker.ts";
 import { Fast } from "./models.ts";
 import { Add, AddLive } from "./tools.ts";
 
-const ModelsLive = Layer.unwrap(
-  Effect.map(Cloudflare.AI.QueryGateway(Gateway), (gateway) =>
-    Fast.layer(
-      gateway.model({
-        model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-        parameters: { temperature: 0, maxTokens: 1024 },
-      }),
-    ),
-  ),
-);
+const ModelsLive = AICloudflare.Gateway(Fast, Gateway, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  parameters: { temperature: 0, maxTokens: 1024 },
+});
 
 export class Codes extends AI.McpServer<Codes>()("codes") {}
 
@@ -67,11 +62,7 @@ const HarnessLive = Layer.mergeAll(
   AddLive,
   CodesLive,
   PiCloudflare.DurableObjectStorage,
-).pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(Cloudflare.AI.QueryGatewayBinding, Cloudflare.Workers.FetchBinding),
-  ),
-);
+).pipe(Layer.provideMerge(Cloudflare.Workers.FetchBinding));
 
 export default class PiMcpSession extends Cloudflare.DurableObject<PiMcpSession>()(
   "PiMcpSession",

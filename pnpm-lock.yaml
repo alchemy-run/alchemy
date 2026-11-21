@@ -9162,6 +9162,9 @@ importers:
       '@alchemy.run/boat':
         specifier: workspace:*
         version: link:../boat
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../cloudflare
       '@alchemy.run/daytona':
         specifier: workspace:*
         version: link:../daytona

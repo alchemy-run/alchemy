@@ -30,6 +30,7 @@
     ".": "./src/index.ts",
     "./Archil": "./src/Archil/index.ts",
     "./Boat": "./src/Boat/index.ts",
+    "./Cloudflare": "./src/Cloudflare/index.ts",
     "./Daytona": "./src/Daytona/index.ts",
     "./E2B": "./src/E2B/index.ts",
     "./Modal": "./src/Modal/index.ts",
@@ -55,6 +56,12 @@
         "bun": "./src/Boat/index.ts",
         "worker": "./src/Boat/index.ts",
         "default": "./lib/Boat/index.js"
+      },
+      "./Cloudflare": {
+        "types": "./lib/Cloudflare/index.d.ts",
+        "bun": "./src/Cloudflare/index.ts",
+        "worker": "./src/Cloudflare/index.ts",
+        "default": "./lib/Cloudflare/index.js"
       },
       "./Daytona": {
         "types": "./lib/Daytona/index.d.ts",
@@ -91,6 +98,7 @@
   "devDependencies": {
     "@alchemy.run/archil": "workspace:*",
     "@alchemy.run/boat": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/daytona": "workspace:*",
     "@alchemy.run/e2b": "workspace:*",
     "@alchemy.run/modal": "workspace:*",
@@ -102,6 +110,7 @@
   "peerDependencies": {
     "@alchemy.run/archil": "workspace:*",
     "@alchemy.run/boat": "workspace:*",
+    "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/daytona": "workspace:*",
     "@alchemy.run/e2b": "workspace:*",
     "@alchemy.run/modal": "workspace:*",
@@ -113,6 +122,9 @@
       "optional": true
     },
     "@alchemy.run/boat": {
+      "optional": true
+    },
+    "@alchemy.run/cloudflare": {
       "optional": true
     },
     "@alchemy.run/daytona": {
