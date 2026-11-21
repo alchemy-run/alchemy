@@ -83,11 +83,7 @@ const ensureParentApi = Effect.gen(function* () {
     return parentApiName;
   }
   const created = yield* apigateway
-    .createProjectsLocationsApis({
-      parent,
-      apiId: parentApiId,
-      body: { displayName: parentApiId },
-    })
+    .createProjectsLocationsApis({ displayName: parentApiId, parent, apiId: parentApiId })
     .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
   if (created !== undefined) {
     yield* waitOperation(created);

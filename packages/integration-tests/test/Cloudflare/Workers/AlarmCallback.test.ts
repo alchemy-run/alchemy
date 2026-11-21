@@ -205,6 +205,39 @@ describe.concurrent.each([
       { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
     );
 
+    test(
+      "delivers recurring interval and cron jobs until they are cancelled",
+      Effect.gen(function* () {
+        const { url } = yield* stack;
+        const base = `${url}/recurring`;
+        const scheduled = yield* json<Snapshot>(`${base}/recurring`, "POST");
+        expect(scheduled.pendingJobs.map(({ callback, id }) => `${callback}:${id}`)).toEqual([
+          "tick:cron",
+          "tick:every",
+        ]);
+        const count = (snapshot: Snapshot, value: string) =>
+          snapshot.deliveries.filter((delivery) => delivery.value === value).length;
+        // Each job stays pending after it runs, so both keep delivering.
+        yield* poll<Snapshot>(
+          `${base}/snapshot`,
+          (snapshot) => count(snapshot, "every") >= 3 && count(snapshot, "cron") >= 3,
+        );
+        const cancelled = yield* json<Snapshot>(`${base}/cancel-recurring`, "POST");
+        expect(cancelled.pendingJobs).toEqual([]);
+        expect(cancelled.alarm).toBeNull();
+        // Cancelling doesn't interrupt a run already under way, which may
+        // still finish; after that, nothing more is delivered.
+        yield* Effect.sleep("2500 millis");
+        const settled = yield* json<Snapshot>(`${base}/snapshot`, "GET");
+        expect(settled.deliveries.length - cancelled.deliveries.length).toBeLessThanOrEqual(1);
+        yield* Effect.sleep("2500 millis");
+        const after = yield* json<Snapshot>(`${base}/snapshot`, "GET");
+        expect(after.deliveries).toEqual(settled.deliveries);
+        expect(after.pendingJobs).toEqual([]);
+      }),
+      { tags: [...(dev ? ["local"] : ["live"])], timeout: 90_000 },
+    );
+
     for (const explicit of [true, false]) {
       test(
         `${explicit ? "explicit rollback" : "native SQL failure"} discards scheduled jobs and their native wake`,

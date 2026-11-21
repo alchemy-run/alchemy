@@ -8,12 +8,14 @@ import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import { loadNodeImage, saveNodeImage } from "../internal/NodeImage.ts";
 import {
   bundleNodes,
   isImageProgram,
   makePoolLayer,
-  nodeEnvironment,
+  SECRET_ENV,
+  splitNodeEnvironment,
   RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
@@ -360,8 +362,15 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
             })).version.pipe(Output.map((version) => version ?? ""))
           : undefined;
       // Nodes read each secret themselves: grant the secret, not the project.
+      // Secrets the classes read as config: one secret of the pool's, loaded
+      // by the node at start, never metadata or the worker pool's config.
+      const split = splitNodeEnvironment(nodes);
+      const secretEnvVersion = (yield* SecretManager.Secret(`${id}SecretEnv`, {
+        value: split.pipe(Output.map(({ secrets }) => Redacted.make(JSON.stringify(secrets)))),
+      })).version.pipe(Output.map((version) => version ?? ""));
       const secrets = Object.entries({
         ...(token === undefined ? {} : { RIVET_TOKEN: token }),
+        [SECRET_ENV]: secretEnvVersion,
         ...options.secrets,
       });
       const secretGrants: Array<Output.Output<string>> = [];
@@ -390,7 +399,7 @@ export const ComputeEnginePool = (id: string, options: ComputeEnginePoolOptions 
           asOutput(value).pipe(Output.map((v) => [name, v] as const)),
         ),
       ).pipe(Output.map((entries) => Object.fromEntries(entries)));
-      const envFile = Output.all(nodeEnvironment(nodes), own).pipe(
+      const envFile = Output.all(split.pipe(Output.map(({ plain }) => plain)), own).pipe(
         Output.map(([env, extra]) =>
           Object.entries({
             ...env,

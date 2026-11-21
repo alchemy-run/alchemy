@@ -157,10 +157,7 @@ export const TenantProvider = () =>
 
       if (current === undefined) {
         const created = yield* jobs
-          .createProjectsTenants({
-            parent: projectParent(env.project),
-            body: { externalId },
-          })
+          .createProjectsTenants({ externalId, parent: projectParent(env.project) })
           .pipe(Effect.catchTag("Conflict", () => findOwnedTenant(env.project, id)));
         current = created ?? undefined;
       }
@@ -174,9 +171,9 @@ export const TenantProvider = () =>
       const currentName = current.name ?? name;
       if (!sameText(current.externalId, externalId)) {
         current = yield* jobs.patchProjectsTenants({
+          externalId,
           name: currentName,
           updateMask: "externalId",
-          body: { name: currentName, externalId },
         });
       }
 

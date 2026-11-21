@@ -8,6 +8,7 @@ import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 /** Action taken on findings that match the filter's criteria. */
@@ -136,7 +137,7 @@ const FilterResource = Resource<Filter>("AWS.GuardDuty.Filter");
 export { FilterResource as Filter };
 
 const filterArn = (region: string, accountId: string, detectorId: string, name: string) =>
-  `arn:aws:guardduty:${region}:${accountId}:detector/${detectorId}/filter/${name}`;
+  `arn:${partitionOf(region)}:guardduty:${region}:${accountId}:detector/${detectorId}/filter/${name}`;
 
 export const FilterProvider = () =>
   Provider.effect(

@@ -487,9 +487,9 @@ const syncRules = (
           project,
           securityPolicyName,
           compute.addRuleSecurityPolicies({
+            ...toRuleBody(rule),
             project,
             securityPolicy: securityPolicyName,
-            body: toRuleBody(rule),
           }),
           { ignoreAlreadyExists: true },
         );
@@ -500,10 +500,10 @@ const syncRules = (
           project,
           securityPolicyName,
           compute.patchRuleSecurityPolicies({
+            ...toRuleBody(rule),
             project,
             securityPolicy: securityPolicyName,
             priority,
-            body: toRuleBody(rule),
           }),
         );
       }
@@ -615,10 +615,7 @@ export const SecurityPolicyProvider = () =>
 
       if (current === undefined) {
         yield* compute
-          .insertSecurityPolicies({
-            project: env.project,
-            body: insertBody(securityPolicyName, news),
-          })
+          .insertSecurityPolicies({ ...insertBody(securityPolicyName, news), project: env.project })
           .pipe(
             Effect.flatMap((operation) =>
               waitGlobalOperation(env.project, operation, {
@@ -684,9 +681,9 @@ export const SecurityPolicyProvider = () =>
           env.project,
           securityPolicyName,
           compute.patchSecurityPolicies({
+            ...patch,
             project: env.project,
             securityPolicy: securityPolicyName,
-            body: patch,
           }),
         );
         current = (yield* getByName(env.project, securityPolicyName)) ?? current;
@@ -705,12 +702,10 @@ export const SecurityPolicyProvider = () =>
           env.project,
           securityPolicyName,
           compute.setLabelsSecurityPolicies({
+            labels: desiredLabels,
+            labelFingerprint: current.labelFingerprint,
             project: env.project,
             resource: securityPolicyName,
-            body: {
-              labels: desiredLabels,
-              labelFingerprint: current.labelFingerprint,
-            },
           }),
         );
         current = (yield* getByName(env.project, securityPolicyName)) ?? current;

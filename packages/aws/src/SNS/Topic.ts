@@ -10,11 +10,12 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { normalizePolicyDocument } from "../IAM/Policy.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type TopicName = string;
-export type TopicArn = `arn:aws:sns:${RegionID}:${AccountID}:${TopicName}`;
+export type TopicArn = `arn:${Partition}:sns:${RegionID}:${AccountID}:${TopicName}`;
 
 export interface TopicProps {
   /**

@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import {
   isImageProgram,
   makePoolLayer,
-  nodeEnvironment,
+  secretNodeEnvironment,
   nodeDockerfile,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
@@ -106,7 +106,8 @@ export const DeploymentPool = (id: string, options: DeploymentPoolOptions = {}) 
           serviceType: "ClusterIP",
           ...(options.resources === undefined ? {} : { resources: options.resources }),
           ...(options.architecture === undefined ? {} : { architecture: options.architecture }),
-          env: nodeEnvironment(nodes, endpoint),
+          // The token stays Redacted: the Deployment keeps it in its Secret.
+          env: secretNodeEnvironment(nodes, endpoint),
         });
       }),
   });

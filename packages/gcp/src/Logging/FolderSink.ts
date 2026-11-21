@@ -366,10 +366,10 @@ export const FolderSinkProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createFoldersSinks({
+            ...toCreateBody(sinkId, news, desiredDescription),
             parent,
             uniqueWriterIdentity,
             customWriterIdentity: news.customWriterIdentity,
-            body: toCreateBody(sinkId, news, desiredDescription),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -432,11 +432,11 @@ export const FolderSinkProvider = () =>
           body.interceptChildren = desiredInterceptChildren;
         }
         current = yield* logging.patchFoldersSinks({
+          ...body,
           sinkName: current.resourceName ?? name,
           uniqueWriterIdentity,
           customWriterIdentity: news.customWriterIdentity,
           updateMask: updateMask.join(","),
-          body,
         });
       }
 

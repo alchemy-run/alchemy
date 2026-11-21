@@ -247,11 +247,9 @@ export const DomainsBackupProvider = () =>
       if (current === undefined) {
         const created = yield* managedidentities
           .createProjectsLocationsGlobalDomainsBackups({
+            labels: desiredLabels,
             parent: domain,
             backupId,
-            body: {
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -277,12 +275,9 @@ export const DomainsBackupProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* managedidentities.patchProjectsLocationsGlobalDomainsBackups({
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

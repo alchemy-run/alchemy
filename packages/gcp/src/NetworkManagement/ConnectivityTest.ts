@@ -459,18 +459,16 @@ export const ConnectivityTestProvider = () =>
       if (current === undefined) {
         const created = yield* networkmanagement
           .createProjectsLocationsGlobalConnectivityTests({
+            description: news.description,
+            labels: desiredLabels,
+            source,
+            destination,
+            protocol,
+            relatedProjects: relatedProjects.length > 0 ? relatedProjects : undefined,
+            roundTrip,
+            bypassFirewallChecks,
             parent: parentOf(env.project, location),
             testId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              source,
-              destination,
-              protocol,
-              relatedProjects: relatedProjects.length > 0 ? relatedProjects : undefined,
-              roundTrip,
-              bypassFirewallChecks,
-            },
           })
           .pipe(
             Effect.retry({
@@ -517,19 +515,16 @@ export const ConnectivityTestProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkmanagement.patchProjectsLocationsGlobalConnectivityTests({
+          labels: desiredLabels,
+          description: news.description,
+          source,
+          destination,
+          protocol,
+          relatedProjects,
+          roundTrip,
+          bypassFirewallChecks,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            source,
-            destination,
-            protocol,
-            relatedProjects,
-            roundTrip,
-            bypassFirewallChecks,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

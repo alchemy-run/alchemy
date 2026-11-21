@@ -262,10 +262,7 @@ export const AgentsEnvironmentProvider = () =>
 
       if (current === undefined) {
         const operation = yield* dialogflow
-          .createProjectsLocationsAgentsEnvironments({
-            parent: agent,
-            body,
-          })
+          .createProjectsLocationsAgentsEnvironments({ ...body, parent: agent })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           current = yield* resolveFromOperation(operation);
@@ -291,13 +288,13 @@ export const AgentsEnvironmentProvider = () =>
 
       if (displayChanged || descriptionChanged || versionsChanged) {
         const operation = yield* dialogflow.patchProjectsLocationsAgentsEnvironments({
+          ...body,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
             descriptionChanged ? "description" : undefined,
             versionsChanged ? "version_configs" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
         const patched = yield* resolveFromOperation(operation);
         current = patched ?? (yield* getByName(currentName)) ?? current;

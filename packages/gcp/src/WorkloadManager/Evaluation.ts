@@ -429,9 +429,9 @@ export const EvaluationProvider = () =>
       if (current === undefined) {
         const created = yield* workloadmanager
           .createProjectsLocationsEvaluations({
+            ...body,
             parent: parentOf(env.project, location),
             evaluationId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -472,9 +472,9 @@ export const EvaluationProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* workloadmanager.patchProjectsLocationsEvaluations({
+          ...body,
           name: current.name ?? name,
           updateMask: mask,
-          body,
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

@@ -258,6 +258,13 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
               { delay: "1 second" },
             );
 
+      const onTick = yield* Alchemy.makeCallback(
+        "tick",
+        Effect.fn(function* (payload: { value: string }) {
+          yield* record("tick", payload.value).pipe(Effect.orDie);
+        }),
+      );
+
       const snapshot = Effect.fn(function* () {
         const tables = yield* (yield* storage.sql.exec<{ name: string }>(
           "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'alchemy_alarm_callbacks'",
@@ -327,6 +334,16 @@ export class AlarmObject extends Cloudflare.DurableObject<AlarmObject>()(
 
       return {
         snapshot,
+        recurring: Effect.fn(function* () {
+          yield* onTick.schedule("every", { every: "1 second", payload: { value: "every" } });
+          yield* onTick.schedule("cron", { cron: "* * * * * *", payload: { value: "cron" } });
+          return yield* snapshot();
+        }),
+        cancelRecurring: Effect.fn(function* () {
+          yield* onTick.cancel("every");
+          yield* onTick.cancel("cron");
+          return yield* snapshot();
+        }),
         bookkeeping: Effect.fn(function* () {
           const at = yield* Effect.sync(() => Date.now() + 1_500);
           yield* storage

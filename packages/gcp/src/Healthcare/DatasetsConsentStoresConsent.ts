@@ -251,15 +251,13 @@ export const DatasetsConsentStoresConsentProvider = () =>
       if (current === undefined) {
         current = yield* retryTransient(
           healthcare.createProjectsLocationsDatasetsConsentStoresConsents({
+            userId: news.userId,
+            consentArtifact: news.consentArtifact,
+            state,
+            metadata,
+            policies: news.policies,
+            ttl: news.ttl,
             parent: consentStore,
-            body: {
-              userId: news.userId,
-              consentArtifact: news.consentArtifact,
-              state,
-              metadata,
-              policies: news.policies,
-              ttl: news.ttl,
-            },
           }),
         );
       }
@@ -281,6 +279,10 @@ export const DatasetsConsentStoresConsentProvider = () =>
       if (userChanged || artifactChanged || policiesChanged || metadataChanged) {
         current = yield* retryTransient(
           healthcare.patchProjectsLocationsDatasetsConsentStoresConsents({
+            userId: news.userId,
+            consentArtifact: news.consentArtifact,
+            policies: news.policies,
+            metadata,
             name: currentName,
             updateMask: updateMaskOf(
               userChanged ? "userId" : undefined,
@@ -288,12 +290,6 @@ export const DatasetsConsentStoresConsentProvider = () =>
               policiesChanged ? "policies" : undefined,
               metadataChanged ? "metadata" : undefined,
             ),
-            body: {
-              userId: news.userId,
-              consentArtifact: news.consentArtifact,
-              policies: news.policies,
-              metadata,
-            },
           }),
         );
       }
@@ -302,10 +298,8 @@ export const DatasetsConsentStoresConsentProvider = () =>
       if (state === "ACTIVE" && currentState === "DRAFT") {
         current = yield* retryTransient(
           healthcare.activateProjectsLocationsDatasetsConsentStoresConsents({
+            consentArtifact: news.consentArtifact,
             name: current.name ?? currentName,
-            body: {
-              consentArtifact: news.consentArtifact,
-            },
           }),
         );
       } else if (state === "REVOKED" && currentState === "ACTIVE") {

@@ -104,9 +104,9 @@ export default class Api extends GCP.Function<Api>()(
           if (plaintext === undefined) {
             return yield* error(400, "plaintext is required");
           }
-          const { ciphertext } = yield* encrypt({
-            body: { plaintext: yield* toBase64(plaintext) },
-          }).pipe(Effect.orDie);
+          const { ciphertext } = yield* encrypt({ plaintext: yield* toBase64(plaintext) }).pipe(
+            Effect.orDie,
+          );
           return yield* HttpServerResponse.json({ ciphertext });
         }
 
@@ -116,7 +116,7 @@ export default class Api extends GCP.Function<Api>()(
         }
         // KMS rejects ciphertext it did not produce (or that was tampered
         // with) as a bad request; that is the caller's fault, not ours.
-        const decrypted = yield* decrypt({ body: { ciphertext } }).pipe(
+        const decrypted = yield* decrypt({ ciphertext }).pipe(
           Effect.map((response) => response.plaintext),
           Effect.catchTag("BadRequest", () => Effect.succeed(null)),
           Effect.orDie,
