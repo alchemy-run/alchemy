@@ -13,7 +13,8 @@ import { Gateway } from "./infra.ts";
 /** Llama 3.3 70B reliably returns OpenAI-shaped tool calls on Workers AI. */
 class Fast extends AI.Model<Fast>()("fast") {}
 
-const ModelsLive = AICloudflare.Gateway(Fast, Gateway, {
+const ModelsLive = AICloudflare.Model(Fast, {
+  gateway: Gateway,
   model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   parameters: { temperature: 0, maxTokens: 1024 },
 });

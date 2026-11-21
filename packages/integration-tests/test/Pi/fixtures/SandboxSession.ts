@@ -11,7 +11,8 @@ import * as Schema from "effect/Schema";
 import { Gateway } from "./infra.ts";
 import { Fast } from "./models.ts";
 
-const ModelsLive = AICloudflare.Gateway(Fast, Gateway, {
+const ModelsLive = AICloudflare.Model(Fast, {
+  gateway: Gateway,
   model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   parameters: { temperature: 0, maxTokens: 1024 },
 });

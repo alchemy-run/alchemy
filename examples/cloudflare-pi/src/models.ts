@@ -7,7 +7,7 @@ import * as Layer from "effect/Layer";
 export class Fast extends AI.Model<Fast>()("fast") {}
 
 /** Llama 3.3 70B on Workers AI, through the Worker's own `AI` binding. */
-export const FastLive = AICloudflare.WorkersAI(Fast, {
+export const FastLive = AICloudflare.Model(Fast, {
   model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   parameters: { temperature: 0, maxTokens: 1024 },
 });

@@ -20,7 +20,7 @@ The options tell the harness what the model can take: `contextWindow` (128,000 t
 
 ## Back it with an LLM
 
-`Fast.layer` takes an Effect AI `LanguageModel` Layer, from any provider. For Workers AI, `@alchemy.run/ai/Cloudflare` does it in one call, through the Worker's own AI binding:
+`Fast.layer` takes an Effect AI `LanguageModel` Layer, from any provider. For the models Cloudflare hosts (the `@cf/...` ids), `AICloudflare.Model` does it in one call, with no provider key:
 
 ```typescript title="src/models.ts"
 import * as AI from "@alchemy.run/ai";
@@ -28,7 +28,7 @@ import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 
 export class Fast extends AI.Model<Fast>()("fast") {}
 
-export const FastLive = AICloudflare.WorkersAI(Fast, {
+export const FastLive = AICloudflare.Model(Fast, {
   model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   parameters: { temperature: 0, maxTokens: 1024 },
 });
@@ -38,7 +38,7 @@ The model's key never leaves your runtime. A harness that runs its agent somewhe
 
 ## Route through AI Gateway
 
-An AI Gateway logs, caches and rate-limits requests on their way to a model. `AICloudflare.Gateway` takes the gateway as well:
+An AI Gateway logs, caches and rate-limits requests on their way to a model. Pass one as `gateway`:
 
 ```typescript title="src/models.ts"
 import * as AI from "@alchemy.run/ai";
@@ -49,7 +49,8 @@ export const Gateway = Cloudflare.AI.Gateway("Gateway", { collectLogs: true });
 
 export class Fast extends AI.Model<Fast>()("fast") {}
 
-export const FastLive = AICloudflare.Gateway(Fast, Gateway, {
+export const FastLive = AICloudflare.Model(Fast, {
+  gateway: Gateway,
   model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 });
 ```
@@ -58,7 +59,7 @@ See [AI Gateway](/cloudflare/ai/ai-gateway).
 
 ## Use another provider
 
-`Fast.layer` takes any `LanguageModel` Layer, so a provider without a ready-made Layer is a few lines. This is `AICloudflare.WorkersAI` written out:
+`Fast.layer` takes any `LanguageModel` Layer, so a provider without a ready-made Layer is a few lines. This is `AICloudflare.Model` written out:
 
 ```typescript title="src/models.ts"
 import * as AI from "@alchemy.run/ai";

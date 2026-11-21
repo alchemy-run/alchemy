@@ -14,7 +14,8 @@ import PiMcpWorker from "./McpWorker.ts";
 import { Fast } from "./models.ts";
 import { Add, AddLive } from "./tools.ts";
 
-const ModelsLive = AICloudflare.Gateway(Fast, Gateway, {
+const ModelsLive = AICloudflare.Model(Fast, {
+  gateway: Gateway,
   model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   parameters: { temperature: 0, maxTokens: 1024 },
 });

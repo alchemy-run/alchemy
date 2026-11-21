@@ -1,5 +1,5 @@
 /**
- * `AI.Model` Layers on Cloudflare: Workers AI, direct or through an AI Gateway.
+ * `AI.Model` Layers on Cloudflare.
  *
  * @module
  */
@@ -8,42 +8,35 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import type { ModelClass } from "../Model.ts";
 
-/** Which Workers AI model answers, and with what parameters. */
-export type ModelOptions = Parameters<Cloudflare.Workers.AIClient["model"]>[0];
+/** Which of Cloudflare's hosted models answers, and with what parameters. */
+export type ModelOptions<E = never, R = never> = Parameters<
+  Cloudflare.Workers.AIClient["model"]
+>[0] & {
+  /**
+   * An AI Gateway to send each request through, which logs, caches and
+   * rate-limits it. Without one, requests go straight to the model through
+   * the Worker's AI binding.
+   */
+  gateway?: Effect.Effect<Cloudflare.AI.Gateway, E, R>;
+};
 
 /**
- * Back a model with Workers AI, through the Worker's own AI binding. It
- * needs nothing beyond your Cloudflare account.
+ * Back a model with one of the models Cloudflare hosts (the `@cf/...` ids).
+ * It needs nothing beyond your Cloudflare account: no provider key.
  *
- * **Example:** Llama 3.3 on Workers AI
+ * **Example:** Llama 3.3
  * ```typescript
  * import * as AI from "@alchemy.run/ai";
  * import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
  *
  * export class Fast extends AI.Model<Fast>()("fast") {}
  *
- * export const FastLive = AICloudflare.WorkersAI(Fast, {
+ * export const FastLive = AICloudflare.Model(Fast, {
  *   model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
  * });
  * ```
  *
- * @layer
- * @provides AI.Model
- * @peer @alchemy.run/cloudflare
- */
-export const WorkersAI = <Self>(model: ModelClass<Self, string>, options: ModelOptions) =>
-  Layer.unwrap(
-    Effect.gen(function* () {
-      const ai = yield* Cloudflare.Workers.AI();
-      return model.layer(ai.model(options));
-    }),
-  ).pipe(Layer.provide(Cloudflare.Workers.AIBinding));
-
-/**
- * Back a model with a Workers AI model reached through an AI Gateway, which
- * logs, caches and rate-limits each request.
- *
- * **Example:** Llama 3.3 through a gateway
+ * **Example:** Through an AI Gateway
  * ```typescript
  * import * as AI from "@alchemy.run/ai";
  * import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
@@ -53,8 +46,9 @@ export const WorkersAI = <Self>(model: ModelClass<Self, string>, options: ModelO
  *
  * export class Fast extends AI.Model<Fast>()("fast") {}
  *
- * export const FastLive = AICloudflare.Gateway(Fast, Gateway, {
+ * export const FastLive = AICloudflare.Model(Fast, {
  *   model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+ *   gateway: Gateway,
  * });
  * ```
  *
@@ -62,14 +56,20 @@ export const WorkersAI = <Self>(model: ModelClass<Self, string>, options: ModelO
  * @provides AI.Model
  * @peer @alchemy.run/cloudflare
  */
-export const Gateway = <Self, E, R>(
+export const Model = <Self, E = never, R = never>(
   model: ModelClass<Self, string>,
-  gateway: Effect.Effect<Cloudflare.AI.Gateway, E, R>,
-  options: ModelOptions,
+  { gateway, ...options }: ModelOptions<E, R>,
 ) =>
-  Layer.unwrap(
-    Effect.gen(function* () {
-      const client = yield* Cloudflare.AI.QueryGateway(yield* gateway);
-      return model.layer(client.model(options));
-    }),
-  ).pipe(Layer.provide(Cloudflare.AI.QueryGatewayBinding));
+  gateway === undefined
+    ? Layer.unwrap(
+        Effect.gen(function* () {
+          const ai = yield* Cloudflare.Workers.AI();
+          return model.layer(ai.model(options));
+        }),
+      ).pipe(Layer.provide(Cloudflare.Workers.AIBinding))
+    : Layer.unwrap(
+        Effect.gen(function* () {
+          const client = yield* Cloudflare.AI.QueryGateway(yield* gateway);
+          return model.layer(client.model(options));
+        }),
+      ).pipe(Layer.provide(Cloudflare.AI.QueryGatewayBinding));

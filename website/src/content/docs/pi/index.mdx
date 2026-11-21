@@ -21,7 +21,7 @@ import * as Schema from "effect/Schema";
 
 export class Fast extends AI.Model<Fast>()("fast") {}
 
-export const FastLive = AICloudflare.WorkersAI(Fast, {
+export const FastLive = AICloudflare.Model(Fast, {
   model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 });
 
