@@ -24,7 +24,6 @@ import * as Stream from "effect/Stream";
 import type { HostedDurableObject } from "../DurableObject.ts";
 import {
   ALARM_ACTION,
-  DISPATCH_ACTION,
   DurableObjectState,
   makeDurableObjectState,
   migrateStorage,
@@ -354,25 +353,6 @@ export const runDurableObjects = (durableObjects: ReadonlyArray<HostedDurableObj
                   ),
                 ),
               ),
-            );
-          },
-          // Schedules and crons name an RPC method; DurableObjectState rewrites
-          // that name through this action so RivetKit only registers one.
-          [DISPATCH_ACTION]: (c: ActivationContext, method: unknown, ...args: unknown[]) => {
-            if (typeof method !== "string" || method.length === 0) return;
-            if (method === ALARM_ACTION || method === DISPATCH_ACTION) return;
-            void c.keepAwake(
-              instanceOf(c)
-                .instance.dispatch(method)(...args)
-                .then(
-                  () => undefined,
-                  (error: unknown) => {
-                    console.error(
-                      `Durable Object scheduled method "${method}" could not run`,
-                      error,
-                    );
-                  },
-                ),
             );
           },
         },

@@ -46,6 +46,7 @@ import {
   PlaceHold,
   Recorded,
   ReleaseHold,
+  TicketLive,
   TotalWriter,
 } from "./model.ts";
 
@@ -58,7 +59,7 @@ export const app = Effect.gen(function* () {
   const holds = yield* Hold;
   const giving = yield* Giving;
   const hidden = yield* HiddenTotal;
-  const api = yield* ConformanceApi;
+  const api = yield* ConformanceApi.pipe(Effect.provide(TicketLive));
   const recorded = yield* Recorded;
   const progress = yield* TotalWriter.Progress;
   const internals = yield* Model.Internals;

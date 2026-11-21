@@ -3,7 +3,8 @@ import * as Effect from "effect/Effect";
 import {
   isImageProgram,
   makePoolLayer,
-  NODE_DOCKERFILE,
+  nodeDockerfile,
+  RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 import { nodeEnvironment, poolNetworkOf, resolvePoolNetwork } from "./internal/Pool.ts";
@@ -86,7 +87,12 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
         yield* ECS.Service(`${id}Nodes`, {
           ...(isImageProgram(program)
             ? program
-            : { ...program, dockerfile: { content: NODE_DOCKERFILE } }),
+            : {
+                ...program,
+                dockerfile: {
+                  content: nodeDockerfile(options.rivetkitVersion ?? RIVETKIT_VERSION),
+                },
+              }),
           cluster,
           desiredCount: options.replicas ?? 1,
           cpu: options.cpu ?? 512,
