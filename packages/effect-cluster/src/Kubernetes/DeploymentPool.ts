@@ -58,6 +58,17 @@ export interface DeploymentPoolOptions extends PoolSettings {
  * );
  * ```
  *
+ * ### Sizing database connections
+ * **Example:** At most 8 connections per runner
+ * ```typescript
+ * // Each runner holds two pools to the database: Effect Cluster's own, and
+ * // one its Domain models share. Each holds at most 4 connections.
+ * export const Default = ClusterKubernetes.DeploymentPool("Default", {
+ *   replicas: 2,
+ *   databaseConnections: 4,
+ * }).pipe(Layer.provide(Database));
+ * ```
+ *
  * @primitive
  */
 export const DeploymentPool = (id: string, options: DeploymentPoolOptions = {}) =>
