@@ -278,13 +278,11 @@ export const CurationProvider = () =>
       if (current === undefined) {
         const created = yield* apihub
           .createProjectsLocationsCurations({
+            displayName,
+            description,
+            endpoint,
             parent,
             curationId,
-            body: {
-              displayName,
-              description,
-              endpoint,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -300,16 +298,13 @@ export const CurationProvider = () =>
 
       if (displayChanged || descriptionChanged) {
         current = yield* apihub.patchProjectsLocationsCurations({
+          displayName,
+          description,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
             descriptionChanged ? "description" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            description,
-          },
         });
       }
 

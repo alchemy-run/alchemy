@@ -1,0 +1,69 @@
+---
+title: Other hosts
+description: Run a Pi harness on a long-lived machine — a Fly Machine, an ECS task, a container — by changing its storage, its sandbox and its code mode runtime.
+---
+
+A Pi harness needs three things from where it runs: a storage only it owns, somewhere for the coding tools to work, and, for code mode, somewhere to run scripts. On a Durable Object those are the object's SQLite, a sandbox and the object's own thread. On a long-lived machine they are a file, the machine itself and a worker thread. The harness, its models and its tools don't change.
+
+## Storage in a file
+
+`Pi.SqliteFile` keeps conversations in a SQLite file. Pi allows one owner per storage, so the file must belong to one process: a Fly Machine with a volume, an ECS task on EFS, a container with a mounted disk.
+
+```typescript
+const StorageLive = Pi.SqliteFile("/data/pi.sqlite");
+```
+
+A machine is not evicted while it has work, so there is no alarm. The harness resumes unfinished runs once, when the process starts and first opens it.
+
+## Tools on the machine
+
+`Pi.LocalEnv` runs the coding tools on the machine itself, in place of a sandbox:
+
+```typescript
+const CodingToolsLive = Pi.CodingTools.pipe(
+  Layer.provideMerge(Pi.LocalEnv({ cwd: "/workspace" })),
+);
+```
+
+Every conversation then works in the same file system. Give each one its own `cwd` to keep them apart:
+
+```typescript
+yield* harness.createConversation({ name: "pr-142", cwd: "/workspace/pr-142" });
+```
+
+## Code mode on a worker thread
+
+`Pi.EvalQuickJS()` runs code mode scripts in QuickJS on a worker thread, so a long script doesn't block the process:
+
+```typescript
+const CodeModeLive = Pi.CodeModeAsync.pipe(Layer.provide(Pi.EvalQuickJS()));
+```
+
+## All three together
+
+The Layers for a machine, composed once:
+
+```typescript title="src/layers.ts"
+import * as Pi from "@alchemy.run/pi";
+import * as Layer from "effect/Layer";
+import { FastLive } from "./models.ts";
+import { AddLive } from "./tools.ts";
+
+export const HarnessLive = Layer.mergeAll(
+  FastLive,
+  AddLive,
+  Pi.SqliteFile("/data/pi.sqlite"),
+  Pi.CodingTools.pipe(Layer.provideMerge(Pi.LocalEnv({ cwd: "/workspace" }))),
+  Pi.CodeModeAsync.pipe(Layer.provide(Pi.EvalQuickJS())),
+);
+```
+
+All of these need Node.js or Bun.
+
+## In tests
+
+`Pi.MemoryStorage` keeps conversations in memory and loses them when the process ends:
+
+```typescript
+const TestLive = Layer.mergeAll(FastLive, AddLive, Pi.MemoryStorage);
+```

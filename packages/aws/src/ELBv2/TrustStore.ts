@@ -8,11 +8,12 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
 export type TrustStoreArn =
-  `arn:aws:elasticloadbalancing:${RegionID}:${AccountID}:truststore/${string}`;
+  `arn:${Partition}:elasticloadbalancing:${RegionID}:${AccountID}:truststore/${string}`;
 
 export interface TrustStoreProps {
   /** The trust store name. If omitted, a unique name is generated. Changing it replaces the trust store. */

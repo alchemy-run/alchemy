@@ -218,12 +218,10 @@ export const ServicesResourcePolicyProvider = () =>
       if (current === undefined) {
         const created = yield* retryTransient(
           firebaseappcheck.createProjectsServicesResourcePolicies({
+            targetResource,
+            enforcementMode:
+              enforcementMode as firebaseappcheck.GoogleFirebaseAppcheckV1ResourcePolicyEnforcementModeEnum,
             parent,
-            body: {
-              targetResource,
-              enforcementMode:
-                enforcementMode as firebaseappcheck.GoogleFirebaseAppcheckV1ResourcePolicyEnforcementModeEnum,
-            },
           }),
         ).pipe(
           Effect.catchTag("Conflict", () =>
@@ -244,13 +242,11 @@ export const ServicesResourcePolicyProvider = () =>
       if (!sameText(current.enforcementMode, enforcementMode)) {
         current = yield* retryTransient(
           firebaseappcheck.patchProjectsServicesResourcePolicies({
+            enforcementMode:
+              enforcementMode as firebaseappcheck.GoogleFirebaseAppcheckV1ResourcePolicyEnforcementModeEnum,
+            etag: current.etag,
             name: current.name ?? "",
             updateMask: "enforcement_mode",
-            body: {
-              enforcementMode:
-                enforcementMode as firebaseappcheck.GoogleFirebaseAppcheckV1ResourcePolicyEnforcementModeEnum,
-              etag: current.etag,
-            },
           }),
         );
       }

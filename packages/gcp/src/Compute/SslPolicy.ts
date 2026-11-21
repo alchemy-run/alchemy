@@ -385,15 +385,10 @@ export const SslPolicyProvider = () =>
       let current = yield* getByName(env.project, sslPolicyName);
 
       if (current === undefined) {
-        yield* compute
-          .insertSslPolicies({
-            project: env.project,
-            body: desired,
-          })
-          .pipe(
-            Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        yield* compute.insertSslPolicies({ ...desired, project: env.project }).pipe(
+          Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* awaitResource(env.project, sslPolicyName);
       }
 
@@ -404,9 +399,9 @@ export const SslPolicyProvider = () =>
       if (needsUpdate(current, desired)) {
         yield* compute
           .patchSslPolicies({
+            ...toBody(sslPolicyName, news, ownership, current.fingerprint),
             project: env.project,
             sslPolicy: sslPolicyName,
-            body: toBody(sslPolicyName, news, ownership, current.fingerprint),
           })
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* getByName(env.project, sslPolicyName);

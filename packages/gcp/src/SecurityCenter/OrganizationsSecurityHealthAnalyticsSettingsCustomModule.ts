@@ -321,8 +321,8 @@ export const OrganizationsSecurityHealthAnalyticsSettingsCustomModuleProvider = 
 
       if (current === undefined) {
         current = yield* scc.createOrganizationsSecurityHealthAnalyticsSettingsCustomModules({
+          ...body,
           parent,
-          body,
         });
       }
 
@@ -342,12 +342,10 @@ export const OrganizationsSecurityHealthAnalyticsSettingsCustomModuleProvider = 
 
       if (updateMask.length > 0) {
         current = yield* scc.patchOrganizationsSecurityHealthAnalyticsSettingsCustomModules({
+          enablementState,
+          customConfig,
           name: currentName,
           updateMask,
-          body: {
-            enablementState,
-            customConfig,
-          },
         });
       }
 

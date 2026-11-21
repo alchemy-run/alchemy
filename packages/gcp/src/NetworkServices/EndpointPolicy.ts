@@ -392,18 +392,16 @@ export const EndpointPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsEndpointPolicies({
+            type,
+            labels: desiredLabels,
+            description: news.description,
+            endpointMatcher: desiredMatcher,
+            trafficPortSelector: desiredPorts,
+            authorizationPolicy: news.authorizationPolicy,
+            serverTlsPolicy: news.serverTlsPolicy,
+            clientTlsPolicy: news.clientTlsPolicy,
             parent: parentOf(env.project, location),
             endpointPolicyId,
-            body: {
-              type,
-              labels: desiredLabels,
-              description: news.description,
-              endpointMatcher: desiredMatcher,
-              trafficPortSelector: desiredPorts,
-              authorizationPolicy: news.authorizationPolicy,
-              serverTlsPolicy: news.serverTlsPolicy,
-              clientTlsPolicy: news.clientTlsPolicy,
-            },
           })
           .pipe(
             Effect.retry({
@@ -441,19 +439,16 @@ export const EndpointPolicyProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsEndpointPolicies({
+          type,
+          labels: desiredLabels,
+          description: news.description,
+          endpointMatcher: desiredMatcher,
+          trafficPortSelector: desiredPorts,
+          authorizationPolicy: news.authorizationPolicy,
+          serverTlsPolicy: news.serverTlsPolicy,
+          clientTlsPolicy: news.clientTlsPolicy,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            type,
-            labels: desiredLabels,
-            description: news.description,
-            endpointMatcher: desiredMatcher,
-            trafficPortSelector: desiredPorts,
-            authorizationPolicy: news.authorizationPolicy,
-            serverTlsPolicy: news.serverTlsPolicy,
-            clientTlsPolicy: news.clientTlsPolicy,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

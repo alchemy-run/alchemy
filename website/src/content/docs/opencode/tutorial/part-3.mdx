@@ -1,0 +1,217 @@
+---
+title: "Part 3: Answer issues"
+description: Subscribe the Worker to the repository's issues with GitHub.consumeRepositoryEvents, run each prompt from the Durable Object's alarm, and post the answer as a comment.
+sidebar:
+  order: 3
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+The bot answers over `curl`, which waits for the whole prompt. GitHub won't: a webhook delivery must be answered within ten seconds, and a prompt takes longer. So the Worker hands the issue to the Durable Object and returns, and the object runs the prompt from its alarm and posts the answer itself.
+
+## Bind a client for comments
+
+`GitHub.CreateIssueComment` is a binding: it gives the Durable Object a client for one repository, and a token to call it with.
+
+```diff lang="typescript"
+import * as AI from "@alchemy.run/ai";
+import * as Cloudflare from "@alchemy.run/cloudflare";
++import * as GitHub from "@alchemy.run/github";
+import * as OpenCode from "@alchemy.run/opencode";
+import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive } from "./models.ts";
++import { Repo } from "./Repo.ts";
+import { Sandbox } from "./Sandbox.ts";
+
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  Sandbox,
+  OpenCode.CodingTools,
+  OpenCodeCloudflare.DurableObjectInstance,
++  GitHub.CreateIssueCommentHttp,
+);
+```
+
+```diff lang="typescript"
+  cwd: "/home/user/repo",
+});
++const createComment = yield* GitHub.CreateIssueComment(yield* Repo);
+
+return Effect.gen(function* () {
+```
+
+The token stays in the Durable Object. OpenCode, in the sandbox, never sees it. Comments are posted for the account you signed in to GitHub with, so they appear as yours.
+
+## Run the prompt from the alarm
+
+`Alchemy.makeCallback` registers work that the Durable Object stores and runs from its alarm. This one prompts the session and comments with the answer:
+
+```diff lang="typescript"
+import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
++import * as Alchemy from "alchemy";
+import * as Effect from "effect/Effect";
+```
+
+```diff lang="typescript"
+const session = harness.session("issue", {
+  tools: [AI.Bash, AI.Read, AI.Grep],
+  instructions,
+});
+
++const answer = yield* Alchemy.makeCallback(
++  "answer",
++  Effect.fn(function* (job: { issue: number; text: string; deliveryId: string }) {
++    const reply = yield* session.prompt(job.text, { requestId: job.deliveryId });
++    yield* createComment({ issue_number: job.issue, body: reply.text });
++  }, Effect.orDie),
++);
++
+return {
+```
+
+A callback that fails is delivered again. `requestId` makes that safe: a second prompt with the same id waits for the first and gets its answer.
+
+## Provide the callbacks
+
+Callbacks need somewhere to be stored. `Cloudflare.DurableObjectCallbacks` keeps them in this object, and is provided to the inner Effect:
+
+```diff lang="typescript"
+        }),
+      };
+-    });
++    }).pipe(Effect.provide(Cloudflare.DurableObjectCallbacks));
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+## Schedule a job instead of prompting
+
+Replace `ask` with a method that stores the job and returns:
+
+```diff lang="typescript"
+return {
+-  ask: Effect.fn(function* (text: string) {
+-    const reply = yield* session.prompt(text);
+-    return reply.text;
+-  }),
++  ask: Effect.fn(function* (issue: number, text: string, deliveryId: string) {
++    yield* answer.schedule(deliveryId, {
++      after: 0,
++      payload: { issue, text, deliveryId },
++    });
++  }),
+};
+```
+
+`after: 0` runs it as soon as the alarm can fire. The job's id is the delivery's id, so scheduling the same delivery twice leaves one job.
+
+## Tell the model where its answer goes
+
+```diff lang="typescript"
+const instructions = [
+  "You answer issues on a GitHub repository, which is your working directory.",
+  "Read the files that matter with your tools before you answer.",
++  "Your answer is posted on the issue as a comment, so write it in Markdown and keep it short.",
+].join("\n");
+```
+
+## Consume the repository's events
+
+`GitHub.consumeRepositoryEvents` subscribes the Worker to the repository. At deploy it creates the webhook, pointed at the Worker, with a signing secret. While the Worker runs, it verifies each delivery and calls your handler with a typed event.
+
+```diff lang="typescript"
+import * as Cloudflare from "@alchemy.run/cloudflare";
++import * as GitHub from "@alchemy.run/github";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import Issue from "./Issue.ts";
++import { owner, repository } from "./Repo.ts";
+
+export default class Bot extends Cloudflare.Worker<Bot>()(
+  "Bot",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const issues = yield* Issue;
+
++    yield* GitHub.consumeRepositoryEvents(
++      { owner, repository, events: ["issues"] },
++      Effect.fn(function* (event) {
++        const { action, issue } = event.payload;
++        if (action === "opened") {
++          yield* issues
++            .getByName(String(issue.number))
++            .ask(issue.number, `Issue #${issue.number}: ${issue.title}\n\n${issue.body ?? ""}`, event.id);
++        }
++      }, Effect.orDie),
++    );
++
+    return {
+```
+
+`event.id` is GitHub's id for the delivery. The handler returns once the job is stored, so GitHub gets its answer in milliseconds.
+
+## Provide the event source
+
+```diff lang="typescript"
+      }).pipe(Effect.orDie),
+    };
+-  }),
++  }).pipe(Effect.provide(GitHub.RepositoryEventSourceLive)),
+) {}
+```
+
+## Show what the session did
+
+`fetch` no longer prompts. Make it show the tool calls of an issue's session instead. Add a method to the Durable Object:
+
+```diff lang="typescript"
+      payload: { issue, text, deliveryId },
+    });
+  }),
++  toolCalls: Effect.fn(function* () {
++    const messages = yield* session.messages;
++    return messages.flatMap((message) =>
++      message.parts.flatMap((part) =>
++        part.type === "tool"
++          ? [{ tool: part.tool, status: part.state?.status, output: part.state?.output }]
++          : [],
++      ),
++    );
++  }),
+};
+```
+
+And return it from the Worker:
+
+```diff lang="typescript"
+  if (area !== "issues" || number === undefined) {
+    return HttpServerResponse.text("not found", { status: 404 });
+  }
+-  const answer = yield* issues.getByName(number).ask(yield* request.text);
+-  return HttpServerResponse.text(answer);
++  return yield* HttpServerResponse.json(yield* issues.getByName(number).toolCalls());
+}).pipe(Effect.orDie),
+```
+
+## Deploy and open an issue
+
+<PackageManagers run="alchemy deploy" />
+
+Open an issue on the repository: "What does README.md say?" Within a minute a comment appears with the answer. `GET /issues/1` on the Worker shows what OpenCode did:
+
+```json
+[
+  {
+    "tool": "read",
+    "status": "completed",
+    "output": "<path>/home/user/repo/README.md</path>\n<type>file</type>\n<content>\n1: # issue-bot-demo\n…"
+  }
+]
+```
+
+## Next
+
+[Part 4](/opencode/tutorial/part-4) answers replies, gives OpenCode a tool of your own, and removes the sandbox when the issue closes.

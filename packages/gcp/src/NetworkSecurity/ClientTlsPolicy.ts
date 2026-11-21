@@ -360,15 +360,13 @@ export const ClientTlsPolicyProvider = () =>
       if (current === undefined) {
         const created = yield* networksecurity
           .createProjectsLocationsClientTlsPolicies({
+            description: news.description,
+            labels: desiredLabels,
+            sni: news.sni,
+            serverValidationCa: desiredCa,
+            clientCertificate: desiredClient,
             parent: parentOf(env.project, location),
             clientTlsPolicyId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              sni: news.sni,
-              serverValidationCa: desiredCa,
-              clientCertificate: desiredClient,
-            },
           })
           .pipe(
             Effect.retry({
@@ -402,16 +400,13 @@ export const ClientTlsPolicyProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networksecurity.patchProjectsLocationsClientTlsPolicies({
+          labels: desiredLabels,
+          description: news.description,
+          sni: news.sni,
+          serverValidationCa: desiredCa,
+          clientCertificate: desiredClient,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            sni: news.sni,
-            serverValidationCa: desiredCa,
-            clientCertificate: desiredClient,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

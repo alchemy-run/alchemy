@@ -28,8 +28,8 @@ const projectGrantsOf = (account: string) =>
   Effect.gen(function* () {
     const project = yield* currentProject;
     const policy = yield* resourcemanager.getIamPolicyProjects({
+      options: { requestedPolicyVersion: 3 },
       resource: `projects/${project}`,
-      body: { options: { requestedPolicyVersion: 3 } },
     });
     return (policy.bindings ?? [])
       .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${account}`))
@@ -139,12 +139,10 @@ describe(
             expect(result.result).toEqual("ATTESTATION_NOT_VERIFIABLE");
             const expected =
               yield* binaryauthorization.validateAttestationOccurrenceProjectsAttestors({
+                occurrenceResourceUri: TEST_RESOURCE_URI,
+                occurrenceNote: verifier.noteReference,
+                attestation: TEST_ATTESTATION,
                 attestor: verifier.name,
-                body: {
-                  occurrenceResourceUri: TEST_RESOURCE_URI,
-                  occurrenceNote: verifier.noteReference,
-                  attestation: TEST_ATTESTATION,
-                },
               });
             expect(result.result).toEqual(expected.result);
 
@@ -190,8 +188,8 @@ describe(
           Effect.gen(function* () {
             const live = yield* expectProbe<{ verdict?: string }>(baseUrl, "evaluateGkePolicy");
             const expected = yield* binaryauthorization.evaluateProjectsPlatformsGkePolicies({
+              resource: TEST_POD,
               name: policyName,
-              body: { resource: TEST_POD },
             });
             expect(live.verdict).toEqual(expected.verdict);
             expect(live.verdict).toEqual(expect.any(String));

@@ -1,0 +1,50 @@
+---
+title: MCP servers
+description: Give OpenCode sessions the tools of an MCP server. The harness connects from your Durable Object, so the server's credentials never enter the sandbox.
+---
+
+An OpenCode harness takes an [`AI.McpServer`](/ai/mcp-servers) beside its other tools. OpenCode can connect to MCP servers by itself, from the sandbox. A harness connects from the Durable Object instead, so the server's address and credentials stay in your runtime.
+
+## List a server
+
+List the server in the harness's `tools` and provide its client Layer:
+
+```typescript title="src/mcp.ts"
+import * as AI from "@alchemy.run/ai";
+import { McpClient, McpProtocol } from "effect/ai";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+
+export class Docs extends AI.McpServer<Docs>()("docs") {}
+
+export const DocsLive = Docs.layer(
+  McpClient.layerHttp({
+    name: "my-agent",
+    version: "1.0.0",
+    protocol: McpProtocol.v2025_11_25,
+    url: "https://docs.example.com/mcp",
+  }).pipe(Layer.provide(FetchHttpClient.layer)),
+);
+```
+
+```typescript
+const harness = yield* OpenCode.Harness({ models: [Fast], tools: [AI.CodingTools, Docs] });
+```
+
+## How its tools are named
+
+The harness asks the server for its tools and serves them to OpenCode through the bridge. The model sees each as `<server>_<tool>`: the `search` tool of `docs` is `docs_search`.
+
+## Select a server for a prompt
+
+In a prompt's tools, the server stands for every tool it has:
+
+```typescript
+const reply = yield* session.prompt("What does the docs site say about retries?", {
+  tools: [Docs],
+});
+```
+
+## OpenCode's own MCP connections
+
+To have OpenCode connect to a server from the sandbox itself, add it to OpenCode's own configuration with the harness's [`config`](/opencode/api#opencodes-configuration). That server is reached from the sandbox, with whatever credentials you put there.

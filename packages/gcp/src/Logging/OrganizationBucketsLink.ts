@@ -376,11 +376,9 @@ export const OrganizationBucketsLinkProvider = () =>
       if (isDeleted(current)) {
         const created = yield* logging
           .createOrganizationsLocationsBucketsLinks({
+            description: desiredDescription,
             parent: bucket,
             linkId,
-            body: {
-              description: desiredDescription,
-            },
           })
           .pipe(
             Effect.flatMap((operation) => waitForOperation(operation)),

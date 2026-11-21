@@ -208,14 +208,12 @@ export const AndroidAppProvider = () =>
       if (current === undefined) {
         const operation = yield* firebase
           .createProjectsAndroidApps({
+            packageName,
+            displayName,
+            sha1Hashes: news.sha1Hashes,
+            sha256Hashes: news.sha256Hashes,
+            apiKeyId: news.apiKeyId,
             parent: projectParent(env.project),
-            body: {
-              packageName,
-              displayName,
-              sha1Hashes: news.sha1Hashes,
-              sha256Hashes: news.sha256Hashes,
-              apiKeyId: news.apiKeyId,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -264,14 +262,12 @@ export const AndroidAppProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* firebase.patchProjectsAndroidApps({
+          displayName,
+          sha1Hashes: news.sha1Hashes,
+          sha256Hashes: news.sha256Hashes,
+          apiKeyId: news.apiKeyId,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            displayName,
-            sha1Hashes: news.sha1Hashes,
-            sha256Hashes: news.sha256Hashes,
-            apiKeyId: news.apiKeyId,
-          },
         });
       }
 
@@ -281,10 +277,7 @@ export const AndroidAppProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       if (!output.name) return;
       const operation = yield* firebase
-        .removeProjectsAndroidApps({
-          name: output.name,
-          body: { immediate: true, allowMissing: true },
-        })
+        .removeProjectsAndroidApps({ immediate: true, allowMissing: true, name: output.name })
         .pipe(Effect.catchTag(["NotFound", "AndroidAppNotFound"], () => Effect.undefined));
       if (operation) {
         yield* waitForOperation(operation).pipe(
