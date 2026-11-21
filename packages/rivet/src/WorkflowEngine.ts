@@ -1,6 +1,6 @@
 import type { Callbacks } from "alchemy/Callback";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
-import type { RuntimeContext } from "alchemy/RuntimeContext";
+import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
 import { InputGate } from "alchemy/Workers/InputGate";
 import * as Config from "effect/Config";
@@ -14,6 +14,7 @@ import type { WorkflowEngine } from "effect/workflow";
 import {
   DurableObject,
   type DurableObjectNamespace,
+  DurableObjectTypeId,
   type DurableObjectRuntimeContext,
   makeNamespace,
   PlatformDeclaration,
@@ -41,6 +42,11 @@ export interface WorkflowEngineOptions<PoolReq> {
   /** The pool whose nodes run the workflows, e.g. `RivetDocker.SwarmPool("Default")`. */
   readonly pool: Layer.Layer<PoolHost, never, PoolReq>;
 }
+
+/** The class's `main` doesn't export the workflows' Layer under `handler`. */
+export class WorkflowsLayerNotFound extends Data.TaggedError("Rivet.WorkflowsLayerNotFound")<{
+  readonly message: string;
+}> {}
 
 /** The engine was asked for an execution of a workflow this class doesn't host. */
 export class WorkflowNotHosted extends Data.TaggedError("Rivet.WorkflowNotHosted")<{
@@ -97,15 +103,45 @@ const engineState = (state: DurableObjectState["Service"]): EngineStateShape => 
   },
 });
 
+/** The workflows each class runs, keyed by class name, as its class phase registers them. */
+const hosted = new Map<string, Map<string, ExecutionBuild>>();
+const workflowsOf = (name: string) => {
+  let workflows = hosted.get(name);
+  if (workflows === undefined) hosted.set(name, (workflows = new Map()));
+  return workflows;
+};
+
 /**
- * The class phase of the class every execution is an instance of: each
- * instance builds the execution its name says (`SendWelcomeWorkflow/u-1`)
- * from the workflows registered on this node.
+ * The class phase of the class every execution is an instance of. It builds
+ * the workflows' Layer itself, from `main`, as this class: their bindings
+ * resolve where executions run, and the engine inside registers each
+ * workflow with it. Each instance then builds the execution its name says
+ * (`SendWelcomeWorkflow/u-1`).
  */
-const hostClassPhase = (name: string, workflows: ReadonlyMap<string, ExecutionBuild>) =>
+const hostClassPhase = (options: WorkflowEngineOptions<unknown>) =>
   Effect.gen(function* () {
+    const scope = yield* Scope.make();
     // The engine's executions were written for Cloudflare's input gate.
-    yield* Layer.buildWithScope(InputGate, yield* Scope.make());
+    yield* Layer.buildWithScope(InputGate, scope);
+    const handler = options.handler ?? "default";
+    const module = yield* Effect.promise(() => import(options.main));
+    const layer: unknown = module[handler];
+    if (!Layer.isLayer(layer)) {
+      return yield* Effect.die(
+        new WorkflowsLayerNotFound({
+          message: `'${options.main}' exports no workflows Layer as '${handler}'.`,
+        }),
+      );
+    }
+    // A memo map of its own: the caller's would hand back the Layer it
+    // already built as itself, bindings and all.
+    yield* Layer.buildWithMemoMap(
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the workflows' Layer, loaded from `main`; the class phase provides what it needs
+      layer as Layer.Layer<unknown>,
+      yield* Layer.makeMemoMap,
+      scope,
+    ).pipe(Effect.orDie);
+    const workflows = workflowsOf(options.name);
     return Effect.gen(function* () {
       const state = yield* DurableObjectState;
       const slash = state.id.name.indexOf("/");
@@ -113,7 +149,7 @@ const hostClassPhase = (name: string, workflows: ReadonlyMap<string, ExecutionBu
       if (build === undefined) {
         return yield* Effect.die(
           new WorkflowNotHosted({
-            message: `Rivet.DurableObject '${name}' hosts no workflow for '${state.id.name}'.`,
+            message: `Rivet.DurableObject '${options.name}' hosts no workflow for '${state.id.name}'.`,
           }),
         );
       }
@@ -123,6 +159,18 @@ const hostClassPhase = (name: string, workflows: ReadonlyMap<string, ExecutionBu
       );
     });
   });
+
+/** This class's own namespace, from inside it: the control plane is in the node's environment. */
+const selfNamespace = (name: string) =>
+  Effect.map(
+    Config.all({
+      endpoint: Config.String("RIVET_ENDPOINT").pipe(Config.withDefault("")),
+      token: Config.String("RIVET_TOKEN").pipe(Config.withDefault("")),
+      namespace: Config.String("RIVET_NAMESPACE").pipe(Config.withDefault("")),
+      pool: Config.String("RIVET_POOL").pipe(Config.withDefault("")),
+    }).pipe(Effect.orDie),
+    (target) => makeNamespace(name, target),
+  );
 
 /**
  * Every workflow on one Rivet class: the execution `u-1` of `SendWelcome` is
@@ -235,33 +283,32 @@ export const layerWorkflowEngine = <PoolReq>(
   // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the class is declared dynamically; its requirements are the pool's and the providers'
   Layer.unwrap(
     Effect.gen(function* () {
-      const workflows = new Map<string, ExecutionBuild>();
+      const ctx = Option.getOrUndefined(yield* Effect.serviceOption(RuntimeContext));
+      if (ctx?.Type === DurableObjectTypeId && ctx.id === options.name) {
+        // Built by the class's own phase: register the workflows with it. A
+        // run reaches other executions (its children, its parent) through
+        // the control plane: they may run on another node.
+        return engineOver(yield* selfNamespace(options.name), (workflow, build) =>
+          workflowsOf(options.name).set(workflow, build),
+        );
+      }
       const Executions = (DurableObject as any)()(
         options.name,
         { main: options.main, handler: options.handler ?? "default" },
-        hostClassPhase(options.name, workflows).pipe(Effect.provide(options.pool)),
+        hostClassPhase(options as WorkflowEngineOptions<unknown>).pipe(
+          Effect.provide(options.pool),
+        ),
       );
       const node = yield* Effect.serviceOption(NodeHost);
       if (Option.isSome(node)) {
-        // A node of the pool: host the class, as the bootstrap hosts an
-        // exported one, with the workflows registered here.
+        // A node of the pool, loading `main`: host the class, as the
+        // bootstrap hosts an exported one. Its phase builds the workflows.
         const context = yield* Layer.build(entrypointLayer(Executions[PlatformDeclaration]));
-        const hosted = (
+        const runtime = (
           Context.get(context, entrypointTag).RuntimeContext as DurableObjectRuntimeContext
         ).hosted();
-        if (hosted !== undefined) yield* node.value.host(hosted);
-        // A run reaches other executions (its children, its parent) through
-        // the control plane: they may run on another node.
-        const self = makeNamespace(
-          options.name,
-          yield* Config.all({
-            endpoint: Config.String("RIVET_ENDPOINT").pipe(Config.withDefault("")),
-            token: Config.String("RIVET_TOKEN").pipe(Config.withDefault("")),
-            namespace: Config.String("RIVET_NAMESPACE").pipe(Config.withDefault("")),
-            pool: Config.String("RIVET_POOL").pipe(Config.withDefault("")),
-          }).pipe(Effect.orDie),
-        );
-        return engineOver(self, (workflow, build) => workflows.set(workflow, build));
+        if (runtime !== undefined) yield* node.value.host(runtime);
+        return engineOver(yield* selfNamespace(options.name), () => undefined);
       }
       // A caller: deploy the class, and reach executions through the gateway.
       return engineOver((yield* Executions) as DurableObjectNamespace<any>, () => undefined);
