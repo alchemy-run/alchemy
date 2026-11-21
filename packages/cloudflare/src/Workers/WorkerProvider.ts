@@ -1216,9 +1216,6 @@ const resolveWorkerMetadataHash = ({
   selfUrl,
 }: WorkerMetadataHashInput): Effect.Effect<string> =>
   resolveMetadataHashValue({
-    // Reconcile legacy state once: older providers could save a stale version
-    // UUID alongside the current bundle hash after a successful script PUT.
-    uploadReceiptVersion: 1,
     accountId,
     selfUrl,
     stack: { name: stack.name, stage: stack.stage },
@@ -1272,28 +1269,47 @@ const resolveWorkerMetadataHash = ({
       : undefined,
   }).pipe(Effect.flatMap((metadata) => sha256Object({ metadata })));
 
-/** The script PUT's deployment_id identifies its uploaded version, not a deployment record. */
-export const uploadedWorkerVersionId = (
-  receipt: string | null | undefined,
+/**
+ * The version and deployment a full script PUT created. The PUT's
+ * `deployment_id` is the uploaded *version* id (compact or hyphenated, as
+ * wrangler's `parseNonHyphenedUuid` handles), so it is authoritative for
+ * `versionId`. The deployment record that put it live is then found by that
+ * version: the deployments listing is eventually consistent and can still
+ * describe the previous deployment right after the PUT.
+ */
+const observeUploadedWorkerVersion = Effect.fn(function* (
+  accountId: string,
   scriptName: string,
-): Effect.Effect<string, WorkerVersionConfigError> =>
-  Effect.gen(function* () {
-    if (
-      typeof receipt !== "string" ||
-      (receipt.length !== 32 && receipt.length !== 36) ||
-      !/^(?:[a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.test(
-        receipt,
-      )
-    ) {
-      return yield* new WorkerVersionConfigError({
-        message: `Cloudflare did not return a valid upload version receipt for '${scriptName}'.`,
-      });
-    }
-    return receipt
-      .toLowerCase()
-      .replaceAll("-", "")
-      .replace(/^(........)(....)(....)(....)(............)$/, "$1-$2-$3-$4-$5");
-  });
+  receipt: string | null | undefined,
+) {
+  const compact = receipt?.replaceAll("-", "").toLowerCase();
+  if (compact === undefined || !/^[a-f0-9]{32}$/.test(compact)) {
+    return yield* new WorkerVersionConfigError({
+      message: `Cloudflare did not return the uploaded version id for '${scriptName}' (got ${JSON.stringify(receipt)}).`,
+    });
+  }
+  const versionId = compact.replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, "$1-$2-$3-$4-$5");
+  const deploymentId = yield* workers.listScriptDeployments({ accountId, scriptName }).pipe(
+    // On a Worker's first deploy, GET /deployments can still return
+    // `WorkerNotFound` (code 10007) after `putScript` succeeded (#2999).
+    Effect.retry({
+      while: (error) => error._tag === "WorkerNotFound",
+      schedule: Schedule.max([Schedule.exponential(200), Schedule.recurs(8)]),
+    }),
+    Effect.map(
+      ({ deployments }) =>
+        deployments.find((deployment) =>
+          deployment.versions.some((version) => version.versionId === versionId),
+        )?.id,
+    ),
+    Effect.repeat({
+      until: (id) => id !== undefined,
+      schedule: Schedule.exponential(200),
+      times: 8,
+    }),
+  );
+  return { versionId, deploymentId };
+});
 
 export const WorkerProvider = () =>
   ProviderLayer.dual(Worker, {
@@ -4500,9 +4516,11 @@ export const LiveWorkerProvider = () =>
             ? yield* reconcileCrons(name, desiredCrons, previousCrons, session)
             : [];
         if (!dispatchNamespace && versionId === undefined) {
-          // Use this upload's receipt, not an eventually consistent listing
-          // that can still describe the previous deployment after a successful PUT.
-          versionId = yield* uploadedWorkerVersionId(worker.deploymentId, name);
+          ({ versionId, deploymentId } = yield* observeUploadedWorkerVersion(
+            accountId,
+            name,
+            worker.deploymentId,
+          ));
         }
         return {
           // The immutable script ID. The gradual-rollout branch deploys via
