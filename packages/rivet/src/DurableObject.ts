@@ -19,6 +19,7 @@ import type * as ConfigError from "effect/Config";
 import * as Config from "effect/Config";
 import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import type * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -50,7 +51,64 @@ export interface DurableObjectProps extends PlatformProps {
    * @default "default"
    */
   handler?: string;
+  /**
+   * How long an instance stays awake with no calls before it sleeps.
+   * @default "30 seconds"
+   */
+  sleepTimeout?: Duration.Input;
+  /**
+   * How long an instance has to wind down when it sleeps or is destroyed:
+   * `onSleep` or `onDestroy`, and the calls still running, must finish
+   * within it.
+   * @default "15 seconds"
+   */
+  sleepGracePeriod?: Duration.Input;
+  /**
+   * How long an instance's storage may take to migrate when it wakes.
+   * @default "30 seconds"
+   */
+  onMigrateTimeout?: Duration.Input;
 }
+
+const ACTOR_OPTIONS = ["sleepTimeout", "sleepGracePeriod", "onMigrateTimeout"] as const;
+
+/** The RivetKit actor options a class runs with, in milliseconds. @internal */
+export type ActorOptions = { readonly [K in (typeof ACTOR_OPTIONS)[number]]?: number };
+
+/** A class sets an actor option to something other than a duration above 0. */
+export class InvalidActorOptions extends Data.TaggedError("Rivet.InvalidActorOptions")<{
+  readonly message: string;
+}> {}
+
+/**
+ * The RivetKit actor options of class `id`, from its props, in
+ * milliseconds. Each one set must be a finite duration above 0; a class
+ * that sets none has none.
+ * @internal
+ */
+export const actorOptionsOf = (
+  id: string,
+  props: Partial<Record<(typeof ACTOR_OPTIONS)[number], unknown>> | undefined,
+): Effect.Effect<ActorOptions | undefined> => {
+  const options: Record<string, number> = {};
+  for (const name of ACTOR_OPTIONS) {
+    const value = props?.[name];
+    if (value === undefined) continue;
+    const duration = Output.isOutput(value)
+      ? Option.none()
+      : Duration.fromInput(value as Duration.Input);
+    const millis = Option.isSome(duration) ? Duration.toMillis(duration.value) : Number.NaN;
+    if (!Number.isFinite(millis) || millis <= 0) {
+      return Effect.die(
+        new InvalidActorOptions({
+          message: `Rivet.DurableObject '${id}' sets ${name} to ${String(value)}: it must be a duration above 0, such as "30 seconds".`,
+        }),
+      );
+    }
+    options[name] = Math.ceil(millis);
+  }
+  return Effect.succeed(Object.keys(options).length === 0 ? undefined : options);
+};
 
 export interface DurableObjectAttributes {
   /** The actor name the control plane knows this class by. */
@@ -415,6 +473,20 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  *       }),
  *     };
  *   }),
+ * ) {}
+ * ```
+ *
+ * ### Tuning when it sleeps
+ * **Example:** Stay awake a minute after the last call
+ * ```typescript
+ * export default class Room extends Rivet.DurableObject<Room>()(
+ *   "Room",
+ *   { main: import.meta.url, sleepTimeout: "1 minute", sleepGracePeriod: "30 seconds" },
+ *   Effect.gen(function* () {
+ *     return Effect.gen(function* () {
+ *       return { ping: () => Effect.succeed("pong") };
+ *     });
+ *   }).pipe(Effect.provide(Default)),
  * ) {}
  * ```
  *
