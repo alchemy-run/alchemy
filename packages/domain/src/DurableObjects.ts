@@ -1,9 +1,12 @@
 import {
   type Callback,
   type CallbackFactory,
+  type CallbackRecurrence,
   type CallbackStatus,
   Callbacks,
   makeCallback,
+  nextCallbackRun,
+  resolveCallbackSchedule,
 } from "alchemy/Callback";
 /**
  * A domain model on Durable Objects, for any runtime that hosts them:
@@ -2850,6 +2853,8 @@ interface CallbackJob {
   /** Replaced by every schedule: a job scheduled again while it ran isn't removed. */
   readonly token: string;
   readonly progress?: number;
+  /** How a recurring job repeats; absent for one run. */
+  readonly recurrence?: CallbackRecurrence;
 }
 
 const JOB_PREFIX = "cb:";
@@ -2901,12 +2906,7 @@ export const alarmCallbacks = (storage: ObjectStorage, alarm: Alarm) => {
         schedule: (id, scheduled) =>
           Effect.gen(function* () {
             const now = yield* Clock.currentTimeMillis;
-            const due =
-              scheduled.at !== undefined
-                ? typeof scheduled.at === "number"
-                  ? scheduled.at
-                  : scheduled.at.getTime()
-                : now + Duration.toMillis(Duration.fromInputUnsafe(scheduled.after));
+            const { at: due, recurrence } = yield* resolveCallbackSchedule(name, scheduled, now);
             const key = jobKey(name, id);
             const existing = yield* storage.get<CallbackJob>(key);
             // A replayed schedule can't replace newer work.
@@ -2923,6 +2923,7 @@ export const alarmCallbacks = (storage: ObjectStorage, alarm: Alarm) => {
               attempts: 0,
               token: yield* token,
               progress: scheduled.progress ?? existing?.progress,
+              ...(recurrence === undefined ? {} : { recurrence }),
             } satisfies CallbackJob);
             yield* arm(due);
           }),
@@ -2955,7 +2956,18 @@ export const alarmCallbacks = (storage: ObjectStorage, alarm: Alarm) => {
       // Scheduled again (or cancelled) while it ran: that stands.
       if (after?.token !== job.token) continue;
       if (exit._tag === "Success") {
-        yield* storage.delete(key);
+        if (job.recurrence === undefined) {
+          yield* storage.delete(key);
+          continue;
+        }
+        // A recurring job moves to its next run.
+        const next = yield* nextCallbackRun(
+          jobName(key),
+          job.recurrence,
+          job.scheduledAt,
+          yield* Clock.currentTimeMillis,
+        ).pipe(Effect.orDie);
+        yield* storage.put(key, { ...job, scheduledAt: next, due: next, attempts: 0 });
         continue;
       }
       const attempts = job.attempts + 1;
