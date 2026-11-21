@@ -75,6 +75,10 @@ jobs:
       - name: Run Domain tests
         run: timeout 240 pnpm test:integration test/Domain --retry 0
 
+      # Each file starts its own Portless proxy on a free high port: nothing is trusted, nothing needs sudo.
+      - name: Run Portless tests
+        run: timeout 240 pnpm test:integration test/Portless --retry 0
+
       - name: Test CLI launcher
         run: |
           timeout 240 pnpm test test/Cli/launcher.test.ts test/Cli/exitCodes.test.ts --retry 0 --concurrency 1
