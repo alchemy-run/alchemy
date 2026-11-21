@@ -13,7 +13,11 @@ import { DurableObjectState } from "@alchemy.run/cloudflare/Workers/DurableObjec
 import { makeRpcStub } from "@alchemy.run/cloudflare/Workers/Rpc";
 import { upgrade } from "@alchemy.run/cloudflare/Workers/WebSocket";
 import { Worker as CloudflareWorker, type Worker } from "@alchemy.run/cloudflare/Workers/Worker";
-import { WorkerEnvironment } from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
+import {
+  deferredExecutionContext,
+  WorkerEnvironment,
+  WorkerExecutionContext,
+} from "@alchemy.run/cloudflare/Workers/WorkerRuntime";
 import {
   sleep,
   task,
@@ -153,6 +157,28 @@ const objectState = (
       >,
   },
 });
+
+/**
+ * Hand `effect` to the current invocation's `waitUntil`: the Durable Object's
+ * inside one, otherwise the Worker event's. A Workflow step, or code outside
+ * any handler, has neither.
+ */
+const handToInvocation = (effect: Effect.Effect<void>): Effect.Effect<boolean> =>
+  Effect.gen(function* () {
+    const runtime = yield* Effect.serviceOption(RuntimeContext);
+    if (Option.isNone(runtime)) return false;
+    const state = yield* Effect.serviceOption(DurableObjectState);
+    // The reference's default is no event: its methods would die.
+    const execution = yield* WorkerExecutionContext;
+    if (Option.isNone(state) && execution === deferredExecutionContext) return false;
+    yield* (
+      Option.isSome(state)
+        ? // Outside the alarm pass, so a callback's alarm isn't held open by it.
+          state.value.waitUntil(outsideAlarmPass(effect))
+        : execution.waitUntil(effect)
+    ).pipe(Effect.provideService(RuntimeContext, runtime.value));
+    return true;
+  });
 
 /** Run a Domain object on a Cloudflare Durable Object class. */
 const onCloudflare = (impl: ObjectImpl): CloudflareImpl =>
@@ -304,6 +330,7 @@ const cloudflareHost = (
           }),
         connect: connectTo,
         claimKey: CloudflareWorker,
+        background: handToInvocation,
         // A deploy's backfill: a Workflow starts each new consumer's run, then
         // waits until every one is complete. Reconciliation starts it and waits.
         backfill: ({ modelName }, plansOf) =>
