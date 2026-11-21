@@ -31,11 +31,9 @@ export const ExchangeDebugTokenHttp = Layer.effect(
       return Effect.fn(`GCP.FirebaseAppCheck.ExchangeDebugToken(${debugToken.LogicalId})`)(
         function* (request?: ExchangeDebugTokenRequest) {
           return yield* exchange({
+            debugToken: (yield* secret) ?? "",
+            limitedUse: request?.limitedUse === true ? true : undefined,
             app: yield* app,
-            body: {
-              debugToken: (yield* secret) ?? "",
-              limitedUse: request?.limitedUse === true ? true : undefined,
-            },
           });
         },
       );

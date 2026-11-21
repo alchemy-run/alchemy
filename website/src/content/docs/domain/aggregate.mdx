@@ -5,7 +5,7 @@ description: How an aggregate holds state, decides commands, applies events, and
 
 import DAG from "../../../components/DAG.astro";
 
-An aggregate is the part of a model that makes decisions. Each instance, one bank account for example, holds the state its rules need, takes one command at a time, and answers with events or a refusal.
+An aggregate is state and the rules that guard it. Each instance, one bank account for example, holds the state its rules need, takes one command at a time, and answers with events or a refusal.
 
 ## What an aggregate protects
 
@@ -28,9 +28,19 @@ To find the invariants, ask the business what must never happen. Then ask which 
 
 So an aggregate isn't a table or an entity with getters and setters. It's a rule, together with exactly the state the rule needs, and the commands that have to respect it. Find the rule first; the state and the commands follow.
 
+You can write the rule on the aggregate, and have it proved that no command breaks it:
+
+```typescript title="src/Account.aggregate.ts"
+invariants: {
+  NeverOverdrawn: (account) => account._tag !== "Open" || account.balance >= 0,
+},
+```
+
+See [Verifying a model](/domain/verifying-models).
+
 ## Give it an identity
 
-An aggregate type has many instances, and each is addressed by an id. The account's id is an `AccountId`, the same schema its commands use as their `target`.
+An aggregate type has many instances, and each is addressed by an id. The account's id is an `AccountId`, and each of its commands carries one in its input.
 
 ```typescript title="src/Account.aggregate.ts"
 export class Account extends Domain.Aggregate("Account", {
@@ -196,7 +206,7 @@ decide: {
 
 `RefundStranded` tells a policy or a person that the account closed before the money came back. The [saga](/domain/saga) that sent the refund never has to handle a refusal it can do nothing about.
 
-## Use context in decisions
+## Use context in decide
 
 Some rules need more than the state and the command. Only the account's owner may withdraw from it, so `decide` needs to know who's asking.
 
@@ -243,13 +253,13 @@ Each instance processes one command at a time. When two withdrawals for the same
 
 Everything a command produces, its events, the new state, the reply and the deliveries to views and policies, commits together or not at all. This is what makes an instance a consistency boundary: its rules hold at every moment, for every observer.
 
-Nothing spans two instances. A transfer between accounts can't debit one and credit the other in a single step, because they're separate boundaries. Instead, each account handles its own side, and a [saga](/domain/saga) drives the steps in order.
+An instance decides alone, from its own state. A rule that involves two instances, like a transfer that debits one account and credits another, is decided by a [decision](/domain/decision), which reads both and records on both together. A process that takes time is carried out step by step by a [saga](/domain/saga).
 
 That shapes how big an aggregate should be. Draw it around the rules that must hold together, and no wider. A customer and their accounts are separate aggregates: no rule needs a customer's name and an account's balance to change in the same step, and keeping them apart means one busy account never slows down the others.
 
 ## Give a rule across instances its own aggregate
 
-Some rules span many instances. Usernames must be unique across every customer, but each customer is its own aggregate, and no customer can see the others. Making `Customer` check every other customer would need a transaction across all of them, which doesn't exist.
+Some rules span many instances. Usernames must be unique across every customer, but each customer is its own aggregate, and no customer can see the others. Making `Customer` check every other customer would mean reading all of them.
 
 The answer is to ask what the rule is about. Uniqueness is about one username, so make the username the aggregate. `UsernameClaim` is keyed by the username itself, and holds who has it:
 
@@ -261,22 +271,16 @@ export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
     Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
   ]),
   initial: { _tag: "Free" },
-  commands: [ClaimUsername],
-  decide: {
-    ClaimUsername: (usernameClaim, cmd) =>
-      usernameClaim._tag === "Free"
-        ? [new UsernameClaimed({ customerId: cmd.customerId })]
-        : usernameClaim.customerId === cmd.customerId
-          ? []
-          : new UsernameTaken(),
-  },
+  events: [UsernameClaimed],
   evolve: {
     UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }),
   },
 }) {}
 ```
 
-Two customers who ask for `sam` at the same moment both send `ClaimUsername` to the same instance, `UsernameClaim/sam`. It decides one at a time, so one wins and the other is told `UsernameTaken`. The rule holds without anything spanning two aggregates. See [Unique values](/domain/unique-values).
+It has no commands of its own. `events` lists what a [decision](/domain/decision) records on it, and `evolve` folds them.
+
+Registering a customer reads the customer and the username together, and records on both or on neither. Two customers who ask for `sam` at the same moment both read the same instance, `UsernameClaim/sam`, so one wins and the other is told `UsernameTaken`. See [Unique values](/domain/unique-values).
 
 ## Keep a process's state in an aggregate
 
@@ -307,15 +311,7 @@ export class UsernameClaim extends Domain.Aggregate(
       Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
     ]),
     initial: { _tag: "Free" },
-    commands: [ClaimUsername],
-    decide: {
-      ClaimUsername: (usernameClaim, cmd) =>
-        usernameClaim._tag === "Free"
-          ? [new UsernameClaimed({ customerId: cmd.customerId })]
-          : usernameClaim.customerId === cmd.customerId
-            ? []
-            : new UsernameTaken(),
-    },
+    events: [UsernameClaimed],
     evolve: {
       UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }),
     },
@@ -330,12 +326,37 @@ Inside a hosted model, the aggregate is a service. `yield* Account` gives you it
 
 ```typescript title="src/MainAccountProvisioning.policy.ts"
 yield* accounts
-  .send(AccountId.make(`${source.id}-main`), new OpenAccount({ owner: source.id }))
+  .send(new OpenAccount({ accountId: AccountId.make(`${source.id}-main`), owner: source.id }))
   .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
 ```
 
 The same client reads an instance's current state, as of its latest commit, with `accounts.get(id)`, schedules a command for later with `accounts.schedule(id, command, { after })`, which returns the command id and when it's due, and cancels a pending one with `accounts.unschedule(id, commandId)`. Scheduling again under the same command id replaces the earlier command, even one that already ran. `unschedule` fails with `AlreadyExecuted`, `AlreadyCancelled` or `NotScheduled` when there's nothing pending to cancel. See [Deadlines](/domain/deadlines).
 
+## Import history from another system
+
+When an aggregate takes over records that another system kept, its history already happened: there is nothing left to decide. `import` appends those events to an instance without running `decide`. `evolve` folds them into the state, and views and projections apply them like any other events. Policies and sagas never react to them, so moving a history in doesn't send its emails or start its processes again.
+
+```typescript title="src/ImportAccount.ts"
+const receipt = yield* accounts.import(
+  accountId,
+  [new AccountOpened({ owner }), new MoneyDeposited({ amount: 500, balanceAfter: 500 })],
+  { commandId: `import:${accountId}` },
+);
+yield* Ledger.caughtUp(receipt);
+```
+
+An import commits its events together under its `commandId`, stamped with the current time. To keep the time an event was first committed, pass it as `{ event, at }`; its envelope's `at` then says when it happened, for every view and projection that reads it. Times only go forward: an import whose times go back, start before the instance's latest event, or pass the platform's clock fails with `ImportOutOfOrder` and commits nothing, because views rebuild their history in commit-time order.
+
+```typescript title="src/ImportAccount.ts"
+const receipt = yield* accounts.import(
+  accountId,
+  deposits.map((row) => ({ event: new MoneyDeposited(row), at: DateTime.makeUnsafe(row.createdAt) })),
+  { commandId: `import:${accountId}` },
+);
+```
+
+Retrying with the same `commandId` returns the first receipt and commits nothing. By default an import expects an instance with no events and fails with `UnexpectedVersion` otherwise. To import a long history in batches, pass the previous receipt's version as `expectedVersion`. Wait for a [projection](/domain/projection) with `caughtUp(receipt)`, or read a view with `atLeast: receipt`.
+
 Clients outside the model send commands through an [Api](/domain/api). They never read an aggregate's state directly: a [view](/domain/view) projects what they may see of it, so the aggregate's state stays free to change with its rules.
 
-Next, [View](/domain/view): the query side, built from the events aggregates record.
+Next, [Decision](/domain/decision): a command decided across several instances at once.

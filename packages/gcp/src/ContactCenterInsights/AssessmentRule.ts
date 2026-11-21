@@ -333,14 +333,12 @@ export const AssessmentRuleProvider = () =>
       if (current === undefined) {
         const created = yield* cci
           .createProjectsLocationsAssessmentRules({
+            displayName,
+            active,
+            sampleRule: news.sampleRule,
+            scheduleInfo: news.scheduleInfo,
             parent,
             assessmentRuleId,
-            body: {
-              displayName,
-              active,
-              sampleRule: news.sampleRule,
-              scheduleInfo: news.scheduleInfo,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -358,6 +356,10 @@ export const AssessmentRuleProvider = () =>
 
       if (displayChanged || activeChanged || sampleChanged || scheduleChanged) {
         current = yield* cci.patchProjectsLocationsAssessmentRules({
+          displayName,
+          active,
+          sampleRule: news.sampleRule,
+          scheduleInfo: news.scheduleInfo,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -365,13 +367,6 @@ export const AssessmentRuleProvider = () =>
             sampleChanged ? "sample_rule" : undefined,
             scheduleChanged ? "schedule_info" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            active,
-            sampleRule: news.sampleRule,
-            scheduleInfo: news.scheduleInfo,
-          },
         });
       }
 

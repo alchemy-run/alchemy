@@ -472,15 +472,13 @@ export const WasmPluginProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsWasmPlugins({
+            labels: desiredLabels,
+            description: news.description,
+            mainVersionId: news.mainVersionId,
+            logConfig: desiredLogConfig,
+            versions: desiredVersions,
             parent: parentOf(env.project, location),
             wasmPluginId,
-            body: {
-              labels: desiredLabels,
-              description: news.description,
-              mainVersionId: news.mainVersionId,
-              logConfig: desiredLogConfig,
-              versions: desiredVersions,
-            },
           })
           .pipe(
             Effect.retry({
@@ -521,16 +519,13 @@ export const WasmPluginProvider = () =>
 
       if (updateMask.length > 0) {
         const operation = yield* networkservices.patchProjectsLocationsWasmPlugins({
+          labels: desiredLabels,
+          description: news.description,
+          mainVersionId: news.mainVersionId,
+          logConfig: desiredLogConfig,
+          versions: versionsChanged ? desiredVersions : undefined,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            mainVersionId: news.mainVersionId,
-            logConfig: desiredLogConfig,
-            versions: versionsChanged ? desiredVersions : undefined,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

@@ -12,10 +12,10 @@ export type DatastoreDatabaseRequest<
   I extends {
     projectId: string;
     requestParams?: string;
-    body?: { databaseId?: string };
+    databaseId?: string;
   },
-> = Omit<I, "projectId" | "requestParams" | "body"> & {
-  body?: Omit<NonNullable<I["body"]>, "databaseId">;
+> = {
+  body?: Omit<I, "projectId" | "requestParams" | "databaseId">;
 };
 
 /** The Datastore API names the default database `""`, not `(default)`. */
@@ -32,7 +32,7 @@ export const makeDatastoreHttpBinding = <
   I extends {
     projectId: string;
     requestParams?: string;
-    body?: { databaseId?: string };
+    databaseId?: string;
   },
   A,
   E,
@@ -58,11 +58,11 @@ export const makeDatastoreHttpBinding = <
         const projectId = yield* project;
         const id = apiDatabaseId(yield* databaseId);
         return yield* run({
-          ...request,
+          ...request.body,
           projectId,
           // Named databases require the routing header.
           requestParams: id.length > 0 ? `project_id=${projectId}&database_id=${id}` : undefined,
-          body: { ...request.body, databaseId: id },
+          databaseId: id,
         } as I);
       });
     });

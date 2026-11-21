@@ -13,11 +13,11 @@ export class HoldReleased extends Domain.Event("HoldReleased") {}
 export class HoldExpired extends Domain.Event("HoldExpired") {}
 
 export class PlaceHold extends Domain.Command("PlaceHold", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [HoldPlaced],
 }) {}
 export class ReleaseHold extends Domain.Command("ReleaseHold", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [HoldReleased],
 }) {}
 /**
@@ -25,7 +25,7 @@ export class ReleaseHold extends Domain.Command("ReleaseHold", {
  * keeps a released hold from expiring.
  */
 export class ExpireHold extends Domain.Command("ExpireHold", {
-  target: Schema.String,
+  input: { id: Schema.String },
   events: [HoldExpired],
 }) {}
 
@@ -34,6 +34,7 @@ export class Hold extends Domain.Aggregate("Hold", {
   state: Schema.Struct({ status: Schema.Literals(["none", "held", "released", "expired"]) }),
   initial: { status: "none" },
   commands: [PlaceHold, ReleaseHold, ExpireHold],
+  keyOf: (command) => command.id,
   decide: {
     PlaceHold: () => [new HoldPlaced()],
     ReleaseHold: () => [new HoldReleased()],
@@ -58,7 +59,10 @@ export const HoldDeadlineLive = HoldDeadline.toLayer(
     return Effect.fn(function* ({ source, event }) {
       if (event._tag === "HoldPlaced") {
         // a redelivery arms the same expiry again, which changes nothing
-        yield* holds.schedule(source, new ExpireHold(), { after: HOLD_WINDOW, commandId: EXPIRY });
+        yield* holds.schedule(new ExpireHold({ id: source.id }), {
+          after: HOLD_WINDOW,
+          commandId: EXPIRY,
+        });
       } else {
         yield* holds.unschedule(source, EXPIRY).pipe(
           // the hold expired first, and the release is recorded after it; a

@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import { Platform, type Main, type PlatformProps } from "alchemy/Platform";
 import * as Provider from "alchemy/Provider";
 import type { Resource, ResourceBinding } from "alchemy/Resource";
+import { envString } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { moduleExtension } from "alchemy/Util/Node";
 import { sha256 } from "alchemy/Util/sha256";
@@ -232,12 +233,7 @@ const bundleFunction = Effect.fn(function* (props: FunctionProps) {
   return { code, hash: yield* sha256(code) };
 });
 
-const plain = (value: unknown): string =>
-  Redacted.isRedacted(value)
-    ? String(Redacted.value(value))
-    : typeof value === "string"
-      ? value
-      : JSON.stringify(value);
+const plain = (value: unknown): string => envString(value) ?? "";
 
 const activeBindings = (bindings: ReadonlyArray<ResourceBinding<FunctionBinding>>) =>
   bindings.filter(

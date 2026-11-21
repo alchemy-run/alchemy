@@ -405,14 +405,11 @@ export const InstantSnapshotGroupProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertInstantSnapshotGroups({
+            name: instantSnapshotGroupName,
+            description,
             project: env.project,
             zone,
             sourceConsistencyGroup: news.sourceConsistencyGroup,
-            body: {
-              name: instantSnapshotGroupName,
-              description,
-              sourceConsistencyGroup: news.sourceConsistencyGroup,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>

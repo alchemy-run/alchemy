@@ -73,15 +73,13 @@ const createGlossary = (glossaryId: string, inputUri?: string) =>
     if (existing !== undefined) return existing;
     const operation = yield* translate
       .createProjectsLocationsGlossaries({
-        parent,
-        body: {
-          name,
-          languagePair: {
-            sourceLanguageCode: "en",
-            targetLanguageCode: "es",
-          },
-          ...(inputUri ? { inputConfig: { gcsSource: { inputUri } } } : {}),
+        name,
+        languagePair: {
+          sourceLanguageCode: "en",
+          targetLanguageCode: "es",
         },
+        ...(inputUri ? { inputConfig: { gcsSource: { inputUri } } } : {}),
+        parent,
       })
       .pipe(
         Effect.catchTag("Conflict", () =>

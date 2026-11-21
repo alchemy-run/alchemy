@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import type { Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 
 export interface MultiRegionAccessPointProps {
@@ -195,8 +196,8 @@ export const MultiRegionAccessPointProvider = () =>
         );
       });
 
-      const mrapArn = (accountId: string, alias: string | undefined) =>
-        `arn:aws:s3::${accountId}:accesspoint/${alias ?? ""}`;
+      const mrapArn = (partition: Partition, accountId: string, alias: string | undefined) =>
+        `arn:${partition}:s3::${accountId}:accesspoint/${alias ?? ""}`;
 
       const observeMrap = (accountId: string, name: string) =>
         inMrapRegion(
@@ -207,12 +208,13 @@ export const MultiRegionAccessPointProvider = () =>
         );
 
       const toAttrs = (
+        partition: Partition,
         name: string,
         accountId: AccountID,
         report: s3control.MultiRegionAccessPointReport | undefined,
       ) => ({
         multiRegionAccessPointName: name,
-        multiRegionAccessPointArn: mrapArn(accountId, report?.Alias),
+        multiRegionAccessPointArn: mrapArn(partition, accountId, report?.Alias),
         alias: report?.Alias,
         status: report?.Status,
         accountId,
@@ -275,7 +277,7 @@ export const MultiRegionAccessPointProvider = () =>
         // name is the ownership scope.
         list: () =>
           Effect.gen(function* () {
-            const { accountId } = yield* AWSEnvironment.current;
+            const { accountId, partition } = yield* AWSEnvironment.current;
             const pages = yield* inMrapRegion(
               s3control.listMultiRegionAccessPoints
                 .pages({ AccountId: accountId })
@@ -283,22 +285,24 @@ export const MultiRegionAccessPointProvider = () =>
             );
             return Array.from(pages).flatMap((page) =>
               (page.AccessPoints ?? []).flatMap((report) =>
-                report.Name !== undefined ? [toAttrs(report.Name, accountId, report)] : [],
+                report.Name !== undefined
+                  ? [toAttrs(partition, report.Name, accountId, report)]
+                  : [],
               ),
             );
           }),
         lookup: Effect.fn(function* ({ multiRegionAccessPointName: name }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
           const report = yield* observeMrap(accountId, name);
           if (report === undefined) return undefined;
-          return toAttrs(name, accountId, report);
+          return toAttrs(partition, name, accountId, report);
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
           const name = output?.multiRegionAccessPointName ?? (yield* createName(id, olds ?? {}));
           const report = yield* observeMrap(accountId, name);
           if (report === undefined) return undefined;
-          return toAttrs(name, accountId, report);
+          return toAttrs(partition, name, accountId, report);
         }),
         diff: Effect.fn(function* ({ id, news, olds }) {
           if (!isResolved(news)) return undefined;
@@ -313,7 +317,7 @@ export const MultiRegionAccessPointProvider = () =>
           }
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
           const name = output?.multiRegionAccessPointName ?? (yield* createName(id, news));
 
           // 1. OBSERVE — cloud state is authoritative.
@@ -356,7 +360,7 @@ export const MultiRegionAccessPointProvider = () =>
           const ready = yield* awaitReady(accountId, name);
 
           yield* session.note(name);
-          return toAttrs(name, accountId, ready);
+          return toAttrs(partition, name, accountId, ready);
         }),
         delete: Effect.fn(function* ({ output, session }) {
           const { accountId } = yield* AWSEnvironment.current;

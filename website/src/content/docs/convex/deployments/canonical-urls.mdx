@@ -1,0 +1,18 @@
+---
+title: Canonical URLs
+description: Set the URL a Convex deployment reports as its own.
+---
+
+Functions read their deployment's own URL, for links in an email or a webhook's callback, from `process.env.CONVEX_CLOUD_URL` and `process.env.CONVEX_SITE_URL`. By default these are the Convex addresses. A **canonical URL** makes one of them a [custom domain](/convex/deployments/custom-domains) instead.
+
+## Set a canonical URL
+
+```typescript
+yield* Convex.CanonicalUrl("Site", {
+  deployment,
+  requestDestination: "convexSite",
+  url: "https://site.example.com",
+});
+```
+
+Removing this resource restores the default.

@@ -183,6 +183,50 @@ test.provider(
   { tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"] },
 );
 
+// Workers AI billing mode is applied on create, switched in place, and left
+// alone when the prop is dropped.
+test.provider(
+  "create, update workers ai billing mode, delete ai gateway",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const program = (props: Cloudflare.AI.GatewayProps) =>
+        Effect.gen(function* () {
+          return yield* Cloudflare.AI.Gateway("BillingGateway", props);
+        });
+      const liveMode = (gatewayId: string) =>
+        aiGateway
+          .getAiGateway({ accountId, id: gatewayId })
+          .pipe(Effect.map((live) => live.workersAiBillingMode));
+
+      const gateway = yield* stack.deploy(program({ workersAiBillingMode: "postpaid" }));
+      expect(gateway.workersAiBillingMode).toEqual("postpaid");
+      expect(yield* liveMode(gateway.gatewayId)).toEqual("postpaid");
+
+      const unified = program({ workersAiBillingMode: "unified" });
+      expect((yield* stack.plan(unified)).resources.BillingGateway?.action).toBe("update");
+      const updated = yield* stack.deploy(unified);
+      expect(updated.gatewayId).toEqual(gateway.gatewayId);
+      expect(updated.workersAiBillingMode).toEqual("unified");
+      expect(yield* liveMode(gateway.gatewayId)).toEqual("unified");
+      expect((yield* stack.plan(unified)).resources.BillingGateway?.action).toBe("noop");
+
+      // Dropping the prop updates the gateway without a billing mode, and
+      // the gateway keeps the one it has.
+      const unmanaged = yield* stack.deploy(program({}));
+      expect(unmanaged.workersAiBillingMode).toEqual("unified");
+      expect(yield* liveMode(gateway.gatewayId)).toEqual("unified");
+      expect((yield* stack.plan(program({}))).resources.BillingGateway?.action).toBe("noop");
+
+      yield* stack.destroy();
+      yield* waitForGatewayToBeDeleted(gateway.gatewayId, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:ai", "provider:cloudflare:worker", "live"] },
+);
+
 test.provider(
   "list enumerates the deployed ai gateway",
   (stack) =>

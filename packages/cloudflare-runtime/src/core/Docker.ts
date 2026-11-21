@@ -133,6 +133,19 @@ export const imageUnavailableHint = (imageUri: string) =>
   `\`docker build --platform linux/amd64 -t ${imageUri} .\` or \`docker load\`.`;
 
 /** Names the missing buildx plugin when docker's own stderr only names the flag. */
+/**
+ * The last non-empty lines of a command's output, joined for an error
+ * message. A failure whose cause sits only in `detail` never reaches a log
+ * or test report, so the message carries the lines that name it.
+ */
+export const outputTail = (text: string, lines = 5): string =>
+  text
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0)
+    .slice(-lines)
+    .join("\n");
+
 export const buildFailureHint = (stderr: string): string | undefined =>
   BUILDKIT_MISSING_MARKERS.some((marker) => stderr.includes(marker))
     ? "This docker CLI has no BuildKit (buildx) plugin, which building container images requires. Install it and retry — e.g. `pacman -S docker-buildx` (Arch/CachyOS), `apt install docker-buildx` (Debian/Ubuntu), or Docker Desktop, which bundles it."
@@ -216,6 +229,11 @@ export const DockerLive = Layer.effect(
     // Native containers can start from images nobody prepared (snapshots,
     // managed `cloudflare/*` images), so per-image cleanup cannot find them.
     const runtimeLabels = { [RUNTIME_LABEL]: yield* random.uuidV4() };
+    // workerd names this runtime's containers and sidecars after the session
+    // and labels them, and the snapshot clone volumes, with
+    // `dev.workerd.session`. Other runtimes never adopt them, while a
+    // replacement workerd (crash restart) adopts the ones still running.
+    const sessionId = (yield* random.uuidV4()).replaceAll("-", "").slice(0, 16);
     // Set once workerd asks the proxy to create a container. A runtime that
     // never did has nothing to remove and must not wait on the daemon.
     let createdContainers = false;
@@ -511,17 +529,49 @@ export const DockerLive = Layer.effect(
         ),
       );
 
-    const removeRuntimeContainers = run([
-      "ps",
-      "--all",
-      "--quiet",
-      "--filter",
-      `label=${RUNTIME_LABEL}=${runtimeLabels[RUNTIME_LABEL]}`,
-    ]).pipe(
-      Effect.flatMap(({ stdout }) => {
-        const ids = stdout.split("\n").filter((id) => id.trim() !== "");
-        return ids.length === 0 ? Effect.void : Effect.asVoid(run(["rm", "--force", ...ids]));
-      }),
+    const removeLabelled = (
+      kind: "container" | "volume",
+      label: string,
+      { sidecars = true }: { sidecars?: boolean } = {},
+    ) =>
+      run(
+        kind === "container"
+          ? ["ps", "--all", "--filter", `label=${label}`, "--format", "{{.ID}} {{.Names}}"]
+          : ["volume", "ls", "--quiet", "--filter", `label=${label}`],
+      ).pipe(
+        Effect.flatMap(({ stdout }) => {
+          const ids = stdout
+            .split("\n")
+            .map((line) => line.trim().split(" "))
+            .filter(([id, name]) => id && (sidecars || !name?.endsWith("-proxy")))
+            .map(([id]) => id!);
+          return ids.length === 0
+            ? Effect.void
+            : run(kind === "container" ? ["rm", "--force", ...ids] : ["volume", "rm", ...ids]).pipe(
+                Effect.flatMap(({ exitCode, stderr }) =>
+                  exitCode === 0
+                    ? Effect.void
+                    : Effect.logWarning(`docker: could not remove ${kind}s: ${stderr.trim()}`),
+                ),
+              );
+        }),
+      );
+    // Application containers first, then the `-proxy` sidecars whose network
+    // namespace they join, then the volumes containers mounted: Docker
+    // refuses to remove a volume in use, and Podman a joined sidecar.
+    const runtime = `${RUNTIME_LABEL}=${runtimeLabels[RUNTIME_LABEL]}`;
+    const session = `${SESSION_LABEL}=${sessionId}`;
+    const removePass = removeLabelled("container", runtime, { sidecars: false }).pipe(
+      Effect.andThen(removeLabelled("container", session, { sidecars: false })),
+      Effect.andThen(removeLabelled("container", runtime)),
+      Effect.andThen(removeLabelled("container", session)),
+      Effect.andThen(removeLabelled("volume", session)),
+    );
+    // Docker can finish a create it accepted just before workerd exited after
+    // the first listing, so a second pass catches it (as upstream does).
+    const removeRuntimeContainers = removePass.pipe(
+      Effect.andThen(Effect.sleep("250 millis")),
+      Effect.andThen(removePass),
       Effect.timeout("30 seconds"),
       Effect.withLogSpan("docker: remove runtime containers"),
       Effect.ignore,
@@ -572,6 +622,7 @@ export const DockerLive = Layer.effect(
         localDocker: {
           socketPath,
           containerEgressInterceptorImage,
+          sessionId,
         },
       }),
       { concurrent: true },
@@ -654,7 +705,9 @@ export const DockerLive = Layer.effect(
               ensureExitZero(result, ({ exitCode, stdout, stderr }) =>
                 SystemError.make({
                   subtag: "DockerBuildFailed",
-                  message: `Failed to build image "${tag}".`,
+                  message: `Failed to build image "${tag}" (exit ${exitCode}).${
+                    outputTail(stderr) ? `\n${outputTail(stderr)}` : ""
+                  }`,
                   hint: buildFailureHint(stderr),
                   detail: { bin, tag, exitCode, stdout, stderr },
                 }),
@@ -773,6 +826,9 @@ export const DockerLive = Layer.effect(
 
 /** Label identifying the runtime that created a container through the proxy. */
 export const RUNTIME_LABEL = "alchemy.runtime";
+
+/** Label workerd puts on the Docker resources of a container session. */
+export const SESSION_LABEL = "dev.workerd.session";
 
 const generateImageTag = (className: string, suffix?: string) =>
   `${DEV_CONTAINER_PREFIX}/${className.toLowerCase()}:${suffix ?? crypto.randomUUID().slice(0, 8)}`;

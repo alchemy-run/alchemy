@@ -306,17 +306,15 @@ export const ApisVersionsSpecProvider = () =>
       if (current === undefined) {
         const created = yield* apihub
           .createProjectsLocationsApisVersionsSpecs({
+            displayName,
+            sourceUri: news.sourceUri,
+            contents: encodedContents,
+            specType,
+            parsingMode: news.parsingMode,
+            documentation: news.documentation,
+            attributes: news.attributes,
             parent: version,
             specId,
-            body: {
-              displayName,
-              sourceUri: news.sourceUri,
-              contents: encodedContents,
-              specType,
-              parsingMode: news.parsingMode,
-              documentation: news.documentation,
-              attributes: news.attributes,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -342,6 +340,11 @@ export const ApisVersionsSpecProvider = () =>
         attributesChanged
       ) {
         current = yield* apihub.patchProjectsLocationsApisVersionsSpecs({
+          displayName,
+          sourceUri: news.sourceUri,
+          contents: contentsChanged ? encodedContents : undefined,
+          specType: contentsChanged || typeChanged ? specType : undefined,
+          attributes: news.attributes,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -350,14 +353,6 @@ export const ApisVersionsSpecProvider = () =>
             contentsChanged || typeChanged ? "spec_type" : undefined,
             attributesChanged ? "attributes" : undefined,
           ),
-          body: {
-            name: currentName,
-            displayName,
-            sourceUri: news.sourceUri,
-            contents: contentsChanged ? encodedContents : undefined,
-            specType: contentsChanged || typeChanged ? specType : undefined,
-            attributes: news.attributes,
-          },
         });
       }
 

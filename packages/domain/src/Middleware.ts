@@ -23,12 +23,15 @@ export type Errors<Ms extends List> = Ms[number] extends infer M
     : never
   : never;
 
-/** An RPC with a list of middleware applied. */
+/**
+ * An RPC with a list of middleware applied, added last entry first like
+ * {@link apply}: what an entry provides satisfies what a later entry requires.
+ */
 export type Apply<R extends Rpc.Any, Ms extends List> = Ms extends readonly [
-  infer Head extends RpcMiddleware.AnyService,
-  ...infer Tail extends List,
+  ...infer Init extends List,
+  infer Last extends RpcMiddleware.AnyService,
 ]
-  ? Apply<Rpc.AddMiddleware<R, Head>, Tail>
+  ? Apply<Rpc.AddMiddleware<R, Last>, Init>
   : R;
 
 /**

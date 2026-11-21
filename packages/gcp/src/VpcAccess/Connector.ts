@@ -541,9 +541,9 @@ export const ConnectorProvider = () =>
       if (current === undefined) {
         const created = yield* vpcaccess
           .createProjectsLocationsConnectors({
+            ...createBody(news),
             parent: parentOf(env.project, location),
             connectorId,
-            body: createBody(news),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -587,16 +587,13 @@ export const ConnectorProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* vpcaccess.patchProjectsLocationsConnectors({
+          machineType: news.machineType ?? current.machineType,
+          minInstances: news.minInstances ?? current.minInstances,
+          maxInstances: news.maxInstances ?? current.maxInstances,
+          minThroughput: news.minThroughput ?? current.minThroughput,
+          maxThroughput: news.maxThroughput ?? current.maxThroughput,
           name,
           updateMask: updateMask.join(","),
-          body: {
-            name,
-            machineType: news.machineType ?? current.machineType,
-            minInstances: news.minInstances ?? current.minInstances,
-            maxInstances: news.maxInstances ?? current.maxInstances,
-            minThroughput: news.minThroughput ?? current.minThroughput,
-            maxThroughput: news.maxThroughput ?? current.maxThroughput,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(name);

@@ -54,12 +54,10 @@ const ensureService = (input: { serviceId: string; displayName: string; body: re
     if (existing !== undefined) return existing;
     const created = yield* registry
       .createProjectsLocationsServices({
+        displayName: input.displayName,
+        ...input.body,
         parent,
         serviceId: input.serviceId,
-        body: {
-          displayName: input.displayName,
-          ...input.body,
-        },
       })
       .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
     if (created !== undefined) {
