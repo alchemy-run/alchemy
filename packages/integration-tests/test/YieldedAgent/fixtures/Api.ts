@@ -30,6 +30,13 @@ export default class YieldedApi extends Cloudflare.Worker<YieldedApi>()(
             return yield* HttpServerResponse.json(yield* threads.file(thread, body.text));
           case "events":
             return yield* HttpServerResponse.json(yield* threads.events(thread, body.text));
+          case "submit":
+            yield* threads.submit(thread, body.text, body.requestId);
+            return yield* HttpServerResponse.json({ ok: true });
+          case "submitted":
+            return yield* HttpServerResponse.json({
+              run: yield* threads.submitted(body.requestId),
+            });
           case "history":
             return yield* HttpServerResponse.json(yield* threads.history(thread));
           case "state":
