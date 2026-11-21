@@ -70,6 +70,7 @@ describe.skipIf(!!process.env.FAST)(
           const arns = yield* runnerTaskDefinitions;
           // The Default and Legacy pools.
           expect(arns).toHaveLength(2);
+          const secretKeys = new Set<string>();
           for (const arn of arns) {
             const { taskDefinition } = yield* ecs.describeTaskDefinition({ taskDefinition: arn });
             const container = taskDefinition?.containerDefinitions?.[0];
@@ -85,7 +86,12 @@ describe.skipIf(!!process.env.FAST)(
             expect(refs.map((ref) => ref.name).sort()).toEqual([
               "CLUSTER_DATABASE_URL",
               "CLUSTER_GATEWAY_TOKEN",
+              "CLUSTER_SECRET_ENV",
             ]);
+            // No other secret either: no packed Redacted value.
+            for (const variable of environment) {
+              expect(variable.value ?? "").not.toContain('"_tag":"Redacted"');
+            }
             const config = JSON.stringify(taskDefinition);
             for (const ref of refs) {
               expect(ref.valueFrom).toMatch(
@@ -102,12 +108,19 @@ describe.skipIf(!!process.env.FAST)(
                   : Redacted.isRedacted(SecretString)
                     ? Redacted.value(SecretString)
                     : SecretString;
-              expect(value.length).toBeGreaterThan(8);
-              // Neither the value, nor the password inside the URL.
+              // Neither the value, nor the password inside the URL, nor
+              // any secret in the JSON object of the rest.
               const pieces =
                 ref.name === "CLUSTER_DATABASE_URL"
                   ? [value, decodeURIComponent(new URL(value).password)]
-                  : [value];
+                  : ref.name === "CLUSTER_SECRET_ENV"
+                    ? Object.values(JSON.parse(value) as Record<string, string>).map(
+                        (packed) => (JSON.parse(packed) as { value: string }).value,
+                      )
+                    : [value];
+              if (ref.name === "CLUSTER_SECRET_ENV") {
+                for (const key of Object.keys(JSON.parse(value))) secretKeys.add(key);
+              }
               for (const piece of pieces) {
                 expect(piece.length).toBeGreaterThan(8);
                 expect(environment.some((variable) => variable.value?.includes(piece))).toBe(false);
@@ -115,6 +128,10 @@ describe.skipIf(!!process.env.FAST)(
               }
             }
           }
+          // Runners call Counter and Journal, whose gateway tokens they hold.
+          expect([...secretKeys].sort()).toEqual(
+            expect.arrayContaining(["CLUSTER_Counter_TOKEN", "CLUSTER_Journal_TOKEN"]),
+          );
         }),
       ),
       { timeout: 120_000 },

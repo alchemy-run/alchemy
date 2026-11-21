@@ -13,6 +13,7 @@ import * as Bundle from "alchemy/Bundle/Bundle";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { Random } from "alchemy/Random";
+import { packEnvValue, unpackEnvValue } from "alchemy/RuntimeContext";
 import { Self } from "alchemy/Self";
 import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
@@ -30,6 +31,7 @@ import { GATEWAY_PORT, RUNNER_PORT } from "./Gateway.ts";
 import type { HostedClass } from "./HostedRuntime.ts";
 import { HOSTED_TYPES, shortLabel, stackDnsLabel } from "./Naming.ts";
 import { PoolHost } from "./PoolHostService.ts";
+import { SECRET_ENV } from "./SecretEnv.ts";
 
 const VIRTUAL = "virtual:cluster-entities";
 
@@ -115,8 +117,8 @@ export interface PoolNodes<Network, Gateway extends PoolGateway = PoolGateway> {
    */
   readonly environment: Output.Output<Record<string, string>>;
   /**
-   * The runners' secrets, the database URL and the gateway token, still
-   * Redacted, for a host to deploy through its platform's secret store.
+   * The runners' secrets, still Redacted, for a host to deploy through its
+   * platform's secret store.
    */
   readonly secrets: Output.Output<RunnerSecrets>;
 }
@@ -125,7 +127,20 @@ export interface PoolNodes<Network, Gateway extends PoolGateway = PoolGateway> {
 export interface RunnerSecrets {
   readonly CLUSTER_DATABASE_URL: Redacted.Redacted<string>;
   readonly CLUSTER_GATEWAY_TOKEN: Redacted.Redacted<string>;
+  /**
+   * Every other secret bound into the runners' environment (the gateway
+   * token of an entity they call, a `Config.redacted` a class reads), as
+   * one JSON object the runner loads at start.
+   */
+  readonly [SECRET_ENV]: Redacted.Redacted<string>;
 }
+
+/** Whether a runner env value is a secret: a `Redacted`, or one packed as a string. */
+const isSecretEnv = (value: unknown) =>
+  Redacted.isRedacted(value) ||
+  (typeof value === "string" &&
+    value.startsWith("{") &&
+    Redacted.isRedacted(unpackEnvValue<unknown>(value)));
 
 /** What a host binds onto each entity so callers can reach the gateway. */
 export interface PoolGateway {
@@ -243,10 +258,29 @@ export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGa
             token: token.text,
           });
           const stack = yield* Stack;
-          const secrets = Output.all(output(database.url), token.text).pipe(
-            Output.map(([url, tokenText]): RunnerSecrets => ({
+          const secretsSeparately = options.secretsSeparately === true;
+          // Runner env strings, a packed `Redacted` kept packed, so the
+          // runtime `get` reads it back as it always has.
+          const values = pool.env.pipe(
+            Output.map((env) =>
+              Object.entries(env).map(([key, value]) => ({
+                key,
+                text: Redacted.isRedacted(value) ? packEnvValue(value) : String(value),
+                secret: secretsSeparately && isSecretEnv(value),
+              })),
+            ),
+          );
+          const secrets = Output.all(output(database.url), token.text, values).pipe(
+            Output.map(([url, tokenText, entries]): RunnerSecrets => ({
               CLUSTER_DATABASE_URL: url,
               CLUSTER_GATEWAY_TOKEN: tokenText,
+              [SECRET_ENV]: Redacted.make(
+                JSON.stringify(
+                  Object.fromEntries(
+                    entries.filter((entry) => entry.secret).map(({ key, text }) => [key, text]),
+                  ),
+                ),
+              ),
             })),
           );
           yield* options.nodes({
@@ -260,16 +294,16 @@ export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGa
               pool,
               options.dockerfile ?? RUNNER_DOCKERFILE,
             ),
-            environment: Output.all(pool.env, secrets, database.shardGroups.groups).pipe(
-              Output.map(([values, runnerSecrets, allGroups]) => ({
+            environment: Output.all(values, secrets, database.shardGroups.groups).pipe(
+              Output.map(([entries, runnerSecrets, allGroups]) => ({
                 ...Object.fromEntries(
-                  Object.entries(values).map(([key, value]) => [key, String(value)]),
+                  entries.filter((entry) => !entry.secret).map(({ key, text }) => [key, text]),
                 ),
                 ...settingsEnvironment(options.settings),
                 ALCHEMY_STACK_NAME: stack.name,
                 ALCHEMY_STAGE: stack.stage,
                 ALCHEMY_PHASE: "runtime",
-                ...(options.secretsSeparately
+                ...(secretsSeparately
                   ? {}
                   : {
                       CLUSTER_DATABASE_URL: Redacted.value(runnerSecrets.CLUSTER_DATABASE_URL),

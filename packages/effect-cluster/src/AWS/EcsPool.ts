@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { GATEWAY_PORT, RUNNER_PORT } from "../internal/Gateway.ts";
 import { makePoolLayer, RUNNER_DOCKERFILE, type PoolSettings } from "../internal/PoolHost.ts";
+import { SECRET_ENV } from "../internal/SecretEnv.ts";
 
 /** Where AWS publishes the certificate authorities of every RDS region. */
 const RDS_CA_BUNDLE = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem";
@@ -73,8 +74,9 @@ const runnerSecret = Effect.fn(function* (
  * security group; the load balancer only reaches the gateway, which checks
  * every call's token.
  *
- * The database URL and the gateway token are kept in Secrets Manager
- * secrets of the pool's own. The task definition only names them, and
+ * The database URL, the gateway token, and every other secret bound into
+ * the runners' environment are kept in Secrets Manager secrets of the
+ * pool's own. The task definition only names them, and
  * only the tasks' execution role may read them.
  *
  * ### Running on ECS
@@ -124,6 +126,10 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
           `${id}GatewayToken`,
           secrets.pipe(Output.map((s) => s.CLUSTER_GATEWAY_TOKEN)),
         );
+        const secretEnv = yield* runnerSecret(
+          `${id}SecretEnv`,
+          secrets.pipe(Output.map((s) => s[SECRET_ENV])),
+        );
         yield* ECS.Service(`${id}Pool`, {
           cluster,
           context: program.pipe(Output.map((p) => p.dir)) as unknown as string,
@@ -157,6 +163,7 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
           secrets: {
             CLUSTER_DATABASE_URL: databaseUrl,
             CLUSTER_GATEWAY_TOKEN: gatewayToken,
+            [SECRET_ENV]: secretEnv,
           },
         });
       }),
