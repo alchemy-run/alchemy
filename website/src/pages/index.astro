@@ -598,7 +598,8 @@ const PROVIDERS = [
       <div class="v2-split v2-split--narrow">
         <CodeBlock filename="src/BankWorker.ts" code={WIRING_SRC} compact />
       </div>
-      <p class="v2-lede v2-lede--next" data-copy>
+      <h3 class="v2-h3" data-copy>Type-checked IAM policies and bindings</h3>
+      <p class="v2-lede" data-copy>
         The program declares what it needs in its type, and so does each Layer: the resources it creates, the access it grants, and the services it calls. Leave one out and it doesn't compile, so a broken stack fails in your editor in milliseconds, before anything deploys.
       </p>
       <TypePolicy client:visible />
@@ -1177,9 +1178,6 @@ const PROVIDERS = [
     text-decoration-color: currentColor;
   }
 
-  .v2-lede--next {
-    margin-top: 40px;
-  }
   .v2-split + .v2-h3 {
     margin-top: 48px;
   }
