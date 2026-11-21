@@ -165,12 +165,11 @@ Before Prisma looks at the hostname, the deploy waits up to 3 minutes for the `T
 - When the 6 minutes run out, the deploy fails with `RoutingUrlNotActive` and `reason: "timedOut"`. Its message names the first condition not met and quotes Prisma's last sync error. When Prisma has not seen a record, the message names it. Prisma does not look again on its own: when it holds no certificate for the hostname, a redeploy asks it to check once; otherwise ask it to check from the RoutingUrl's `setupUrl` in the Console once the record is published. Otherwise Prisma keeps working on the hostname; redeploy to wait again.
 - When the certificate failed, the deploy fails at once with `RoutingUrlNotActive`, `reason: "certificateFailed"` and Prisma's reason in `certificateFailureReason`. A redeploy does not retry it. Retry it from the RoutingUrl's `setupUrl` in the Console or with one `POST /v1/urls/{id}/check`; a retry orders a new certificate, which counts toward the workspace's hourly limit.
 - When another RoutingUrl holds the hostname, the deploy fails at once with `RoutingUrlNotActive`, `reason: "held"` and the holder in `heldBy`. The hostname serves once that RoutingUrl gives it up.
-- When the workspace has reached its hourly limit of new certificates, the deploy fails at once with `RoutingUrlCertificateLimitReached`, which says when the limit resets. Prisma continues on its own at that time, and a redeploy after then waits for the hostname.
 - After any of these errors except `RoutingUrlRecordsNotSeen`, the RoutingUrl is saved. The next deploy finds it and does not create another.
 
 ### How many certificates a workspace can order
 
-Prisma orders a certificate for each new hostname once its records are published, for each hostname change, and again when an order fails or is stuck. A workspace may order 10 an hour. A RoutingUrl created again after it was deleted counts again, so count CI reruns and parallel jobs that deploy to the same workspace. A hostname that waits for the limit serves on its own once the limit resets.
+Prisma orders a certificate for each new hostname once its records are published, for each hostname change, and again when an order fails or is stuck. A workspace may order 10 an hour. A RoutingUrl created again after it was deleted counts again, so count CI reruns and parallel jobs that deploy to the same workspace. At the limit, the hostname stays `pending` until the limit resets, and Prisma then continues on its own. A deploy with `dns` times out meanwhile, with Prisma's sentence and the reset time in `customDomainSyncError`, and a later deploy picks the hostname up.
 
 ### Proving a wildcard once
 

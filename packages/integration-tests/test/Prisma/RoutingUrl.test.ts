@@ -5,7 +5,6 @@ import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as Prisma from "@alchemy.run/prisma";
 import {
   RoutingUrl,
-  RoutingUrlCertificateLimitReached,
   type RoutingUrlHostnameChangeRefused,
   RoutingUrlHostnameTaken,
   RoutingUrlInvalidHostname,
@@ -486,7 +485,7 @@ testFor(failedCertificate).test.provider(
 
 const certificateLimit = makeUrlCloud();
 testFor(certificateLimit).test.provider(
-  "with dns, fails at once when the workspace reached its hourly limit of new certificates",
+  "with dns, a row waiting for the hourly certificate limit gets no /check and times out quoting Prisma's sentence",
   (stack) =>
     Effect.gen(function* () {
       certificateLimit.reset({
@@ -504,20 +503,14 @@ testFor(certificateLimit).test.provider(
 
       const error = result.pipe(
         Result.map(({ errors }) =>
-          errors.find(
-            (each): each is RoutingUrlCertificateLimitReached =>
-              each instanceof RoutingUrlCertificateLimitReached,
-          ),
+          errors.find((each): each is RoutingUrlNotActive => each instanceof RoutingUrlNotActive),
         ),
         Result.getOrUndefined,
       );
-      expect(error?.limit).toBe(10);
-      expect(error?.resetAt).toBe("2026-11-21T01:00:00.000Z");
-      expect(error?.message).toContain("hourly limit of 10 new certificates");
-      expect(error?.message).toContain("resets at 2026-11-21T01:00:00.000Z");
-      expect(error?.message).toContain("Prisma continues on its own");
-      expect(error?.message).toContain("a redeploy after then waits");
-      expect(URL_READS(certificateLimit)).toEqual([]);
+      expect(error?.reason).toBe("timedOut");
+      expect(error?.customDomainSyncError).toBe(CERTIFICATE_LIMIT_ERROR);
+      expect(error?.message).toContain(CERTIFICATE_LIMIT_ERROR);
+      expect(URL_READS(certificateLimit).length).toBe(36);
       expect(CHECKS(certificateLimit)).toEqual([]);
 
       yield* stack.destroy();

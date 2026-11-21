@@ -178,23 +178,6 @@ export class RoutingUrlRecordsNotSeen extends Data.TaggedError("RoutingUrlRecord
   }>;
 }> {}
 
-/**
- * With `dns`, Prisma cannot order the hostname's certificate yet: the
- * workspace reached its hourly limit of new certificates. Prisma continues on
- * its own at `resetAt`; a redeploy after then waits for the hostname to serve.
- */
-export class RoutingUrlCertificateLimitReached extends Data.TaggedError(
-  "RoutingUrlCertificateLimitReached",
-)<{
-  readonly message: string;
-  readonly routingUrlId: string;
-  readonly hostname: string;
-  /** New certificates a workspace may order per hour. */
-  readonly limit: number;
-  /** When the limit resets, as Prisma reports it (ISO 8601). */
-  readonly resetAt: string;
-}> {}
-
 type ApiRoutingUrl = GetUrlResponseData;
 
 export interface RoutingUrlProps {
@@ -357,12 +340,13 @@ export interface RoutingUrl extends Resource<
  * (`heldBy`), and with
  * `reason: "certificateFailed"` when the certificate failed: a redeploy does
  * not retry it; retry it from `setupUrl` in the Console or with one
- * `POST /v1/urls/{id}/check`, which orders a new certificate. It fails at
- * once with `RoutingUrlCertificateLimitReached` when the workspace has
- * reached its hourly limit of new certificates; Prisma continues on its own
- * when the limit resets, and a redeploy after then waits again. After each of
+ * `POST /v1/urls/{id}/check`, which orders a new certificate. After each of
  * these failures the RoutingUrl is saved, and the next deploy finds it
- * instead of creating another.
+ * instead of creating another. When the workspace has reached its hourly
+ * limit of new certificates, the hostname stays `pending` until the limit
+ * resets, and Prisma then continues on its own: the deploy times out, with
+ * Prisma's sentence and the reset time in `customDomainSyncError`, and a
+ * later deploy picks the hostname up.
  *
  * Prisma orders a certificate for each new hostname once its records are
  * published, for each hostname change, and again when an order fails or is
@@ -559,19 +543,6 @@ const ACTIVE_POLLS = Duration.toMillis(ACTIVE_WAIT) / Duration.toMillis(ACTIVE_P
 /** How long a deploy with `dns` waits for its published records to reach every authoritative nameserver. */
 const RECORDS_WAIT = Duration.minutes(3);
 
-/**
- * Prisma reports its hourly certificate limit only as this
- * `customDomainSyncError` text, written by the control plane's
- * `certificateSlotWaitMessage`.
- */
-const CERTIFICATE_LIMIT =
-  /^The workspace has reached its hourly limit of (\d+) new certificates\. The limit resets at (\S+)\.$/;
-
-const certificateLimitOf = (url: ApiRoutingUrl) => {
-  const match = CERTIFICATE_LIMIT.exec(url.customDomainSyncError ?? "");
-  return match ? { limit: Number(match[1]), resetAt: match[2]! } : undefined;
-};
-
 /** Prisma's `state` shows `certificate_failed` only when no earlier state applies, so read the custom domain itself. */
 const certificateFailed = (url: ApiRoutingUrl) => url.customDomain?.status === "failed";
 
@@ -638,29 +609,19 @@ const notActive = (url: ApiRoutingUrl) => {
 
 /**
  * `url` once it is `active`, read every {@link ACTIVE_POLL_INTERVAL} up to
- * {@link ACTIVE_WAIT}. Fails at once when waiting cannot help: Prisma has
- * reached its hourly certificate limit, another RoutingUrl holds the
- * hostname, or the certificate failed.
+ * {@link ACTIVE_WAIT}. Fails at once when waiting cannot help: another
+ * RoutingUrl holds the hostname, or the certificate failed.
  */
 const untilActive = (
   url: ApiRoutingUrl,
   pollsLeft = ACTIVE_POLLS,
 ): Effect.Effect<
   ApiRoutingUrl,
-  RoutingUrlNotActive | RoutingUrlCertificateLimitReached | Effect.Error<ReturnType<typeof getUrl>>,
+  RoutingUrlNotActive | Effect.Error<ReturnType<typeof getUrl>>,
   Effect.Services<ReturnType<typeof getUrl>>
 > =>
   Effect.gen(function* () {
     if (url.status === "active") return url;
-    const limited = certificateLimitOf(url);
-    if (limited) {
-      return yield* new RoutingUrlCertificateLimitReached({
-        routingUrlId: url.id,
-        hostname: url.hostname,
-        ...limited,
-        message: `Prisma RoutingUrl '${url.hostname}' cannot get its certificate yet: the workspace reached its hourly limit of ${limited.limit} new certificates, which resets at ${limited.resetAt}. Prisma continues on its own at that time; a redeploy after then waits for the hostname to serve.`,
-      });
-    }
     if (isHeld(url) || certificateFailed(url) || pollsLeft <= 0) return yield* notActive(url);
     yield* Effect.sleep(ACTIVE_POLL_INTERVAL);
     return yield* untilActive((yield* getUrl({ id: url.id })).data, pollsLeft - 1);
