@@ -514,6 +514,10 @@ describe(
           const first = yield* stack.deploy(service("nginx:1.27-alpine"));
           const before = yield* publishedPorts(first.id);
           expect(before).toHaveLength(1);
+          // The port Swarm picked is an attribute, so callers can reach it.
+          expect(first.ports.map((port) => [port.external, port.internal])).toEqual([
+            [before[0], 80],
+          ]);
 
           const second = yield* stack.deploy(service("nginx:1.28-alpine"));
           expect(second.id).toBe(first.id);

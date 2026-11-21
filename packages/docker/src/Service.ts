@@ -293,7 +293,10 @@ export interface Service extends Resource<
     replicas: number;
     /** Network ids the service's tasks attach to. */
     networks: string[];
-    /** Published port mappings reported by Swarm. */
+    /**
+     * Published port mappings reported by Swarm, including the port it
+     * picked for a mapping without `external`.
+     */
     ports: Service.PortMapping[];
     /** Service labels reported by Swarm. */
     labels: Record<string, string>;
@@ -584,6 +587,15 @@ type ServiceInspect = {
         PublishMode?: "ingress" | "host";
       }>;
     };
+  };
+  /** What Swarm published, including the ports it picked itself. */
+  Endpoint?: {
+    Ports?: Array<{
+      PublishedPort?: number;
+      TargetPort?: number;
+      Protocol?: "tcp" | "udp";
+      PublishMode?: "ingress" | "host";
+    }>;
   };
 };
 
@@ -1146,7 +1158,9 @@ const toServiceAttributes = (
   networks: (service.Spec.TaskTemplate?.Networks ?? []).flatMap((n) =>
     n.Target ? [n.Target] : [],
   ),
-  ports: (service.Spec.EndpointSpec?.Ports ?? []).flatMap((port) => {
+  // A port without `external` is picked by Swarm, which records it on
+  // `Endpoint`, not in the spec.
+  ports: (service.Endpoint?.Ports ?? service.Spec.EndpointSpec?.Ports ?? []).flatMap((port) => {
     if (port.PublishedPort === undefined || port.TargetPort === undefined) {
       return [];
     }
