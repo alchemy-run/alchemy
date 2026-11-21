@@ -34,6 +34,7 @@ it.effect(
             "Account.WithinDailyLimit",
             "Account.AClosedAccountStaysClosed",
             "Account.MoneyLeavesOnlyByWithdrawalOrTransfer",
+            "Account.AFrozenAccountLosesNoMoney",
             "Account.OnlyAnAgentChangesTheOwner",
             // The username's rule is kept by the decision that claims it, across both instances.
             "UsernameClaim.AClaimedNameStaysWithItsHolder",
@@ -42,6 +43,14 @@ it.effect(
             "Bank.ARegisteredCustomerHoldsTheirName",
             "RegisterCustomer.TheNameGoesToWhoRegistered",
             "RegisterCustomer.OnlyAFreeNameIsClaimed",
+          ],
+          // Each of these refusals is what keeps a rule: with its check taken out, the rule breaks.
+          guards: [
+            "Account.WithdrawMoney.InsufficientFunds",
+            "Account.WithdrawMoney.DailyLimitExceeded",
+            "Account.DebitTransfer.InsufficientFunds",
+            "Account.WithdrawMoney.Frozen",
+            "Account.DebitTransfer.Frozen",
           ],
         },
       });
@@ -52,6 +61,7 @@ it.effect(
         "Account.WithinDailyLimit": "proved",
         "Account.AClosedAccountStaysClosed": "proved",
         "Account.MoneyLeavesOnlyByWithdrawalOrTransfer": "proved",
+        "Account.AFrozenAccountLosesNoMoney": "proved",
         "Account.OnlyAnAgentChangesTheOwner": "proved",
         // Registering is a decision across a customer and a username: its rules are proved too.
         "UsernameClaim.AClaimedNameStaysWithItsHolder": "proved",

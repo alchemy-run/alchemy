@@ -261,6 +261,11 @@ export interface Found {
    * A path where the real code did something else is in `disagreements`.
    */
   readonly agreement: { readonly compared: number; readonly uncompared: number };
+  /**
+   * Each rejection an aggregate's command gives, and the rules of that
+   * aggregate that break when its check is taken out.
+   */
+  readonly guards: ReadonlyArray<Induction.Guard & { readonly aggregate: string }>;
   readonly undecided: ReadonlyArray<{ readonly reason: string; readonly times: number }>;
 }
 
@@ -3909,6 +3914,9 @@ export const search = Effect.fn(function* (
           0,
         ),
       },
+      guards: [...ownRows].flatMap(([agg, rows]) =>
+        rows.flatMap((row) => row.guards.map((guard) => ({ ...guard, aggregate: agg.name }))),
+      ),
       undecided: [...undecided].map(([reason, times]) => ({ reason, times })),
     };
     return found;

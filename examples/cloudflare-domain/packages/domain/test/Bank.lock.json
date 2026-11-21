@@ -61,6 +61,10 @@
       "Bank.ARegisteredCustomerHoldsTheirName": {
         "kind": "relation",
         "source": "({ customer, claim }) =>\n        customer.state._tag !== \"Registered\" ||\n        customer.state.username !== claim.id ||\n        (claim.state._tag === \"Claimed\" && claim.state.customerId === customer.id)"
+      },
+      "Account.AFrozenAccountLosesNoMoney": {
+        "kind": "transition",
+        "source": "({ before, after }) =>\n      before._tag !== \"Open\" ||\n      before.frozen === null ||\n      after._tag !== \"Open\" ||\n      after.balance >= before.balance"
       }
     },
     "Account": {
@@ -83,6 +87,10 @@
       "OnlyAnAgentChangesTheOwner": {
         "kind": "transition",
         "source": "Effect.fn(function* ({ before, after }) {\n      if (before._tag !== \"Open\" || after._tag !== \"Open\") return true;\n      if (before.customerId === after.customerId) return true;\n      return (yield* CurrentActor)._tag === \"Agent\";\n    })"
+      },
+      "AFrozenAccountLosesNoMoney": {
+        "kind": "transition",
+        "source": "({ before, after }) =>\n      before._tag !== \"Open\" ||\n      before.frozen === null ||\n      after._tag !== \"Open\" ||\n      after.balance >= before.balance"
       }
     }
   }

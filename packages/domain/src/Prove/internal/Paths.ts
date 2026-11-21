@@ -59,6 +59,8 @@ export interface Path {
   readonly run: Value.Run;
   readonly inputs: Inputs | undefined;
   readonly outcome: Outcome;
+  /** How many conditions the run had tested when `decide` began: the ones after are the command's own. */
+  readonly from: number;
 }
 
 /** The latest time the prover considers: the start of the year 2100. */
@@ -816,11 +818,14 @@ export const path = (
   definition: Definition,
   command: CommandClass,
   prefix: ReadonlyArray<number>,
+  /** One test of a condition the code is told the opposite of: see `Value.Run`. */
+  unguarded?: number,
 ): Effect.Effect<Path> => {
-  const run = new Value.Run(prefix);
+  const run = new Value.Run(prefix, undefined, unguarded);
   interpreter.current.run = run;
   const site = siteOf(definition);
   let inputs: Inputs | undefined;
+  let from = 0;
 
   const body: Eval<Outcome> = Effect.gen(function* () {
     const stateAst = Symbolic.typeOf(definition.state);
@@ -838,6 +843,7 @@ export const path = (
 
     const versionTerm = run.constant("version", "Int");
     run.assume(`(>= ${versionTerm.text} 0)`);
+    from = run.tests.length;
     const stepped = yield* step(
       interpreter,
       definition,
@@ -873,7 +879,7 @@ export const path = (
       NotTranslated: (error) => Effect.succeed<Outcome>({ _tag: "Stopped", error }),
       Rejected: () => Effect.succeed<Outcome>({ _tag: "Unchanged" }),
     }),
-    Effect.map((outcome) => ({ run, inputs, outcome })),
+    Effect.map((outcome) => ({ run, inputs, outcome, from })),
   );
 };
 
