@@ -253,11 +253,9 @@ export const InspectTemplateProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createProjectsInspectTemplates({
+            templateId,
+            inspectTemplate: body,
             parent: `projects/${env.project}`,
-            body: {
-              templateId,
-              inspectTemplate: body,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -274,16 +272,14 @@ export const InspectTemplateProvider = () =>
 
       if (displayChanged || descriptionChanged || configChanged || limitedChanged) {
         current = yield* dlp.patchProjectsInspectTemplates({
+          inspectTemplate: body,
+          updateMask: updateMaskOf(
+            displayChanged ? "displayName" : undefined,
+            descriptionChanged ? "description" : undefined,
+            configChanged ? "inspectConfig" : undefined,
+            limitedChanged ? "allowLimitedAvailabilityInfoTypes" : undefined,
+          ),
           name: current.name ?? name,
-          body: {
-            inspectTemplate: body,
-            updateMask: updateMaskOf(
-              displayChanged ? "displayName" : undefined,
-              descriptionChanged ? "description" : undefined,
-              configChanged ? "inspectConfig" : undefined,
-              limitedChanged ? "allowLimitedAvailabilityInfoTypes" : undefined,
-            ),
-          },
         });
       }
 

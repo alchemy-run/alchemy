@@ -319,12 +319,10 @@ export const SourcesDiskMigrationJobProvider = () =>
       if (current === undefined) {
         const created = yield* vm
           .createProjectsLocationsSourcesDiskMigrationJobs({
+            targetDetails,
+            awsSourceDiskDetails: news.awsSourceDiskDetails,
             parent: source,
             diskMigrationJobId,
-            body: {
-              targetDetails,
-              awsSourceDiskDetails: news.awsSourceDiskDetails,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -359,12 +357,9 @@ export const SourcesDiskMigrationJobProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* vm.patchProjectsLocationsSourcesDiskMigrationJobs({
+          targetDetails,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            targetDetails,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

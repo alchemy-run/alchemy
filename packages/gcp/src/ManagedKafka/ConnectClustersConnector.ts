@@ -299,12 +299,10 @@ export const ConnectClustersConnectorProvider = () =>
         const created = yield* retryTransient(
           kafka
             .createProjectsLocationsConnectClustersConnectors({
+              configs,
+              taskRestartPolicy,
               parent: connectCluster,
               connectorId,
-              body: {
-                configs,
-                taskRestartPolicy,
-              },
             })
             .pipe(Effect.catchTag("Conflict", () => getConnector(name))),
         );
@@ -323,15 +321,13 @@ export const ConnectClustersConnectorProvider = () =>
 
       if (configsChanged || policyChanged) {
         current = yield* kafka.patchProjectsLocationsConnectClustersConnectors({
+          configs,
+          taskRestartPolicy,
           name,
           updateMask: fieldMask([
             configsChanged && "configs",
             policyChanged && "task_restart_policy",
           ]),
-          body: {
-            configs,
-            taskRestartPolicy,
-          },
         });
       }
 

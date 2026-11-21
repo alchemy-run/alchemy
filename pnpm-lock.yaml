@@ -13145,6 +13145,28 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
+  submodules/distilled/packages/opensearch:
+    dependencies:
+      '@distilled.cloud/aws4signer':
+        specifier: workspace:*
+        version: link:../aws4signer
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
+
   submodules/distilled/packages/ovh:
     dependencies:
       '@distilled.cloud/core':
@@ -13473,6 +13495,22 @@ importers:
         specifier: 4.1.4
         version: 4.1.4
     devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+
+  submodules/distilled/packages/scaleway:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5

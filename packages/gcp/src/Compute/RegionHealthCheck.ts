@@ -667,16 +667,10 @@ export const RegionHealthCheckProvider = () =>
       let current = yield* getByName(env.project, region, healthCheckName);
 
       if (current === undefined) {
-        yield* compute
-          .insertRegionHealthChecks({
-            project: env.project,
-            region,
-            body: desired,
-          })
-          .pipe(
-            Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        yield* compute.insertRegionHealthChecks({ ...desired, project: env.project, region }).pipe(
+          Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* awaitResource(env.project, region, healthCheckName);
       }
 
@@ -690,10 +684,10 @@ export const RegionHealthCheckProvider = () =>
       if (needsUpdate(current, desired)) {
         yield* compute
           .patchRegionHealthChecks({
+            ...desired,
             project: env.project,
             region,
             healthCheck: healthCheckName,
-            body: desired,
           })
           .pipe(Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)));
         current = yield* getByName(env.project, region, healthCheckName);

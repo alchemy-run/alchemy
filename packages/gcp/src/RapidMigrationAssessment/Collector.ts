@@ -364,17 +364,15 @@ export const CollectorProvider = () =>
       if (observed === undefined) {
         const created = yield* rma
           .createProjectsLocationsCollectors({
+            displayName,
+            description: news.description,
+            collectionDays: news.collectionDays,
+            serviceAccount: news.serviceAccount,
+            expectedAssetCount,
+            eulaUri: news.eulaUri,
+            labels: desiredLabels,
             parent: locationParent(env.project, location),
             collectorId,
-            body: {
-              displayName,
-              description: news.description,
-              collectionDays: news.collectionDays,
-              serviceAccount: news.serviceAccount,
-              expectedAssetCount,
-              eulaUri: news.eulaUri,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -416,18 +414,15 @@ export const CollectorProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* rma.patchProjectsLocationsCollectors({
+          displayName,
+          description: news.description,
+          collectionDays: news.collectionDays,
+          serviceAccount: news.serviceAccount,
+          expectedAssetCount,
+          eulaUri: news.eulaUri,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            description: news.description,
-            collectionDays: news.collectionDays,
-            serviceAccount: news.serviceAccount,
-            expectedAssetCount,
-            eulaUri: news.eulaUri,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);
