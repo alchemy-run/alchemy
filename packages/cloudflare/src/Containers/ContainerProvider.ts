@@ -1541,7 +1541,7 @@ export const LiveContainerProvider = () =>
             applicationId: generateLocalId(),
             applicationName: name,
             accountId,
-            schedulingPolicy: news.schedulingPolicy ?? "default",
+            schedulingPolicy: schedulingPolicyOf(news),
             instances: undefined,
             maxInstances: undefined,
             constraints: undefined,
@@ -1634,6 +1634,18 @@ export const LiveContainerProvider = () =>
           // the convergence pass creates the application once it has.
           if (hasUnresolvedAttachment && durableObjectsForRecovery === undefined && !existing) {
             if (output && !isLiveId(output.applicationId)) return output;
+            // The recorded application is gone and so is its attachment:
+            // fall back to a placeholder, exactly like precreate's, so the
+            // convergence pass creates the application once the Worker has
+            // published the namespace.
+            if (output) {
+              return {
+                ...output,
+                applicationId: generateLocalId(),
+                durableObjects: undefined,
+                version: undefined,
+              };
+            }
             return yield* new ContainerProviderOperationFailed({
               message: `Container application "${name}" has an unresolved Durable Object namespace and no recorded attachment. Reconcile its Worker first.`,
             });
