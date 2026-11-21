@@ -631,6 +631,11 @@ const ensureFlociUnsynchronized = (
           : "FLOCI_SERVICES_CLOUDFRONT_EDGE_PORTS_ENABLED=false",
         "-e",
         `FLOCI_SERVICES_CLOUDFRONT_DOMAIN_SUFFIX=${FLOCI_CLOUDFRONT_DOMAIN_SUFFIX}`,
+        // Databases, cache clusters and tables read as deleting for a moment
+        // before they are gone, as AWS deletes them in the background, so a
+        // destroy interrupted mid-delete behaves locally as it does on AWS.
+        "-e",
+        "FLOCI_ASYNC_DELETE_MILLIS=8000",
         ...(config?.dockerSocket === false
           ? []
           : ["-v", "/var/run/docker.sock:/var/run/docker.sock", "-u", "root"]),
