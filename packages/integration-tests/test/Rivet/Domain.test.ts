@@ -1,18 +1,21 @@
 import * as Docker from "@alchemy.run/docker";
+import * as DomainRivet from "@alchemy.run/domain/Rivet";
 import * as Rivet from "@alchemy.run/rivet";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { ensureDockerSwarm } from "../Docker/Runtime.ts";
+import { domainRevisions, ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { conformance, rebuild, waitForReady } from "../Domain/conformance/conformance.ts";
 import { latency } from "../Domain/conformance/latency.ts";
 import { DOMAIN_FRONT_PORT } from "./fixtures/domain-cluster.ts";
 import DomainFrontV1 from "./fixtures/domain-front-v1.ts";
 import DomainFront from "./fixtures/domain-front.ts";
 
-const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };
+const testOptions = {
+  providers: Layer.mergeAll(Docker.providers(), Rivet.providers(), DomainRivet.providers()),
+};
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 // File-backed scratch state: the leading `destroy()` drains whatever a
 // previous (interrupted or NO_DESTROY) run left behind.
@@ -50,6 +53,13 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll.skipIf(!!process.env.NO_DESTROY)(stack.destroy(), { timeout: 300_000 });
+
+    test(
+      "the nodes run with the model's revision",
+      Effect.gen(function* () {
+        expect(yield* domainRevisions).toEqual({ DomainObjects: { Conformance: 1 } });
+      }),
+    );
 
     conformance({ test, url: Effect.succeed(url), kind: "local" });
     latency({

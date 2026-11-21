@@ -24,6 +24,7 @@
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/domain": "workspace:*",
     "@alchemy.run/effect-cluster": "workspace:*",
     "@cluster-bank/server": "workspace:*",
     "alchemy": "workspace:*",

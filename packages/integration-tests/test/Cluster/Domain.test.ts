@@ -1,11 +1,12 @@
 import * as Docker from "@alchemy.run/docker";
+import * as DomainEffectCluster from "@alchemy.run/domain/EffectCluster";
 import * as Cluster from "@alchemy.run/effect-cluster";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { ensureDockerSwarm } from "../Docker/Runtime.ts";
+import { domainRevisions, ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { conformance, rebuild, waitForReady } from "../Domain/conformance/conformance.ts";
 import { latency } from "../Domain/conformance/latency.ts";
 import { DOMAIN_FRONT_PORT } from "./fixtures/domain/cluster.ts";
@@ -13,7 +14,13 @@ import { crash } from "./fixtures/domain/crash.ts";
 import DomainFrontV1 from "./fixtures/domain/front-v1.ts";
 import DomainFront from "./fixtures/domain/front.ts";
 
-const testOptions = { providers: Layer.mergeAll(Docker.providers(), Cluster.providers()) };
+const testOptions = {
+  providers: Layer.mergeAll(
+    Docker.providers(),
+    Cluster.providers(),
+    DomainEffectCluster.providers(),
+  ),
+};
 const { test, beforeAll, afterAll } = Test.make(testOptions);
 const stack = Core.scratchStack(testOptions, "ClusterDomain", import.meta.url);
 
@@ -51,6 +58,13 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll.skipIf(!!process.env.NO_DESTROY)(stack.destroy(), { timeout: 300_000 });
+
+    test(
+      "the runners run with the model's revision",
+      Effect.gen(function* () {
+        expect(yield* domainRevisions).toEqual({ DomainObjects: { Conformance: 1 } });
+      }),
+    );
 
     conformance({ test, url: Effect.succeed(url), kind: "local" });
     latency({
