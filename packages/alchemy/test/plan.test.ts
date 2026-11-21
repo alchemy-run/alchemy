@@ -5635,6 +5635,31 @@ describe("renamed resources (renamedFrom)", { tags: ["unit", "local"] }, () => {
       }
     }),
   );
+
+  test(
+    "resources declared by a renamed resource's props do not inherit its former ids (#2219)",
+    Effect.gen(function* () {
+      yield* seed({ "Site/Worker": bucketRow("Site/Worker") });
+
+      // A Website's Worker is `renamedFrom(`${id}/Worker`)`, and its props
+      // can declare resources of their own (the API token behind
+      // `R2.S3Credentials`). Only the Worker claims the former FQN.
+      const plan = yield* Effect.gen(function* () {
+        yield* Bucket(
+          "Site",
+          Effect.gen(function* () {
+            yield* Bucket("SiteToken", { name: "t" });
+            return { name: "b" };
+          }),
+        ).pipe(renamedFrom("Site/Worker"));
+        return {};
+      }).pipe(makePlan);
+
+      expect(plan.resources.Site?.renamedFrom).toEqual(["Site/Worker"]);
+      expect(plan.resources.SiteToken?.action).toEqual("create");
+      expect(plan.resources.SiteToken?.renamedFrom).toBeUndefined();
+    }),
+  );
 });
 
 describe("filtered planning", { tags: ["unit", "local"] }, () => {
