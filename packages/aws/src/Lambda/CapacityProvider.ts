@@ -328,7 +328,7 @@ export const CapacityProviderProvider = () =>
   Provider.succeed(CapacityProvider, {
     stables: ["capacityProviderArn", "capacityProviderName", "operatorRoleArn", "operatorRoleName"],
 
-    diff: Effect.fn(function* ({ id, olds, news, output }) {
+    diff: Effect.fn(function* ({ olds, news, output }) {
       if (!isResolved(news)) return;
       const name = news.capacityProviderName ?? output?.capacityProviderName;
       if (name !== undefined && output !== undefined && name !== output.capacityProviderName) {
