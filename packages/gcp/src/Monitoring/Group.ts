@@ -234,17 +234,19 @@ export const GroupProvider = () =>
       let current = yield* observe(env.project, id, output?.name);
 
       if (current === undefined) {
-        const created = yield* monitoring
-          .createProjectsGroups({
-            displayName: encodedDisplayName,
-            filter: news.filter,
-            parentName: news.parentName,
-            isCluster: desiredCluster,
-            name: parentOf(env.project),
-          })
-          // Group ids are server-assigned, so a 409 here is the transient
-          // "too many concurrent edits", never an existing group.
-          .pipe(retryConcurrentEdits);
+        const created = yield* (
+          monitoring
+            .createProjectsGroups({
+              displayName: encodedDisplayName,
+              filter: news.filter,
+              parentName: news.parentName,
+              isCluster: desiredCluster,
+              name: parentOf(env.project),
+            })
+            // Group ids are server-assigned, so a 409 here is the transient
+            // "too many concurrent edits", never an existing group.
+            .pipe(retryConcurrentEdits)
+        );
         current = created;
       }
 
