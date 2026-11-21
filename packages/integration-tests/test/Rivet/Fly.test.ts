@@ -7,7 +7,9 @@ import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
+import { CLASS_SECRET, CLASS_SECRET_NAME, ClassSecretConfig } from "./fixtures/class-secret.ts";
 import { expectDurableStream } from "./fixtures/durable-stream-check.ts";
+import { stackApps } from "./fixtures/fly-checks.ts";
 import { Cluster } from "./fixtures/fly/cluster.ts";
 import { CounterLive } from "./fixtures/fly/counter-live.ts";
 import Front from "./fixtures/fly/front.ts";
@@ -40,7 +42,7 @@ describe.skipIf(!!process.env.FAST)(
             const front = yield* Front;
             const actors = yield* RustActors().pipe(Effect.provide(RustPool));
             return { url: front.url, rust: rustTarget(actors) };
-          }).pipe(Effect.provide(CounterLive)),
+          }).pipe(Effect.provide(CounterLive.pipe(Layer.provide(ClassSecretConfig)))),
         );
         const url = out.url;
         rust = out.rust as typeof rust;
@@ -58,6 +60,37 @@ describe.skipIf(!!process.env.FAST)(
       "Durable Streams: the front appends to and reads a stream on its cloud's Services pool",
       Effect.suspend(() => expectDurableStream(baseUrl)),
       { timeout: 180_000 },
+    );
+
+    test(
+      "no Machine config holds the control plane's token, its bucket key or a class's secret",
+      Effect.gen(function* () {
+        const apps = yield* Core.withProviders(
+          stackApps(sharedStack),
+          testOptions,
+          sharedStack.name,
+        );
+        const configs = apps.flatMap(({ machines }) => machines.map((machine) => machine.config));
+        const env = configs.flatMap((config) => Object.keys(config?.env ?? {}));
+        expect(env).not.toContain("RIVET_TOKEN");
+        expect(env).not.toContain("RIVET__AUTH__ADMIN_TOKEN");
+        expect(env).not.toContain("RIVET__OBJECT_STORAGE__PRIMARY__S3__SECRET_ACCESS_KEY");
+        expect(env).not.toContain(CLASS_SECRET_NAME);
+        expect(JSON.stringify(configs)).not.toContain(CLASS_SECRET);
+        // They are App secrets instead: the engines', and every pool's.
+        const secrets = apps.map(({ secrets }) => secrets);
+        expect(secrets.filter((names) => names.includes("RIVET__AUTH__ADMIN_TOKEN"))).toHaveLength(
+          1,
+        );
+        // Default, Rust and Services.
+        expect(
+          secrets.filter((names) => names.some((name) => name.endsWith("RIVET_TOKEN"))),
+        ).toHaveLength(3);
+        expect(
+          secrets.filter((names) => names.some((name) => name.endsWith(CLASS_SECRET_NAME))),
+        ).toHaveLength(1);
+      }),
+      { timeout: 120_000 },
     );
 
     test(

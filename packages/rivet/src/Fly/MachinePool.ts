@@ -4,8 +4,8 @@ import {
   bundleNodes,
   isImageProgram,
   makePoolLayer,
-  nodeEnvironment,
   RIVETKIT_VERSION,
+  secretNodeEnvironment,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -74,7 +74,9 @@ export const MachinePool = (id: string, options: MachinePoolOptions = {}) =>
         region: options.region ?? "iad",
         count: options.replicas ?? 1,
         guest: options.guest ?? { cpus: 1, memoryMb: 1024 },
-        env: nodeEnvironment(nodes),
+        // The token and any secret a class reads as config stay Redacted:
+        // the Service keeps them as secrets of the App it owns.
+        env: secretNodeEnvironment(nodes),
       });
     }),
   });
