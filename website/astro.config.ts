@@ -603,6 +603,7 @@ export default defineConfig({
                 { label: "Previews", link: "/cloudflare/compute/previews" },
                 { label: "Python Workers", link: "/cloudflare/compute/python-workers" },
                 { label: "Workers Cache", link: "/cloudflare/compute/cache" },
+                { label: "TCP connections", link: "/cloudflare/compute/tcp" },
                 { label: "Rate limiting", link: "/cloudflare/compute/rate-limiting" },
                 { label: "Browser rendering", link: "/cloudflare/compute/browser-rendering" },
                 { label: "Worker Loader", link: "/cloudflare/compute/worker-loader" },

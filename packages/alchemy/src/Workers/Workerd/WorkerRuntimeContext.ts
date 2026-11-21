@@ -14,6 +14,7 @@ import { packEnvValueKeepRedacted, RuntimeContext, unpackEnvValue } from "../../
 import { EventLifetime } from "../EventLifetime.ts";
 import { WorkerEnvironment } from "../WorkerEnvironment.ts";
 import { makeRequestEffect } from "./HttpServer.ts";
+import { fromWorkerdSocket, type TcpSocket } from "./Socket.ts";
 import { ExportedHandlerMethods, isWorkerEvent, type WorkerEvent } from "./WorkerEvent.ts";
 
 /** Something a hosted class or capture exports onto its Worker's bundle. */
@@ -39,6 +40,19 @@ const makeRequestHandler =
   (event: any) =>
     isWorkerEvent(event) && event.type === "fetch"
       ? makeRequestEffect(event.input, handler, event.context)
+      : undefined;
+
+/**
+ * The shape's `connect` handler, run for each inbound TCP connection
+ * (forwarded by Spectrum or by another Worker's `connect()`). The handler's
+ * Effect lives as long as the connection: workerd keeps the socket open
+ * until it settles.
+ */
+const makeConnectHandler =
+  (handler: (socket: TcpSocket) => Effect.Effect<void>): FunctionListener<void> =>
+  (event) =>
+    isWorkerEvent(event) && event.type === "connect"
+      ? handler(fromWorkerdSocket(event.input as cf.Socket))
       : undefined;
 
 export interface WorkerRuntimeContext extends FunctionContext {
@@ -86,7 +100,15 @@ export const makeWorkerRuntimeContext = (
       // expose any non-handler methods on it as RPC methods on the
       // deployed `WorkerEntrypoint` subclass — see `__rpc__` below.
       if (options?.shape) userShape = options.shape;
-      return ctx.listen(makeRequestHandler(handler));
+      // The shape's `connect` handler (inbound TCP) runs in the same
+      // context as `fetch`; its requirements are the shape's `Req` too.
+      const connect = options?.shape?.connect as
+        | Parameters<typeof makeConnectHandler>[0]
+        | undefined;
+      return Effect.andThen(
+        ctx.listen(makeRequestHandler(handler)),
+        typeof connect === "function" ? ctx.listen(makeConnectHandler(connect)) : Effect.void,
+      ) as Effect.Effect<void, never, Req>;
     },
     listen: ((handler: FunctionListener | Effect.Effect<FunctionListener>) =>
       Effect.gen(function* () {
