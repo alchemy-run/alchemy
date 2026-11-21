@@ -1,10 +1,15 @@
 import * as Output from "alchemy/Output";
 
-/** The Function attributes the helpers below read. */
+/**
+ * The Function attributes the helpers below read. `Req` is pinned to `never`
+ * (resource attributes are `Output<string, never>`): the default
+ * `Output<string>` widens `Req` to `any`, which leaks into every Effect that
+ * yields a helper's result.
+ */
 export interface QualifiedFunctionRef {
-  readonly functionArn: Output.Output<string>;
-  readonly functionName: Output.Output<string>;
-  readonly qualifiedArn: Output.Output<string>;
+  readonly functionArn: Output.Output<string, never>;
+  readonly functionName: Output.Output<string, never>;
+  readonly qualifiedArn: Output.Output<string, never>;
 }
 
 /** The alias ARN, when the Function routes through one. */
@@ -18,7 +23,7 @@ const aliasArnOf = (qualifiedArn: string | undefined, functionArn: string) =>
  * URIs, notification targets and rule targets wire this instead of
  * `functionArn` so they follow the alias.
  */
-export const qualifiedArnOf = (fn: QualifiedFunctionRef): Output.Output<string> =>
+export const qualifiedArnOf = (fn: QualifiedFunctionRef): Output.Output<string, never> =>
   Output.map(
     Output.all(fn.qualifiedArn, fn.functionArn),
     ([qualifiedArn, functionArn]: [string | undefined, string]) =>
@@ -30,7 +35,7 @@ export const qualifiedArnOf = (fn: QualifiedFunctionRef): Output.Output<string> 
  * mappings, `AddPermission`): the alias ARN when the Function sets `alias`,
  * otherwise the plain function name.
  */
-export const qualifiedNameOf = (fn: QualifiedFunctionRef): Output.Output<string> =>
+export const qualifiedNameOf = (fn: QualifiedFunctionRef): Output.Output<string, never> =>
   Output.map(
     Output.all(fn.qualifiedArn, fn.functionArn, fn.functionName),
     ([qualifiedArn, functionArn, functionName]: [string | undefined, string, string]) =>
@@ -41,7 +46,7 @@ export const qualifiedNameOf = (fn: QualifiedFunctionRef): Output.Output<string>
  * The `Qualifier` to start `fn`'s durable executions on: the alias name when
  * the Function sets `alias`, otherwise `$LATEST`.
  */
-export const qualifierOf = (fn: QualifiedFunctionRef): Output.Output<string> =>
+export const qualifierOf = (fn: QualifiedFunctionRef): Output.Output<string, never> =>
   Output.map(
     Output.all(fn.qualifiedArn, fn.functionArn),
     ([qualifiedArn, functionArn]: [string | undefined, string]) =>
