@@ -29,6 +29,11 @@ export interface ServicePoolOptions extends PoolSettings {
  * public domain and works with any control plane it can reach —
  * `RivetCloud.ControlPlane`, or one on another cloud.
  *
+ * The control plane's token is a variable of the Service, as are the
+ * secrets a class reads as config: anyone who can read the project's
+ * variables can read them. Railway has no other secret store, and its API
+ * cannot seal a variable.
+ *
  * Every Durable Object given the same pool shares its nodes: declare the
  * pool once and provide it to each class.
  *
