@@ -3,7 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { botUserId, listBotGuilds, ownership, physicalName, sameJson } from "./internal/Discord.ts";
+import { botUserId, emojiName, listBotGuilds, ownership, sameJson } from "./internal/Discord.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface EmojiProps {
@@ -90,17 +90,6 @@ const toAttributes = (guildId: string, emoji: discord.EmojiResponse): EmojiAttri
   roles: emoji.roles.filter((r): r is string => typeof r === "string"),
   mention: `<${emoji.animated ? "a" : ""}:${emoji.name}:${emoji.id}>`,
 });
-
-/** Emoji names: letters, digits and underscores, 2-32 characters. */
-export const emojiName = (id: string, instanceId: string, props: { name?: string }) =>
-  props.name !== undefined
-    ? Effect.succeed(props.name)
-    : physicalName(id, {
-        instanceId,
-        maxLength: 32,
-        delimiter: "_",
-        charset: /[^A-Za-z0-9_]/g,
-      });
 
 const getEmoji = (guildId: string, emojiId: string) =>
   discord

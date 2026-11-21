@@ -184,3 +184,14 @@ const canonical = (value: unknown): string =>
       ? Object.fromEntries(Object.entries(v).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)))
       : v,
   );
+
+/** Emoji names: letters, digits and underscores, 2-32 characters. */
+export const emojiName = (id: string, instanceId: string, props: { name?: string }) =>
+  props.name !== undefined
+    ? Effect.succeed(props.name)
+    : physicalName(id, {
+        instanceId,
+        maxLength: 32,
+        delimiter: "_",
+        charset: /[^A-Za-z0-9_]/g,
+      });

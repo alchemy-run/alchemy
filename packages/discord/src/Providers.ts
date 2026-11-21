@@ -21,6 +21,7 @@ import { GuildSettings, GuildSettingsProvider } from "./GuildSettings.ts";
 import { GuildTemplate, GuildTemplateProvider } from "./GuildTemplate.ts";
 import { InteractionsEndpoint, InteractionsEndpointProvider } from "./InteractionsEndpoint.ts";
 import { DeployerToken, DeployerTokenProvider } from "./internal/DeployerToken.ts";
+import { PublicKey, PublicKeyProvider } from "./internal/PublicKey.ts";
 import { Invite, InviteProvider } from "./Invite.ts";
 import { MemberRole, MemberRoleProvider } from "./MemberRole.ts";
 import { Onboarding, OnboardingProvider } from "./Onboarding.ts";
@@ -82,6 +83,7 @@ const make = () =>
       Widget,
       Guild,
       DeployerToken,
+      PublicKey,
     ]),
   ).pipe(
     Layer.provide(
@@ -114,6 +116,7 @@ const make = () =>
         WidgetProvider(),
         GuildProvider(),
         DeployerTokenProvider(),
+        PublicKeyProvider(),
       ),
     ),
     Layer.provideMerge(Layer.succeed(DiscordRetry, DeployRetry.policy)),

@@ -3,8 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { emojiName } from "./Emoji.ts";
-import { applicationId } from "./internal/Discord.ts";
+import { applicationId, emojiName } from "./internal/Discord.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface ApplicationEmojiProps {
