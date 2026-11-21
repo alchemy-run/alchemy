@@ -9,6 +9,7 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 
 /**
  * Plan-time replacement check for immutable Image Builder versions
@@ -136,7 +137,7 @@ export const syncImageBuilderTags = Effect.fn(function* (
  */
 export const imageBuilderArn = Effect.fn(function* (resourceType: string, resourcePath: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
-  return `arn:aws:imagebuilder:${region}:${accountId}:${resourceType}/${resourcePath.toLowerCase()}`;
+  return `arn:${partitionOf(region)}:imagebuilder:${region}:${accountId}:${resourceType}/${resourcePath.toLowerCase()}`;
 });
 
 /**
