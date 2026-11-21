@@ -136,6 +136,8 @@ export const DOCS_TABS: DocsTab[] = [
   hub("AI", "ai", "AI", "models · tools · skills · sandboxes"),
   hub("Pi", "pi", "AI", "conversations · extensions · code mode"),
   hub("OpenCode", "opencode", "AI", "sessions · prompts · skills"),
+  hub("Yielded Agent", "yielded-agent", "AI", "agents · threads · runs"),
+  hub("clanka", "clanka", "AI", "scripts · executor · conversations"),
 
   hub("Rivet", "rivet", "Actors", "durable objects · control planes · pools", ["/providers/rivet"]),
   hub("Effect Cluster", "cluster", "Actors", "entities · workflows · pools", [

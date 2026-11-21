@@ -1,0 +1,91 @@
+---
+title: What is Yielded Agent?
+description: The concepts behind Yielded Agent on Alchemy — agents, Threads, Runs, tools and history — and how @alchemy.run/yielded-agent supplies each one in a Durable Object.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Yielded Agent is a library, not a server. An **agent** is a value: schemas for its input and output, instructions, a toolkit and limits. Running one is an Effect that needs things from the application around it: a model to ask, a handler for each tool, and somewhere to keep the conversation. On Alchemy that application is a Durable Object, and the harness gives the runtime each of those from Layers you provide.
+
+Take one small app: a `Threads` Durable Object running a `Support` agent on the Thread `ticket-7`. The harness asks the `Fast` model on Workers AI, runs the `lookup` tool in the object, and keeps the Thread in the object's own SQLite.
+
+<Tree
+  nodes={[
+    {
+      id: "threads", label: "Threads", type: "Durable Object", icon: "box",
+      areas: ["agent harness", "tool harness", "history harness"],
+      phoneAreas: ["agent", "harness", "tool", "history"], colGap: 4.5,
+    },
+    { id: "agent", label: "Support", type: "agent", parent: "threads", icon: "bot" },
+    { id: "harness", label: "harness", type: "runs it", parent: "threads", tone: "accent", icon: "refresh-cw" },
+    { id: "tool", label: "lookup", type: "tool", parent: "threads", icon: "wrench" },
+    { id: "history", label: "ticket-7", type: "Thread", parent: "threads", icon: "database" },
+    { id: "fast", label: "Fast", type: "model · Workers AI", icon: "sparkles" },
+  ]}
+  areas={["threads fast"]}
+  phoneAreas={["threads", "fast"]}
+  colGap={4.5}
+  links={[
+    { from: "harness", to: "agent", label: "runs" },
+    { from: "harness", to: "tool", label: "calls" },
+    { from: "harness", to: "history", label: "commits" },
+    { from: "harness", to: "fast", label: "asks" },
+  ]}
+  caption="Everything but the model is in the Durable Object. The harness runs the Support agent: it asks the Fast model, calls the lookup tool, and commits each run to the Thread ticket-7 in the object's SQLite."
+/>
+
+## Agents
+
+An **agent** is defined with Yielded's own `Agent.make`. Its `input` and `output` are schemas, so a run takes typed input and returns validated output. `Output.text` says the answer is plain text; any other schema is returned as JSON.
+
+```typescript
+export const Support = Agent.make("support", {
+  input: Schema.String,
+  output: Output.text(Schema.String),
+  instructions: "Answer questions about orders.",
+  toolkit: YieldedAgent.toolkit(LookupOrder),
+  policy: { maxTurns: 6, maxToolCalls: 6, maxDuration: "90 seconds" },
+});
+```
+
+See [Agents & runs](/yielded-agent/agents-and-runs).
+
+## The harness
+
+The **harness** is what runs agents in your runtime: the models a run may use and the tools agents call. You yield it in a Durable Object's outer Effect.
+
+```typescript
+const harness = yield* YieldedAgent.Harness({ models: [Fast], tools: [LookupOrder] });
+```
+
+## Threads
+
+A **Thread** is one conversation. You name it, and every run on that name reads what came before and adds to it. A Thread belongs to the Durable Object it was started in.
+
+```typescript
+const result = yield* harness.run(Support, "Where is order A-1042?", { thread: "ticket-7" });
+```
+
+See [Threads](/yielded-agent/threads).
+
+## Runs
+
+A **Run** is one execution of an agent on a Thread: the model is asked, its tool calls run, and that repeats until it answers or a limit in the agent's `policy` is reached. `harness.run` waits for the output, and `harness.stream` gives every event as it happens.
+
+## Tools
+
+An agent's toolkit is made of Effect AI tools. `YieldedAgent.toolkit` builds it from `AI.Tool` declarations, and the harness supplies each tool's handler from its Layer.
+
+See [Tools](/yielded-agent/tools).
+
+## History
+
+Thread history is committed once per successful Run. In a Durable Object it is stored in the object's SQLite, so a Thread continues after the object is evicted or redeployed.
+
+See [Surviving eviction](/yielded-agent/eviction).
+
+## How @alchemy.run/yielded-agent models these concepts
+
+Agents stay Yielded's: `Agent.make`, `Output`, and policies are imported from `@yielded/agent`. `YieldedAgent.Harness` is an Effect you yield where its Layers are provided. Models, tools and sandboxes are the [`@alchemy.run/ai`](/ai) declarations, unchanged. `YieldedCloudflare.DurableObjectHistory` keeps Threads in the Durable Object. A Thread's sandbox is found by a key made from the object's id and the Thread's name.
+
+Next: [Setup](/yielded-agent/setup).

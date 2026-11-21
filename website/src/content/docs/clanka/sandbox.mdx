@@ -1,0 +1,53 @@
+---
+title: The executor & sandbox
+description: clanka's executor runs in the conversation's sandbox. Install clanka into a snapshot, choose the working directory, and suspend or remove the sandbox.
+---
+
+Each conversation has one sandbox, and clanka's executor runs in it. The sandbox holds the project the agent works on, so it lasts across the conversation's prompts.
+
+## Install clanka in a snapshot
+
+The executor needs clanka and Node in the sandbox. `Clanka.installCommand` is a shell command that installs clanka; run it when the snapshot is built:
+
+```typescript title="src/agent.ts"
+import * as AIBoat from "@alchemy.run/ai/Boat";
+import * as Boat from "@alchemy.run/boat";
+import * as Clanka from "@alchemy.run/clanka";
+
+export const Base = Boat.Snapshot("Base", {
+  run: ["git clone https://github.com/acme/shop /home/user/shop", Clanka.installCommand],
+});
+
+export const Sandbox = AIBoat.Sandboxes(Base);
+```
+
+Without it, the first prompt of each conversation installs clanka before it starts.
+
+## Choose the working directory
+
+`directory` is where the executor starts and where relative paths in scripts resolve. It is created if it is missing.
+
+```typescript
+const harness = yield* Clanka.Harness({ models: [Smart], directory: "/home/user/shop" });
+```
+
+The default is `/home/user`.
+
+## What runs when
+
+A prompt opens the conversation's sandbox, starts the executor there, and stops it when the prompt ends. The files stay for the next prompt.
+
+## Suspend and remove
+
+Stop a conversation's sandbox and keep its files, or delete it:
+
+```typescript
+yield* harness.conversation("issue-42").suspendSandbox;
+yield* harness.conversation("issue-42").removeSandbox;
+```
+
+The next prompt resumes a suspended sandbox, and starts an empty one after a removal. `conversation.sandboxKey` is the key the platform's Layer names the sandbox by.
+
+## Other platforms
+
+Any `AI.Sandboxes` Layer works. See [Sandbox platforms](/ai/sandbox-platforms).
