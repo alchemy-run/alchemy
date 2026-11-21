@@ -369,6 +369,9 @@ export const readAssets = Effect.fn(function* ({ directory, base, ...config }: A
         },
       );
     }),
+    // Stat, read and hash independent files concurrently, without keeping
+    // an unused array of results; sorting below preserves manifest order.
+    { concurrency: 16, discard: true },
   );
   // Cloudflare's SPA fallback is hard-coded to `/index.html` at the
   // manifest root, so prefixing every key would 404 every client-side
