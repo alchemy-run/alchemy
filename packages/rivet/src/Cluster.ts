@@ -89,18 +89,6 @@ export interface ControlPlaneProps {
    * stage.
    */
   namespace?: string;
-  /**
-   * The URL nodes on {@link network} connect to instead of `endpoint`: a
-   * private address of the control plane that only that network reaches.
-   * Deploys and callers still use `endpoint`.
-   */
-  nodeEndpoint?: string;
-  /**
-   * The private network the control plane is on. A pool that runs its
-   * nodes on this network, such as `RivetGCP.ComputeEnginePool` on a `gcp`
-   * one, joins it and connects them to {@link nodeEndpoint}.
-   */
-  network?: ClusterNetwork;
 }
 
 /**
@@ -117,26 +105,6 @@ export interface ControlPlaneProps {
  * });
  * ```
  *
- * ### Reaching a control plane privately
- * **Example:** Nodes on its GCP network connect to its private address
- * ```typescript
- * export const Cluster = Rivet.ControlPlane("Rivet", {
- *   endpoint: "https://rivet.example.com",
- *   token: Config.Redacted("RIVET_TOKEN"),
- *   nodeEndpoint: "http://10.0.0.2:6420",
- *   network: {
- *     kind: "gcp",
- *     network: "rivet",
- *     subnetwork: "rivet-us-central1",
- *     region: "us-central1",
- *   },
- * });
- *
- * export const Default = RivetGCP.CloudRunPool("Default", { clusterNetwork: true }).pipe(
- *   Layer.provide(Cluster),
- * );
- * ```
- *
  * @primitive
  */
 export const ControlPlane = (
@@ -147,22 +115,12 @@ export const ControlPlane = (
     Cluster,
     Effect.gen(function* () {
       const token = Config.isConfig(props.token) ? yield* props.token : props.token;
-      // Absent unless set, so a control plane without them stays the same.
-      const network = {
-        ...(props.nodeEndpoint === undefined ? {} : { nodeEndpoint: props.nodeEndpoint }),
-        ...(props.network === undefined ? {} : { network: props.network }),
-      };
       if (globalThis.__ALCHEMY_RUNTIME__ || props.namespace !== undefined) {
         // At runtime a node or client reads its endpoint and namespace from its own
         // environment; the cluster is only consulted while deploying.
-        return {
-          endpoint: props.endpoint,
-          token,
-          namespace: props.namespace ?? "default",
-          ...network,
-        };
+        return { endpoint: props.endpoint, token, namespace: props.namespace ?? "default" };
       }
       const namespace = yield* Namespace(`${id}Namespace`, { endpoint: props.endpoint, token });
-      return { endpoint: props.endpoint, token, namespace: namespace.name, ...network };
+      return { endpoint: props.endpoint, token, namespace: namespace.name };
     }),
   );

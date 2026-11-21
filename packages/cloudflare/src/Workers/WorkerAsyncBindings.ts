@@ -151,6 +151,8 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       const bindingEff = props.env?.[bindingName] as
         | WorkerBindingResource
         | Effect.Effect<WorkerBindingResource>;
+      // An `undefined` entry is no binding.
+      if (bindingEff === undefined) continue;
       // A Container bound directly in `env` declares a container-backed
       // Durable Object class: the Container IS the DO namespace binding plus
       // its ContainerApplication. Handled before the generic Effect
@@ -501,7 +503,7 @@ const bindDurableObjectContainers = Effect.fn(function* (
       return yield* Effect.die(
         new DurableObjectContainerBindingError({
           bindingName,
-          message: `Cloudflare.DurableObject("${className}", { containers }) lists a Container that is not Durable Object-managed. Declare it with schedulingPolicy: "durable_object" and an image source (image, or context/dockerfile).`,
+          message: `Cloudflare.DurableObject("${className}", { containers }) lists a Container that is not Durable Object-managed. Declare it with schedulingPolicy: "durable_object" and an image source (main, image, or context/dockerfile).`,
         }),
       );
     }

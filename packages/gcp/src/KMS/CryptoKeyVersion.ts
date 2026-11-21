@@ -744,11 +744,9 @@ export const CryptoKeyVersionProvider = () =>
       if (current === undefined) {
         const created = yield* kms
           .createProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
+            state: targetState === "DISABLED" ? "DISABLED" : undefined,
+            externalProtectionLevelOptions: news.externalProtectionLevelOptions,
             parent: parent.parent,
-            body: {
-              state: targetState === "DISABLED" ? "DISABLED" : undefined,
-              externalProtectionLevelOptions: news.externalProtectionLevelOptions,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () =>
@@ -791,14 +789,12 @@ export const CryptoKeyVersionProvider = () =>
           .filter((field): field is string => field !== undefined)
           .join(",");
         current = yield* kms.patchProjectsLocationsKeyRingsCryptoKeysCryptoKeyVersions({
+          state: stateChanged ? targetState : undefined,
+          externalProtectionLevelOptions: optionsChanged
+            ? news.externalProtectionLevelOptions
+            : undefined,
           name: currentName,
           updateMask,
-          body: {
-            state: stateChanged ? targetState : undefined,
-            externalProtectionLevelOptions: optionsChanged
-              ? news.externalProtectionLevelOptions
-              : undefined,
-          },
         });
       }
 

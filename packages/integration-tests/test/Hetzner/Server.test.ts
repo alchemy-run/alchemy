@@ -7,6 +7,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { expectDeleteRefused } from "../expectDeleteRefused.ts";
 import { hetznerPrimaryIps } from "./limit.ts";
 import { expectFound } from "./lookup.ts";
 
@@ -125,6 +126,32 @@ test.provider(
       expect(refetched.server?.labels.env).toEqual("prod");
       expect(refetched.server?.labels.role).toEqual("web");
       expect(refetched.server?.public_net.ipv4?.ip).toEqual(created.ipv4);
+
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Server("Web", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+            labels: { env: "prod", role: "web" },
+            deleteProtection: true,
+          });
+        }),
+      );
+      // Deletion protection refuses the destroy: the provider never lifts it.
+      // Turn it off and deploy, then destroy.
+      yield* expectDeleteRefused(stack, { logicalId: "Web", tag: "Hetzner.ServerDeleteProtected" });
+      yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Server("Web", {
+            serverType: "cpx12",
+            image: "ubuntu-24.04",
+            location: "nbg1",
+            labels: { env: "prod", role: "web" },
+            deleteProtection: false,
+          });
+        }),
+      );
 
       yield* stack.destroy();
 

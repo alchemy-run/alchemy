@@ -2,15 +2,12 @@ import * as ce from "@distilled.cloud/aws/cost-explorer";
 import { diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { Region } from "../Region.ts";
+import { withGlobalRegion } from "../Region.ts";
 
-// Cost Explorer is a global service served exclusively from the us-east-1
-// endpoint. Every control-plane call must target that region regardless of
-// the ambient stack region, so we pin it on every distilled operation. The
-// distilled Region service value is `Effect<RegionName>`, not a raw string —
-// providing a bare string makes the client `yield*` a string and crash
-// (same pattern as CloudFront KVS / ECR Public / WAFv2 / GlobalAccelerator).
-export const CE_REGION = "us-east-1" as const;
+// Cost Explorer is a global service served exclusively from the partition's
+// global region (us-east-1 in `aws`). Every control-plane call must target
+// that region regardless of the ambient stack region, so we pin it on every
+// distilled operation.
 
 // Cost Explorer's control-plane rate limits are extremely low and shared
 // account-wide, so concurrent deploys readily trip `LimitExceededException:
@@ -25,7 +22,7 @@ export const pinCe = <A, E extends { _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   effect.pipe(
-    Effect.provideService(Region, Effect.succeed(CE_REGION)),
+    withGlobalRegion,
     Effect.retry({
       while: (e) => e._tag === "LimitExceededException",
       schedule: ceThrottleRetrySchedule,

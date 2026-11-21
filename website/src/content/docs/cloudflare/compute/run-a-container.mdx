@@ -83,8 +83,7 @@ is missing. Let's fill it in.
 
 The container's deploy-time props can read the surrounding Stack
 through `Stack.useSync`. Pass it as `.make()`'s first argument to
-pick a beefier instance type in `prod` and the cheap `dev` instance
-everywhere else:
+log less in `prod` than everywhere else:
 
 ```diff lang="typescript"
 // src/Sandbox.runtime.ts
@@ -96,7 +95,7 @@ export const SandboxLive = Sandbox.make(
 -  { main: import.meta.url },
 +  Stack.useSync((stack) => ({
 +    main: import.meta.url,
-+    instanceType: stack.stage === "prod" ? "standard-1" : "dev",
++    env: { LOG_LEVEL: stack.stage === "prod" ? "info" : "debug" },
 +    observability: { logs: { enabled: true } },
 +  })),
   Effect.gen(function* () {

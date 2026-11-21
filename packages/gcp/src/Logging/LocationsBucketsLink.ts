@@ -284,9 +284,9 @@ export const LocationsBucketsLinkProvider = () =>
       if (current === undefined) {
         yield* logging
           .createLocationsBucketsLinks({
+            description: desiredDescription,
             parent: news.bucketName,
             linkId,
-            body: { description: desiredDescription },
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.succeed<logging.Operation>({ done: true })),

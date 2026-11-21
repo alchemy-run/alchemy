@@ -1,4 +1,4 @@
-import * as Rivet from "@distilled.cloud/rivet";
+import * as Pools from "@distilled.cloud/rivet/pools";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -10,7 +10,6 @@ import * as Effect from "effect/Effect";
 import * as HttpClientError from "effect/http/HttpClientError";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import type { DurableObjectActorOptions } from "./DurableObject.ts";
 import { withConnection, type ConnectionProps } from "./internal/Connection.ts";
 import type { Providers } from "./Providers.ts";
 
@@ -75,8 +74,6 @@ export interface PoolDurableObject {
    * `Rivet.DurableObject`. It owns the pool's nodes.
    */
   external?: boolean;
-  /** The RivetKit actor options the pool's nodes host it with. */
-  options?: DurableObjectActorOptions;
 }
 
 /** Data the Durable Objects a pool hosts bind onto it. */
@@ -182,7 +179,7 @@ const poolName = (id: string, name: string | undefined) =>
     : createPhysicalName({ id, lowercase: true, maxLength: 63, delimiter: "-" });
 
 /** Ownership tags ride in the pool's free-form `metadata`. */
-const tagsOf = (pool: Rivet.pools.Pool): Record<string, string> | undefined => {
+const tagsOf = (pool: Pools.Pool): Record<string, string> | undefined => {
   const metadata = pool.metadata as { tags?: unknown } | null | undefined;
   const tags = metadata?.tags;
   return typeof tags === "object" && tags !== null ? (tags as Record<string, string>) : undefined;
@@ -209,7 +206,7 @@ export const PoolProvider = () =>
     Pool,
     Effect.gen(function* () {
       const observe = (connection: ConnectionProps, namespace: string, name: string) =>
-        Rivet.pools.getPool({ pool: name, namespace }).pipe(
+        Pools.getPool({ pool: name, namespace }).pipe(
           Effect.map((res) => res.pool),
           Effect.catchTag(["PoolNotFound", "NamespaceNotFound"], () => Effect.undefined),
           withConnection(connection),
@@ -218,7 +215,7 @@ export const PoolProvider = () =>
       const toAttrs = (
         connection: ConnectionProps,
         namespace: string,
-        pool: Rivet.pools.Pool,
+        pool: Pools.Pool,
         hosted: Pick<PoolAttributes, "durableObjects" | "env">,
       ): PoolAttributes => ({
         ...hosted,
@@ -303,14 +300,12 @@ export const PoolProvider = () =>
           yield* session.note(
             observed === undefined ? `Creating pool ${name}...` : `Updating pool ${name}...`,
           );
-          yield* Rivet.pools
-            .upsertPool({
-              pool: name,
-              namespace: news.namespace,
-              ...desired,
-              metadata: { tags: { ...tagsOf(observed ?? ({} as Rivet.pools.Pool)), ...tags } },
-            })
-            .pipe(withConnection(news));
+          yield* Pools.upsertPool({
+            pool: name,
+            namespace: news.namespace,
+            ...desired,
+            metadata: { tags: { ...tagsOf(observed ?? ({} as Pools.Pool)), ...tags } },
+          }).pipe(withConnection(news));
 
           const pool = yield* observe(news, news.namespace, name);
           if (pool === undefined) {
@@ -322,7 +317,7 @@ export const PoolProvider = () =>
           // A pool's nodes are stopped before the pool is deleted, but the
           // control plane only drops them once they disconnect: retry while
           // they drain.
-          yield* Rivet.pools.deletePool({ pool: output.name, namespace: output.namespace }).pipe(
+          yield* Pools.deletePool({ pool: output.name, namespace: output.namespace }).pipe(
             Effect.tapError((error) =>
               error._tag === "PoolNodesConnected"
                 ? session.note(`Waiting for pool ${output.name}'s nodes to disconnect...`)

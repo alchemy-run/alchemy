@@ -90,6 +90,7 @@
   },
   "references": [
     { "path": "../alchemy/tsconfig.json" },
+    { "path": "../1password/tsconfig.json" },
     { "path": "../sql/tsconfig.json" },
     { "path": "../redis/tsconfig.json" },
     { "path": "../docker/tsconfig.json" },
@@ -102,6 +103,7 @@
     { "path": "../acme/tsconfig.json" },
     { "path": "../drizzle/tsconfig.json" },
     { "path": "../axiom/tsconfig.json" },
+    { "path": "../convex/tsconfig.json" },
     { "path": "../rivet/tsconfig.json" },
     {
       "path": "../effect-cluster/tsconfig.json"
@@ -111,6 +113,7 @@
     { "path": "../daytona/tsconfig.json" },
     { "path": "../archil/tsconfig.json" },
     { "path": "../boat/tsconfig.json" },
+    { "path": "../pi/tsconfig.json" },
     { "path": "../modal/tsconfig.json" },
     { "path": "../planetscale/tsconfig.json" },
     { "path": "../neon/tsconfig.json" },

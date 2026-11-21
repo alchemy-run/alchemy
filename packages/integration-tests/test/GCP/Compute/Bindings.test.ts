@@ -59,8 +59,8 @@ const expectInstanceGrants = Effect.gen(function* () {
 
   const { project } = yield* GcpEnvironment.current;
   const projectPolicy = yield* resourcemanager.getIamPolicyProjects({
+    options: { requestedPolicyVersion: 3 },
     resource: `projects/${project}`,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   const projectRoles = (projectPolicy.bindings ?? []).filter((binding) =>
     (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),

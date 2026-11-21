@@ -76,13 +76,11 @@ test.provider.skipIf(!!process.env.GCP_TEST_ORG_NETWORKSECURITY)(
           : parent;
       const error = yield* Effect.flip(
         networksecurity.createOrganizationsLocationsAddressGroups({
+          type: "IPV4",
+          capacity: 100,
+          items: ["10.0.0.1"],
           parent: `organizations/${organization}/locations/global`,
           addressGroupId: "alchemy-org-address-group-probe",
-          body: {
-            type: "IPV4",
-            capacity: 100,
-            items: ["10.0.0.1"],
-          },
         }),
       );
       expect(error._tag).toBe("Forbidden");

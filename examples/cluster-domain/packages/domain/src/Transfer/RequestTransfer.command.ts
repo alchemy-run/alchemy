@@ -27,9 +27,8 @@ export class TransferRequested extends Domain.Event("TransferRequested", {
  * is idempotent.
  */
 export class RequestTransfer extends Domain.Command("RequestTransfer", {
-  target: TransferId,
   middleware: [Session],
-  input: { from: AccountId, to: AccountId, amount: Cents },
+  input: { transferId: TransferId, from: AccountId, to: AccountId, amount: Cents },
   events: [TransferRequested],
   rejects: [AlreadyRequested, SameAccount],
 }) {}

@@ -1,15 +1,17 @@
+import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as IAM from "@alchemy.run/gcp/IAM";
 import * as Run from "@alchemy.run/gcp/Run";
+import * as SecretManager from "@alchemy.run/gcp/SecretManager";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import type { ClusterNetwork, ClusterShape } from "../Cluster.ts";
+import * as Redacted from "effect/Redacted";
 import {
   isImageProgram,
   makePoolLayer,
   nodeDockerfile,
-  nodeEnvironment,
-  RIVETKIT_VERSION,
+  SECRET_ENV,
+  splitNodeEnvironment,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -37,8 +39,7 @@ export interface CloudRunPoolOptions extends PoolSettings {
   /**
    * Environment each node runs with, besides the pool's own. A value named
    * here wins over the pool's own, so `RIVET_ENDPOINT` points the nodes at
-   * a private address of the control plane, and `RIVET_NODE_VERSION` tells
-   * the control plane which nodes are newer (see `drainOnVersionUpgrade`).
+   * a private address of the control plane.
    */
   env?: Record<string, Input<string>>;
   /**
@@ -47,8 +48,9 @@ export interface CloudRunPoolOptions extends PoolSettings {
    * The nodes' service account is granted `roles/secretmanager.secretAccessor`
    * on each secret before the worker pool rolls out a revision that reads it,
    * and Cloud Run hands the values to the container, so they stay out of the
-   * worker pool's configuration. The control plane's token is plain
-   * environment unless `RIVET_TOKEN` is named here.
+   * worker pool's configuration. The control plane's token reaches the
+   * nodes this way too, from a secret the pool keeps; name `RIVET_TOKEN`
+   * here to use a secret of your own instead.
    */
   secrets?: Record<string, Input<string>>;
   /**
@@ -72,21 +74,6 @@ export interface CloudRunPoolOptions extends PoolSettings {
    * @default the subnetwork named like `network`
    */
   subnetwork?: Input<string>;
-  /**
-   * Send the nodes' private traffic through the control plane's GCP network
-   * (a `Rivet.ControlPlane` given `network` of kind `gcp`), so they reach
-   * its `nodeEndpoint`. `network` and `subnetwork` set here win over its own.
-   * A cluster on no GCP network fails the deploy.
-   * @default false
-   */
-  clusterNetwork?: boolean;
-  /**
-   * RivetKit release the nodes run a TypeScript program with. Nodes speak
-   * the control plane protocol of their release: a 3.0 node works with a
-   * 3.0 or 3.1 control plane, a 3.1 node needs a 3.1 one.
-   * @default "3.0.0"
-   */
-  rivetkitVersion?: string;
 }
 
 const asOutput = (value: Input<string>): Output.Output<string> =>
@@ -96,6 +83,16 @@ const asOutput = (value: Input<string>): Output.Output<string> =>
 const secretKeyRef = (version: string) => {
   const at = version.lastIndexOf("/versions/");
   return { secret: version.slice(0, at), version: version.slice(at + "/versions/".length) };
+};
+
+/**
+ * A version as a Cloud Run `secretKeyRef`, naming a secret of `project` by
+ * its id alone: Cloud Run caps the reference at 255 characters.
+ */
+const secretRefIn = (project: string) => (version: string) => {
+  const ref = secretKeyRef(version);
+  const own = `projects/${project}/secrets/`;
+  return ref.secret.startsWith(own) ? { ...ref, secret: ref.secret.slice(own.length) } : ref;
 };
 
 /** The grants that let a pool's worker pool read the secrets it names. @internal */
@@ -123,54 +120,27 @@ export const nodeTemplate = (
     readonly serviceAccount?: Input<string>;
     readonly secretEnv?: Array<Input<Run.WorkerPoolEnvVar>>;
   } = {},
-  cluster?: ClusterNetwork | { readonly kind: "none" },
-) => {
-  // With `clusterNetwork`, the control plane's network and subnetwork fill
-  // in what the pool doesn't name; a pool that names its own network takes
-  // none of the control plane's.
-  const joined = options.clusterNetwork === true && cluster?.kind === "gcp" ? cluster : undefined;
-  const network = options.network ?? joined?.network;
-  const subnetwork =
-    options.subnetwork ?? (options.network === undefined ? joined?.subnetwork : undefined);
-  return {
-    ...(identity.serviceAccount === undefined ? {} : { serviceAccount: identity.serviceAccount }),
-    ...(network === undefined && subnetwork === undefined
-      ? {}
-      : {
-          vpcAccess: {
-            egress: "PRIVATE_RANGES_ONLY",
-            networkInterfaces: [{ network, subnetwork }],
-          },
-        }),
-    containers: [
-      {
-        resources: {
-          limits: { cpu: options.cpu ?? "1", memory: options.memory ?? "1Gi" },
+) => ({
+  ...(identity.serviceAccount === undefined ? {} : { serviceAccount: identity.serviceAccount }),
+  ...(options.network === undefined && options.subnetwork === undefined
+    ? {}
+    : {
+        vpcAccess: {
+          egress: "PRIVATE_RANGES_ONLY",
+          networkInterfaces: [{ network: options.network, subnetwork: options.subnetwork }],
         },
-        ...(identity.secretEnv === undefined || identity.secretEnv.length === 0
-          ? {}
-          : { env: identity.secretEnv }),
+      }),
+  containers: [
+    {
+      resources: {
+        limits: { cpu: options.cpu ?? "1", memory: options.memory ?? "1Gi" },
       },
-    ],
-  };
-};
-
-/**
- * The network a pool's nodes are on, as `makePoolLayer` compares it with
- * the cluster's: only the cluster's own network gets its `nodeEndpoint`.
- * Worker pools reach the internet without a VPC of their own, so a pool
- * that doesn't join a GCP control plane's network gets a copy of it, which
- * still gives the region, and its nodes connect to the public endpoint.
- * @internal
- */
-export const nodesNetwork = (
-  options: Pick<CloudRunPoolOptions, "clusterNetwork">,
-  cluster: Pick<ClusterShape, "network">,
-) => {
-  if (options.clusterNetwork) return cluster.network?.kind === "gcp" ? cluster.network : undefined;
-  if (cluster.network?.kind === "gcp") return { ...cluster.network };
-  return cluster.network ?? { kind: "none" as const };
-};
+      ...(identity.secretEnv === undefined || identity.secretEnv.length === 0
+        ? {}
+        : { env: identity.secretEnv }),
+    },
+  ],
+});
 
 /**
  * Run a pool's nodes on a Cloud Run worker pool: a pool on the control
@@ -186,7 +156,7 @@ export const nodesNetwork = (
  *
  * A deploy that changes the nodes rolls out a new worker pool revision.
  * To move actors off the old nodes before Cloud Run stops them, give each
- * deploy a higher `RIVET_NODE_VERSION` and set `drainOnVersionUpgrade`.
+ * deploy a higher `version` and set `drainOnVersionUpgrade`.
  *
  * ### Running Durable Objects on Cloud Run
  * **Example:** Two nodes
@@ -204,7 +174,8 @@ export const nodesNetwork = (
  *   serviceAccount: "nodes@acme.iam.gserviceaccount.com",
  *   network: "private",
  *   subnetwork: "private-us-central1",
- *   env: { RIVET_ENDPOINT: "http://10.0.0.2:6420", RIVET_NODE_VERSION: "42" },
+ *   env: { RIVET_ENDPOINT: "http://10.0.0.2:6420" },
+ *   version: 42,
  *   secrets: {
  *     RIVET_TOKEN: "projects/acme/secrets/rivet-token/versions/1",
  *     DATABASE_URL: "projects/acme/secrets/database-url/versions/3",
@@ -214,24 +185,6 @@ export const nodesNetwork = (
  * }).pipe(Layer.provide(Cluster));
  * ```
  *
- * **Example:** Nodes on the network of a control plane with a private address
- * ```typescript
- * export const Cluster = Rivet.ControlPlane("Rivet", {
- *   endpoint: "https://rivet.example.com",
- *   token: Config.Redacted("RIVET_TOKEN"),
- *   nodeEndpoint: "http://10.0.0.2:6420",
- *   network: {
- *     kind: "gcp",
- *     network: "rivet",
- *     subnetwork: "rivet-us-central1",
- *     region: "us-central1",
- *   },
- * });
- * export const Default = RivetGCP.CloudRunPool("Default", { clusterNetwork: true }).pipe(
- *   Layer.provide(Cluster),
- * );
- * ```
- *
  * @primitive
  */
 export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
@@ -239,16 +192,35 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
     label: "RivetGCP.CloudRunPool",
     id,
     settings: options,
-    expected: options.clusterNetwork
-      ? "the control plane's GCP network"
-      : "a reachable control plane",
-    network: (cluster) => nodesNetwork(options, cluster),
+    expected: "a reachable control plane",
+    // Worker pools reach the internet without a VPC of their own.
+    network: (cluster) => cluster.network ?? { kind: "none" as const },
     nodes: (nodes) =>
       Effect.gen(function* () {
+        const { project } = yield* GcpEnvironment.current.pipe(Effect.orDie);
         const location =
           options.location ?? (nodes.network?.kind === "gcp" ? nodes.network.region : undefined);
         const { program } = nodes;
-        const secrets = Object.entries(options.secrets ?? {});
+        // The control plane's token reaches the nodes from Secret Manager,
+        // never the worker pool's config, unless the pool names its own.
+        const token =
+          options.secrets?.RIVET_TOKEN === undefined
+            ? (yield* SecretManager.Secret(`${id}Token`, {
+                value: nodes.environment.RIVET_TOKEN,
+              })).version.pipe(Output.map((version) => version ?? ""))
+            : undefined;
+        // Secrets the classes read as config: one secret of the pool's, loaded
+        // by the node at start, never metadata or the worker pool's config.
+        const split = splitNodeEnvironment(nodes);
+        const secretEnvVersion = (yield* SecretManager.Secret(`${id}SecretEnv`, {
+          value: split.pipe(Output.map(({ secrets }) => Redacted.make(JSON.stringify(secrets)))),
+        })).version.pipe(Output.map((version) => version ?? ""));
+        const secretMap: Record<string, Input<string>> = {
+          ...(token === undefined ? {} : { RIVET_TOKEN: token }),
+          [SECRET_ENV]: secretEnvVersion,
+          ...options.secrets,
+        };
+        const secrets = Object.entries(secretMap);
         const { serviceAccount } = options;
         const secretEnv: Array<Input<Run.WorkerPoolEnvVar>> = [];
         for (const [name, version] of secrets) {
@@ -270,7 +242,7 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
                 ).pipe(Output.map(([v]) => v));
           secretEnv.push({
             name,
-            valueSource: { secretKeyRef: ready.pipe(Output.map(secretKeyRef)) },
+            valueSource: { secretKeyRef: ready.pipe(Output.map(secretRefIn(project))) },
           });
         }
         const own = Output.all(
@@ -286,14 +258,14 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
             : {
                 ...program,
                 dockerfile: {
-                  content: nodeDockerfile(options.rivetkitVersion ?? RIVETKIT_VERSION),
+                  content: nodeDockerfile(options.rivetkitVersion ?? nodes.rivetkitVersion),
                 },
               }),
           ...(location === undefined ? {} : { location }),
           scaling: { manualInstanceCount: options.replicas ?? 1 },
-          template: nodeTemplate(options, { serviceAccount, secretEnv }, nodes.network),
-          env: Output.all(nodeEnvironment(nodes), own).pipe(
-            Output.map(([env, extra]) => plainEnvironment({ ...env, ...extra }, options.secrets)),
+          template: nodeTemplate(options, { serviceAccount, secretEnv }),
+          env: Output.all(split.pipe(Output.map(({ plain }) => plain)), own).pipe(
+            Output.map(([env, extra]) => plainEnvironment({ ...env, ...extra }, secretMap)),
           ),
         });
         if (serviceAccount === undefined && secrets.length > 0) {

@@ -199,22 +199,6 @@ return {
 
 `state.sleep()` puts the instance to sleep without waiting for it to go idle; `onSleep` runs, and its next call wakes it with its storage intact. `state.destroy()` destroys the instance and its storage once its calls finish, and the next call to the same name starts an empty instance. Neither hook is a method, and neither runs for an instance that took no call since it last woke.
 
-## Tune when it sleeps
-
-`actorOptions` sets the RivetKit actor options every instance of the class runs with: `sleepTimeout`, how long it stays idle before it sleeps; `sleepGracePeriod`, how long `onSleep` or `onDestroy` and the work it keeps awake have to finish; and `onMigrateTimeout`, how long its storage may take to migrate when it wakes. Each is in milliseconds, and an option you don't set keeps RivetKit's default:
-
-```typescript title="src/room.ts"
-export default class Room extends Rivet.DurableObject<Room>()(
-  "Room",
-  { main: import.meta.url, actorOptions: { sleepTimeout: 60_000, sleepGracePeriod: 30_000 } },
-  Effect.gen(function* () {
-    // ...
-  }).pipe(Effect.provide(Default)),
-) {}
-```
-
-The pool records them when it deploys, and its nodes run the class with what it recorded. A deploy fails on any other option, or on a value that isn't a whole number of milliseconds above 0.
-
 ## Keep its code out of its callers
 
 A caller imports the class to call it, and the class carries its implementation with it. When the implementation is large, or imports things a caller shouldn't bundle, declare the class on its own with the shape of its methods:

@@ -358,13 +358,10 @@ export const BackupRunProvider = () =>
       if (current === undefined) {
         const created = yield* sqladmin
           .insertBackupRuns({
+            description: desiredDescription,
+            location: news.location,
             project: env.project,
             instance,
-            body: {
-              instance,
-              description: desiredDescription,
-              location: news.location,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", (error) =>

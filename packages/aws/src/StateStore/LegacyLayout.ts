@@ -1,6 +1,8 @@
+import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as s3 from "@distilled.cloud/aws/s3";
 import { decodeFqn, encodeFqn } from "alchemy/FQN";
 import { encodeState, reviveState } from "alchemy/State/StateEncoding";
+import { isSealed, type StateCodec } from "alchemy/State/StateEncryption";
 import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
@@ -8,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
+import { partitionOf } from "../Partition.ts";
 
 /**
  * The S3 state store's object layout, read and written directly: what the
@@ -132,11 +135,21 @@ const parse = (text: string, key: string) =>
   });
 
 /** The stage's output, read without the S3 store's lease. */
-export const readLegacyOutput = (location: LegacyLocation, stack: string, stage: string) => {
+export const readLegacyOutput = (
+  location: LegacyLocation,
+  stack: string,
+  stage: string,
+  codec: StateCodec,
+) => {
   const key = `${stagePrefix(location, stack, stage)}${OUTPUT_FILE}`;
-  return readText(location.bucket, key).pipe(
-    Effect.flatMap((object) => (object === undefined ? Effect.undefined : parse(object.text, key))),
-  );
+  return Effect.gen(function* () {
+    const object = yield* readText(location.bucket, key);
+    if (object === undefined) return undefined;
+    if (!isSealed(object.text)) return yield* parse(object.text, key);
+    return yield* codec
+      .decode<unknown>({ stack, stage }, object.text, `S3 state object '${key}'`)
+      .pipe(Effect.mapError((error) => new LegacyStateError({ message: error.message })));
+  });
 };
 
 /** A stage's contents, each value encoded the way the DynamoDB store stores it. */
@@ -146,9 +159,14 @@ export interface StageContents {
   readonly output: string | undefined;
 }
 
-/** Re-encode stored JSON into the DynamoDB store's canonical form. */
+/**
+ * Re-encode stored JSON into the DynamoDB store's canonical form. A sealed
+ * record is already in it: both stores seal with the same codec.
+ */
 const canonical = (text: string, key: string) =>
-  parse(text, key).pipe(Effect.map((value) => JSON.stringify(encodeState(value))));
+  isSealed(text)
+    ? Effect.succeed(text)
+    : parse(text, key).pipe(Effect.map((value) => JSON.stringify(encodeState(value))));
 
 /** Read every record and the output of a stage. */
 export const readLegacyStage = Effect.fn(function* (
@@ -348,6 +366,14 @@ export const fenceLegacyStage = (
   );
 };
 
+/** Whether a migration's fence holds the stage's S3 lease. */
+export const isLegacyStageFenced = (location: LegacyLocation, stack: string, stage: string) =>
+  readText(location.bucket, `${stagePrefix(location, stack, stage)}${LEASE_FILE}`).pipe(
+    Effect.map(
+      (existing) => existing !== undefined && parseLease(existing.text).token === FENCE_TOKEN,
+    ),
+  );
+
 /** Remove the stage's fence, so S3 stores can take its lease again. */
 export const unfenceLegacyStage = (location: LegacyLocation, stack: string, stage: string) => {
   const key = `${stagePrefix(location, stack, stage)}${LEASE_FILE}`;
@@ -431,7 +457,9 @@ export const setStageAccess = (
     1,
   )(
     Effect.gen(function* () {
-      const arn = `arn:aws:s3:::${location.bucket}/${stagePrefix(location, stack, stage)}*`;
+      // Credentials are partition-scoped, so their region names the bucket's partition.
+      const { region } = yield* yield* Credentials;
+      const arn = `arn:${partitionOf(region)}:s3:::${location.bucket}/${stagePrefix(location, stack, stage)}*`;
       const { version, statements } = yield* readPolicy(location.bucket);
       const resources = (sid: string) =>
         new Set(asArray(statements.find((statement) => statement.Sid === sid)?.Resource));

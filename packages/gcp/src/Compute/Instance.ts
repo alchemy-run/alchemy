@@ -234,6 +234,18 @@ export type Instance = Resource<
  * manage by its identifiers, in the ambient project unless `project` names
  * another.
  */
+/**
+ * Deletion was refused because the instance has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy
+ * (or turn it off in the console) before deleting it.
+ */
+export class InstanceDeletionProtected extends Data.TaggedError(
+  "GCP.Compute.InstanceDeletionProtected",
+)<{
+  readonly resourceName: string;
+  readonly message: string;
+}> {}
+
 export interface InstanceLookup {
   /**
    * Instance name.
@@ -780,9 +792,9 @@ export const InstanceProvider = () =>
           env.project,
           zone,
           compute.insertInstances({
+            ...insertBody(news, instanceName, zone, desiredLabels),
             project: env.project,
             zone,
-            body: insertBody(news, instanceName, zone, desiredLabels),
           }),
           { ignore: ["RESOURCE_ALREADY_EXISTS"] },
         ).pipe(Effect.catchTag("Conflict", () => Effect.void));
@@ -811,13 +823,11 @@ export const InstanceProvider = () =>
           env.project,
           zone,
           compute.setLabelsInstances({
+            labels: desiredLabels,
+            labelFingerprint: current.labelFingerprint,
             project: env.project,
             zone,
             instance: instanceName,
-            body: {
-              labels: desiredLabels,
-              labelFingerprint: current.labelFingerprint,
-            },
           }),
         );
         current = (yield* getByName(env.project, zone, instanceName)) ?? current;
@@ -830,13 +840,11 @@ export const InstanceProvider = () =>
             env.project,
             zone,
             compute.setTagsInstances({
+              items: news.tags,
+              fingerprint: current.tags?.fingerprint,
               project: env.project,
               zone,
               instance: instanceName,
-              body: {
-                items: news.tags,
-                fingerprint: current.tags?.fingerprint,
-              },
             }),
           );
           current = (yield* getByName(env.project, zone, instanceName)) ?? current;
@@ -850,16 +858,14 @@ export const InstanceProvider = () =>
             env.project,
             zone,
             compute.setMetadataInstances({
+              fingerprint: current.metadata?.fingerprint,
+              items: Object.entries(news.metadata).map(([key, value]) => ({
+                key,
+                value,
+              })),
               project: env.project,
               zone,
               instance: instanceName,
-              body: {
-                fingerprint: current.metadata?.fingerprint,
-                items: Object.entries(news.metadata).map(([key, value]) => ({
-                  key,
-                  value,
-                })),
-              },
             }),
           );
           current = (yield* getByName(env.project, zone, instanceName)) ?? current;
@@ -895,11 +901,11 @@ export const InstanceProvider = () =>
             env.project,
             zone,
             compute.addAccessConfigInstances({
+              ...config,
               project: env.project,
               zone,
               instance: instanceName,
               networkInterface: nicName,
-              body: config,
             }),
           );
         }
@@ -929,10 +935,10 @@ export const InstanceProvider = () =>
           env.project,
           zone,
           compute.attachDiskInstances({
+            ...desiredAttachedDisk(disk),
             project: env.project,
             zone,
             instance: instanceName,
-            body: desiredAttachedDisk(disk),
           }),
         );
       }
@@ -964,12 +970,11 @@ export const InstanceProvider = () =>
           env.project,
           zone,
           compute.setSchedulingInstances({
+            ...current.scheduling,
+            ...scheduling,
             project: env.project,
             zone,
             instance: instanceName,
-            // Merge onto observed scheduling so the create-time fields
-            // (provisioningModel, preemptible) are preserved verbatim.
-            body: { ...current.scheduling, ...scheduling },
           }),
         );
         current = (yield* getByName(env.project, zone, instanceName)) ?? current;
@@ -984,11 +989,12 @@ export const InstanceProvider = () =>
           env.project,
           zone,
           compute.updateInstances({
+            ...current,
+            description: news.description ?? "",
             project: env.project,
             zone,
             instance: instanceName,
             mostDisruptiveAllowedAction: "REFRESH",
-            body: { ...current, description: news.description ?? "" },
           }),
         );
         current = (yield* getByName(env.project, zone, instanceName)) ?? current;
@@ -1002,7 +1008,17 @@ export const InstanceProvider = () =>
       const env = yield* GcpEnvironment.current;
       const zone = lastSegment(output.zone);
       const instance = output.instanceName;
-      if (output.deletionProtection === true || force === true) {
+      const current = yield* getByName(env.project, zone, instance);
+      if (current === undefined) return;
+      // Deletion protection, set by this stack or outside it, refuses the
+      // delete. Only an account-wide nuke (`force`) lifts it.
+      if (current.deletionProtection === true) {
+        if (force !== true) {
+          return yield* new InstanceDeletionProtected({
+            resourceName: instance,
+            message: `Compute Engine instance '${instance}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+          });
+        }
         yield* applyZoneOp(
           env.project,
           zone,

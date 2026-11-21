@@ -326,15 +326,17 @@ export const DatasetProvider = () =>
       return toAttributes(updated, accountId);
     }),
     delete: Effect.fn(function* ({ output }) {
-      yield* aiGateway
-        .deleteDataset({
-          accountId: output.accountId,
-          gatewayId: output.gatewayId,
-          id: output.datasetId,
-        })
-        // Cloudflare reports both a missing dataset and a missing gateway
-        // with code 7002 on this endpoint — either way it's already gone.
-        .pipe(Effect.catchTag("DatasetNotFound", () => Effect.void));
+      yield* (
+        aiGateway
+          .deleteDataset({
+            accountId: output.accountId,
+            gatewayId: output.gatewayId,
+            id: output.datasetId,
+          })
+          // Cloudflare reports both a missing dataset and a missing gateway
+          // with code 7002 on this endpoint — either way it's already gone.
+          .pipe(Effect.catchTag("DatasetNotFound", () => Effect.void))
+      );
     }),
     list: Effect.fn(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;

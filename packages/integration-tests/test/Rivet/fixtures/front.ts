@@ -5,7 +5,9 @@
 import * as Docker from "@alchemy.run/docker";
 import * as Rivet from "@alchemy.run/rivet";
 import * as StreamFormat from "@alchemy.run/rivet/StreamFormat";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -14,6 +16,8 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { conformanceFetch } from "../../Cloudflare/Workers/conformance/routes.ts";
+import AbandonedAlarm from "./abandoned-alarm.ts";
+import Callbacks from "./callbacks.ts";
 import { BinaryLog, ChatLog } from "./chat-log.ts";
 import { Cluster, FRONT_PORT, Services } from "./cluster.ts";
 import Counter from "./counter.ts";
@@ -42,6 +46,8 @@ export default class Front extends Docker.Service<Front>()(
     const counters = yield* Counter;
     const greeters = yield* Greeter;
     const lifecycles = yield* Lifecycle;
+    const abandonedAlarms = yield* AbandonedAlarm;
+    const callbacks = yield* Callbacks;
     const parallelTallies = yield* Tally;
     const gatedTallies = yield* GatedTally;
     const reentrants = yield* Reentrant;
@@ -174,6 +180,38 @@ export default class Front extends Docker.Service<Front>()(
             yield* instance.sleepNow();
             return yield* HttpServerResponse.json({ ok: true });
           }
+          // A call still writing when the instance sleeps past its grace
+          // period, answered as a call that never arrived.
+          if (step === "late") {
+            const late = yield* Effect.forkChild(
+              Effect.exit(instance.writeLate(Number(url.searchParams.get("ms") ?? "20000"))),
+            );
+            yield* Effect.sleep("1 second");
+            yield* instance.sleepNow();
+            const exit = yield* Fiber.join(late);
+            if (Exit.isSuccess(exit)) return yield* HttpServerResponse.json({ late: "ran" });
+            const error = Cause.squash(exit.cause) as { _tag?: unknown; status?: unknown };
+            return yield* HttpServerResponse.json({
+              late: `${String(error?._tag)} ${String(error?.status)}`,
+            });
+          }
+          // A call writing storage when the instance sleeps past its grace
+          // period, which reports the failure as data.
+          if (step === "busy") {
+            const busy = yield* Effect.forkChild(Effect.exit(instance.writeUntilStopped()));
+            yield* Effect.sleep("1 second");
+            yield* instance.sleepNow();
+            const exit = yield* Fiber.join(busy);
+            if (Exit.isSuccess(exit)) {
+              return yield* HttpServerResponse.json({
+                busy: exit.value.failed === null ? "ran" : `data: ${exit.value.failed}`,
+              });
+            }
+            const error = Cause.squash(exit.cause) as { _tag?: unknown; status?: unknown };
+            return yield* HttpServerResponse.json({
+              busy: `${String(error?._tag)} ${String(error?.status)}`,
+            });
+          }
           if (step === "destroy") {
             yield* instance.destroyNow();
             return yield* HttpServerResponse.json({ ok: true });
@@ -181,10 +219,86 @@ export default class Front extends Docker.Service<Front>()(
           if (step === "value") {
             return yield* HttpServerResponse.json({ value: yield* instance.get() });
           }
+          // Calls each hook as a method, which the instance must refuse.
+          if (step === "call-hooks") {
+            const refusal = (call: Effect.Effect<void, unknown>) =>
+              Effect.map(Effect.exit(call), (exit) => {
+                if (Exit.isSuccess(exit)) return "ran";
+                const error = Cause.squash(exit.cause) as { _tag?: unknown; status?: unknown };
+                return `${String(error?._tag)} ${String(error?.status)}`;
+              });
+            return yield* HttpServerResponse.json({
+              onSleep: yield* refusal(instance.onSleep()),
+              onDestroy: yield* refusal(instance.onDestroy()),
+            });
+          }
           return yield* HttpServerResponse.json({
             slept: yield* counters.getByName(`slept-${name}`).get(),
             destroyed: yield* counters.getByName(`destroyed-${name}`).get(),
           });
+        }
+        // `/abandoned-alarm/<name>/<step>`: `arm` sets an alarm whose first
+        // run hangs, `arm-held` one that comes due inside a transaction, `node` names the node running the instance, `busy`
+        // writes until storage fails, and `state` reads its runs, finished
+        // runs and alarm.
+        if (group === "abandoned-alarm" && name !== undefined) {
+          const step = url.pathname.split("/").filter((segment) => segment.length > 0)[2];
+          const instance = abandonedAlarms.getByName(name);
+          if (step === "arm") {
+            yield* instance.arm();
+            return yield* HttpServerResponse.json({ ok: true });
+          }
+          if (step === "arm-held") {
+            yield* instance.armHeld();
+            return yield* HttpServerResponse.json({ ok: true });
+          }
+          if (step === "node") {
+            return yield* HttpServerResponse.json({ node: yield* instance.node() });
+          }
+          // Writes until its storage fails; reports how the call ended.
+          if (step === "busy") {
+            const exit = yield* Effect.exit(instance.writeUntilStopped());
+            if (Exit.isSuccess(exit)) {
+              return yield* HttpServerResponse.json({
+                busy: exit.value.failed === null ? "ran" : `data: ${exit.value.failed}`,
+              });
+            }
+            const error = Cause.squash(exit.cause) as { _tag?: unknown; status?: unknown };
+            return yield* HttpServerResponse.json({
+              busy: `${String(error?._tag)} ${String(error?.status)}`,
+            });
+          }
+          return yield* HttpServerResponse.json(yield* instance.alarmState());
+        }
+        // `/callbacks/<name>/<step>`: schedule, cancel or read durable
+        // callbacks; `counts` reads what ran without waking the instance.
+        if (group === "callbacks" && name !== undefined) {
+          const step = url.pathname.split("/").filter((segment) => segment.length > 0)[2];
+          const instance = callbacks.getByName(name);
+          const param = (key: string) => url.searchParams.get(key) ?? "";
+          if (step === "counts") {
+            const kinds = ["every", "cron", "once", "flaky", "alarm", "rolled-back", "slept"];
+            const counts = yield* Effect.forEach(kinds, (kind) =>
+              counters.getByName(`${kind}-${name}`).get(),
+            );
+            return yield* HttpServerResponse.json(
+              Object.fromEntries(kinds.map((kind, i) => [kind, counts[i]])),
+            );
+          }
+          if (step === "status") {
+            return yield* HttpServerResponse.json({
+              scheduledAt: yield* instance.status(param("id")),
+            });
+          }
+          if (step === "every") yield* instance.every();
+          else if (step === "cron") yield* instance.cron();
+          else if (step === "once") yield* instance.once(Number(param("after")));
+          else if (step === "flaky") yield* instance.flaky();
+          else if (step === "cancel") yield* instance.cancel(param("id"));
+          else if (step === "rolled-back") yield* instance.rolledBack();
+          else if (step === "alarm") yield* instance.armAlarm(Number(param("times")));
+          else return HttpServerResponse.text("Not Found", { status: 404 });
+          return yield* HttpServerResponse.json({ ok: true });
         }
         if (group === "greet" && name !== undefined) {
           const greeting = yield* greeters.getByName("front").greet(name);

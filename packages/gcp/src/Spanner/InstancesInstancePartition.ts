@@ -472,17 +472,9 @@ export const InstancesInstancePartitionProvider = () =>
       if (current === undefined) {
         const created = yield* spanner
           .createProjectsInstancesInstancePartitions({
+            instancePartitionId,
+            instancePartition: toCreatePartition(name, news, env.project, env.region, displayName),
             parent: instanceName(env.project, instanceId),
-            body: {
-              instancePartitionId,
-              instancePartition: toCreatePartition(
-                name,
-                news,
-                env.project,
-                env.region,
-                displayName,
-              ),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -534,11 +526,9 @@ export const InstancesInstancePartitionProvider = () =>
 
         const patched = yield* retryConcurrentChanges(
           spanner.patchProjectsInstancesInstancePartitions({
+            instancePartition: patchBody,
+            fieldMask: fieldMask.join(","),
             name,
-            body: {
-              instancePartition: patchBody,
-              fieldMask: fieldMask.join(","),
-            },
           }),
         );
         yield* waitForOperation(patched);

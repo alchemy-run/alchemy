@@ -35,10 +35,7 @@ const getSubscription = (name: string) =>
 
 const pullUntilMessage = (name: string) =>
   pubsub
-    .pullProjectsSubscriptions({
-      subscription: name,
-      body: { maxMessages: 1, returnImmediately: true },
-    })
+    .pullProjectsSubscriptions({ maxMessages: 1, returnImmediately: true, subscription: name })
     .pipe(
       Effect.repeat({
         schedule: Schedule.spaced("1 second"),
@@ -78,8 +75,8 @@ test.provider(
       expect(fetched.labels?.env).toEqual("test");
 
       yield* pubsub.publishProjectsTopics({
+        messages: [{ data: btoa("hello-pubsub") }],
         topic: created.topic.name,
-        body: { messages: [{ data: btoa("hello-pubsub") }] },
       });
 
       const pulled = yield* pullUntilMessage(created.subscription.name);
@@ -89,8 +86,8 @@ test.provider(
       expect(ackId).toEqual(expect.any(String));
       if (ackId !== undefined) {
         yield* pubsub.acknowledgeProjectsSubscriptions({
+          ackIds: [ackId],
           subscription: created.subscription.name,
-          body: { ackIds: [ackId] },
         });
       }
 
@@ -183,15 +180,16 @@ test.provider(
       ).toBe(true);
 
       yield* pubsub.publishProjectsTopics({
+        messages: [{ data: btoa("poison") }],
         topic: out.topic,
-        body: { messages: [{ data: btoa("poison") }] },
       });
 
       // Pull and nack until Pub/Sub gives up on the message.
       const nackOnce = pubsub
         .pullProjectsSubscriptions({
+          maxMessages: 1,
+          returnImmediately: true,
           subscription: out.subscription,
-          body: { maxMessages: 1, returnImmediately: true },
         })
         .pipe(
           Effect.tap(({ receivedMessages = [] }) => {
@@ -199,15 +197,17 @@ test.provider(
             return ackIds.length === 0
               ? Effect.void
               : pubsub.modifyAckDeadlineProjectsSubscriptions({
+                  ackIds,
+                  ackDeadlineSeconds: 0,
                   subscription: out.subscription,
-                  body: { ackIds, ackDeadlineSeconds: 0 },
                 });
           }),
         );
       const deadLetter = pubsub
         .pullProjectsSubscriptions({
+          maxMessages: 1,
+          returnImmediately: true,
           subscription: out.inbox,
-          body: { maxMessages: 1, returnImmediately: true },
         })
         .pipe(Effect.map(({ receivedMessages = [] }) => receivedMessages[0]));
 
@@ -235,7 +235,6 @@ const tableWriters = (table: { project: string; datasetId: string; tableId: stri
   bigquery
     .getIamPolicyTables({
       resource: `projects/${table.project}/datasets/${table.datasetId}/tables/${table.tableId}`,
-      body: {},
     })
     .pipe(
       Effect.map(
@@ -317,20 +316,18 @@ test.provider(
       expect(fetched.bigqueryConfig?.serviceAccountEmail).toEqual(writer);
 
       const published = yield* pubsub.publishProjectsTopics({
+        messages: [{ data: btoa("impression-1") }],
         topic: created.topic.name,
-        body: { messages: [{ data: btoa("impression-1") }] },
       });
       const messageId = published.messageIds?.[0];
       expect(messageId).toEqual(expect.any(String));
 
       const rows = yield* bigquery
         .queryJobs({
+          query: `SELECT DISTINCT data, message_id FROM ${created.table.datasetId}.${created.table.tableId}`,
+          useLegacySql: false,
+          location: created.table.location,
           projectId: created.table.project,
-          body: {
-            query: `SELECT DISTINCT data, message_id FROM ${created.table.datasetId}.${created.table.tableId}`,
-            useLegacySql: false,
-            location: created.table.location,
-          },
         })
         .pipe(
           Effect.map(({ rows = [] }) => rows.map((row) => row.f?.map((cell) => cell.v))),
@@ -444,17 +441,15 @@ test.provider(
       ]);
 
       const published = yield* pubsub.publishProjectsTopics({
+        messages: [{ data: btoa("click-1") }],
         topic: given.topic.name,
-        body: { messages: [{ data: btoa("click-1") }] },
       });
       const rows = yield* bigquery
         .queryJobs({
+          query: `SELECT DISTINCT data FROM ${given.table.datasetId}.${given.table.tableId}`,
+          useLegacySql: false,
+          location: given.table.location,
           projectId: given.table.project,
-          body: {
-            query: `SELECT DISTINCT data FROM ${given.table.datasetId}.${given.table.tableId}`,
-            useLegacySql: false,
-            location: given.table.location,
-          },
         })
         .pipe(
           Effect.map(({ rows = [] }) => rows.map((row) => row.f?.map((cell) => cell.v))),

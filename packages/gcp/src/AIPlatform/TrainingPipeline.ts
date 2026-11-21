@@ -348,8 +348,8 @@ export const TrainingPipelineProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsTrainingPipelines({
+            ...toBody(news, displayName, desiredLabels),
             parent,
-            body: toBody(news, displayName, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, parent)));
         current = created ?? undefined;

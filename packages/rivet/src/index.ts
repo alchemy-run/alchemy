@@ -4,6 +4,7 @@
  */
 export * from "./Cluster.ts";
 export * from "./DurableObject.ts";
+export * from "./DurableObjectCallbacks.ts";
 export * from "./DurableStream.ts";
 export { DurableObjectState, SqlRowCountMismatch } from "./DurableObjectState.ts";
 export type {
@@ -13,8 +14,8 @@ export type {
   SqlCursor,
 } from "./DurableObjectState.ts";
 export * from "./Namespace.ts";
-export * as Node from "./Node.ts";
 export * from "./Pool.ts";
 export * from "./Providers.ts";
 export * from "./Services.ts";
 export * from "./WebSocket.ts";
+export * from "./WorkflowEngine.ts";

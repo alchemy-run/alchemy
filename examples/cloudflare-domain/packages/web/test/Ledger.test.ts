@@ -14,14 +14,14 @@ it.live("reads the ledger through the AccountLedger query, after the app's own w
   Effect.gen(function* () {
     const client = yield* CustomerApi.Client;
     const customerId = CustomerId.make("c-1");
-    yield* client.RegisterCustomer(customerId, { name: "Sam", username: Username.make("sam") });
+    yield* client.RegisterCustomer({ customerId, name: "Sam", username: Username.make("sam") });
     // MainAccountProvisioning opens the account after the username is claimed.
     yield* client.AccountSummary.watch(accountId).pipe(
       Stream.filter(({ state }) => state !== null),
       Stream.runHead,
       Effect.timeout("10 seconds"),
     );
-    const receipt = yield* client.DepositMoney(accountId, { amount: 1_000 });
+    const receipt = yield* client.DepositMoney({ accountId, amount: 1_000 });
     const page = yield* BankClient.AccountLedger({
       input: { account: accountId },
       requestId: "page:0",

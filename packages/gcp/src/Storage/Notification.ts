@@ -355,13 +355,11 @@ const ensureTopicPublisher = (project: string, topic: string) =>
         bindings.push({ role: PUBLISHER_ROLE, members: [member] });
       }
       yield* pubsub.setIamPolicyProjectsTopics({
-        resource,
-        body: {
-          policy: {
-            ...policy,
-            bindings,
-          },
+        policy: {
+          ...policy,
+          bindings,
         },
+        resource,
       });
     });
     yield* grant.pipe(
@@ -461,15 +459,13 @@ export const NotificationProvider = () =>
         yield* ensureTopicPublisher(env.project, canonicalTopic);
         const created = yield* storage
           .insertNotifications({
+            topic: canonicalTopic,
+            payload_format: payloadFormat,
+            event_types:
+              news.eventTypes && news.eventTypes.length > 0 ? news.eventTypes : undefined,
+            object_name_prefix: news.objectNamePrefix,
+            custom_attributes: desiredAttributes,
             bucket: bucketName,
-            body: {
-              topic: canonicalTopic,
-              payload_format: payloadFormat,
-              event_types:
-                news.eventTypes && news.eventTypes.length > 0 ? news.eventTypes : undefined,
-              object_name_prefix: news.objectNamePrefix,
-              custom_attributes: desiredAttributes,
-            },
           })
           .pipe(
             Effect.retry({

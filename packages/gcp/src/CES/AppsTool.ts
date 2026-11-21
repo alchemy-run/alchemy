@@ -366,11 +366,7 @@ export const AppsToolProvider = () =>
 
       if (current === undefined) {
         const created = yield* retryTransient(
-          ces.createProjectsLocationsAppsTools({
-            parent: app,
-            toolId,
-            body,
-          }),
+          ces.createProjectsLocationsAppsTools({ ...body, parent: app, toolId }),
         ).pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -388,6 +384,7 @@ export const AppsToolProvider = () =>
       if (executionChanged || timeoutChanged || fakeChanged || variantChanged) {
         current = yield* retryTransient(
           ces.patchProjectsLocationsAppsTools({
+            ...body,
             name: currentName,
             updateMask: updateMaskOf(
               executionChanged ? "execution_type" : undefined,
@@ -419,7 +416,6 @@ export const AppsToolProvider = () =>
                                       : "mcp_tool"
                 : undefined,
             ),
-            body,
           }),
         );
       }

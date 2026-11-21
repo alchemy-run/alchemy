@@ -520,13 +520,11 @@ export const ImportJobProvider = () =>
       if (current === undefined) {
         const created = yield* kms
           .createProjectsLocationsKeyRingsImportJobs({
+            importMethod,
+            protectionLevel,
+            cryptoKeyBackend: news.cryptoKeyBackend,
             parent: parent.parent,
             importJobId,
-            body: {
-              importMethod,
-              protectionLevel,
-              cryptoKeyBackend: news.cryptoKeyBackend,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;

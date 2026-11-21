@@ -1,8 +1,11 @@
+import * as Context from "effect/Context";
+import * as Cron from "effect/Cron";
 import * as Data from "effect/Data";
-import type * as Duration from "effect/Duration";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import type * as Scope from "effect/Scope";
-import { RuntimeContext } from "./RuntimeContext.ts";
+import type { RuntimeContext } from "./RuntimeContext.ts";
 
 /** A durable callback could not be registered, scheduled, cancelled, or dispatched. */
 export class CallbackError extends Data.TaggedError("CallbackError")<{
@@ -11,26 +14,13 @@ export class CallbackError extends Data.TaggedError("CallbackError")<{
   readonly cause?: unknown;
 }> {}
 
-export interface CallbackOptions {
-  /** Bounded backoff for unsuccessful deliveries and self-rescheduling without progress. */
-  readonly retry?: {
-    /** Initial delay. Defaults to 30 seconds; positive durations below one second use one second. */
-    readonly delay?: Duration.Input;
-    /** Attempts without progress before parking. Must be a positive safe integer. Defaults to eight. */
-    readonly maxAttempts?: number;
-    /** Recovery interval for parked work. Must be at least one hour and the initial delay. Defaults to the greater of those two values. */
-    readonly parkedDelay?: Duration.Input;
-  };
-}
-
 export type CallbackScheduleOptions<Payload> = {
   /** JSON-serializable data delivered to the callback. */
   readonly payload: Payload;
   /**
-   * Committed source version or sequence, as a nonnegative safe integer.
-   * A strictly increasing value resets the retry budget. Replayed external
-   * schedules cannot replace newer work. Commit progress and scheduling in the
-   * same storage transaction; changing IDs, payloads, or deadlines is not progress.
+   * Committed source version or sequence, as a nonnegative safe integer. A
+   * schedule whose progress is behind the pending job's can't replace it, so
+   * a replayed external schedule never overwrites newer work.
    */
   readonly progress?: number;
 } & (
@@ -38,24 +28,156 @@ export type CallbackScheduleOptions<Payload> = {
       /** Absolute delivery time, as a Date or positive milliseconds since the Unix epoch. */
       readonly at: Date | number;
       readonly after?: never;
+      readonly every?: never;
+      readonly cron?: never;
+      readonly timeZone?: never;
     }
   | {
       /** Minimum delay before delivery. Zero schedules the callback as soon as possible. */
       readonly after: Duration.Input;
       readonly at?: never;
+      readonly every?: never;
+      readonly cron?: never;
+      readonly timeZone?: never;
+    }
+  | {
+      /**
+       * Deliver once per interval, first one interval from now. The job stays
+       * pending after each delivery; a run missed during an outage is
+       * delivered once, then the interval continues from its original start.
+       */
+      readonly every: Duration.Input;
+      readonly at?: never;
+      readonly after?: never;
+      readonly cron?: never;
+      readonly timeZone?: never;
+    }
+  | {
+      /**
+       * Deliver on a cron expression, with an optional leading seconds field:
+       * `"0 9 * * *"`, `"*\/30 * * * * *"`. The job stays pending after each
+       * delivery; runs missed during an outage are delivered once.
+       */
+      readonly cron: string;
+      /** The IANA time zone the expression is read in. @default "UTC" */
+      readonly timeZone?: string;
+      readonly at?: never;
+      readonly after?: never;
+      readonly every?: never;
     }
 );
 
+/**
+ * How a recurring job repeats, as an implementation stores it with the job:
+ * an interval in milliseconds, or a cron expression.
+ *
+ * @internal For `Callbacks` implementations.
+ */
+export type CallbackRecurrence =
+  | { readonly every: number }
+  | { readonly cron: string; readonly timeZone?: string };
+
+/**
+ * When a job first runs, and how it repeats if it does. Fails on a schedule
+ * that names no time or more than one, a negative delay, a non-positive
+ * interval, or a cron expression or time zone that doesn't parse.
+ *
+ * @internal For `Callbacks` implementations.
+ */
+export const resolveCallbackSchedule = (
+  callback: string,
+  options: CallbackScheduleOptions<unknown>,
+  now: number,
+): Effect.Effect<
+  { readonly at: number; readonly recurrence: CallbackRecurrence | undefined },
+  CallbackError
+> =>
+  Effect.gen(function* () {
+    const invalid = (message: string, cause?: unknown) =>
+      new CallbackError({ callback, message, cause });
+    const given = [options.at, options.after, options.every, options.cron].filter(
+      (value) => value !== undefined,
+    ).length;
+    if (given !== 1) return yield* invalid("Specify exactly one of at, after, every or cron");
+    if (options.at !== undefined) {
+      const at = typeof options.at === "number" ? options.at : options.at.getTime();
+      if (!Number.isFinite(at) || at <= 0) return yield* invalid("Delivery time must be positive");
+      return { at, recurrence: undefined };
+    }
+    if (options.after !== undefined) {
+      const delay = durationMillis(options.after);
+      if (delay === undefined || delay < 0 || !Number.isFinite(delay)) {
+        return yield* invalid("Delay must be non-negative and finite");
+      }
+      return { at: now + delay, recurrence: undefined };
+    }
+    if (options.every !== undefined) {
+      const every = durationMillis(options.every);
+      if (every === undefined || every <= 0 || !Number.isFinite(every)) {
+        return yield* invalid("Interval must be positive and finite");
+      }
+      return { at: now + every, recurrence: { every } };
+    }
+    const recurrence: CallbackRecurrence =
+      options.timeZone === undefined
+        ? { cron: options.cron! }
+        : { cron: options.cron!, timeZone: options.timeZone };
+    const cron = yield* parseCron(callback, "Invalid cron schedule", recurrence);
+    return { at: Cron.next(cron, now).getTime(), recurrence };
+  });
+
+/**
+ * The run after one delivered at `scheduledAt`: the first occurrence after
+ * `now`, so runs missed during an outage collapse into one.
+ *
+ * @internal For `Callbacks` implementations.
+ */
+export const nextCallbackRun = (
+  callback: string,
+  recurrence: CallbackRecurrence,
+  scheduledAt: number,
+  now: number,
+): Effect.Effect<number, CallbackError> => {
+  if ("every" in recurrence) {
+    const { every } = recurrence;
+    return Effect.succeed(
+      scheduledAt > now
+        ? scheduledAt + every
+        : scheduledAt + every * (Math.floor((now - scheduledAt) / every) + 1),
+    );
+  }
+  return parseCron(callback, "Invalid stored cron schedule", recurrence).pipe(
+    Effect.map((cron) => Cron.next(cron, now).getTime()),
+  );
+};
+
+const durationMillis = (input: Duration.Input) => {
+  const millis = Option.getOrUndefined(Duration.fromInput(input));
+  return millis === undefined ? undefined : Duration.toMillis(millis);
+};
+
+// `Cron.parse` returns a failure for a bad expression and throws for an
+// unknown time zone.
+const parseCron = (
+  callback: string,
+  message: string,
+  recurrence: { readonly cron: string; readonly timeZone?: string },
+): Effect.Effect<Cron.Cron, CallbackError> =>
+  Effect.try({
+    try: () => Cron.parse(recurrence.cron, recurrence.timeZone ?? "UTC"),
+    catch: (cause) => new CallbackError({ callback, message, cause }),
+  }).pipe(
+    Effect.flatMap((result) =>
+      Effect.fromResult(result).pipe(
+        Effect.mapError((cause) => new CallbackError({ callback, message, cause })),
+      ),
+    ),
+  );
+
 /** Durable scheduling state, available without decoding the job's payload. */
 export interface CallbackStatus {
-  /** Requested delivery time in milliseconds since the Unix epoch; preserved across retries. */
+  /** Requested delivery time in milliseconds since the Unix epoch. */
   readonly scheduledAt: number;
-  /** Earliest recovery time in milliseconds since the Unix epoch, if an attempt has started. */
-  readonly retryAt: number | undefined;
-  /** Attempts started without reported progress, capped when the job is parked. */
-  readonly attempts: number;
-  /** Whether the job is retained for recovery at the parked interval. */
-  readonly parked: boolean;
   /** Latest committed source cursor supplied when scheduling, if any. */
   readonly progress: number | undefined;
 }
@@ -75,113 +197,137 @@ export interface Callback<Payload> {
 }
 
 /**
- * Host-provided durable callback registration and scheduling.
- *
- * Implementations scope callback names and job IDs to a durable owner, persist
- * jobs and recovery wakes, and acknowledge successful handlers without deleting
- * same-ID replacements. Each invocation supplies a fresh Scope. Scheduling joins
- * a storage transaction only when the host supports that transaction boundary.
+ * Registers a durable callback and returns its scheduling client. A handler
+ * can't fail: typed errors are its own to retry or handle. Each invocation
+ * supplies a fresh Scope.
  */
-export type CallbackFactory = <Payload, E, R>(
+export type CallbackFactory = <Payload, R>(
   name: string,
-  handler: (payload: Payload) => Effect.Effect<unknown, E, R>,
-  options?: CallbackOptions,
-) => Effect.Effect<Callback<Payload>, never, RuntimeContext | Exclude<R, Scope.Scope>>;
+  handler: (payload: Payload) => Effect.Effect<unknown, never, R>,
+) => Effect.Effect<Callback<Payload>, never, Exclude<R, Scope.Scope>>;
 
 /**
- * Register a durable callback with the current host.
+ * The durable callback implementation a runtime is provided with. Each
+ * backend is its own Layer: `AWS.Scheduler.SchedulerCallbacks` keeps jobs
+ * as EventBridge Scheduler schedules that invoke a Lambda Function, and
+ * `Cloudflare.DurableObjectCallbacks` keeps them in a Durable Object's
+ * storage and fires them from its alarm.
+ */
+export class Callbacks extends Context.Service<
+  Callbacks,
+  {
+    /** Register a callback with this implementation. */
+    readonly make: CallbackFactory;
+  }
+>()("alchemy/Callbacks") {}
+
+/**
+ * Register a durable callback with the provided {@link Callbacks}
+ * implementation.
  *
- * Cloudflare Durable Objects supply callback registration on their per-instance
- * RuntimeContext. Register handlers in their inner Effect. Other hosts must
- * implement RuntimeContext.makeCallback; unsupported hosts reject registration.
- * Delivery is at least once: external writes must be idempotent. This API does
- * not make unrelated external operations atomic.
+ * A callback is a named handler that runs later, at least once, for each job
+ * scheduled with `schedule(id, { at | after, payload })`. Register every
+ * callback while the runtime initializes; it routes each due job to the
+ * handler registered under the job's callback name. Scheduling the same ID
+ * again replaces the pending job, and `cancel(id)` removes it.
+ *
+ * The handler's error type is `never`. Retry or handle typed failures inside
+ * it with `Effect.retry`, `Effect.catchTag` or a new schedule. Defects and
+ * crashes (a timeout, an evicted instance, a deploy) are redelivered by the
+ * implementation, so external writes must be idempotent.
  *
  * ### Registering and Scheduling a Callback
- * **Example:** Schedule typed work from a Durable Object instance
+ * **Example:** Expire an order an hour after it is placed
  * ```typescript
- * return Effect.gen(function* () {
- *   const onArchive = yield* Alchemy.makeCallback(
- *     "archive",
- *     Effect.fn(function* (payload: { key: string; body: string }) {
- *       yield* archive.put(payload.key, payload.body);
- *     }),
- *   );
- *   return {
- *     save: Effect.fn(function* (id: string, body: string) {
- *       yield* state.storage.transaction(
- *         Effect.gen(function* () {
- *           yield* state.storage.put(id, body);
- *           yield* onArchive.schedule(id, {
- *             after: "30 seconds",
- *             payload: { key: id, body },
- *           });
- *         }),
- *       );
- *     }),
- *   };
- * });
+ * const onExpire = yield* Alchemy.makeCallback(
+ *   "expire",
+ *   Effect.fn(function* ({ orderId }: { orderId: string }) {
+ *     yield* expireOrder(orderId).pipe(
+ *       Effect.retry({ schedule: Schedule.exponential("1 second"), times: 3 }),
+ *       Effect.orDie,
+ *     );
+ *   }),
+ * );
+ *
+ * // runtime
+ * yield* onExpire.schedule(orderId, { after: "1 hour", payload: { orderId } });
  * ```
  *
  * ### Cancelling or Replacing a Job
  * **Example:** Use a stable ID within a callback
  * ```typescript
- * yield* onArchive.schedule("revision-42", {
+ * yield* onExpire.schedule("order-42", {
  *   at: new Date("2026-10-01T09:00:00Z"),
- *   payload: { key: "42.txt", body: "hello" },
+ *   payload: { orderId: "order-42" },
  * });
- * yield* onArchive.cancel("revision-42");
+ * yield* onExpire.cancel("order-42");
  * ```
  *
- * ### Inspecting and Recovering Work
- * **Example:** Resume a parked job from an incoming recovery request
+ * ### Recurring Jobs
+ * A job scheduled with `every` or `cron` stays pending after each run, until
+ * it is cancelled or scheduled again under the same ID. A run that fails is
+ * redelivered like any other job, and the next run is the first one due after
+ * it succeeds, so runs missed during an outage are delivered once.
+ *
+ * **Example:** Sweep every ten seconds and report every morning
  * ```typescript
- * const status = yield* onArchive.getStatus("revision-42");
- * if (status?.parked) {
- *   yield* onArchive.schedule("revision-42", {
- *     after: 0,
- *     payload: { key: "42.txt", body: "hello" },
- *   });
- * }
+ * const sweep = yield* Alchemy.makeCallback(
+ *   "sweep",
+ *   Effect.fn(function* () {
+ *     yield* sweepExpired;
+ *   }),
+ * );
+ * const report = yield* Alchemy.makeCallback(
+ *   "report",
+ *   Effect.fn(function* () {
+ *     yield* sendReport;
+ *   }),
+ * );
+ *
+ * // runtime
+ * yield* sweep.schedule("expired", { every: "10 seconds", payload: undefined });
+ * yield* report.schedule("daily", {
+ *   cron: "0 9 * * *",
+ *   timeZone: "Europe/London",
+ *   payload: undefined,
+ * });
  * ```
  *
- * Cloudflare persists an exponential retry budget before each attempt. The
- * default initial delay is 30 seconds, with a one-second minimum. After eight
- * attempts without progress, jobs remain stored and recover hourly. Configure
- * `retry.delay`, `retry.maxAttempts`, and `retry.parkedDelay` when registering.
- * Status preserves the requested `scheduledAt` separately from `retryAt`.
+ * ### Choosing an Implementation
+ * **Example:** A Lambda Function on EventBridge Scheduler
+ * ```typescript
+ * export default Orders.make(
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const onExpire = yield* Alchemy.makeCallback("expire", expire);
+ *     return { fetch: placeOrder(onExpire) };
+ *   }).pipe(Effect.provide(AWS.Scheduler.SchedulerCallbacks())),
+ * );
+ * ```
  *
- * Scheduling inside a callback inherits its budget, including when cancelling
- * or changing IDs. Supply a strictly increasing `progress` cursor alongside
- * committed application state to reset it. An external schedule without a
- * cursor starts a fresh budget; stale external cursors leave existing work
- * unchanged. Detached callback fibers cannot schedule or cancel after the
- * invocation ends. Successful completion and cancellation remove the job.
+ * **Example:** A Durable Object on its own alarm
+ * ```typescript
+ * export default class Order extends Cloudflare.DurableObject<Order>()(
+ *   "Order",
+ *   Effect.gen(function* () {
+ *     return Effect.gen(function* () {
+ *       const onArchive = yield* Alchemy.makeCallback("archive", archive);
+ *       return { save: save(onArchive) };
+ *     }).pipe(Effect.provide(Cloudflare.DurableObjectCallbacks));
+ *   }),
+ * ) {}
+ * ```
  *
- * Callback names identify persisted jobs; retain handlers for old names while
- * jobs are pending. Payloads must be JSON values compatible with pending jobs
- * from earlier deployments; TypeScript types do not perform runtime decoding.
- * Cloudflare commits scheduling alongside SQLite, KV, and native alarm writes
- * inside the same Durable Object's storage transaction. Automatic recovery from
- * instance termination relies on Cloudflare's native alarm retries. Calling
- * `state.abort` with `{ retryAlarm: false }` removes that recovery guarantee:
- * pending jobs remain stored, but may need an explicitly rearmed native alarm.
- * Other implementations must document their own transaction integration.
+ * Callback names identify persisted jobs: keep a handler registered while
+ * its jobs are pending. Payloads are JSON values that must stay compatible
+ * with pending jobs from earlier deployments; their TypeScript types are not
+ * decoded at runtime.
  */
-export const makeCallback = <Payload, E, R>(
+export const makeCallback = <Payload, R>(
   name: string,
-  handler: (payload: Payload) => Effect.Effect<unknown, E, R>,
-  options?: CallbackOptions,
-): Effect.Effect<Callback<Payload>, never, RuntimeContext | Exclude<R, Scope.Scope>> =>
+  handler: (payload: Payload) => Effect.Effect<unknown, never, R>,
+): Effect.Effect<Callback<Payload>, never, Callbacks | Exclude<R, Scope.Scope>> =>
   Effect.gen(function* () {
-    const context = yield* RuntimeContext;
-    if (!context.makeCallback) {
-      return yield* Effect.die(
-        new CallbackError({
-          callback: name,
-          message: `Durable callbacks are not supported by ${context.Type}`,
-        }),
-      );
-    }
-    return yield* context.makeCallback(name, handler, options);
+    const callbacks = yield* Callbacks;
+    return yield* callbacks.make(name, handler);
   });

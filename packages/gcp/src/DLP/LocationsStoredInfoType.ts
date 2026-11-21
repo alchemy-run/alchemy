@@ -304,11 +304,9 @@ export const LocationsStoredInfoTypeProvider = () =>
       if (current === undefined) {
         const created = yield* dlp
           .createProjectsLocationsStoredInfoTypes({
+            storedInfoTypeId,
+            config,
             parent: locationParent(env.project, location),
-            body: {
-              storedInfoTypeId,
-              config,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -333,17 +331,15 @@ export const LocationsStoredInfoTypeProvider = () =>
         largeChanged
       ) {
         current = yield* dlp.patchProjectsLocationsStoredInfoTypes({
+          config,
+          updateMask: updateMaskOf(
+            displayChanged ? "displayName" : undefined,
+            descriptionChanged ? "description" : undefined,
+            regexChanged ? "regex" : undefined,
+            dictionaryChanged ? "dictionary" : undefined,
+            largeChanged ? "largeCustomDictionary" : undefined,
+          ),
           name: current.name ?? name,
-          body: {
-            config,
-            updateMask: updateMaskOf(
-              displayChanged ? "displayName" : undefined,
-              descriptionChanged ? "description" : undefined,
-              regexChanged ? "regex" : undefined,
-              dictionaryChanged ? "dictionary" : undefined,
-              largeChanged ? "largeCustomDictionary" : undefined,
-            ),
-          },
         });
       }
 

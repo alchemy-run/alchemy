@@ -23,6 +23,7 @@ export class Transfer extends Domain.Aggregate("Transfer", {
   ]),
   initial: { _tag: "New" },
   commands: [RequestTransfer, CompleteTransfer, FailTransfer],
+  keyOf: (command) => command.transferId,
   decide: {
     // Records who asked, so ExecuteTransfer debits the source on their behalf.
     RequestTransfer: Effect.fn(function* (transfer, cmd, { id }) {

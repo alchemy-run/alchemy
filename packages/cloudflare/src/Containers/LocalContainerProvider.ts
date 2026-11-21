@@ -8,7 +8,6 @@ import { sha256Object } from "alchemy/Util/sha256";
 import { normalizeNulls } from "alchemy/Util/stable";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import { localAccountId } from "../LocalAccount.ts";
@@ -29,8 +28,10 @@ import {
   durableObjectPlaceholder,
   hasImageSource,
   isDurableObjectContainer,
+  schedulingPolicyOf,
   validateContainerConfiguration,
 } from "./ContainerConfiguration.ts";
+import { resolveContainerBuildPaths } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 
 /**
@@ -53,7 +54,6 @@ export const LocalContainerProvider = () =>
     ContainerPlatform,
     LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
 
       // Resolve the `dev` image plus a content hash for change detection.
@@ -122,10 +122,10 @@ export const LocalContainerProvider = () =>
           // directory. The runtime builds the user's Dockerfile against the
           // (real-path'd) context, exactly like the live provider's
           // `external` variant.
-          const context = yield* fs.realPath(news.context ?? ".");
-          const dockerfile = news.dockerfile
-            ? yield* fs.realPath(news.dockerfile)
-            : path.join(context, "Dockerfile");
+          const { context, dockerfile } = yield* resolveContainerBuildPaths({
+            context: news.context,
+            dockerfile: news.dockerfile,
+          });
           // Hash what Docker receives, like the live provider: the context
           // `.dockerignore` keeps (never a lockfile above it) and the Dockerfile.
           return {
@@ -229,13 +229,17 @@ export const LocalContainerProvider = () =>
         yield* validateContainerConfiguration(news, output?.schedulingPolicy);
         const accountId = yield* localAccountId;
         if (isDurableObjectContainer(news)) {
-          const attributes = durableObjectPlaceholder({
-            applicationId: output?.applicationId ?? generateLocalId(),
-            applicationName: yield* createContainerApplicationName(id, undefined),
-            accountId,
-            createdAt: output?.createdAt ?? DateTime.formatIso(yield* DateTime.now),
-            observability: news.observability,
-          });
+          const attributes = {
+            ...durableObjectPlaceholder({
+              applicationId: output?.applicationId ?? generateLocalId(),
+              applicationName: yield* createContainerApplicationName(id, undefined),
+              accountId,
+              createdAt: output?.createdAt ?? DateTime.formatIso(yield* DateTime.now),
+              observability: news.observability,
+            }),
+            // The Durable Object's handle passes this to start(), as on Cloudflare.
+            runtimeEnv: makeContainerEnv(news, accountId, bindings),
+          };
           if (!hasImageSource(news)) return attributes;
           const { dev, hash } = yield* prepareImage(id, news);
           return {
@@ -253,7 +257,7 @@ export const LocalContainerProvider = () =>
           applicationId: output?.applicationId ?? generateLocalId(),
           applicationName: yield* createContainerApplicationName(id, news.name),
           accountId: output?.accountId ?? accountId,
-          schedulingPolicy: news.schedulingPolicy ?? "default",
+          schedulingPolicy: schedulingPolicyOf(news),
           instances: news.instances ?? 1,
           maxInstances: news.maxInstances ?? 1,
           constraints: news.constraints,
@@ -274,6 +278,10 @@ export const LocalContainerProvider = () =>
             yield* validateContainerConfiguration(news, output?.schedulingPolicy);
           }
           if (!output) return { action: "update" };
+          // State written before the handle passed env to start() has none.
+          if (output.schedulingPolicy === "durable_object" && output.runtimeEnv === undefined) {
+            return { action: "update" };
+          }
           // A content-only edit (an imported module of `main`, a Dockerfile,
           // a context file) changes no prop, so the engine's structural
           // fallback would call it a noop and the image would never rebuild.

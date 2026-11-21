@@ -478,8 +478,8 @@ const syncRules = (
           securityPolicyId,
           parentId,
           compute.addRuleOrganizationSecurityPolicies({
+            ...toRuleBody(rule),
             securityPolicy: securityPolicyId,
-            body: toRuleBody(rule),
           }),
           { ignoreAlreadyExists: true },
         );
@@ -490,9 +490,9 @@ const syncRules = (
           securityPolicyId,
           parentId,
           compute.patchRuleOrganizationSecurityPolicies({
+            ...toRuleBody(rule),
             securityPolicy: securityPolicyId,
             priority,
-            body: toRuleBody(rule),
           }),
         );
       }
@@ -607,18 +607,16 @@ export const OrganizationSecurityPolicyProvider = () =>
           shortName,
           parentId,
           compute.insertOrganizationSecurityPolicies({
+            shortName,
+            description: desiredDescription,
+            type: typeOf(news.type),
+            rules: withDefaultRule(news.rules),
+            advancedOptionsConfig: news.advancedOptionsConfig,
+            adaptiveProtectionConfig: news.adaptiveProtectionConfig,
+            recaptchaOptionsConfig: news.recaptchaOptionsConfig,
+            ddosProtectionConfig: news.ddosProtectionConfig,
+            userDefinedFields: news.userDefinedFields,
             parentId,
-            body: {
-              shortName,
-              description: desiredDescription,
-              type: typeOf(news.type),
-              rules: withDefaultRule(news.rules),
-              advancedOptionsConfig: news.advancedOptionsConfig,
-              adaptiveProtectionConfig: news.adaptiveProtectionConfig,
-              recaptchaOptionsConfig: news.recaptchaOptionsConfig,
-              ddosProtectionConfig: news.ddosProtectionConfig,
-              userDefinedFields: news.userDefinedFields,
-            },
           }),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
@@ -685,10 +683,7 @@ export const OrganizationSecurityPolicyProvider = () =>
         yield* runOp(
           securityPolicyId,
           parentId,
-          compute.patchOrganizationSecurityPolicies({
-            securityPolicy: securityPolicyId,
-            body: patch,
-          }),
+          compute.patchOrganizationSecurityPolicies({ ...patch, securityPolicy: securityPolicyId }),
         );
         current = (yield* getById(securityPolicyId)) ?? current;
       }

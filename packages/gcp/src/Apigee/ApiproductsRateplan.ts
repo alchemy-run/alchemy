@@ -263,10 +263,7 @@ export const ApiproductsRateplanProvider = () =>
 
       if (current === undefined) {
         const created = yield* apigee
-          .createOrganizationsApiproductsRateplans({
-            parent,
-            body,
-          })
+          .createOrganizationsApiproductsRateplans({ ...body, parent })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
       }
@@ -293,8 +290,8 @@ export const ApiproductsRateplanProvider = () =>
 
       if (needsUpdate) {
         current = yield* apigee.updateOrganizationsApiproductsRateplans({
+          ...body,
           name: current.name,
-          body,
         });
       }
 

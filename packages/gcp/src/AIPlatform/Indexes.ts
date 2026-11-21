@@ -305,16 +305,14 @@ export const IndexProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsIndexes({
+            displayName,
+            description: news.description,
+            labels: desiredLabels,
+            indexUpdateMethod,
+            metadata: news.metadata,
+            metadataSchemaUri: news.metadataSchemaUri,
+            encryptionSpec: news.encryptionSpec,
             parent: `projects/${env.project}/locations/${location}`,
-            body: {
-              displayName,
-              description: news.description,
-              labels: desiredLabels,
-              indexUpdateMethod,
-              metadata: news.metadata,
-              metadataSchemaUri: news.metadataSchemaUri,
-              encryptionSpec: news.encryptionSpec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -345,6 +343,10 @@ export const IndexProvider = () =>
 
       if (descriptionChanged || displayChanged || labelsChanged || metadataChanged) {
         const operation = yield* aiplatform.patchProjectsLocationsIndexes({
+          displayName,
+          description: news.description,
+          labels: desiredLabels,
+          metadata: news.metadata,
           name,
           updateMask: [
             descriptionChanged ? "description" : undefined,
@@ -354,13 +356,6 @@ export const IndexProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: {
-            name,
-            displayName,
-            description: news.description,
-            labels: desiredLabels,
-            metadata: news.metadata,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(name);

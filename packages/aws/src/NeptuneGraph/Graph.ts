@@ -58,8 +58,9 @@ export interface GraphProps {
     dimension: number;
   };
   /**
-   * Block accidental deletion. In-place modify.
-   * @default true
+   * Refuse deletion while on: `destroy` and replacement fail until it is
+   * turned off and deployed. In-place modify.
+   * @default false
    */
   deletionProtection?: boolean;
   /**
@@ -180,6 +181,16 @@ type GraphOutput = neptunegraph.GetGraphOutput;
  * The graph entered the terminal `FAILED` state during provisioning or a
  * modification. Not retried.
  */
+/**
+ * Deletion was refused because the Neptune Analytics graph has deletion protection on, set
+ * through `deletionProtection` or outside the stack. Turn it off and deploy (or turn it
+ * off in the console) before deleting it.
+ */
+export class GraphDeletionProtected extends Data.TaggedError("GraphDeletionProtected")<{
+  readonly graphId: string;
+  readonly message: string;
+}> {}
+
 export class GraphProvisioningFailed extends Data.TaggedError("GraphProvisioningFailed")<{
   readonly graphId: string;
   readonly reason: string;
@@ -382,7 +393,7 @@ export const GraphProvider = () =>
                 replicaCount: news.replicaCount,
                 kmsKeyIdentifier: news.kmsKeyIdentifier,
                 vectorSearchConfiguration: news.vectorSearchConfiguration,
-                deletionProtection: news.deletionProtection,
+                deletionProtection: news.deletionProtection ?? false,
                 tags: desiredTags,
               })
               .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
@@ -416,11 +427,9 @@ export const GraphProvider = () =>
               update.publicConnectivity = news.publicConnectivity;
               dirty = true;
             }
-            if (
-              news.deletionProtection !== undefined &&
-              news.deletionProtection !== observed.deletionProtection
-            ) {
-              update.deletionProtection = news.deletionProtection;
+            const deletionProtection = news.deletionProtection ?? false;
+            if (deletionProtection !== observed.deletionProtection) {
+              update.deletionProtection = deletionProtection;
               dirty = true;
             }
             if (dirty) {
@@ -451,12 +460,18 @@ export const GraphProvider = () =>
           yield* session.note(observed.arn);
           return toAttrs({ graph: observed, tags: desiredTags });
         }),
-        delete: Effect.fn(function* ({ output }) {
-          // Deletion is blocked while delete-protection is on — disable it
-          // first if the live graph still has it enabled.
+        delete: Effect.fn(function* ({ output, force }) {
           const observed = yield* getGraph(output.graphId);
           if (observed === undefined) return;
+          // Deletion protection, set by this stack or outside it, refuses the
+          // delete. Only an account-wide nuke (`force`) lifts it.
           if (observed.deletionProtection === true) {
+            if (force !== true) {
+              return yield* new GraphDeletionProtected({
+                graphId: output.graphId,
+                message: `Neptune Analytics graph '${output.graphId}' has deletion protection on. Set \`deletionProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
+              });
+            }
             yield* neptunegraph
               .updateGraph({
                 graphIdentifier: output.graphId,

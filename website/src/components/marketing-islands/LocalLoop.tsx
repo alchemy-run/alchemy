@@ -3,29 +3,42 @@ import { highlightTS } from "../marketing/highlightTS";
 import { useSpinner } from "./_terminal";
 
 /*
- * The two steps of the full-picture animation that run on your machine,
- * before the pull request: an agent edits the Worker and the type checker
- * catches the missing Layer, then the same test runs on emulated services
- * and against the real cloud.
+ * The three steps of the full-picture animation that run on your machine,
+ * before the pull request. An agent specifies a withdrawal as a story and
+ * writes the logic that passes it. The proof then finds the sequence nobody
+ * wrote a story for, and the fix keeps that sequence as a story. Last, the
+ * same behavior is tested on emulated services and against the real cloud.
  *
  * Left: the editor. Right: the agent's transcript. Like the CI steps,
  * every frame is derived from ms elapsed in the step.
  */
 
-export type LocalStepId = "edit" | "local";
+export type LocalStepId = "specify" | "prove" | "local";
 
-// ---------- Edit: add an upload route, hit the type error, fix it ----------
+type Span = readonly [number, number];
+
+// ---------- Specify: write the story, then the logic that passes it ----------
 const T_PROMPT_DONE = 900;
-const T_EDIT1 = 1100;
-const T_A = [1250, 2050] as const; // typing `const photos = yield* Photos;`
-const T_B = [2150, 3250] as const; // typing the upload call
-const T_CHECK1 = 3400;
-const T_ERROR = 3650;
-const T_EDIT2 = 5400;
-const T_C = [5550, 6550] as const; // typing `.pipe(Effect.provide([PhotosR2]))`
-const T_CHECK2 = 6700;
-const T_OK = 6950;
-export const EDIT_MS = 8800;
+const T_S_EDIT1 = 1100;
+const T_S_STORY: Span = [1250, 3700]; // typing the story
+const T_S_EDIT2 = 4300;
+const T_S_A: Span = [4450, 5250]; // typing the command's signature
+const T_S_B: Span = [5300, 6100]; // typing the event it records
+const T_S_RUN = 6300;
+const T_S_OK = 6700;
+export const SPECIFY_MS = 8300;
+
+// ---------- Prove: a rule breaks, the fix keeps the case as a story ----------
+const T_P_RUN1 = 300;
+const T_P_ERROR = 900;
+const T_P_EDIT1 = 2900;
+const T_P_C1: Span = [3050, 3550]; // typing the balance check
+const T_P_C2: Span = [3600, 4050]; // typing the rejection
+const T_P_EDIT2 = 4600;
+const T_P_STORY: Span = [4750, 6500]; // typing the overdraft story
+const T_P_RUN2 = 6700;
+const T_P_OK = 7100;
+export const PROVE_MS = 8900;
 
 // ---------- Iterate locally: emulated test, then the real cloud ----------
 // The live run replays the preview benchmark's measured phases
@@ -46,11 +59,42 @@ export const LOCAL_MS = T_PUSH + 1500;
 const GREEN = "var(--alc-accent-bright)";
 const RED = "var(--alc-danger)";
 
-const PROMPT = "add photo uploads to the API";
-const LINE_A = "    const photos = yield* Photos;";
-const LINE_B = "        yield* photos.upload(request.url, yield* request.text);";
-const PROVIDE = ".pipe(Effect.provide([PhotosR2]))";
-const ERROR = "Type 'Photos' is not assignable to type 'PlatformServices | WorkerServices'.";
+const PROMPT = "let customers withdraw money";
+const AGGREGATE = "src/Account.aggregate.ts";
+const STORIES = "test/Account.story.test.ts";
+const LINE_A = "    WithdrawMoney: (account, { amount }) =>";
+const LINE_B = "[new MoneyWithdrawn({ amount })],";
+const LINE_C1 = "      amount > account.balance";
+const LINE_C2 = "        ? new InsufficientFunds()";
+const RULE = "Account.NeverOverdrawn";
+const STORY_1 = "a withdrawal is recorded";
+const STORY_2 = "an overdraft is rejected";
+const LIVE_TEST = `${STORY_2} over HTTP`;
+// The shortest sequence that breaks the rule, written as a story.
+const COUNTEREXAMPLE = [
+  "given  MoneyDeposited 50",
+  "when   WithdrawMoney 80",
+  "then   balance is -30",
+];
+
+const STORY_1_SRC = [
+  `it.effect("${STORY_1}", () =>`,
+  "  story(",
+  "    Story.given(account, new MoneyDeposited({ amount: 50 })),",
+  "    Story.when(account, new WithdrawMoney({ amount: 30 })),",
+  "    Story.then(account, new MoneyWithdrawn({ amount: 30 })),",
+  "  ),",
+  ");",
+];
+const STORY_2_SRC = [
+  `it.effect("${STORY_2}", () =>`,
+  "  story(",
+  "    Story.given(account, new MoneyDeposited({ amount: 50 })),",
+  "    Story.when(account, new WithdrawMoney({ amount: 80 })),",
+  "    Story.rejected(new InsufficientFunds()),",
+  "  ),",
+  ");",
+];
 
 const TEST_FILE = [
   "const { test, beforeAll, afterAll, deploy, destroy } = Test.make({",
@@ -61,16 +105,16 @@ const TEST_FILE = [
   "const stack = beforeAll(deploy(Stack));",
   "afterAll(destroy(Stack));",
   "",
-  'test("PUT + GET round-trips through R2", Effect.gen(function* () {',
+  `test("${LIVE_TEST}", Effect.gen(function* () {`,
   "  const { url } = yield* stack;",
-  "  const res = yield* HttpClient.get(`${url}/object/hello.txt`);",
-  '  expect(yield* res.text).toBe("hi!");',
+  '  const res = yield* withdraw(url, { account: "sam", amount: 80 });',
+  "  expect(res.status).toBe(409);",
   "}));",
 ];
 
-const typed = (text: string, [a, b]: readonly [number, number], t: number) =>
+const typed = (text: string, [a, b]: Span, t: number) =>
   text.slice(0, Math.round(Math.min(1, Math.max(0, (t - a) / (b - a))) * text.length));
-const typing = ([a, b]: readonly [number, number], t: number) => t >= a && t < b;
+const typing = ([a, b]: Span, t: number) => t >= a && t < b;
 /** Live seconds, scaled back up to real time. */
 const liveSecs = (t: number, from: number) =>
   `${((Math.max(0, t - from) * LIVE_SPEED) / 1000).toFixed(1)}s`;
@@ -82,6 +126,21 @@ type CodeLine = {
   error?: boolean;
   lit?: boolean;
 };
+
+/** A block typed line by line over `span`; the caret sits on the last line. */
+function typedBlock(src: string[], span: Span, t: number): CodeLine[] {
+  if (t < span[0]) return [];
+  const total = src.reduce((n, l) => n + l.length, 0);
+  let left = Math.round(Math.min(1, (t - span[0]) / (span[1] - span[0])) * total);
+  const out: CodeLine[] = [];
+  for (const line of src) {
+    out.push({ text: line.slice(0, left), added: true });
+    if (left <= line.length) break;
+    left -= line.length;
+  }
+  if (typing(span, t)) out[out.length - 1]!.caret = true;
+  return out;
+}
 
 function Chrome({
   title,
@@ -110,41 +169,64 @@ function Chrome({
 /* Left: the editor                                                    */
 /* ------------------------------------------------------------------ */
 
-function apiLines(t: number): CodeLine[] {
-  const error = t >= T_ERROR && t < T_OK;
-  const lines: CodeLine[] = [
-    { text: "export default Cloudflare.Worker(" },
-    { text: '  "Api",' },
-    { text: "  { main: import.meta.url }," },
-    { text: "  Effect.gen(function* () {", error },
+type File = "stories" | "aggregate" | "live";
+
+/** Which file the editor shows: it follows the agent's latest edit. */
+function fileAt(id: LocalStepId, t: number): File {
+  if (id === "local") return "live";
+  if (id === "specify") return t >= T_S_EDIT2 ? "aggregate" : "stories";
+  return t >= T_P_EDIT2 ? "stories" : "aggregate";
+}
+
+function storyLines(id: LocalStepId, t: number): CodeLine[] {
+  if (id === "specify") {
+    const lines = typedBlock(STORY_1_SRC, T_S_STORY, t);
+    return lines.length ? lines : [{ text: "", caret: true }];
+  }
+  return [
+    ...STORY_1_SRC.map((text) => ({ text })),
+    { text: "" },
+    ...typedBlock(STORY_2_SRC, T_P_STORY, t),
   ];
-  if (t >= T_A[0])
-    lines.push({
-      text: typed(LINE_A, T_A, t),
-      added: true,
-      caret: typing(T_A, t),
-    });
-  lines.push(
-    { text: "    return {" },
-    { text: "      fetch: Effect.gen(function* () {" },
-    { text: "        const request = yield* HttpServerRequest;" },
-  );
-  if (t >= T_B[0])
-    lines.push({
-      text: typed(LINE_B, T_B, t),
-      added: true,
-      caret: typing(T_B, t),
-    });
-  lines.push(
-    { text: "        return HttpServerResponse.empty({ status: 201 });" },
-    { text: "      })," },
-    { text: "    };" },
+}
+
+function modelLines(id: LocalStepId, t: number): CodeLine[] {
+  const proving = id === "prove";
+  const error = proving && t >= T_P_ERROR && t < T_P_OK && t < T_P_EDIT2;
+  const fixing = proving && t >= T_P_C1[0];
+  const lines: CodeLine[] = [
+    { text: 'export class Account extends Domain.Aggregate("Account", {' },
+    { text: "  decide: {" },
     {
-      text: `  })${typed(PROVIDE, T_C, t)},`,
-      added: t >= T_C[0],
-      caret: typing(T_C, t),
+      text: proving ? LINE_A : typed(LINE_A, T_S_A, t),
+      added: !proving,
+      caret: !proving && (t < T_S_A[0] || typing(T_S_A, t)),
     },
-    { text: ");" },
+  ];
+  if (fixing)
+    lines.push({
+      text: typed(LINE_C1, T_P_C1, t),
+      added: true,
+      caret: typing(T_P_C1, t),
+    });
+  if (proving && t >= T_P_C2[0])
+    lines.push({
+      text: typed(LINE_C2, T_P_C2, t),
+      added: true,
+      caret: typing(T_P_C2, t),
+    });
+  if (proving || t >= T_S_B[0])
+    lines.push({
+      text: (fixing ? "        : " : "      ") + (proving ? LINE_B : typed(LINE_B, T_S_B, t)),
+      added: !proving || fixing,
+      caret: !proving && typing(T_S_B, t),
+    });
+  lines.push(
+    { text: "  }," },
+    { text: "  invariants: {" },
+    { text: "    NeverOverdrawn: ({ balance }) => balance >= 0,", error },
+    { text: "  }," },
+    { text: "}) {}" },
   );
   return lines;
 }
@@ -160,15 +242,29 @@ function testLines(t: number): CodeLine[] {
   }));
 }
 
+const FILES: Record<File, { path: string; tab: string }> = {
+  stories: { path: STORIES, tab: "Account.story.test.ts" },
+  aggregate: { path: AGGREGATE, tab: "Account.aggregate.ts" },
+  live: { path: "test/Bank.test.ts", tab: "Bank.test.ts" },
+};
+
 export function EditorPane({ id, t }: { id: LocalStepId; t: number }) {
-  const file = id === "edit" ? "src/api.ts" : "test/api.test.ts";
-  const lines = id === "edit" ? apiLines(t) : testLines(t);
+  const file = fileAt(id, t);
+  const lines =
+    file === "stories"
+      ? storyLines(id, t)
+      : file === "aggregate"
+        ? modelLines(id, t)
+        : testLines(t);
   const errorAt = lines.findIndex((l) => l.error);
   return (
-    <Chrome title={<>my-app — {file}</>}>
+    <Chrome title={<>bank — {FILES[file].path}</>}>
       <div className="prf-edtabs" aria-hidden>
-        <span className={`prf-edtab ${id === "edit" ? "is-active" : ""}`}>api.ts</span>
-        <span className={`prf-edtab ${id === "local" ? "is-active" : ""}`}>api.test.ts</span>
+        {(Object.keys(FILES) as File[]).map((f) => (
+          <span key={f} className={`prf-edtab ${f === file ? "is-active" : ""}`}>
+            {FILES[f].tab}
+          </span>
+        ))}
       </div>
       <div className="prf-code">
         {lines.map((l, i) => (
@@ -185,7 +281,8 @@ export function EditorPane({ id, t }: { id: LocalStepId; t: number }) {
             </div>
             {i === errorAt && (
               <div className="prf-diag prf-enter">
-                <span style={{ color: RED }}>✗</span> {ERROR}
+                <span style={{ color: RED }}>✗</span> a customer can overdraw: deposit 50, withdraw
+                80
               </div>
             )}
           </div>
@@ -248,31 +345,52 @@ export function AgentPane({ id, t, paused }: { id: LocalStepId; t: number; pause
     if (el) el.scrollTop = el.scrollHeight;
   });
   const busy =
-    id === "edit"
-      ? (t >= T_CHECK1 && t < T_ERROR) || (t >= T_CHECK2 && t < T_OK)
-      : (t >= T_RUN1 && t < T_EMU_TEST[1]) || (t >= T_RUN2 && t < T_DESTROY[1]);
+    id === "specify"
+      ? t >= T_S_RUN && t < T_S_OK
+      : id === "prove"
+        ? (t >= T_P_RUN1 && t < T_P_ERROR) || (t >= T_P_RUN2 && t < T_P_OK)
+        : (t >= T_RUN1 && t < T_EMU_TEST[1]) || (t >= T_RUN2 && t < T_DESTROY[1]);
   const spin = useSpinner(busy && !paused);
 
   const prompt =
-    id === "edit"
+    id === "specify"
       ? PROMPT.slice(0, Math.round(Math.min(1, t / T_PROMPT_DONE) * PROMPT.length))
       : PROMPT;
 
   const items: ReactNode[] = [
     <div className="prf-act__prompt" key="prompt">
       <span className="prf-muted">›</span> {prompt}
-      {id === "edit" && t < T_PROMPT_DONE && <span className="prf-caret" />}
+      {id === "specify" && t < T_PROMPT_DONE && <span className="prf-caret" />}
     </div>,
   ];
 
-  if (id === "edit") {
-    if (t >= T_EDIT1) items.push(<Action key="e1" title="Edit" detail="src/api.ts · +2 lines" />);
-    if (t >= T_CHECK1)
+  if (id === "specify") {
+    if (t >= T_S_EDIT1)
+      items.push(<Action key="e1" title="Edit" detail={`${STORIES} · the story first`} />);
+    if (t >= T_S_EDIT2)
+      items.push(<Action key="e2" title="Edit" detail={`${AGGREGATE} · +2 lines`} />);
+    if (t >= T_S_RUN)
       items.push(
-        <Action key="c1" title="Type-check">
-          {t < T_ERROR ? (
+        <Action key="r" title="Run" detail="pnpm test Account.story">
+          <Row done={t >= T_S_OK} spin={spin}>
+            {STORY_1}
+          </Row>
+          {t >= T_S_OK && (
+            <div className="prf-act__row">
+              <span style={{ color: GREEN }}>13 stories pass</span>
+              <span className="prf-muted"> · in memory, nothing deployed</span>
+            </div>
+          )}
+        </Action>,
+      );
+  } else if (id === "prove") {
+    items.push(<Action key="done" title="Edit" detail={`${AGGREGATE} · 13 stories pass`} />);
+    if (t >= T_P_RUN1)
+      items.push(
+        <Action key="r1" title="Run" detail="pnpm test">
+          {t < T_P_ERROR ? (
             <Row done={false} spin={spin}>
-              checking
+              proving 6 rules
             </Row>
           ) : (
             <>
@@ -280,26 +398,39 @@ export function AgentPane({ id, t, paused }: { id: LocalStepId; t: number; pause
                 <span className="prf-log__icon" style={{ color: RED }}>
                   ✗
                 </span>
-                <span style={{ color: RED }}>1 error</span>
-                <span className="prf-muted"> · src/api.ts:4</span>
+                <span style={{ color: RED }}>1 rule broken</span>
+                <span className="prf-muted"> · {RULE}</span>
               </div>
-              <div className="prf-act__msg">{ERROR}</div>
+              <div className="prf-act__msg prf-act__story">
+                {COUNTEREXAMPLE.map((l) => (
+                  <div key={l}>{l}</div>
+                ))}
+              </div>
             </>
           )}
         </Action>,
       );
-    if (t >= T_EDIT2)
-      items.push(<Action key="e2" title="Edit" detail="src/api.ts · provide PhotosR2" />);
-    if (t >= T_CHECK2)
+    if (t >= T_P_EDIT1)
+      items.push(<Action key="e1" title="Edit" detail={`${AGGREGATE} · reject an overdraft`} />);
+    if (t >= T_P_EDIT2)
+      items.push(<Action key="e2" title="Edit" detail={`${STORIES} · keep the case as a story`} />);
+    if (t >= T_P_RUN2)
       items.push(
-        <Action key="c2" title="Type-check">
-          <Row done={t >= T_OK} spin={spin}>
-            {t >= T_OK ? "no errors" : "checking"}
+        <Action key="r2" title="Run" detail="pnpm test">
+          <Row done={t >= T_P_OK} spin={spin}>
+            {t >= T_P_OK ? "14 stories pass" : "proving 6 rules"}
           </Row>
+          {t >= T_P_OK && (
+            <Row done spin={spin}>
+              6 rules proved and checked
+            </Row>
+          )}
         </Action>,
       );
   } else {
-    items.push(<Action key="done-edit" title="Edit" detail="src/api.ts · type-checks" />);
+    items.push(
+      <Action key="done-edit" title="Run" detail="pnpm test · 14 stories pass, 6 rules proved" />,
+    );
     if (t >= T_RUN1)
       items.push(
         <Action key="r1" title="Run" detail="LOCAL=1 pnpm test">
@@ -308,7 +439,7 @@ export function AgentPane({ id, t, paused }: { id: LocalStepId; t: number; pause
           </Row>
           {t >= T_EMU_TEST[0] && (
             <Row done={t >= T_EMU_TEST[1]} spin={spin}>
-              PUT + GET round-trips through R2
+              {LIVE_TEST}
             </Row>
           )}
           {t >= T_EMU_TEST[1] && (
@@ -333,7 +464,7 @@ export function AgentPane({ id, t, paused }: { id: LocalStepId; t: number; pause
           )}
           {t >= T_LIVE_TEST[0] && (
             <Row done={t >= T_LIVE_TEST[1]} spin={spin}>
-              PUT + GET round-trips through R2
+              {LIVE_TEST}
             </Row>
           )}
           {t >= T_DESTROY[0] && (
@@ -359,14 +490,20 @@ export function AgentPane({ id, t, paused }: { id: LocalStepId; t: number; pause
       );
     if (t >= T_PUSH)
       items.push(
-        <Action key="push" title="Push" detail="feature/photo-upload · open a pull request" />,
+        <Action key="push" title="Push" detail="feature/withdrawals · open a pull request" />,
       );
   }
 
   return (
     <Chrome
-      title="agent · my-app"
-      badge={id === "edit" ? { text: "TYPE-CHECK", tone: "sky" } : { text: "TEST", tone: "green" }}
+      title="agent · bank"
+      badge={
+        id === "specify"
+          ? { text: "STORY", tone: "green" }
+          : id === "prove"
+            ? { text: "PROVE", tone: "sky" }
+            : { text: "TEST", tone: "green" }
+      }
     >
       <div className="prf-agent" ref={listRef}>
         {items}
