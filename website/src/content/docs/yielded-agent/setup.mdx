@@ -1,0 +1,91 @@
+---
+title: Setup
+description: Install @alchemy.run/yielded-agent, @yielded/agent and @alchemy.run/ai, and add a Yielded Agent harness to a Cloudflare Durable Object.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+You need:
+
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
+- An Alchemy app on Cloudflare. See [Cloudflare setup](/cloudflare/setup).
+
+Yielded Agent needs no account. It is a library that runs in your Durable Object.
+
+## Install
+
+Install the harness, Yielded Agent itself, its Durable Object storage and the shared AI package:
+
+<PackageManagers add="@alchemy.run/yielded-agent @yielded/agent@beta @yielded/agent-storage-cloudflare@beta @alchemy.run/ai" />
+
+## A model
+
+A harness needs a model. See [Models](/ai/models).
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AICloudflare.Model(Fast, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+});
+```
+
+## An agent
+
+Define an agent with Yielded's `Agent.make`:
+
+```typescript title="src/agent.ts"
+import { Agent, Output } from "@yielded/agent";
+import { Toolkit } from "effect/ai";
+import * as Schema from "effect/Schema";
+
+export const Greeter = Agent.make("greeter", {
+  input: Schema.String,
+  output: Output.text(Schema.String),
+  instructions: "Greet the person by name in one sentence.",
+  toolkit: Toolkit.empty,
+});
+```
+
+## A harness
+
+Yield the harness in a Durable Object's outer Effect and provide its Layers once:
+
+```typescript title="src/Threads.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as YieldedAgent from "@alchemy.run/yielded-agent";
+import * as YieldedCloudflare from "@alchemy.run/yielded-agent/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Greeter } from "./agent.ts";
+import { Fast, FastLive } from "./models.ts";
+
+const HarnessLive = Layer.mergeAll(FastLive, YieldedCloudflare.DurableObjectHistory);
+
+export default class Threads extends Cloudflare.DurableObject<Threads>()(
+  "Threads",
+  Effect.gen(function* () {
+    const harness = yield* YieldedAgent.Harness({ models: [Fast] });
+
+    return Effect.gen(function* () {
+      return {
+        greet: Effect.fn(function* (thread: string, name: string) {
+          const result = yield* harness.run(Greeter, name, { thread });
+          return result.output;
+        }, Effect.orDie),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+`YieldedCloudflare.DurableObjectHistory` keeps Threads in the object's SQLite. A harness left without a history Layer does not compile.
+
+## Deploy
+
+<PackageManagers run="alchemy deploy" />
+
+Next: [Agents & runs](/yielded-agent/agents-and-runs).

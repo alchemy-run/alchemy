@@ -52,6 +52,7 @@ function providersSidebarEntry() {
       { label: "AI", link: "/ai" },
       { label: "Pi", link: "/pi" },
       { label: "OpenCode", link: "/opencode" },
+      { label: "Yielded Agent", link: "/yielded-agent" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -2594,6 +2595,29 @@ export default defineConfig({
               items: [
                 { label: "The session's sandbox", link: "/opencode/sandbox" },
                 { label: "OpenCode's own API", link: "/opencode/api" },
+              ],
+            },
+          ],
+        },
+        {
+          label: "Yielded Agent",
+          items: [
+            { label: "Overview", link: "/yielded-agent" },
+            { label: "What is Yielded Agent?", link: "/yielded-agent/what-is-yielded-agent" },
+            { label: "Setup", link: "/yielded-agent/setup" },
+            {
+              label: "Agents",
+              items: [
+                { label: "Agents & runs", link: "/yielded-agent/agents-and-runs" },
+                { label: "Threads", link: "/yielded-agent/threads" },
+                { label: "Tools", link: "/yielded-agent/tools" },
+              ],
+            },
+            {
+              label: "Hosting",
+              items: [
+                { label: "Sandboxes", link: "/yielded-agent/sandboxes" },
+                { label: "Surviving eviction", link: "/yielded-agent/eviction" },
               ],
             },
           ],

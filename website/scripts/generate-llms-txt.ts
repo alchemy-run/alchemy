@@ -765,6 +765,23 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Yielded Agent",
+    intro:
+      "Yielded Agent on Alchemy: schema-defined agents, Threads in a Durable Object, tools, sandboxes and runs that survive eviction.",
+    pages: {
+      slugs: [
+        "yielded-agent/index",
+        "yielded-agent/what-is-yielded-agent",
+        "yielded-agent/setup",
+        "yielded-agent/agents-and-runs",
+        "yielded-agent/threads",
+        "yielded-agent/tools",
+        "yielded-agent/sandboxes",
+        "yielded-agent/eviction",
+      ],
+    },
+  },
+  {
     heading: "Boat",
     intro:
       "Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.",

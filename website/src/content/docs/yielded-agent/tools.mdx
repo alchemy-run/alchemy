@@ -1,0 +1,98 @@
+---
+title: Tools
+description: Give a Yielded agent tools declared with AI.Tool. The harness supplies each handler from its Layer, and a declared failure is returned to the model.
+---
+
+A Yielded agent's `toolkit` is an Effect AI toolkit. `YieldedAgent.toolkit` builds one from the `AI.Tool`s you already have, and the harness supplies their handlers.
+
+## Declare a tool
+
+A tool is declared once and implemented by a Layer. See [Tools](/ai/tools).
+
+```typescript title="src/tools.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Schema from "effect/Schema";
+
+export class LookupOrder extends AI.Tool<LookupOrder>()("lookup_order", {
+  description: "Look up an order by its number.",
+  parameters: Schema.Struct({ number: Schema.String }),
+  success: Schema.Struct({ status: Schema.String }),
+}) {}
+
+export const LookupOrderLive = LookupOrder.make(({ number }) => ({
+  status: number.startsWith("A") ? "shipped" : "processing",
+}));
+```
+
+## Put it in an agent's toolkit
+
+```typescript title="src/agent.ts"
+import * as YieldedAgent from "@alchemy.run/yielded-agent";
+import { Agent, Output } from "@yielded/agent";
+import * as Schema from "effect/Schema";
+import { LookupOrder } from "./tools.ts";
+
+export const Support = Agent.make("support", {
+  input: Schema.String,
+  output: Output.text(Schema.String),
+  instructions: "Answer questions about orders. Look an order up before you answer.",
+  toolkit: YieldedAgent.toolkit(LookupOrder),
+});
+```
+
+## List it on the harness
+
+The harness resolves a tool's handler where it is yielded, so list every tool an agent uses and provide its Layer there:
+
+```typescript
+const harness = yield* YieldedAgent.Harness({ models: [Fast], tools: [LookupOrder] });
+```
+
+A tool that is listed without its Layer provided does not compile.
+
+## Failures the model can read
+
+A tool's declared `failure` is returned to the model as a failed result, and the run goes on:
+
+```typescript title="src/tools.ts"
+export class OrderNotFound extends Schema.TaggedError<OrderNotFound>()("OrderNotFound", {
+  number: Schema.String,
+}) {}
+
+export class CancelOrder extends AI.Tool<CancelOrder>()("cancel_order", {
+  description: "Cancel an order by its number.",
+  parameters: Schema.Struct({ number: Schema.String }),
+  success: Schema.Struct({ refunded: Schema.Number }),
+  failure: OrderNotFound,
+}) {}
+```
+
+The model sees `{"_tag":"OrderNotFound","number":"Z-9"}` and can tell the person. A defect in a handler fails the run instead.
+
+## Use bindings in a tool
+
+A tool's Layer is built in the Durable Object, so it can use a binding:
+
+```typescript title="src/tools.ts"
+export const LookupOrderLive = LookupOrder.make(
+  Effect.gen(function* () {
+    const orders = yield* Cloudflare.KV.ReadNamespace(Orders);
+    return Effect.fn(function* ({ number }) {
+      const status = yield* orders.get(number).pipe(Effect.orDie);
+      return { status: status ?? "unknown" };
+    });
+  }),
+);
+```
+
+Provide the binding's Layer to the tool's Layer where you compose the harness:
+
+```typescript
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  LookupOrderLive.pipe(Layer.provide(Cloudflare.KV.ReadNamespaceBinding)),
+  YieldedCloudflare.DurableObjectHistory,
+);
+```
+
+Tool tags such as `AI.Bash` are not supported here: Yielded Agent has no coding tools of its own to provide for them.

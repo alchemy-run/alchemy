@@ -11233,6 +11233,9 @@ importers:
       '@alchemy.run/turso':
         specifier: workspace:*
         version: link:../turso
+      '@alchemy.run/yielded-agent':
+        specifier: workspace:*
+        version: link:../yielded-agent
       '@cloudflare/containers':
         specifier: 'catalog:'
         version: 0.3.7
@@ -11452,6 +11455,12 @@ importers:
       '@vitejs/plugin-vue':
         specifier: 'catalog:'
         version: 6.0.10(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.44(typescript@7.1.0-beta))
+      '@yielded/agent':
+        specifier: 0.1.0-beta.192
+        version: 0.1.0-beta.192(effect@4.1.4)
+      '@yielded/agent-storage-cloudflare':
+        specifier: 0.1.0-beta.192
+        version: 0.1.0-beta.192(effect@4.1.4)
       alchemy:
         specifier: workspace:*
         version: link:../alchemy
@@ -12092,6 +12101,34 @@ importers:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-beta
+
+  packages/yielded-agent:
+    dependencies:
+      '@alchemy.run/ai':
+        specifier: workspace:*
+        version: link:../ai
+      '@yielded/agent':
+        specifier: 0.1.0-beta.192
+        version: 0.1.0-beta.192(effect@4.1.4)
+    devDependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../cloudflare
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@yielded/agent-storage-cloudflare':
+        specifier: 0.1.0-beta.192
+        version: 0.1.0-beta.192(effect@4.1.4)
       alchemy:
         specifier: workspace:*
         version: link:../alchemy
@@ -23169,6 +23206,21 @@ packages:
   '@xtuc/long@4.2.2':
     resolution: {integrity: sha512-NuHqBY1PB/D8xU6s/thBgOAiAP7HOYDQ32+BFZILJ8ivkUkAHQnWfn6WhL79Owj1qmUnoN/YPhktdIoucipkAQ==}
 
+  '@yielded/agent-storage-cloudflare@0.1.0-beta.192':
+    resolution: {integrity: sha512-171Sli+bn9ZdJVwxMvXN4+jkGEZk4sbYeVq1fvfD9+0Ee8UabY8TUvzt1gLsaGIcwBG1f0WXIMKE5NtkD/xxaA==}
+    peerDependencies:
+      effect: 4.1.4
+
+  '@yielded/agent-storage-sql@0.1.0-beta.192':
+    resolution: {integrity: sha512-RqYbSv3QafwCpIEXkYTzFHQErie3drChKgY95oCUkWZFnNydhn+2ELvENJ47UADKT/JmzjIG7rRsi7TlNS+cvg==}
+    peerDependencies:
+      effect: 4.1.4
+
+  '@yielded/agent@0.1.0-beta.192':
+    resolution: {integrity: sha512-WGCKlAPT1mutBPuG52EvsZIAtCEKqASEiFxAvfxc45oKvpaRjUAksyvTrrnyN1jb2S6lRk4ArWfV02GnaW9fow==}
+    peerDependencies:
+      effect: 4.1.4
+
   '@yuku-toolchain/darwin-arm64@0.25.0':
     resolution: {integrity: sha512-21QMCgP74cgSrgxIgw/SS5uMnn7cFHwgjNEBZYgO1HxpdjG4ULenXyUY92xRReuAJZdbRyz6OGwtYi6lDKumSw==}
     cpu: [arm64]
@@ -25861,6 +25913,11 @@ packages:
   ignore@7.0.12:
     resolution: {integrity: sha512-/8UvqAPU9DGTI9k4mxtf49U37Isfwr8Uts96+SBHIkFxPJnHS0Ew4f00sM4Scd8V8EjM0jUNtVDdv1kPdt35lg==}
     engines: {node: '>= 4'}
+
+  image-dimensions@2.6.0:
+    resolution: {integrity: sha512-j1cgVnvl0ltv7tYImMYMlrkYeDB43oSUiQv3zodkImsFbJWmJZ6M5e5N9k5/8zdMVjrtYzRbmcqTqpxvyh29vw==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   image-meta@0.3.0:
     resolution: {integrity: sha512-IDxPcgtP9oUwUhcUMBfAQo27JTx9j96jFV9kpfavkANF6LvcTWEm1IouSbgMDV3G5Y5jx2SEdnHtecxV2OjGBA==}
@@ -43032,6 +43089,24 @@ snapshots:
 
   '@xtuc/long@4.2.2': {}
 
+  '@yielded/agent-storage-cloudflare@0.1.0-beta.192(effect@4.1.4)':
+    dependencies:
+      '@effect/platform-browser': 4.1.4(effect@4.1.4)
+      '@effect/sql-sqlite-do': 4.1.4(effect@4.1.4)
+      '@yielded/agent': 0.1.0-beta.192(effect@4.1.4)
+      '@yielded/agent-storage-sql': 0.1.0-beta.192(effect@4.1.4)
+      effect: 4.1.4
+
+  '@yielded/agent-storage-sql@0.1.0-beta.192(effect@4.1.4)':
+    dependencies:
+      '@yielded/agent': 0.1.0-beta.192(effect@4.1.4)
+      effect: 4.1.4
+
+  '@yielded/agent@0.1.0-beta.192(effect@4.1.4)':
+    dependencies:
+      effect: 4.1.4
+      image-dimensions: 2.6.0
+
   '@yuku-toolchain/darwin-arm64@0.25.0':
     optional: true
 
@@ -45962,6 +46037,8 @@ snapshots:
   ieee754@1.2.1: {}
 
   ignore@7.0.12: {}
+
+  image-dimensions@2.6.0: {}
 
   image-meta@0.3.0: {}
 
