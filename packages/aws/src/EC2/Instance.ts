@@ -23,12 +23,14 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { nameTagFilter, single } from "../internal/Lookup.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
   type Ec2HostedProps,
   type InstanceEnclaveOptions,
   type InstanceMetadataOptions,
+  CONTAINER_UNIT_VERSION,
   createEc2HostRuntimeContext,
   createEc2HostedSupport,
   type Ec2HostRuntimeContext,
@@ -44,7 +46,7 @@ export const InstanceId = <ID extends string>(id: ID): ID & InstanceId<ID> =>
   `i-${id}` as ID & InstanceId<ID>;
 
 export type InstanceArn<ID extends InstanceId = InstanceId> =
-  `arn:aws:ec2:${RegionID}:${AccountID}:instance/${ID}`;
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:instance/${ID}`;
 
 export const isInstance = (value: any): value is Instance =>
   typeof value === "object" &&
@@ -155,7 +157,9 @@ export interface InstanceProps extends PlatformProps {
    */
   port?: number;
   /**
-   * Additional environment variables for the hosted process.
+   * Additional environment variables for the hosted process. systemd loads
+   * them, so keys must be shell-style names (`[A-Za-z_][A-Za-z0-9_]*`);
+   * another fails the deploy.
    */
   env?: Record<string, any>;
   /**
@@ -306,6 +310,10 @@ export interface Instance extends Resource<
      */
     code?: {
       hash: string;
+      /**
+       * Version of the systemd unit a container instance was launched with.
+       */
+      unit?: number;
     };
   },
   {
@@ -466,7 +474,7 @@ export const InstanceProvider = () =>
         AWSEnvironment.current.pipe(
           Effect.map(
             (env) =>
-              `arn:aws:ec2:${env.region}:${env.accountId}:instance/${instanceId}` as InstanceArn,
+              `arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:instance/${instanceId}` as InstanceArn,
           ),
         );
 
@@ -788,8 +796,14 @@ export const InstanceProvider = () =>
             !isResolved(raw.userData) || !deepEqual(raw.userData, olds.userData);
           const hostModeChanged =
             Boolean(olds.main || olds.context) !== Boolean(raw.main || raw.context);
+          // User data installs the unit once, so a different container unit
+          // (or a switch between program and container) needs a new instance.
+          const containerUnitChanged =
+            output?.code !== undefined &&
+            output.code.unit !== (raw.context !== undefined ? CONTAINER_UNIT_VERSION : undefined);
           if (
             hostModeChanged ||
+            containerUnitChanged ||
             launchConfigChanged(raw.imageId, olds.imageId) ||
             launchConfigChanged(raw.subnetId, olds.subnetId) ||
             launchConfigChanged(raw.keyName, olds.keyName) ||

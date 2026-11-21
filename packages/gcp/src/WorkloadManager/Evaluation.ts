@@ -269,9 +269,7 @@ const expandScope = (value: string, project: string) => {
   return `projects/${trimmed.length > 0 ? trimmed : project}`;
 };
 
-const toFilter = (
-  filter: workloadmanager.ResourceFilter | undefined,
-): ResourceFilter | undefined =>
+const toFilter = (filter: workloadmanager.ResourceFilter | undefined): ResourceFilter | undefined =>
   filter === undefined
     ? undefined
     : {

@@ -8,6 +8,8 @@
     "test": "alchemy-test"
   },
   "devDependencies": {
+    "@1password/sdk": "catalog:",
+    "@alchemy.run/1password": "workspace:*",
     "@alchemy.run/acme": "workspace:*",
     "@alchemy.run/archil": "workspace:*",
     "@alchemy.run/aws": "workspace:*",
@@ -15,6 +17,7 @@
     "@alchemy.run/boat": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@alchemy.run/convex": "workspace:*",
     "@alchemy.run/daytona": "workspace:*",
     "@alchemy.run/digitalocean": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
@@ -49,6 +52,7 @@
     "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/boat-dev": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
+    "@distilled.cloud/convex": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/daytona": "workspace:*",
     "@distilled.cloud/digitalocean": "workspace:*",
@@ -116,6 +120,7 @@
     "arktype": "catalog:",
     "astro": "catalog:",
     "aws4fetch": "catalog:",
+    "convex": "1.49.0",
     "cross-fetch": "catalog:",
     "debug": "catalog:",
     "drizzle-kit": "catalog:",

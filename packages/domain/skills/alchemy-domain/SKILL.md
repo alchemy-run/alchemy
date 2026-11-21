@@ -16,7 +16,7 @@ Work in this order. Each step has a reference file with templates.
 1. **Break the requirements down** into building blocks. See [references/modeling.md](references/modeling.md).
 2. **Lay out the monorepo**: a domain package, a server package, a web package, with one kind-suffixed file per block. See [references/layout.md](references/layout.md).
 3. **Write each block** from its template. See [references/building-blocks.md](references/building-blocks.md).
-4. **Specify behavior with stories** before and while you implement it. See [references/testing.md](references/testing.md).
+4. **Specify behavior with stories** before and while you implement it, and **state each rule that must always hold** as an invariant that `Verify` checks. See [references/testing.md](references/testing.md).
 5. **Host the model** on Cloudflare from the server package, export its traces, and deploy with one alchemy stack. See [references/hosting.md](references/hosting.md).
 6. **Drive it from foldkit** in the web package. See [references/frontend.md](references/frontend.md).
 
@@ -79,4 +79,4 @@ More: [Domain Model: The aggregate decides, and everything commits at once](http
 3. Update the views, policies and projections that care about the new events.
 4. Expose it through an Api, if a client sends or reads it, with the middleware it needs, and give it a `{ description }` as its last argument.
 5. Write stories for the happy path, every rejection, every policy reaction, and every query's authorization.
-6. Run the domain package's tests, with one that expects `Domain.verify(Model)` to be empty. Then type-check the monorepo (`tsc -b`) and run the server and web tests.
+6. Run the domain package's tests: building the model's Layer, which every story does, fails on any definition problem. Then type-check the monorepo (`tsc -b`) and run the server and web tests.

@@ -28,6 +28,8 @@ const makeStorage = (stats: Stats, data: Map<string, unknown>): DurableObjects.O
     put: ((keyOrEntries: string | Record<string, unknown>, value?: unknown) =>
       Effect.sync(() => {
         if (typeof keyOrEntries === "string") data.set(keyOrEntries, clone(value));
+        // Cloudflare's storage takes at most 128 keys a put.
+        else if (Object.keys(keyOrEntries).length > 128) throw new Error("more than 128 keys");
         else for (const [key, entry] of Object.entries(keyOrEntries)) data.set(key, clone(entry));
       })) as DurableObjects.ObjectStorage["put"],
     delete: ((keyOrKeys: string | ReadonlyArray<string>) =>

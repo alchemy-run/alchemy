@@ -150,6 +150,17 @@ timers and fetches are pinned to the request that created them: a
 process-global batching exporter would be killed the moment its
 creating request ended.
 
+A Durable Object also gets trace and log exporters of its own, built
+once when the object starts. Fibers its instance phase forks (a tick
+loop, a subscription) record into them. They have no export interval,
+so an idle object can still hibernate. Each event flushes them as it
+ends, so a record made between events waits for the next one. Metrics
+stay per event.
+
+Don't call `provideProcessTelemetry` inside a Durable Object. Its
+exporters keep a timer pending, and Cloudflare keeps the object in
+memory, and bills it, while one is pending.
+
 Server runtimes — Cloudflare Containers, ECS Tasks, EC2 hosts,
 Lambda microVMs — are long-lived processes, so they build the
 exporters once at startup instead: telemetry batches on the standard

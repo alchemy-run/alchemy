@@ -98,6 +98,8 @@ An aggregate's state is never read by clients directly: a view projects what the
 
 `Aggregate.ref(id)` builds a reference for stories and views.
 
+To move history in from another system, `accounts.import(id, events, { commandId })` appends already-decided events without `decide` (pass `{ event, at }` to keep an event's original commit time; times must go forward from the instance's latest event and not pass the clock, else `ImportOutOfOrder`): views and projections apply them, policies and sagas never react. A retry with the same `commandId` returns the first receipt; it fails with `UnexpectedVersion` unless the instance is at `expectedVersion` (default `0`, so import in batches by passing the previous receipt's `version`). Wait with `Projection.caughtUp(receipt)`.
+
 More: [Aggregate](https://alchemy.run/domain/aggregate).
 
 ### Patterns for decide, evolve and reply
@@ -161,9 +163,10 @@ yield* registration.send(new RegisterCustomer({ customerId, name: "Sam", usernam
 - **List it in the model's `decisions`.** Every command has one implementation, an aggregate or a decision; a second is a type error.
 - **The receipt has `commits`**, one `{ stream, version }` per instance read: pass one as a view's `atLeast`.
 - **Send it like any command:** `bank.RegisterCustomer({ customerId, name, username })` from an Api client, `Story.when(command)` in a story.
+- **State what it must keep in `transitions`:** `({ before, after, command, events }) => boolean`, with each state under its key in `reads`. Verification proves them, and that the decision keeps each aggregate's own rules.
 - **Use a saga instead** when the process waits, takes time, or calls an external system.
 
-More: [Decision](https://alchemy.run/domain/decision), [Decision: How it commits](https://alchemy.run/domain/decision#how-it-commits), [Unique values](https://alchemy.run/domain/unique-values).
+More: [Decision](https://alchemy.run/domain/decision), [Decision: How it commits](https://alchemy.run/domain/decision#how-it-commits), [Decision: Say what it must keep](https://alchemy.run/domain/decision#say-what-it-must-keep), [Unique values](https://alchemy.run/domain/unique-values).
 
 ## Request context and middleware
 

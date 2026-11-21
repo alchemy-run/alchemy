@@ -69,7 +69,7 @@ export default Bank.layer(BankHandlers).pipe(
 
 - Make the model's Layer the default export of `main`; set `handler` only when another export holds it.
 - Callers build the same model Layer, so they need the handlers' services too.
-- Neither platform holds WebSockets: serve Apis with `Domain.protocolHttp`.
+- Both platforms push live reads over `Domain.protocolWebSocket`: the runtime that serves the Api holds the caller's socket, and the owner of the key pushes each commit. Over `Domain.protocolHttp`, live reads poll instead.
 - A deploy that adds a view or projection doesn't wait for its backfill; the first call starts it.
 
 More: [Rivet](https://alchemy.run/domain/rivet), [Effect Cluster](https://alchemy.run/domain/effect-cluster).
@@ -86,10 +86,11 @@ const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem)); 
 yield* bank.DepositMoney({ accountId, amount });
 ```
 
+- A command answers at the commit; a view read that must include it passes the receipt as `atLeast`. `{ consistency: "strong" }` answers once the model's views have applied it, and `Effect.provideService(Domain.DefaultConsistency, "strong")` on a client sets that for all its commands. Projection stores are never waited for: a query takes `atLeast`.
 - Build `clientInProcess` per request in a Worker. `layerClientInProcess` provides `CustomerApi.Client` in process, for long-lived processes and scripts.
 - Do not send a request to the Worker's own URL, and do not pass a verified secret through a header to `clientInProcess` to be checked again.
 
-More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-process), [In memory](https://alchemy.run/domain/in-memory).
+More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-process), [Command: Choose when it answers](https://alchemy.run/domain/command#choose-when-it-answers), [In memory](https://alchemy.run/domain/in-memory).
 
 ## Queries
 

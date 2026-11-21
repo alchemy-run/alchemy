@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { domainRevisions, ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { conformance, waitForReady } from "../Domain/conformance/conformance.ts";
+import { latency } from "../Domain/conformance/latency.ts";
 import { DOMAIN_FRONT_PORT } from "./fixtures/domain-cluster.ts";
 import DomainFront from "./fixtures/domain-front.ts";
 
@@ -53,5 +54,11 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     conformance({ test, url: Effect.succeed(url), kind: "local" });
+    latency({
+      kind: "local",
+      test,
+      label: "Rivet (local Docker)",
+      url: Effect.succeed(url),
+    });
   },
 );

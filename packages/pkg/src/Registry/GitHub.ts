@@ -118,10 +118,8 @@ export const renderComment = (
   ].join("\n");
 
 /** Render any GitHub operation failure for logs and error responses. */
-export const describe = (error: {
-  readonly _tag: string;
-  readonly message?: string | undefined;
-}) => (error.message ? `${error._tag}: ${error.message}` : error._tag);
+export const describe = (error: { readonly _tag: string; readonly message?: string | undefined }) =>
+  error.message ? `${error._tag}: ${error.message}` : error._tag;
 
 const USER_AGENT = "alchemy-pkg";
 

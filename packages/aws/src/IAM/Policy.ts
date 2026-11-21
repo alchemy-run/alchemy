@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { IamAction } from "./actions.generated.ts";
 import {
@@ -122,7 +123,7 @@ export const normalizePolicyDocument = (json: string | object): string => {
 };
 
 export type PolicyName = string;
-export type PolicyArn = `arn:aws:iam::${AccountID}:policy/${string}`;
+export type PolicyArn = `arn:${Partition}:iam::${AccountID}:policy/${string}`;
 
 export interface PolicyProps {
   /**
@@ -256,9 +257,10 @@ export const PolicyProvider = () =>
           : createPhysicalName({ id, maxLength: 128 });
 
       const toPolicyArn = Effect.fn(function* (id: string, props: PolicyProps) {
-        const { accountId } = yield* AWSEnvironment.current;
+        const { accountId, partition } = yield* AWSEnvironment.current;
         const policyName = yield* toPolicyName(id, props);
         return policyArnFromParts({
+          partition,
           accountId,
           path: props.path,
           policyName,
@@ -407,11 +409,16 @@ export const PolicyProvider = () =>
           }
         }),
         lookup: Effect.fn(function* (props) {
-          const { accountId } = yield* AWSEnvironment.current;
+          const { accountId, partition } = yield* AWSEnvironment.current;
           return yield* readPolicyAttributes(
             "policyArn" in props
               ? props.policyArn
-              : policyArnFromParts({ accountId, path: props.path, policyName: props.policyName }),
+              : policyArnFromParts({
+                  partition,
+                  accountId,
+                  path: props.path,
+                  policyName: props.policyName,
+                }),
           );
         }),
         read: Effect.fn(function* ({ id, olds, output }) {

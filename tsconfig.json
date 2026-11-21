@@ -27,6 +27,9 @@
       "path": "./submodules/distilled/packages/turso/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/convex/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/daytona/tsconfig.json"
     },
     {
@@ -130,7 +133,13 @@
       "path": "./packages/infisical/tsconfig.json"
     },
     {
+      "path": "./packages/1password/tsconfig.json"
+    },
+    {
       "path": "./packages/turso/tsconfig.json"
+    },
+    {
+      "path": "./packages/convex/tsconfig.json"
     },
     {
       "path": "./packages/daytona/tsconfig.json"
@@ -399,6 +408,15 @@
     },
     {
       "path": "./examples/cloudflare-turso-drizzle/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-convex-worker/tsconfig.json"
+    },
+    {
+      "path": "./examples/cloudflare-convex-tanstack-start/tsconfig.json"
+    },
+    {
+      "path": "./examples/aws-convex-self-hosted/tsconfig.json"
     },
     {
       "path": "./examples/e2b-agent-sandbox/tsconfig.json"

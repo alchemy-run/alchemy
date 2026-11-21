@@ -5,7 +5,8 @@ import {
   isImageProgram,
   makePoolLayer,
   nodeEnvironment,
-  NODE_DOCKERFILE,
+  nodeDockerfile,
+  RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
 
@@ -94,7 +95,12 @@ export const DeploymentPool = (id: string, options: DeploymentPoolOptions = {}) 
         yield* Kubernetes.Deployment(`${id}Nodes`, {
           ...(isImageProgram(nodes.program)
             ? nodes.program
-            : { ...nodes.program, dockerfile: { content: NODE_DOCKERFILE } }),
+            : {
+                ...nodes.program,
+                dockerfile: {
+                  content: nodeDockerfile(options.rivetkitVersion ?? RIVETKIT_VERSION),
+                },
+              }),
           cluster,
           namespace: options.namespace ?? network.namespace ?? "default",
           replicas: options.replicas ?? 1,
