@@ -50,7 +50,7 @@ export const gatewayUrl = (
   target: GatewayTarget,
   path: string,
   search: string,
-  route: "request" | "websocket" = "request",
+  route: "request" | "websocket" | "action" = "request",
 ): string => {
   const params = new URLSearchParams({
     "rvt-namespace": target.namespace,
