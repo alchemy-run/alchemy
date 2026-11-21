@@ -118,6 +118,26 @@ export class CounterTotal extends Domain.View("CounterTotal", {
   },
 }) {}
 
+/**
+ * The same fold as {@link CounterTotal}, added by the model's next version
+ * ({@link ConformanceV1}): deployed after the counters have recorded events,
+ * it is backfilled from their history.
+ */
+export class CounterReplay extends Domain.View("CounterReplay", {
+  from: [Counter],
+  key: Counter,
+  state: Schema.Struct({ total: Schema.Int, increments: Schema.Int }),
+  initial: { total: 0, increments: 0 },
+  evolve: {
+    Incremented: (view, event) => ({
+      total: view.total + event.by,
+      increments: view.increments + 1,
+    }),
+    Taken: (view, event) => ({ ...view, total: view.total - event.by }),
+    Received: (view, event) => ({ ...view, total: view.total + event.by }),
+  },
+}) {}
+
 /** When a counter's first and latest events were committed, in epoch milliseconds. */
 export class CounterTimes extends Domain.View("CounterTimes", {
   from: [Counter],
@@ -404,11 +424,14 @@ export class Conformance extends Domain.Model("Conformance", {
   sagas: [MirrorFirst],
 }) {}
 
-/** The model's next version: {@link TallyWriterV1} in place of {@link TallyWriter}. */
+/**
+ * The model's next version: {@link TallyWriterV1} in place of {@link TallyWriter},
+ * and a view it adds, {@link CounterReplay}.
+ */
 export class ConformanceV1 extends Domain.Model("Conformance", {
   aggregates: [Counter, Echo, Hold, ...latencyAggregates],
   decisions: [Giving],
-  views: [CounterTotal, CounterTimes, HiddenTotal, TicketedTotal, ...latencyViews],
+  views: [CounterTotal, CounterTimes, HiddenTotal, TicketedTotal, CounterReplay, ...latencyViews],
   projections: [TotalWriter, TallyWriterV1],
   streams: [Recorded, Tallies],
   policies: [StartMirror, HoldDeadline],
@@ -441,5 +464,8 @@ const handlers = Layer.mergeAll(
 /** The model's Layer, given the platform it runs on. */
 export const ConformanceLive = Conformance.layer(Layer.merge(handlers, TallyWriterLive));
 
-/** The next version's Layer: deployed over {@link ConformanceLive}, it rebuilds the tallies. */
+/**
+ * The next version's Layer: deployed over {@link ConformanceLive}, it rebuilds
+ * the tallies and backfills {@link CounterReplay}.
+ */
 export const ConformanceLiveV1 = ConformanceV1.layer(Layer.merge(handlers, TallyWriterV1Live));

@@ -1,6 +1,6 @@
 import * as nodePath from "node:path";
 import type { HttpEffect } from "alchemy/Http";
-import type { InputProps } from "alchemy/Input";
+import type { Input, InputProps } from "alchemy/Input";
 import type { Named } from "alchemy/Named";
 import * as Output from "alchemy/Output";
 import {
@@ -236,6 +236,9 @@ export interface ExternalDurableObjectProps {
    */
   main: string;
   crate?: never;
+  image?: never;
+  context?: never;
+  dockerfile?: never;
 }
 
 /** Props of a Rust Durable Object: Actors written with RivetKit's Rust crate, run as they are. */
@@ -251,6 +254,66 @@ export interface RustDurableObjectProps {
   /** How the crate is compiled. */
   build?: CargoBuild;
   main?: never;
+  image?: never;
+  context?: never;
+  dockerfile?: never;
+}
+
+/**
+ * Props of an image Durable Object: Actors in a prebuilt image, run as it
+ * is. The same `image` as every other container resource
+ * (`AWS.ECS.Task`, `Cloudflare.Container`, `Kubernetes.Deployment`).
+ */
+export interface ImageDurableObjectProps {
+  /**
+   * The image every node runs, such as
+   * `us-docker.pkg.dev/acme/app/actors@sha256:…`, or the `imageRef` of a
+   * `Docker.Image` in the same stack. Its `CMD` starts a RivetKit registry
+   * with `RIVET_ENDPOINT`, `RIVET_TOKEN`, `RIVET_NAMESPACE` and
+   * `RIVET_POOL` set. The image brings its own runtime and RivetKit, so a
+   * node installs nothing when it starts.
+   *
+   * The pool builds its node image `FROM` this one, wherever it builds
+   * images: the deploy's Docker for a Docker, Compute Engine, EC2 or
+   * Hetzner pool, the platform's builder on Fly, Railway or Rivet Cloud.
+   * That builder must be able to pull it. As on ECS and Kubernetes, a tag
+   * is resolved once per reference: pin a digest, so a new image is a new
+   * reference.
+   */
+  image: Input<string>;
+  main?: never;
+  crate?: never;
+  context?: never;
+  dockerfile?: never;
+}
+
+/**
+ * Props of a Dockerfile Durable Object: Actors in an image the pool builds
+ * from your own Dockerfile, run as it is. The same `context` and
+ * `dockerfile` as every other container resource (`AWS.ECS.Task`,
+ * `Cloudflare.Container`, `Kubernetes.Deployment`).
+ */
+export interface DockerfileDurableObjectProps {
+  /**
+   * The build context directory, relative to where the deploy runs.
+   * @default "."
+   */
+  context?: string;
+  /**
+   * The Dockerfile, as a path relative to where the deploy runs, or inline
+   * content (`Dockerfile.inline`), which builds in an empty context. Its
+   * `CMD` starts a RivetKit registry with `RIVET_ENDPOINT`, `RIVET_TOKEN`,
+   * `RIVET_NAMESPACE` and `RIVET_POOL` set.
+   *
+   * The pool builds it wherever it builds images: the deploy's Docker for a
+   * Docker, Compute Engine, EC2 or Hetzner pool, the platform's builder on
+   * Fly, Railway or Rivet Cloud.
+   * @default `${context}/Dockerfile`
+   */
+  dockerfile?: string | { readonly content: Input<string> };
+  main?: never;
+  crate?: never;
+  image?: never;
 }
 
 /** The class surface of {@link DurableObject}. */
@@ -270,6 +333,23 @@ export interface DurableObjectClass {
   <const Id extends string>(
     id: Id,
     props: RustDurableObjectProps,
+  ): Effect.Effect<DurableObject, never, PoolHost | Providers>;
+  /**
+   * An image Durable Object: Actors in a prebuilt image, run as it is on
+   * the pool's nodes. Provide a pool Layer to it.
+   */
+  <const Id extends string>(
+    id: Id,
+    props: ImageDurableObjectProps,
+  ): Effect.Effect<DurableObject, never, PoolHost | Providers>;
+  /**
+   * A Dockerfile Durable Object: Actors in an image the pool builds from
+   * your own Dockerfile, run as it is on the pool's nodes. Provide a pool
+   * Layer to it.
+   */
+  <const Id extends string>(
+    id: Id,
+    props: DockerfileDurableObjectProps,
   ): Effect.Effect<DurableObject, never, PoolHost | Providers>;
   <Self, Shape = {}>(): {
     /** The class form with an inline implementation. */
@@ -422,7 +502,9 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * Given only `main`, it is external: a RivetKit program, async or
  * `@rivetkit/effect`, that its pool bundles and runs as it is. Given a
  * `crate`, it is a Rust program that its pool compiles into the node image.
- * Either needs a pool of its own, and has no bindings or `yield*` calls.
+ * Given an `image`, or a `context` and `dockerfile`, it is an image its
+ * pool's nodes run as it is, prebuilt or built from your own Dockerfile.
+ * Each needs a pool of its own, and has no bindings or `yield*` calls.
  *
  * An instance's calls run in parallel, storage included: unlike Cloudflare,
  * there is no input gate. Make a read-then-write atomic with
@@ -540,17 +622,62 @@ const createRuntimeContext = (id: string): DurableObjectRuntimeContext => {
  * }).pipe(Effect.provide(Counters));
  * ```
  *
+ * ### Deploying an image
+ * An image Durable Object takes the same `image`, `context` and
+ * `dockerfile` as `AWS.ECS.Task` or `Cloudflare.Container`.
+ *
+ * **Example:** An image the app already builds and ships
+ * ```typescript
+ * export const Actors = Rivet.DurableObject("Actors", {
+ *   image: "us-docker.pkg.dev/acme/app/actors@sha256:…",
+ * }).pipe(Effect.provide(Default));
+ * ```
+ *
+ * **Example:** The app's own Dockerfile, built by the pool
+ * ```typescript
+ * export const Actors = Rivet.DurableObject("Actors", {
+ *   context: "./actors",
+ *   dockerfile: "./actors/Dockerfile.prod",
+ * }).pipe(Effect.provide(Default));
+ * ```
+ *
+ * **Example:** An image built in the same stack
+ * ```typescript
+ * export const Actors = Effect.gen(function* () {
+ *   const image = yield* Docker.Image("ActorsImage", {
+ *     build: { context: "./actors" },
+ *   });
+ *   return yield* Rivet.DurableObject("Actors", { image: image.imageRef }).pipe(
+ *     Effect.provide(Default),
+ *   );
+ * });
+ * ```
+ *
  * @resource
  */
 export const DurableObject: DurableObjectClass = ((
-  ...args: [string, ExternalDurableObjectProps | RustDurableObjectProps] | []
-) =>
-  args.length === 0
-    ? (id: string, props?: unknown, impl?: unknown) =>
-        declare(id, (platform as any)()(id, props, impl))
-    : args[1].crate !== undefined
-      ? rust(args[0], args[1] as RustDurableObjectProps)
-      : external(args[0], args[1] as ExternalDurableObjectProps)) as unknown as DurableObjectClass;
+  ...args:
+    | [
+        string,
+        (
+          | ExternalDurableObjectProps
+          | RustDurableObjectProps
+          | ImageDurableObjectProps
+          | DockerfileDurableObjectProps
+        ),
+      ]
+    | []
+) => {
+  if (args.length === 0) {
+    return (id: string, props?: unknown, impl?: unknown) =>
+      declare(id, (platform as any)()(id, props, impl));
+  }
+  const [id, props] = args;
+  if (props.main !== undefined) return external(id, props as ExternalDurableObjectProps);
+  if (props.crate !== undefined) return rust(id, props as RustDurableObjectProps);
+  if (props.image !== undefined) return image(id, props as ImageDurableObjectProps);
+  return dockerfile(id, props as DockerfileDurableObjectProps);
+}) as unknown as DurableObjectClass;
 
 /**
  * An external Durable Object: declare its resource, then have the pool it
@@ -578,6 +705,34 @@ const rust = (id: string, props: RustDurableObjectProps) =>
     if (globalThis.__ALCHEMY_RUNTIME__) return resource;
     const host = yield* PoolHost;
     yield* host.deployCrate({ id, crate, build: props.build, resource });
+    return resource;
+  });
+
+/**
+ * An image Durable Object: a Dockerfile Durable Object whose Dockerfile is
+ * `FROM <image>` and nothing else.
+ */
+const image = (id: string, props: ImageDurableObjectProps) =>
+  dockerfile(id, {
+    dockerfile: { content: Output.interpolate`FROM ${props.image}\n` },
+  });
+
+/**
+ * A Dockerfile Durable Object: declare its resource, then have the pool it
+ * was given build the Dockerfile into its node image. The pool Layer is
+ * what provides `PoolHost`.
+ */
+const dockerfile = (id: string, props: DockerfileDurableObjectProps) =>
+  Effect.gen(function* () {
+    const resource: DurableObject = yield* (platform as any)(id, { main: id });
+    if (globalThis.__ALCHEMY_RUNTIME__) return resource;
+    const host = yield* PoolHost;
+    yield* host.deployDockerfile({
+      id,
+      context: props.context,
+      dockerfile: props.dockerfile,
+      resource,
+    });
     return resource;
   });
 
