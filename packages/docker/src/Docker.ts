@@ -64,6 +64,8 @@ export class Docker extends Context.Service<
         name: string;
         image: string;
         volume: Array<string> | undefined;
+        /** Typed mounts serialized as repeated Docker `--mount` CSV arguments. */
+        mount?: Array<string> | undefined;
         env: Record<string, string> | undefined;
         /** Overrides the image's ENTRYPOINT executable. */
         entrypoint?: string | undefined;

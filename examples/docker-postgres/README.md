@@ -8,6 +8,10 @@ This example provisions PostgreSQL 18 Alpine with Docker resources:
 - `Docker.Container` starts PostgreSQL with a redacted password, a 256 MiB `/dev/shm` mount, a network alias, a named volume, and a host port
 - `Docker.inspectContainer` returns the bound host port
 
+PostgreSQL 18 uses a versioned data directory under `/var/lib/postgresql`;
+the example mounts the managed volume at that parent directory rather than
+the former `/var/lib/postgresql/data` location.
+
 Docker resources use the active Docker CLI context. That can be Docker Desktop, a remote Docker host, an SSH context, or a CI runner daemon.
 
 These resources are separate from `Cloudflare.Container`. The bridge between Docker and cloud container platforms is an image reference or registry digest, not a swappable container object.
