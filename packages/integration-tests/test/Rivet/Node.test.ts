@@ -90,7 +90,9 @@ describe.skipIf(!!process.env.FAST)(
           const first = yield* settled(echoes.getByName("a").increment());
           expect(yield* echoes.getByName("a").increment()).toBe(first + 1);
           expect(yield* echoes.getByName("b").increment()).toBe(1);
-        }).pipe(Effect.provideService(ConfigProvider.ConfigProvider, fromEnvironment())),
+        }).pipe(
+          Effect.provideServiceEffect(ConfigProvider.ConfigProvider, Effect.sync(fromEnvironment)),
+        ),
       ),
       // serve sets the process-wide runtime flag while the class phase runs.
       { timeout: 120_000, exclusive: true },
