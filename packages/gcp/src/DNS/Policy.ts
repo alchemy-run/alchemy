@@ -400,16 +400,14 @@ export const PolicyProvider = () =>
       if (current === undefined) {
         const created = yield* dns
           .createPolicies({
+            name: policyName,
+            description: desiredDescription,
+            enableInboundForwarding,
+            enableLogging,
+            networks: networks.map((networkUrl) => ({ networkUrl })),
+            alternativeNameServerConfig: alternativeNameServerConfig(nameServers),
+            dns64Config: dns64Config(enableDns64),
             project: env.project,
-            body: {
-              name: policyName,
-              description: desiredDescription,
-              enableInboundForwarding,
-              enableLogging,
-              networks: networks.map((networkUrl) => ({ networkUrl })),
-              alternativeNameServerConfig: alternativeNameServerConfig(nameServers),
-              dns64Config: dns64Config(enableDns64),
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(env.project, policyName)));
         current = created ?? undefined;
@@ -458,9 +456,9 @@ export const PolicyProvider = () =>
           };
         }
         const patched = yield* dns.patchPolicies({
+          ...body,
           project: env.project,
           policy: policyName,
-          body,
         });
         current = patched.policy ?? (yield* getByName(env.project, policyName)) ?? current;
       }
@@ -473,12 +471,10 @@ export const PolicyProvider = () =>
       const policyName = output.policyName;
       const detach = dns
         .patchPolicies({
+          enableInboundForwarding: false,
+          networks: [],
           project,
           policy: policyName,
-          body: {
-            enableInboundForwarding: false,
-            networks: [],
-          },
         })
         .pipe(Effect.catchTag("NotFound", () => Effect.void));
       const attempt = dns

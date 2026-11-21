@@ -399,23 +399,21 @@ export const DatasetProvider = () =>
       if (current === undefined) {
         const created = yield* bigquery
           .insertDatasets({
+            datasetReference: { projectId: project, datasetId },
+            location,
+            labels: desiredLabels,
+            description: news.description,
+            friendlyName: news.friendlyName,
+            defaultTableExpirationMs: news.defaultTableExpirationMs,
+            defaultPartitionExpirationMs: news.defaultPartitionExpirationMs,
+            maxTimeTravelHours: news.maxTimeTravelHours,
+            storageBillingModel: news.storageBillingModel,
+            isCaseInsensitive: news.isCaseInsensitive === true ? true : undefined,
+            defaultCollation: news.defaultCollation,
+            defaultRoundingMode: news.defaultRoundingMode,
+            defaultEncryptionConfiguration: news.defaultEncryptionConfiguration,
+            access: news.access,
             projectId: project,
-            body: {
-              datasetReference: { projectId: project, datasetId },
-              location,
-              labels: desiredLabels,
-              description: news.description,
-              friendlyName: news.friendlyName,
-              defaultTableExpirationMs: news.defaultTableExpirationMs,
-              defaultPartitionExpirationMs: news.defaultPartitionExpirationMs,
-              maxTimeTravelHours: news.maxTimeTravelHours,
-              storageBillingModel: news.storageBillingModel,
-              isCaseInsensitive: news.isCaseInsensitive === true ? true : undefined,
-              defaultCollation: news.defaultCollation,
-              defaultRoundingMode: news.defaultRoundingMode,
-              defaultEncryptionConfiguration: news.defaultEncryptionConfiguration,
-              access: news.access,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getById(project, datasetId)));
         current = created ?? undefined;
@@ -431,9 +429,10 @@ export const DatasetProvider = () =>
         // PATCH merges labels; removing one needs a JSON null the typed body
         // cannot carry, so replace the labels with PUT (get-modify-put).
         current = yield* bigquery.updateDatasets({
+          ...current,
+          labels: desiredLabels,
           projectId: project,
           datasetId,
-          body: { ...current, labels: desiredLabels },
         });
       }
       const labelsChanged = removed.length === 0 && upsert.length > 0;
@@ -518,6 +517,7 @@ export const DatasetProvider = () =>
           body.access = news.access;
         }
         current = yield* bigquery.patchDatasets({
+          ...body,
           projectId: project,
           datasetId,
           updateMode:
@@ -526,7 +526,6 @@ export const DatasetProvider = () =>
               : accessChanged
                 ? "UPDATE_ACL"
                 : "UPDATE_METADATA",
-          body,
         });
       }
 

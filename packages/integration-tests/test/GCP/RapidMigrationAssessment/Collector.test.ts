@@ -66,14 +66,12 @@ test.provider.skip(
 
       const error = yield* Effect.flip(
         rma.createProjectsLocationsCollectors({
+          displayName: "alchemy-probe",
+          collectionDays: 7,
+          expectedAssetCount: "1",
+          serviceAccount,
           parent,
           collectorId: "alchemyrmaprobe",
-          body: {
-            displayName: "alchemy-probe",
-            collectionDays: 7,
-            expectedAssetCount: "1",
-            serviceAccount,
-          },
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");

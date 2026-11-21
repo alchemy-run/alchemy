@@ -167,13 +167,7 @@ export const ReleaseProvider = () =>
 
       if (current === undefined) {
         const created = yield* firebaserules
-          .createProjectsReleases({
-            name: parent,
-            body: {
-              name,
-              rulesetName: desiredRuleset,
-            },
-          })
+          .createProjectsReleases({ rulesetName: desiredRuleset, name: parent })
           .pipe(Effect.catchTag("Conflict", () => getRelease(name)));
         current = created ?? undefined;
       }
@@ -184,14 +178,12 @@ export const ReleaseProvider = () =>
 
       if (!sameText(current.rulesetName, desiredRuleset)) {
         current = yield* firebaserules.patchProjectsReleases({
-          name: current.name ?? name,
-          body: {
-            release: {
-              name: current.name ?? name,
-              rulesetName: desiredRuleset,
-            },
-            updateMask: "rulesetName",
+          release: {
+            name: current.name ?? name,
+            rulesetName: desiredRuleset,
           },
+          updateMask: "rulesetName",
+          name: current.name ?? name,
         });
       }
 

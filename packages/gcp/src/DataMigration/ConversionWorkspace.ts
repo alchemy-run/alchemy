@@ -354,16 +354,14 @@ export const ConversionWorkspaceProvider = () =>
       if (current === undefined) {
         const created = yield* dm
           .createProjectsLocationsConversionWorkspaces({
+            displayName,
+            source: news.source,
+            destination: news.destination,
+            sourceProvider: news.sourceProvider,
+            destinationProvider: news.destinationProvider,
+            globalSettings,
             parent: locationParent(env.project, location),
             conversionWorkspaceId,
-            body: {
-              displayName,
-              source: news.source,
-              destination: news.destination,
-              sourceProvider: news.sourceProvider,
-              destinationProvider: news.destinationProvider,
-              globalSettings,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -387,13 +385,10 @@ export const ConversionWorkspaceProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* dm.patchProjectsLocationsConversionWorkspaces({
+          displayName,
+          globalSettings,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            globalSettings,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

@@ -32,8 +32,9 @@ const writeWorkspaceFile = (workspace: string, path: string, text: string) =>
   Effect.gen(function* () {
     const contents = yield* Effect.sync(() => Buffer.from(text, "utf8").toString("base64"));
     return yield* dataform.writeFileProjectsLocationsRepositoriesWorkspaces({
+      path,
+      contents,
       workspace,
-      body: { path, contents },
     });
   });
 
@@ -80,8 +81,8 @@ test.provider.skipIf(!runLifecycle)(
       );
       yield* dataform
         .makeDirectoryProjectsLocationsRepositoriesWorkspaces({
+          path: "definitions",
           workspace: created.workspace.name,
-          body: { path: "definitions" },
         })
         .pipe(Effect.catchTag("Conflict", () => Effect.void));
       yield* writeWorkspaceFile(
@@ -91,8 +92,8 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       const compilation = yield* dataform.createProjectsLocationsRepositoriesCompilationResults({
+        workspace: created.workspace.name,
         parent: created.repo.name,
-        body: { workspace: created.workspace.name },
       });
       expect(compilation.name).toEqual(expect.any(String));
 

@@ -363,17 +363,15 @@ export const ReasoningEnginesMemoryProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsReasoningEnginesMemories({
+            scope: news.scope,
+            fact: news.fact,
+            displayName: news.displayName,
+            description: stampedDescription,
+            metadata: news.metadata,
+            ttl: news.ttl,
+            expireTime: news.expireTime,
             parent,
             memoryId,
-            body: {
-              scope: news.scope,
-              fact: news.fact,
-              displayName: news.displayName,
-              description: stampedDescription,
-              metadata: news.metadata,
-              ttl: news.ttl,
-              expireTime: news.expireTime,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -402,15 +400,12 @@ export const ReasoningEnginesMemoryProvider = () =>
           metadataChanged ? "metadata" : undefined,
         ].filter((field): field is string => field !== undefined);
         const patched = yield* aiplatform.patchProjectsLocationsReasoningEnginesMemories({
+          fact: news.fact,
+          displayName: news.displayName,
+          description: stampedDescription,
+          metadata: news.metadata,
           name: observedName,
           updateMask: updateMask.join(","),
-          body: {
-            name: observedName,
-            fact: news.fact,
-            displayName: news.displayName,
-            description: stampedDescription,
-            metadata: news.metadata,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* getByName(observedName);

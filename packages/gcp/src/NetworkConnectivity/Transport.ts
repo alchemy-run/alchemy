@@ -600,9 +600,9 @@ export const TransportProvider = () =>
       if (current === undefined) {
         const created = yield* networkconnectivity
           .createProjectsLocationsTransports({
+            ...toCreateBody(news, env.project, location, desiredLabels),
             parent: parentOf(env.project, location),
             transportId,
-            body: toCreateBody(news, env.project, location, desiredLabels),
           })
           .pipe(
             Effect.retry({
@@ -652,16 +652,13 @@ export const TransportProvider = () =>
         ].filter((field): field is string => field !== undefined);
 
         const operation = yield* networkconnectivity.patchProjectsLocationsTransports({
+          labels: desiredLabels,
+          description: news.description,
+          bandwidth: news.bandwidth,
+          stackType: news.stackType,
+          advertisedRoutes: news.advertisedRoutes,
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            labels: desiredLabels,
-            description: news.description,
-            bandwidth: news.bandwidth,
-            stackType: news.stackType,
-            advertisedRoutes: news.advertisedRoutes,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(current.name ?? name);

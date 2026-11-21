@@ -221,10 +221,7 @@ export const WebappProvider = () =>
 
       if (current === undefined) {
         const created = yield* androidenterprise
-          .insertWebapps({
-            enterpriseId,
-            body: desiredBody({ title, news }),
-          })
+          .insertWebapps({ ...desiredBody({ title, news }), enterpriseId })
           .pipe(Effect.catchTag("Conflict", () => findOwnedWebapp(id, enterpriseId)));
         current = created ?? undefined;
       }
@@ -244,11 +241,7 @@ export const WebappProvider = () =>
         current,
       });
       if (needsSync(current, desired)) {
-        current = yield* androidenterprise.updateWebapps({
-          enterpriseId,
-          webAppId,
-          body: desired,
-        });
+        current = yield* androidenterprise.updateWebapps({ ...desired, enterpriseId, webAppId });
       }
 
       return toAttrs(current, enterpriseId, env.project);

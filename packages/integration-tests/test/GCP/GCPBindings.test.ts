@@ -217,10 +217,7 @@ describe(
           expect(published.messageIds?.length).toBe(1);
 
           const pulled = yield* pubsub
-            .pullProjectsSubscriptions({
-              subscription: out.subscription,
-              body: { maxMessages: 1 },
-            })
+            .pullProjectsSubscriptions({ maxMessages: 1, subscription: out.subscription })
             .pipe(
               Effect.repeat({
                 until: (response) => (response.receivedMessages ?? []).length > 0,
@@ -328,10 +325,7 @@ describe(
           expect(published.messageIds?.length).toBe(1);
 
           const pulled = yield* pubsub
-            .pullProjectsSubscriptions({
-              subscription: out.subscription,
-              body: { maxMessages: 1 },
-            })
+            .pullProjectsSubscriptions({ maxMessages: 1, subscription: out.subscription })
             .pipe(
               Effect.repeat({
                 until: (response) => (response.receivedMessages ?? []).length > 0,
@@ -415,10 +409,7 @@ describe(
           expect(`${job?.status}: ${job?.statusReason ?? ""}`).toMatch(/^SUCCEEDED:/);
 
           const pulled = yield* pubsub
-            .pullProjectsSubscriptions({
-              subscription: out.subscription,
-              body: { maxMessages: 1 },
-            })
+            .pullProjectsSubscriptions({ maxMessages: 1, subscription: out.subscription })
             .pipe(
               Effect.repeat({
                 until: (response) => (response.receivedMessages ?? []).length > 0,

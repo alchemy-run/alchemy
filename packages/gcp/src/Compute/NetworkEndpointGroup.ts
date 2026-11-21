@@ -391,12 +391,7 @@ const endpointKey = (endpoint: {
 
 const listEndpoints = (project: string, zone: string, networkEndpointGroup: string) =>
   compute.listNetworkEndpointsNetworkEndpointGroups
-    .items({
-      project,
-      zone,
-      networkEndpointGroup,
-      body: { healthStatus: "SKIP" },
-    })
+    .items({ healthStatus: "SKIP", project, zone, networkEndpointGroup })
     .pipe(
       Stream.runCollect,
       Effect.map((chunk) =>
@@ -571,16 +566,14 @@ export const NetworkEndpointGroupProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertNetworkEndpointGroups({
+            name: networkEndpointGroupName,
+            description,
+            network,
+            subnetwork,
+            networkEndpointType,
+            defaultPort: news.defaultPort ?? output?.defaultPort,
             project: env.project,
             zone,
-            body: {
-              name: networkEndpointGroupName,
-              description,
-              network,
-              subnetwork,
-              networkEndpointType,
-              defaultPort: news.defaultPort ?? output?.defaultPort,
-            },
           })
           .pipe(
             Effect.catchTag("Conflict", () => Effect.undefined),
@@ -633,10 +626,10 @@ export const NetworkEndpointGroupProvider = () =>
             env.project,
             zone,
             compute.attachNetworkEndpointsNetworkEndpointGroups({
+              networkEndpoints: toAdd,
               project: env.project,
               zone,
               networkEndpointGroup: networkEndpointGroupName,
-              body: { networkEndpoints: toAdd },
             }),
           ).pipe(Effect.catchTag("Conflict", () => Effect.void));
         }
@@ -645,10 +638,10 @@ export const NetworkEndpointGroupProvider = () =>
             env.project,
             zone,
             compute.detachNetworkEndpointsNetworkEndpointGroups({
+              networkEndpoints: toRemove,
               project: env.project,
               zone,
               networkEndpointGroup: networkEndpointGroupName,
-              body: { networkEndpoints: toRemove },
             }),
           ).pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.void));
         }

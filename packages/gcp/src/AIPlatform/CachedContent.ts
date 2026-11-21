@@ -290,18 +290,16 @@ export const CachedContentProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsCachedContents({
+            model: news.model,
+            contents: toContents(news.contents),
+            systemInstruction: news.systemInstruction
+              ? toContents([news.systemInstruction])?.[0]
+              : undefined,
+            ttl: news.ttl,
+            expireTime: news.expireTime,
+            displayName: desiredDisplayName,
+            encryptionSpec: news.encryptionSpec,
             parent: parentOf(env.project, location),
-            body: {
-              model: news.model,
-              contents: toContents(news.contents),
-              systemInstruction: news.systemInstruction
-                ? toContents([news.systemInstruction])?.[0]
-                : undefined,
-              ttl: news.ttl,
-              expireTime: news.expireTime,
-              displayName: desiredDisplayName,
-              encryptionSpec: news.encryptionSpec,
-            },
           })
           .pipe(
             // Vertex AI intermittently counts large content as "1 tokens".
@@ -328,13 +326,10 @@ export const CachedContentProvider = () =>
 
       if (ttlChanged || expireChanged) {
         current = yield* aiplatform.patchProjectsLocationsCachedContents({
+          ttl: ttlChanged ? news.ttl : undefined,
+          expireTime: expireChanged ? news.expireTime : undefined,
           name,
           updateMask: ttlChanged ? "ttl" : "expire_time",
-          body: {
-            name,
-            ttl: ttlChanged ? news.ttl : undefined,
-            expireTime: expireChanged ? news.expireTime : undefined,
-          },
         });
       }
 

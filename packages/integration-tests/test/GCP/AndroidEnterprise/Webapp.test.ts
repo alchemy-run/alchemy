@@ -49,12 +49,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         androidenterprise.insertWebapps({
+          title: "Alchemy Probe Web App",
+          startUrl: "https://example.com/",
+          displayMode: "standalone",
           enterpriseId: probeEnterpriseId,
-          body: {
-            title: "Alchemy Probe Web App",
-            startUrl: "https://example.com/",
-            displayMode: "standalone",
-          },
         }),
       );
       expect(error._tag).toEqual("InsufficientAuthenticationScopes");

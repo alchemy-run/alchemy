@@ -516,24 +516,22 @@ export const InterconnectProvider = () =>
       if (current === undefined) {
         yield* compute
           .insertInterconnects({
+            name: interconnectName,
+            location,
+            interconnectType,
+            linkType,
+            requestedLinkCount,
+            customerName: news.customerName,
+            description: news.description,
+            nocContactEmail: news.nocContactEmail,
+            adminEnabled,
+            remoteLocation: news.remoteLocation,
+            macsecEnabled: news.macsecEnabled,
+            macsec: news.macsec,
+            requestedFeatures: news.requestedFeatures,
+            aaiEnabled: news.aaiEnabled,
+            applicationAwareInterconnect: news.applicationAwareInterconnect,
             project: env.project,
-            body: {
-              name: interconnectName,
-              location,
-              interconnectType,
-              linkType,
-              requestedLinkCount,
-              customerName: news.customerName,
-              description: news.description,
-              nocContactEmail: news.nocContactEmail,
-              adminEnabled,
-              remoteLocation: news.remoteLocation,
-              macsecEnabled: news.macsecEnabled,
-              macsec: news.macsec,
-              requestedFeatures: news.requestedFeatures,
-              aaiEnabled: news.aaiEnabled,
-              applicationAwareInterconnect: news.applicationAwareInterconnect,
-            },
           })
           .pipe(
             Effect.flatMap((operation) =>
@@ -562,18 +560,16 @@ export const InterconnectProvider = () =>
           env.project,
           interconnectName,
           compute.patchInterconnects({
+            description: news.description,
+            nocContactEmail: news.nocContactEmail,
+            adminEnabled,
+            requestedLinkCount,
+            macsecEnabled: news.macsecEnabled,
+            macsec: news.macsec,
+            aaiEnabled: news.aaiEnabled,
+            applicationAwareInterconnect: news.applicationAwareInterconnect,
             project: env.project,
             interconnect: interconnectName,
-            body: {
-              description: news.description,
-              nocContactEmail: news.nocContactEmail,
-              adminEnabled,
-              requestedLinkCount,
-              macsecEnabled: news.macsecEnabled,
-              macsec: news.macsec,
-              aaiEnabled: news.aaiEnabled,
-              applicationAwareInterconnect: news.applicationAwareInterconnect,
-            },
           }),
         );
         current = (yield* getByName(env.project, interconnectName)) ?? current;
@@ -591,12 +587,10 @@ export const InterconnectProvider = () =>
             env.project,
             interconnectName,
             compute.setLabelsInterconnects({
+              labels: desiredLabels,
+              labelFingerprint: latest.labelFingerprint,
               project: env.project,
               resource: interconnectName,
-              body: {
-                labels: desiredLabels,
-                labelFingerprint: latest.labelFingerprint,
-              },
             }),
           );
         }).pipe(

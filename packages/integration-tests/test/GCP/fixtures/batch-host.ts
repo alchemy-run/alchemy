@@ -32,7 +32,7 @@ export default class FederatedBatchJob extends AWS.Batch.JobDefinition<Federated
       // A grant to a federated principal takes minutes to propagate (IAM
       // documents up to 7): retry inside the job, which fails if it never
       // lands.
-      run: publish({ body: { messages: [{ data: btoa(BATCH_MESSAGE) }] } }).pipe(
+      run: publish({ messages: [{ data: btoa(BATCH_MESSAGE) }] }).pipe(
         Effect.tapError((error) => Effect.logInfo(`publish not ready: ${String(error)}`)),
         Effect.retry({ schedule: Schedule.spaced("15 seconds"), times: 40 }),
         Effect.orDie,
