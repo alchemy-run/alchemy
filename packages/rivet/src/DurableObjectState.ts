@@ -475,7 +475,12 @@ const makeCallbackHost = (c: ActorContextLike, handler: CallbackWakeHandler): Ca
           CALLBACKS_WAKE_KEY,
           String(at),
         );
-        yield* Effect.promise(() => c.schedule.at(at, CALLBACKS_ACTION));
+        const wake = Effect.asVoid(Effect.promise(() => c.schedule.at(at, CALLBACKS_ACTION)));
+        // RivetKit's scheduler waits on an open transaction, so inside one
+        // the wake is set once it commits, as `setAlarm` does.
+        const transaction = yield* currentTransaction;
+        if (transaction === undefined) yield* wake;
+        else transaction.afterCommit.push(wake);
       }),
     get: query<{ value: string }>(
       c,
