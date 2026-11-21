@@ -1,6 +1,6 @@
 import { expect } from "@alchemy.run/test";
 import type * as Test from "@alchemy.run/test/Alchemy";
-import { getProject } from "@distilled.cloud/prisma/management";
+import { createUrlCheck, getProject, getUrl } from "@distilled.cloud/prisma/management";
 import { isActionState, State } from "alchemy/State/State";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -84,3 +84,22 @@ export const markCreating = (stack: Test.ScratchStack, fqn: string) =>
     const { attr: _attr, ...creating } = stored;
     yield* state.set({ ...address, value: { ...creating, status: "creating" } as never });
   }).pipe(Effect.provide(stack.state));
+
+/** Reads the RoutingUrl every 15 seconds until it is `active`, at most 6 minutes. */
+export const pollUntilActive = (id: string) =>
+  getUrl({ id }).pipe(
+    Effect.map(({ data }) => data),
+    Effect.repeat({
+      schedule: Schedule.spaced("15 seconds"),
+      until: (data) => data.status === "active",
+      times: 24,
+    }),
+  );
+
+/**
+ * For a hostname whose records were published by hand: asks Prisma to check
+ * it once, then only reads it. A check on a failed certificate orders a new
+ * one, and a workspace may order only 10 an hour.
+ */
+export const checkOnceThenPollUntilActive = (id: string) =>
+  createUrlCheck({ id }).pipe(Effect.andThen(pollUntilActive(id)));

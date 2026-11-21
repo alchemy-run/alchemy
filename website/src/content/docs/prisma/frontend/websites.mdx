@@ -199,7 +199,7 @@ const site = yield* Prisma.Website.Astro("Web", {
 });
 ```
 
-With `dns`, the deploy waits up to 6 minutes for the hostname to serve, and fails with an error that says what is missing if it does not. A workspace can add about 10 custom hostnames an hour; see [How many hostnames you can add](/prisma/compute/apps#how-many-hostnames-you-can-add).
+With `dns`, the deploy waits up to about 7 minutes for the hostname to serve, and fails with an error that says what is missing if it does not: a record the nameservers do not answer yet, a failed certificate, a hostname another RoutingUrl holds, or the workspace's hourly limit of new certificates. See [Waiting for the hostname to serve](/prisma/compute/apps#waiting-for-the-hostname-to-serve). Prisma orders a certificate for each new hostname, each hostname change and each certificate ordered again, and a workspace may order 10 an hour; see [How many certificates a workspace can order](/prisma/compute/apps#how-many-certificates-a-workspace-can-order).
 
 `AWS.Route53.Adapter()` and `Hetzner.DNS.Adapter()` work the same way. See [DNS Adapters](/infrastructure-as-code/dns-adapters) and [Routing URLs](/prisma/compute/apps#routing-urls) for what `dns` publishes and when.
 

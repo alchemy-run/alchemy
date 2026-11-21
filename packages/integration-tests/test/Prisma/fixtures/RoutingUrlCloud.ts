@@ -22,6 +22,7 @@ import {
 } from "../../../../prisma/src/internal/AuthoritativeDns.ts";
 import {
   data,
+  failure,
   type FakeManagementApi,
   makeFakeManagementApi,
   noContent,
@@ -117,7 +118,7 @@ export const routingUrl = (
         : {
             id: options.customDomainId,
             status: "active",
-            failureReason: null,
+            failureReason: null as string | null,
             certExpiresAt: null,
             lastSeenAt: WIRE_CREATED_AT,
             certificateRetryRequestedAt: null,
@@ -184,11 +185,15 @@ export interface CloudState {
   /** The DNS host's records when Prisma received a PATCH. */
   zoneAtPatch: DNS.DnsRecord[] | undefined;
   /**
-   * How Prisma moves a saved row on, applied to each create, update and read
-   * of one. By default a pending row becomes `active` once the DNS host
-   * publishes both of its records.
+   * How Prisma moves a saved row on when it is written, checked or read. By
+   * default Prisma looks DNS up only on a write or a check, and serves a
+   * pending row at once when the DNS host has published both its records.
    */
-  progress: (row: WireRoutingUrl, zone: Zone) => WireRoutingUrl;
+  progress: (row: WireRoutingUrl, zone: Zone, event: PrismaEvent) => WireRoutingUrl;
+  /** Whether Prisma makes the next create's row and then loses its reply behind a 502. */
+  loseCreateReply: boolean;
+  /** How many TXT checks had run when Prisma received a PATCH. */
+  txtCheckedAtPatch: number | undefined;
   /** Requests, as `METHOD /path`, that Prisma answers once with 429 and `Retry-After` seconds. */
   throttle: Array<{ route: string; retryAfter: number }>;
 }
@@ -207,6 +212,9 @@ export interface Zone {
 export const sameRecord = (a: DNS.DnsRecord) => (b: DNS.DnsRecord) =>
   a.name === b.name && a.type === b.type && a.value === b.value;
 
+/** What makes Prisma look at a row: a create or update, a `/check`, or a read. */
+export type PrismaEvent = "write" | "check" | "read";
+
 /** The row as Prisma shows it once it serves. */
 export const served = (row: WireRoutingUrl): WireRoutingUrl => ({
   ...routingUrl(row.id, {
@@ -218,12 +226,16 @@ export const served = (row: WireRoutingUrl): WireRoutingUrl => ({
   customDomain: row.customDomain,
 });
 
-/** Prisma serves a pending row once the DNS host publishes both of its records. */
-export const servesWhenPublished = (row: WireRoutingUrl, zone: Zone) =>
-  row.status === "pending" &&
-  recordsFor(row.hostname).every((record) => zone.records.some(sameRecord(record)))
-    ? served(row)
-    : row;
+/** Whether the DNS host has published both of the row's records. */
+export const published = (row: WireRoutingUrl, zone: Zone) =>
+  recordsFor(row.hostname).every((record) => zone.records.some(sameRecord(record)));
+
+/**
+ * Prisma looks a pending row's DNS up when it is written or checked, and
+ * serves it then if both records are published. A read changes nothing.
+ */
+export const looksOnWrite = (row: WireRoutingUrl, zone: Zone, event: PrismaEvent) =>
+  event !== "read" && row.status === "pending" && published(row, zone) ? served(row) : row;
 
 export const makeUrlCloud = () => {
   const rows = new Map<string, WireRoutingUrl>();
@@ -241,12 +253,14 @@ export const makeUrlCloud = () => {
     txtAttempts: [],
     txtOptions: [],
     zoneAtPatch: undefined,
-    progress: servesWhenPublished,
+    progress: looksOnWrite,
     throttle: [],
+    loseCreateReply: false,
+    txtCheckedAtPatch: undefined,
   };
   let next = 0;
-  const progressed = (row: WireRoutingUrl) => {
-    const moved = state.progress(row, zone);
+  const progressed = (row: WireRoutingUrl, event: PrismaEvent) => {
+    const moved = state.progress(row, zone, event);
     rows.set(moved.id, moved);
     return moved;
   };
@@ -312,12 +326,23 @@ export const makeUrlCloud = () => {
     }
     if (serviceMatch?.[2] && request.method === "POST") {
       if (state.refusal) return state.refusal;
-      const created = routingUrl(`url-${++next}`, {
-        hostname: String(body?.hostname),
-        serviceId: serviceMatch[1],
-        logicalId: (body?.logicalId as string | undefined) ?? null,
-      });
-      return data(progressed(created), { status: 201 });
+      const logicalId = (body?.logicalId as string | undefined) ?? null;
+      if (logicalId !== null && [...rows.values()].some((row) => row.logicalId === logicalId)) {
+        return failure(409, "logical-id-taken", "Another live RoutingUrl has this logicalId.");
+      }
+      const created = progressed(
+        routingUrl(`url-${++next}`, {
+          hostname: String(body?.hostname),
+          serviceId: serviceMatch[1],
+          logicalId,
+        }),
+        "write",
+      );
+      if (state.loseCreateReply) {
+        state.loseCreateReply = false;
+        return failure(502, "bad-gateway", "Bad gateway");
+      }
+      return data(created, { status: 201 });
     }
     if (path === "/v1/projects/proj-1/branches/br-1/urls") {
       const logicalId = new URLSearchParams(request.search).get("logicalId");
@@ -359,11 +384,16 @@ export const makeUrlCloud = () => {
           : [],
       );
     }
+    const checkMatch = /^\/v1\/urls\/([^/]+)\/check$/.exec(path);
+    if (checkMatch && request.method === "POST") {
+      const row = rows.get(checkMatch[1]!);
+      return row === undefined ? notFound("RoutingUrl not found") : data(progressed(row, "check"));
+    }
     const urlMatch = /^\/v1\/urls\/([^/]+)$/.exec(path);
     if (urlMatch) {
       const row = rows.get(urlMatch[1]!);
       if (row === undefined) return notFound("RoutingUrl not found");
-      if (request.method === "GET") return data(progressed(row));
+      if (request.method === "GET") return data(progressed(row, "read"));
       if (request.method === "DELETE") {
         rows.delete(row.id);
         return noContent();
@@ -371,6 +401,7 @@ export const makeUrlCloud = () => {
       if (request.method === "PATCH") {
         if (state.refusal) return state.refusal;
         state.zoneAtPatch = [...zone.records];
+        state.txtCheckedAtPatch = state.txtChecked.length;
         const hostname = (body?.hostname as string | undefined) ?? row.hostname;
         const updated = {
           ...routingUrl(row.id, {
@@ -383,7 +414,7 @@ export const makeUrlCloud = () => {
           // Prisma changes only the fields it is given; a new hostname loses the custom domain.
           customDomain: hostname === row.hostname ? row.customDomain : null,
         };
-        return data(progressed(updated));
+        return data(progressed(updated, "write"));
       }
     }
     return unhandled(request);
@@ -408,8 +439,10 @@ export const makeUrlCloud = () => {
         txtAttempts: [],
         txtOptions: [],
         zoneAtPatch: undefined,
-        progress: servesWhenPublished,
+        progress: looksOnWrite,
         throttle: [],
+        loseCreateReply: false,
+        txtCheckedAtPatch: undefined,
       },
       options,
     );

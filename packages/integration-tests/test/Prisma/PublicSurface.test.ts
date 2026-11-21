@@ -137,6 +137,7 @@ const publicExports = [
   "RoutingUrlHostnameChangeRefused",
   "RoutingUrlNotActive",
   "RoutingUrlCertificateLimitReached",
+  "RoutingUrlRecordsNotSeen",
   "RoutingUrlOperationFailed",
   "EnvironmentVariable",
   "EnvironmentVariableProvider",

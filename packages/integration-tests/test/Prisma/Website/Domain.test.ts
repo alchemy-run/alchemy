@@ -11,7 +11,6 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import {
-  createUrlCheck,
   getDomainOwnership,
   getDomain,
   getProject,
@@ -41,6 +40,7 @@ import {
   websiteDomain,
 } from "../../../../prisma/src/internal/WebsiteDomain.ts";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
+import { checkOnceThenPollUntilActive } from "../fixtures/Live.ts";
 import {
   AppRef,
   makeUrlCloud,
@@ -99,7 +99,7 @@ testFor(withDns).test.provider(
   "a site with domain and dns publishes its TXT and CNAME and deploys once its RoutingUrl serves",
   (stack) =>
     Effect.gen(function* () {
-      withDns.reset();
+      withDns.reset({ fromZone: true });
       yield* stack.destroy();
 
       const url = yield* stack.deploy(siteDomain({ name: SITE_HOST, dns: TEST_DNS }));
@@ -236,7 +236,7 @@ testFor(aliasDropped).test.provider(
   "a later release that stops declaring the alias keeps the CNAME published",
   (stack) =>
     Effect.gen(function* () {
-      aliasDropped.reset();
+      aliasDropped.reset({ fromZone: true });
       yield* stack.destroy();
       yield* stack.deploy(siteDomain({ name: SITE_HOST, dns: TEST_DNS }));
 
@@ -265,7 +265,7 @@ testFor(proxied).test.provider(
   "a site publishes its records DNS-only when the DNS host is set to proxy aliases",
   (stack) =>
     Effect.gen(function* () {
-      proxied.reset();
+      proxied.reset({ fromZone: true });
       yield* stack.destroy();
 
       yield* stack.deploy(
@@ -373,23 +373,6 @@ const waitForAuthoritativeCnames = (records: ReadonlyArray<{ name: string; value
       ),
     );
   });
-
-/**
- * For a hostname whose records were published by hand: asks Prisma to check
- * it once, then reads it every 15 seconds until it is `active`, at most 6
- * minutes. A check on a failed certificate orders a new one, and a workspace
- * may order only 10 an hour, so the check is never repeated.
- */
-const checkOnceThenPollUntilActive = (id: string) =>
-  createUrlCheck({ id }).pipe(
-    Effect.andThen(getUrl({ id })),
-    Effect.map(({ data }) => data),
-    Effect.repeat({
-      schedule: Schedule.spaced("15 seconds"),
-      until: (data) => data.status === "active",
-      times: 24,
-    }),
-  );
 
 const routingUrlGone = (id: string) =>
   getUrl({ id }).pipe(
