@@ -63,7 +63,7 @@ export default class DomainBatchesWorker extends Cloudflare.Worker<DomainBatches
           return HttpServerResponse.text("ok");
         }
         if (route[1] === "count") {
-          const count = yield* counts.get(group);
+          const count = yield* counts.get(group).pipe(Effect.orDie);
           return yield* HttpServerResponse.json(
             Option.match(count, {
               onNone: () => 0,
