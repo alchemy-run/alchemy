@@ -109,8 +109,22 @@ export interface PoolNodes<Network, Gateway extends PoolGateway = PoolGateway> {
     readonly dir: string;
     readonly hash: string;
   }>;
-  /** Environment every runner needs, as plain strings. */
+  /**
+   * Environment every runner needs, as plain strings. For a host that sets
+   * `secretsSeparately`, it holds neither of {@link secrets}.
+   */
   readonly environment: Output.Output<Record<string, string>>;
+  /**
+   * The runners' secrets, the database URL and the gateway token, still
+   * Redacted, for a host to deploy through its platform's secret store.
+   */
+  readonly secrets: Output.Output<RunnerSecrets>;
+}
+
+/** The secrets every runner reads from its environment. */
+export interface RunnerSecrets {
+  readonly CLUSTER_DATABASE_URL: Redacted.Redacted<string>;
+  readonly CLUSTER_GATEWAY_TOKEN: Redacted.Redacted<string>;
 }
 
 /** What a host binds onto each entity so callers can reach the gateway. */
@@ -152,6 +166,12 @@ export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGa
   readonly nameLength?: number;
   /** The runner image's Dockerfile, when the host needs more than {@link RUNNER_DOCKERFILE}. */
   readonly dockerfile?: string;
+  /**
+   * Leave the runners' {@link RunnerSecrets} out of `environment`: the host
+   * deploys them from `secrets` instead.
+   * @default false
+   */
+  readonly secretsSeparately?: boolean;
   /** Where callers reach the gateway, declaring what it needs; before the pool's service. */
   readonly gateway: (name: string, network: Network) => Effect.Effect<Gateway, never, Req>;
   readonly nodes: (nodes: PoolNodes<Network, Gateway>) => Effect.Effect<void, never, Req>;
@@ -223,6 +243,12 @@ export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGa
             token: token.text,
           });
           const stack = yield* Stack;
+          const secrets = Output.all(output(database.url), token.text).pipe(
+            Output.map(([url, tokenText]): RunnerSecrets => ({
+              CLUSTER_DATABASE_URL: url,
+              CLUSTER_GATEWAY_TOKEN: tokenText,
+            })),
+          );
           yield* options.nodes({
             gateway,
             database,
@@ -234,13 +260,8 @@ export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGa
               pool,
               options.dockerfile ?? RUNNER_DOCKERFILE,
             ),
-            environment: Output.all(
-              pool.env,
-              output(database.url),
-              token.text,
-              database.shardGroups.groups,
-            ).pipe(
-              Output.map(([values, url, tokenText, allGroups]) => ({
+            environment: Output.all(pool.env, secrets, database.shardGroups.groups).pipe(
+              Output.map(([values, runnerSecrets, allGroups]) => ({
                 ...Object.fromEntries(
                   Object.entries(values).map(([key, value]) => [key, String(value)]),
                 ),
@@ -248,13 +269,18 @@ export const makePoolLayer = <Network, Req, Gateway extends PoolGateway = PoolGa
                 ALCHEMY_STACK_NAME: stack.name,
                 ALCHEMY_STAGE: stack.stage,
                 ALCHEMY_PHASE: "runtime",
-                CLUSTER_DATABASE_URL: Redacted.value(url),
-                CLUSTER_GATEWAY_TOKEN: Redacted.value(tokenText),
+                ...(options.secretsSeparately
+                  ? {}
+                  : {
+                      CLUSTER_DATABASE_URL: Redacted.value(runnerSecrets.CLUSTER_DATABASE_URL),
+                      CLUSTER_GATEWAY_TOKEN: Redacted.value(runnerSecrets.CLUSTER_GATEWAY_TOKEN),
+                    }),
                 CLUSTER_POOL: name,
                 CLUSTER_SHARD_GROUPS: groups.join(","),
                 CLUSTER_AVAILABLE_SHARD_GROUPS: allGroups.join(","),
               })),
             ),
+            secrets,
           });
         }).pipe(Effect.provide(context));
 

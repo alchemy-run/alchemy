@@ -1,6 +1,8 @@
 import * as ECS from "@alchemy.run/aws/ECS";
+import * as SecretsManager from "@alchemy.run/aws/SecretsManager";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import { GATEWAY_PORT, RUNNER_PORT } from "../internal/Gateway.ts";
 import { makePoolLayer, RUNNER_DOCKERFILE, type PoolSettings } from "../internal/PoolHost.ts";
 
@@ -47,6 +49,21 @@ export interface EcsPoolOptions extends PoolSettings {
 }
 
 /**
+ * Keep a runner secret in a Secrets Manager secret of the pool's own, and
+ * return its ARN pinned to the version deployed: a new value is a new
+ * reference, so the runners restart with it.
+ */
+const runnerSecret = Effect.fn(function* (
+  id: string,
+  value: Output.Output<Redacted.Redacted<string>>,
+) {
+  const secret = yield* SecretsManager.Secret(id, { secretString: value });
+  return Output.all(secret.secretArn, secret.versionId).pipe(
+    Output.map(([arn, version]) => (version === undefined ? arn : `${arn}:::${version}`)),
+  );
+});
+
+/**
  * Run a pool of Effect Cluster runners on ECS Fargate: an ECS service whose tasks
  * host every class given this pool, in the database's VPC, behind a
  * load balancer that serves their gateway to callers anywhere. With a
@@ -55,6 +72,10 @@ export interface EcsPoolOptions extends PoolSettings {
  * Runners reach each other and the database through the cluster's runner
  * security group; the load balancer only reaches the gateway, which checks
  * every call's token.
+ *
+ * The database URL and the gateway token are kept in Secrets Manager
+ * secrets of the pool's own. The task definition only names them, and
+ * only the tasks' execution role may read them.
  *
  * ### Running on ECS
  * **Example:** Two runners on Fargate
@@ -89,10 +110,20 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
     ownNetwork: Effect.succeed(
       options.network === undefined ? undefined : { kind: "aws" as const, ...options.network },
     ),
+    secretsSeparately: true,
     gateway: (_name, network) => makeAwsGateway(id, network, "ip"),
-    nodes: ({ network, gateway, program, environment }) =>
+    nodes: ({ network, gateway, program, environment, secrets }) =>
       Effect.gen(function* () {
         const cluster = yield* ECS.Cluster(`${id}Cluster`, {});
+        // ECS reads them into each task as it starts.
+        const databaseUrl = yield* runnerSecret(
+          `${id}DatabaseUrl`,
+          secrets.pipe(Output.map((s) => s.CLUSTER_DATABASE_URL)),
+        );
+        const gatewayToken = yield* runnerSecret(
+          `${id}GatewayToken`,
+          secrets.pipe(Output.map((s) => s.CLUSTER_GATEWAY_TOKEN)),
+        );
         yield* ECS.Service(`${id}Pool`, {
           cluster,
           context: program.pipe(Output.map((p) => p.dir)) as unknown as string,
@@ -123,6 +154,10 @@ export const EcsPool = (id: string, options: EcsPoolOptions = {}) =>
             },
           ],
           env: environment as unknown as Record<string, string>,
+          secrets: {
+            CLUSTER_DATABASE_URL: databaseUrl,
+            CLUSTER_GATEWAY_TOKEN: gatewayToken,
+          },
         });
       }),
   });
