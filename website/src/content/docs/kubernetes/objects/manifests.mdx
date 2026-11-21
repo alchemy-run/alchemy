@@ -1,6 +1,6 @@
 ---
 title: Manifests
-description: Apply any single Kubernetes object with Kubernetes.Manifest, including Namespaces, ConfigMaps, Secrets, StatefulSets, Ingresses, CRDs and custom resources, and order objects with Output references.
+description: Apply any single Kubernetes object with Kubernetes.Manifest, including Namespaces, ConfigMaps, StatefulSets, Ingresses, CRDs and custom resources, and order objects with Output references.
 ---
 
 [`Kubernetes.Manifest`](/providers/kubernetes/manifest) applies one
@@ -8,8 +8,9 @@ Kubernetes object, written as a literal object in the same shape as
 its YAML. Use it for everything
 [`Deployment`](/kubernetes/workloads/deployments) and
 [`Job`](/kubernetes/workloads/jobs) don't model. That includes
-Namespaces, ConfigMaps, Secrets, StatefulSets, DaemonSets, Ingresses,
-RBAC, NetworkPolicies, and custom resources.
+Namespaces, ConfigMaps, StatefulSets, DaemonSets, Ingresses, RBAC,
+NetworkPolicies, and custom resources. For Secrets, use
+[`Kubernetes.Secret`](/providers/kubernetes/secret).
 
 ```typescript
 const config = yield* Kubernetes.Manifest("AppConfig", {

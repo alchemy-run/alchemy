@@ -50,21 +50,22 @@ from bindings.
 
 Everything in `env` is written into the Deployment or Job object and
 into Alchemy's state, where anyone who can read either can see it.
-For credentials, store the value in a Kubernetes Secret and have the
-workload read it from the cluster. A Secret is a
-[Manifest](/kubernetes/objects/manifests) with `kind: "Secret"`:
+For credentials, store the value in a
+[`Kubernetes.Secret`](/providers/kubernetes/secret) and have the
+workload read it from the cluster. Its values must be `Redacted`, so
+plans and logs show `<redacted>` instead of the value:
 
 ```typescript
-const dbSecret = yield* Kubernetes.Manifest("DbSecret", {
+const dbSecret = yield* Kubernetes.Secret("DbSecret", {
   cluster,
-  manifest: {
-    apiVersion: "v1",
-    kind: "Secret",
-    metadata: { name: "db", namespace: "apps" },
-    stringData: { url: databaseUrl },
-  },
+  name: "db",
+  namespace: "apps",
+  stringData: { url: yield* Config.Redacted("DATABASE_URL") },
 });
 ```
+
+State still holds the values so the next deploy can apply them, so
+use a state store that encrypts them, such as `Cloudflare.state()`.
 
 Referencing a Secret from a container (`envFrom`, `valueFrom`, or a
 volume mount) is a container-level field. `podTemplate` can add the
