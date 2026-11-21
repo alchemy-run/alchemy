@@ -18,7 +18,7 @@ import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import NodeEcho from "./fixtures/node-echo.ts";
 import NodeSleepy, { slept } from "./fixtures/node-sleepy.ts";
 
-const CONTROL_PLANE_PORT = 16470;
+const CONTROL_PLANE_PORT = 16480;
 const POOL = "node-test";
 
 const testOptions = { providers: Layer.mergeAll(Docker.providers(), Rivet.providers()) };
