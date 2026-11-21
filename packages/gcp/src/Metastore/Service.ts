@@ -462,25 +462,23 @@ export const ServiceProvider = () =>
       if (current === undefined) {
         const created = yield* metastore
           .createProjectsLocationsServices({
+            hiveMetastoreConfig: hive,
+            tier: news.tier,
+            port: news.port,
+            network: news.network,
+            databaseType: news.databaseType,
+            deletionProtection: news.deletionProtection,
+            releaseChannel: news.releaseChannel,
+            encryptionConfig: news.encryptionConfig,
+            networkConfig: news.networkConfig,
+            scalingConfig: news.scalingConfig,
+            telemetryConfig: news.telemetryConfig,
+            scheduledBackup: news.scheduledBackup,
+            metadataIntegration: news.metadataIntegration,
+            maintenanceWindow: news.maintenanceWindow,
+            labels: desiredLabels,
             parent: locationParent(env.project, location),
             serviceId,
-            body: {
-              hiveMetastoreConfig: hive,
-              tier: news.tier,
-              port: news.port,
-              network: news.network,
-              databaseType: news.databaseType,
-              deletionProtection: news.deletionProtection,
-              releaseChannel: news.releaseChannel,
-              encryptionConfig: news.encryptionConfig,
-              networkConfig: news.networkConfig,
-              scalingConfig: news.scalingConfig,
-              telemetryConfig: news.telemetryConfig,
-              scheduledBackup: news.scheduledBackup,
-              metadataIntegration: news.metadataIntegration,
-              maintenanceWindow: news.maintenanceWindow,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -547,20 +545,18 @@ export const ServiceProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* metastore.patchProjectsLocationsServices({
+          labels: desiredLabels,
+          port: news.port,
+          tier: news.tier,
+          deletionProtection: news.deletionProtection,
+          scalingConfig: news.scalingConfig,
+          telemetryConfig: news.telemetryConfig,
+          scheduledBackup: news.scheduledBackup,
+          metadataIntegration: news.metadataIntegration,
+          maintenanceWindow: news.maintenanceWindow,
+          hiveMetastoreConfig: hive,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            labels: desiredLabels,
-            port: news.port,
-            tier: news.tier,
-            deletionProtection: news.deletionProtection,
-            scalingConfig: news.scalingConfig,
-            telemetryConfig: news.telemetryConfig,
-            scheduledBackup: news.scheduledBackup,
-            metadataIntegration: news.metadataIntegration,
-            maintenanceWindow: news.maintenanceWindow,
-            hiveMetastoreConfig: hive,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(
@@ -592,9 +588,9 @@ export const ServiceProvider = () =>
         }
         const unlocked = yield* metastore
           .patchProjectsLocationsServices({
+            deletionProtection: false,
             name: output.name,
             updateMask: "deletionProtection",
-            body: { deletionProtection: false },
           })
           .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (unlocked !== undefined) {

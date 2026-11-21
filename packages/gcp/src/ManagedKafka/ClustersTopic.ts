@@ -270,13 +270,11 @@ export const ClustersTopicProvider = () =>
         const created = yield* retryTransient(
           kafka
             .createProjectsLocationsClustersTopics({
+              partitionCount,
+              replicationFactor,
+              configs,
               parent: cluster,
               topicId,
-              body: {
-                partitionCount,
-                replicationFactor,
-                configs,
-              },
             })
             .pipe(Effect.catchTag("Conflict", () => getTopic(name))),
         );
@@ -305,15 +303,13 @@ export const ClustersTopicProvider = () =>
 
       if (partitionsChanged || configsChanged) {
         current = yield* kafka.patchProjectsLocationsClustersTopics({
+          partitionCount,
+          configs,
           name,
           updateMask: fieldMask([
             partitionsChanged && "partition_count",
             configsChanged && "configs",
           ]),
-          body: {
-            partitionCount,
-            configs,
-          },
         });
       }
 

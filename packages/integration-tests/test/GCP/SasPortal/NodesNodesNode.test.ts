@@ -45,8 +45,8 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         sasportal.createNodesNodesNodes({
+          displayName: "alchemy-sasportal-probe",
           parent: "nodes/missing/nodes/missing",
-          body: { displayName: "alchemy-sasportal-probe" },
         }),
       );
       expect(error._tag).toEqual("ServiceDisabled");

@@ -461,16 +461,10 @@ export const TargetInstanceProvider = () =>
         if (desiredNetwork !== undefined) {
           body.network = desiredNetwork;
         }
-        yield* compute
-          .insertTargetInstances({
-            project: env.project,
-            zone,
-            body,
-          })
-          .pipe(
-            Effect.flatMap((operation) => waitZoneOperation(env.project, zone, operation)),
-            Effect.catchTag("Conflict", () => Effect.undefined),
-          );
+        yield* compute.insertTargetInstances({ ...body, project: env.project, zone }).pipe(
+          Effect.flatMap((operation) => waitZoneOperation(env.project, zone, operation)),
+          Effect.catchTag("Conflict", () => Effect.undefined),
+        );
         current = yield* requireTarget(env.project, zone, targetInstanceName);
       }
 
@@ -487,10 +481,10 @@ export const TargetInstanceProvider = () =>
         if (observedPolicy !== desiredPolicy) {
           yield* compute
             .setSecurityPolicyTargetInstances({
+              securityPolicy: news.securityPolicy,
               project: env.project,
               zone,
               targetInstance: targetInstanceName,
-              body: { securityPolicy: news.securityPolicy },
             })
             .pipe(Effect.flatMap((operation) => waitZoneOperation(env.project, zone, operation)));
           current = yield* requireTarget(env.project, zone, targetInstanceName);

@@ -93,7 +93,7 @@ export const makeFirestoreDatabaseHelpers = Effect.gen(function* () {
       },
       query: (structuredQuery) =>
         documentsRoot.pipe(
-          Effect.flatMap((parent) => runQuery({ parent, body: { structuredQuery } })),
+          Effect.flatMap((parent) => runQuery({ structuredQuery, parent })),
           // The REST endpoint streams a JSON array of RunQueryResponse
           // messages; the generated output type models a single message.
           Effect.map((response): ReadonlyArray<firestore.RunQueryResponse> =>
@@ -112,17 +112,17 @@ export const makeFirestoreDatabaseHelpers = Effect.gen(function* () {
     return {
       set: (path, fields) =>
         documentName(path).pipe(
-          Effect.flatMap((name) => patchDocument({ name, body: { fields: encodeFields(fields) } })),
+          Effect.flatMap((name) => patchDocument({ fields: encodeFields(fields), name })),
           Effect.map(snapshot),
         ),
       update: (path, fields) =>
         documentName(path).pipe(
           Effect.flatMap((name) =>
             patchDocument({
+              fields: encodeFields(fields),
               name,
               "updateMask.fieldPaths": Object.keys(fields).map(fieldPath),
               "currentDocument.exists": true,
-              body: { fields: encodeFields(fields) },
             }),
           ),
           Effect.map(snapshot),
@@ -139,13 +139,13 @@ export const makeFirestoreDatabaseHelpers = Effect.gen(function* () {
         return databaseName.pipe(
           Effect.flatMap((db) =>
             createDocument({
+              fields: encodeFields(fields),
               parent:
                 collection.parent.length > 0
                   ? `${db}/documents/${collection.parent}`
                   : `${db}/documents`,
               collectionId: collection.last,
               documentId: last,
-              body: { fields: encodeFields(fields) },
             }),
           ),
           Effect.map(snapshot),

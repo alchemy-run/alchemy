@@ -75,10 +75,8 @@ test.provider.skipIf(entitled)(
       const organization = yield* organizationOf();
       const error = yield* Effect.flip(
         cloudsupport.createOrganizationsSupportEventSubscriptions({
+          pubSubTopic: `projects/${project}/topics/alchemy-missing-topic`,
           parent: organization,
-          body: {
-            pubSubTopic: `projects/${project}/topics/alchemy-missing-topic`,
-          },
         }),
       );
       expect(error._tag).toEqual("Forbidden");

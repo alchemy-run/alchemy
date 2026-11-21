@@ -35,28 +35,27 @@ const requestParams = () =>
 /** Look an entity up out of band, as the deployer. */
 const lookupOutOfBand = (path: { kind: string; name: string }) =>
   datastore.lookupProjects({
+    databaseId,
+    keys: [keyOf(path)],
     projectId: project,
     requestParams: requestParams(),
-    body: { databaseId, keys: [keyOf(path)] },
   });
 
 /** Seed the entity the Lookup / RunQuery probes read, as the deployer. */
 const seed = Effect.suspend(() =>
   datastore.commitProjects({
+    databaseId,
+    mode: "NON_TRANSACTIONAL",
+    mutations: [
+      {
+        upsert: {
+          key: keyOf(SEEDED),
+          properties: { title: { stringValue: "seeded" } },
+        },
+      },
+    ],
     projectId: project,
     requestParams: requestParams(),
-    body: {
-      databaseId,
-      mode: "NON_TRANSACTIONAL",
-      mutations: [
-        {
-          upsert: {
-            key: keyOf(SEEDED),
-            properties: { title: { stringValue: "seeded" } },
-          },
-        },
-      ],
-    },
   }),
 );
 
@@ -67,8 +66,8 @@ const seed = Effect.suspend(() =>
  */
 const projectGrants = Effect.gen(function* () {
   const policy = yield* crm.getIamPolicyProjects({
+    options: { requestedPolicyVersion: 3 },
     resource: `projects/${project}`,
-    body: { options: { requestedPolicyVersion: 3 } },
   });
   return (policy.bindings ?? [])
     .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))

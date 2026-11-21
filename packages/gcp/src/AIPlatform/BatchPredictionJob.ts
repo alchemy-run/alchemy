@@ -363,20 +363,18 @@ export const BatchPredictionJobProvider = () =>
       if (current === undefined) {
         const created = yield* aiplatform
           .createProjectsLocationsBatchPredictionJobs({
+            displayName,
+            model: news.model,
+            inputConfig: news.inputConfig,
+            outputConfig: news.outputConfig,
+            dedicatedResources: news.dedicatedResources,
+            modelParameters: news.modelParameters,
+            generateExplanation: news.generateExplanation,
+            disableContainerLogging: news.disableContainerLogging,
+            serviceAccount: news.serviceAccount,
+            labels: desiredLabels,
+            encryptionSpec: news.encryptionSpec,
             parent: parentOf(env.project, location),
-            body: {
-              displayName,
-              model: news.model,
-              inputConfig: news.inputConfig,
-              outputConfig: news.outputConfig,
-              dedicatedResources: news.dedicatedResources,
-              modelParameters: news.modelParameters,
-              generateExplanation: news.generateExplanation,
-              disableContainerLogging: news.disableContainerLogging,
-              serviceAccount: news.serviceAccount,
-              labels: desiredLabels,
-              encryptionSpec: news.encryptionSpec,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, env.region)));
         current = created ?? undefined;

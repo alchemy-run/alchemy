@@ -5,11 +5,13 @@ import * as SecretManager from "@alchemy.run/gcp/SecretManager";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
 import {
   isImageProgram,
   makePoolLayer,
   nodeDockerfile,
-  nodeEnvironment,
+  SECRET_ENV,
+  splitNodeEnvironment,
   RIVETKIT_VERSION,
   type PoolSettings,
 } from "../internal/PoolHost.ts";
@@ -38,8 +40,7 @@ export interface CloudRunPoolOptions extends PoolSettings {
   /**
    * Environment each node runs with, besides the pool's own. A value named
    * here wins over the pool's own, so `RIVET_ENDPOINT` points the nodes at
-   * a private address of the control plane, and `RIVET_NODE_VERSION` tells
-   * the control plane which nodes are newer (see `drainOnVersionUpgrade`).
+   * a private address of the control plane.
    */
   env?: Record<string, Input<string>>;
   /**
@@ -156,7 +157,7 @@ export const nodeTemplate = (
  *
  * A deploy that changes the nodes rolls out a new worker pool revision.
  * To move actors off the old nodes before Cloud Run stops them, give each
- * deploy a higher `RIVET_NODE_VERSION` and set `drainOnVersionUpgrade`.
+ * deploy a higher `version` and set `drainOnVersionUpgrade`.
  *
  * ### Running Durable Objects on Cloud Run
  * **Example:** Two nodes
@@ -174,7 +175,8 @@ export const nodeTemplate = (
  *   serviceAccount: "nodes@acme.iam.gserviceaccount.com",
  *   network: "private",
  *   subnetwork: "private-us-central1",
- *   env: { RIVET_ENDPOINT: "http://10.0.0.2:6420", RIVET_NODE_VERSION: "42" },
+ *   env: { RIVET_ENDPOINT: "http://10.0.0.2:6420" },
+ *   version: 42,
  *   secrets: {
  *     RIVET_TOKEN: "projects/acme/secrets/rivet-token/versions/1",
  *     DATABASE_URL: "projects/acme/secrets/database-url/versions/3",
@@ -208,8 +210,15 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
                 value: nodes.environment.RIVET_TOKEN,
               })).version.pipe(Output.map((version) => version ?? ""))
             : undefined;
+        // Secrets the classes read as config: one secret of the pool's, loaded
+        // by the node at start, never metadata or the worker pool's config.
+        const split = splitNodeEnvironment(nodes);
+        const secretEnvVersion = (yield* SecretManager.Secret(`${id}SecretEnv`, {
+          value: split.pipe(Output.map(({ secrets }) => Redacted.make(JSON.stringify(secrets)))),
+        })).version.pipe(Output.map((version) => version ?? ""));
         const secretMap: Record<string, Input<string>> = {
           ...(token === undefined ? {} : { RIVET_TOKEN: token }),
+          [SECRET_ENV]: secretEnvVersion,
           ...options.secrets,
         };
         const secrets = Object.entries(secretMap);
@@ -256,7 +265,7 @@ export const CloudRunPool = (id: string, options: CloudRunPoolOptions = {}) =>
           ...(location === undefined ? {} : { location }),
           scaling: { manualInstanceCount: options.replicas ?? 1 },
           template: nodeTemplate(options, { serviceAccount, secretEnv }),
-          env: Output.all(nodeEnvironment(nodes), own).pipe(
+          env: Output.all(split.pipe(Output.map(({ plain }) => plain)), own).pipe(
             Output.map(([env, extra]) => plainEnvironment({ ...env, ...extra }, secretMap)),
           ),
         });

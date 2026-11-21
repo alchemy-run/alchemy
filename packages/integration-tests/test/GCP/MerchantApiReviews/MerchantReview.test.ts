@@ -56,17 +56,15 @@ test.provider.skipIf(runMerchantReviewLifecycle || reviewsV1betaRetired)(
 
       const error = yield* Effect.flip(
         reviews.insertAccountsMerchantReviews({
+          merchantReviewId: "alchemy-probe-merchant-review",
+          merchantReviewAttributes: {
+            merchantId: probeAccount,
+            reviewTime: "2020-01-01T00:00:00Z",
+            content: "probe",
+            title: "Alchemy Probe Merchant Review",
+          },
           parent: `accounts/${probeAccount}`,
           dataSource: probeDataSource(merchantReviewDataSource),
-          body: {
-            merchantReviewId: "alchemy-probe-merchant-review",
-            merchantReviewAttributes: {
-              merchantId: probeAccount,
-              reviewTime: "2020-01-01T00:00:00Z",
-              content: "probe",
-              title: "Alchemy Probe Merchant Review",
-            },
-          },
         }),
       );
       expect(error._tag).toEqual("InsufficientScopes");

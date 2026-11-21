@@ -353,11 +353,7 @@ export const RegionBackendBucketProvider = () =>
         yield* runRegionOp(
           env.project,
           region,
-          compute.insertRegionBackendBuckets({
-            project: env.project,
-            region,
-            body: insertBody,
-          }),
+          compute.insertRegionBackendBuckets({ ...insertBody, project: env.project, region }),
           { ignoreAlreadyExists: true },
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, name);
@@ -410,10 +406,10 @@ export const RegionBackendBucketProvider = () =>
           env.project,
           region,
           compute.patchRegionBackendBuckets({
+            ...patchBody,
             project: env.project,
             region,
             backendBucket: name,
-            body: patchBody,
           }),
         );
         current = (yield* getByName(env.project, region, name)) ?? current;

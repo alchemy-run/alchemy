@@ -11,6 +11,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
+import { CLASS_SECRET, ClassSecretConfig } from "./fixtures/class-secret.ts";
 import { secretMembers, workerPools } from "./fixtures/gcp-checks.ts";
 import { Cluster } from "./fixtures/gcp/cluster.ts";
 import { CounterLive } from "./fixtures/gcp/counter-live.ts";
@@ -45,7 +46,7 @@ const program = (named: boolean) =>
       ),
     );
     return { url: front.uri, rust: rustTarget(actors), extra: extra.name, account };
-  }).pipe(Effect.provide(CounterLive));
+  }).pipe(Effect.provide(CounterLive.pipe(Layer.provide(ClassSecretConfig))));
 const accessor = "roles/secretmanager.secretAccessor";
 /** Out-of-band reads run with the GCP credentials and project the stack deploys with. */
 const gcp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -110,6 +111,13 @@ describe.skipIf(!!process.env.FAST)(
         Effect.gen(function* () {
           const { project } = yield* GcpEnvironment.current;
           const { account, env } = yield* rustNodes();
+          // The pool hosting the class that reads a secret as config.
+          const [defaults] = yield* workerPools(sharedStack, /defaultnodes$/);
+          expect(JSON.stringify(defaults?.template)).not.toContain(CLASS_SECRET);
+          expect(
+            defaults?.template?.containers?.[0]?.env?.find((e) => e.name === "RIVET_SECRET_ENV")
+              ?.valueSource?.secretKeyRef,
+          ).toBeDefined();
           // Neither value is in the worker pool's configuration.
           for (const name of ["RIVET_TOKEN", "EXTRA_SECRET"]) {
             const entry = env.find((e) => e.name === name);

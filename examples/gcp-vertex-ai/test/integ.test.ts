@@ -45,8 +45,8 @@ describe("gcp-vertex-ai", () => {
   const aiplatformUsers = currentProject.pipe(
     Effect.flatMap((project) =>
       resourcemanager.getIamPolicyProjects({
+        options: { requestedPolicyVersion: 3 },
         resource: `projects/${project}`,
-        body: { options: { requestedPolicyVersion: 3 } },
       }),
     ),
     Effect.map((policy) =>

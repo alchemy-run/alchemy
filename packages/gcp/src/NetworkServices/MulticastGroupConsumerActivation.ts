@@ -70,11 +70,6 @@ export type MulticastGroupConsumerActivationProps = {
    */
   multicastGroupRangeActivation: string;
   /**
-   * Deprecated multicast group resource name. Prefer
-   * `multicastGroupRangeActivation`.
-   */
-  multicastGroup?: string;
-  /**
    * Human-readable description.
    */
   description?: string;
@@ -104,8 +99,6 @@ export type MulticastGroupConsumerActivation = Resource<
     multicastConsumerAssociation: string | undefined;
     /** Attached multicast group range activation. */
     multicastGroupRangeActivation: string | undefined;
-    /** Deprecated multicast group name, if set. */
-    multicastGroup: string | undefined;
     /** User-provided description. */
     description: string | undefined;
     /** Logging configuration. */
@@ -203,9 +196,6 @@ const toAssociation = (project: string, location: string, value: string | undefi
 const toRangeActivation = (project: string, location: string, value: string | undefined) =>
   value ? toNamedResource(project, location, "multicastGroupRangeActivations", value) : undefined;
 
-const toGroup = (project: string, location: string, value: string | undefined) =>
-  value ? toNamedResource(project, location, "multicastGroups", value) : undefined;
-
 const toLogConfig = (
   config: MulticastLogConfig | networkservices.MulticastLogConfig | undefined,
 ): MulticastLogConfig | undefined => {
@@ -233,7 +223,6 @@ const toAttrs = (activation: networkservices.MulticastGroupConsumerActivation, p
       location,
       activation.multicastGroupRangeActivation,
     ),
-    multicastGroup: toGroup(proj, location, activation.multicastGroup),
     description: activation.description,
     logConfig: toLogConfig(activation.logConfig),
     resourceState: activation.resourceState,
@@ -372,7 +361,6 @@ export const MulticastGroupConsumerActivationProvider = () =>
         location,
         news.multicastGroupRangeActivation,
       );
-      const multicastGroup = toGroup(env.project, location, news.multicastGroup);
       const logConfig = toLogConfig(news.logConfig);
 
       let current = yield* getByName(name);
@@ -380,16 +368,13 @@ export const MulticastGroupConsumerActivationProvider = () =>
       if (current === undefined) {
         const created = yield* networkservices
           .createProjectsLocationsMulticastGroupConsumerActivations({
+            description: news.description,
+            labels: desiredLabels,
+            multicastConsumerAssociation,
+            multicastGroupRangeActivation,
+            logConfig,
             parent: parentOf(env.project, location),
             multicastGroupConsumerActivationId,
-            body: {
-              description: news.description,
-              labels: desiredLabels,
-              multicastConsumerAssociation,
-              multicastGroupRangeActivation,
-              multicastGroup,
-              logConfig,
-            },
           })
           .pipe(
             Effect.retry({
@@ -418,14 +403,11 @@ export const MulticastGroupConsumerActivationProvider = () =>
       if (updateMask.length > 0) {
         const operation =
           yield* networkservices.patchProjectsLocationsMulticastGroupConsumerActivations({
+            labels: desiredLabels,
+            description: news.description,
+            logConfig,
             name: current.name ?? name,
             updateMask: updateMask.join(","),
-            body: {
-              name: current.name ?? name,
-              labels: desiredLabels,
-              description: news.description,
-              logConfig,
-            },
           });
         yield* waitForOperation(operation);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

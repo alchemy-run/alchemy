@@ -49,12 +49,10 @@ test.provider.skipIf(!!process.env.GCP_TEST_CLOUDIDENTITY)(
 
       const error = yield* Effect.flip(
         cloudidentity.createDevices({
+          serialNumber: "alchemy-probe-device",
+          deviceType: "LINUX",
+          assetTag: "alchemy-probe",
           customer,
-          body: {
-            serialNumber: "alchemy-probe-device",
-            deviceType: "LINUX",
-            assetTag: "alchemy-probe",
-          },
         }),
       );
       expect(error._tag).toEqual("InsufficientScopes");

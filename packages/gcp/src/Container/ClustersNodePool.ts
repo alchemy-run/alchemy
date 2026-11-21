@@ -1024,12 +1024,10 @@ export const ClustersNodePoolProvider = () =>
         const created = yield* retryConflict(
           container
             .createProjectsZonesClustersNodePools({
+              nodePool: toCreatePool(news, nodePoolId, desiredLabels, workloadIdentity),
               projectId: ref.project,
               zone: ref.zone,
               clusterId: ref.clusterId,
-              body: {
-                nodePool: toCreatePool(news, nodePoolId, desiredLabels, workloadIdentity),
-              },
             })
             .pipe(Effect.catchTag("Conflict", () => Effect.undefined)),
         );
@@ -1120,11 +1118,11 @@ export const ClustersNodePoolProvider = () =>
         if (upgradeChanged) body.upgradeSettings = news.upgradeSettings;
         const updated = yield* retryConflict(
           container.updateProjectsZonesClustersNodePools({
+            ...body,
             projectId: ref.project,
             zone: ref.zone,
             clusterId: ref.clusterId,
             nodePoolId,
-            body,
           }),
         );
         live = yield* apply(updated);
@@ -1135,15 +1133,13 @@ export const ClustersNodePoolProvider = () =>
         const nodeVersion = news.version ?? live.version;
         const relocated = yield* retryConflict(
           container.updateProjectsZonesClustersNodePools({
+            locations: news.nodeLocations,
+            ...(imageType !== undefined ? { imageType } : {}),
+            ...(nodeVersion !== undefined ? { nodeVersion } : {}),
             projectId: ref.project,
             zone: ref.zone,
             clusterId: ref.clusterId,
             nodePoolId,
-            body: {
-              locations: news.nodeLocations,
-              ...(imageType !== undefined ? { imageType } : {}),
-              ...(nodeVersion !== undefined ? { nodeVersion } : {}),
-            },
           }),
         );
         live = yield* apply(relocated);
@@ -1155,11 +1151,11 @@ export const ClustersNodePoolProvider = () =>
       ) {
         const scaled = yield* retryConflict(
           container.autoscalingProjectsZonesClustersNodePools({
+            autoscaling: news.autoscaling,
             projectId: ref.project,
             zone: ref.zone,
             clusterId: ref.clusterId,
             nodePoolId,
-            body: { autoscaling: news.autoscaling },
           }),
         );
         live = yield* apply(scaled);
@@ -1170,11 +1166,11 @@ export const ClustersNodePoolProvider = () =>
         if (managementKey(live.management) !== managementKey(nextManagement)) {
           const managed = yield* retryConflict(
             container.setManagementProjectsZonesClustersNodePools({
+              management: nextManagement,
               projectId: ref.project,
               zone: ref.zone,
               clusterId: ref.clusterId,
               nodePoolId,
-              body: { management: nextManagement },
             }),
           );
           live = yield* apply(managed);
@@ -1186,11 +1182,11 @@ export const ClustersNodePoolProvider = () =>
       if (!autoscalingOn && (live.initialNodeCount ?? 0) !== nodeCount) {
         const resized = yield* retryConflict(
           container.setSizeProjectsZonesClustersNodePools({
+            nodeCount,
             projectId: ref.project,
             zone: ref.zone,
             clusterId: ref.clusterId,
             nodePoolId,
-            body: { nodeCount },
           }),
         );
         live = yield* apply(resized);

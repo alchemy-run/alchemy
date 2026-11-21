@@ -457,19 +457,17 @@ export const BackupPlanProvider = () =>
       if (current === undefined) {
         const created = yield* backupdr
           .createProjectsLocationsBackupPlans({
+            backupVault,
+            resourceType: news.resourceType,
+            backupRules: news.backupRules,
+            logRetentionDays: news.logRetentionDays,
+            maxCustomOnDemandRetentionDays: news.maxCustomOnDemandRetentionDays,
+            diskBackupPlanProperties: news.diskBackupPlanProperties,
+            computeInstanceBackupPlanProperties: news.computeInstanceBackupPlanProperties,
+            description: news.description,
+            labels: desiredLabels,
             parent: parentOf(env.project, location),
             backupPlanId,
-            body: {
-              backupVault,
-              resourceType: news.resourceType,
-              backupRules: news.backupRules,
-              logRetentionDays: news.logRetentionDays,
-              maxCustomOnDemandRetentionDays: news.maxCustomOnDemandRetentionDays,
-              diskBackupPlanProperties: news.diskBackupPlanProperties,
-              computeInstanceBackupPlanProperties: news.computeInstanceBackupPlanProperties,
-              description: news.description,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -515,17 +513,15 @@ export const BackupPlanProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* backupdr.patchProjectsLocationsBackupPlans({
+          etag: current.etag,
+          description: news.description,
+          backupRules: news.backupRules,
+          logRetentionDays: news.logRetentionDays,
+          maxCustomOnDemandRetentionDays: news.maxCustomOnDemandRetentionDays,
+          diskBackupPlanProperties: news.diskBackupPlanProperties,
+          computeInstanceBackupPlanProperties: news.computeInstanceBackupPlanProperties,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            etag: current.etag,
-            description: news.description,
-            backupRules: news.backupRules,
-            logRetentionDays: news.logRetentionDays,
-            maxCustomOnDemandRetentionDays: news.maxCustomOnDemandRetentionDays,
-            diskBackupPlanProperties: news.diskBackupPlanProperties,
-            computeInstanceBackupPlanProperties: news.computeInstanceBackupPlanProperties,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilReady(

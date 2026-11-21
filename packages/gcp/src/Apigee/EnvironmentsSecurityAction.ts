@@ -416,9 +416,9 @@ export const EnvironmentsSecurityActionProvider = () =>
       if (current === undefined) {
         const created = yield* apigee
           .createOrganizationsEnvironmentsSecurityActions({
+            ...toBody(news, desiredDescription, securityActionId),
             parent,
             securityActionId,
-            body: toBody(news, desiredDescription, securityActionId),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -449,6 +449,7 @@ export const EnvironmentsSecurityActionProvider = () =>
         proxiesChanged
       ) {
         current = yield* apigee.patchOrganizationsEnvironmentsSecurityActions({
+          ...toBody(news, desiredDescription, securityActionId),
           name,
           updateMask: [
             descriptionChanged ? "description" : undefined,
@@ -462,7 +463,6 @@ export const EnvironmentsSecurityActionProvider = () =>
           ]
             .filter((field): field is string => field !== undefined)
             .join(","),
-          body: toBody(news, desiredDescription, securityActionId),
         });
       }
 

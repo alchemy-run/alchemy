@@ -24,6 +24,8 @@ export interface GatewayTarget {
   readonly name: string;
   /** The instance key: RivetKit's array of parts, one per element. */
   readonly key: ReadonlyArray<string>;
+  /** Headers added to every request, computed when it is sent, such as the caller's trace. */
+  readonly headers?: (() => ReadonlyArray<readonly [string, string]>) | undefined;
 }
 
 /** The header the gateway reads the caller's token from, as RivetKit's client sends it. */
@@ -125,6 +127,11 @@ export const gatewayUpgrade = (
     for (const [name, value] of Object.entries(request.headers)) {
       if (!HANDSHAKE_HEADERS.has(name.toLowerCase())) headers[name] = value;
     }
+    for (const [name, value] of target.headers?.() ?? []) {
+      if (!Object.keys(headers).some((own) => own.toLowerCase() === name.toLowerCase())) {
+        headers[name] = value;
+      }
+    }
     headers[TOKEN_HEADER] = target.token;
     const socketUrl = gatewayUrl(target, url.pathname, url.search, "websocket");
     if (typeof (globalThis as { WebSocketPair?: unknown }).WebSocketPair === "function") {
@@ -184,6 +191,9 @@ export const gatewayFetcher = (target: GatewayTarget): NativeFetcher => ({
         ? undefined
         : await request.arrayBuffer();
     const headers = new Headers(request.headers);
+    for (const [name, value] of target.headers?.() ?? []) {
+      if (!headers.has(name)) headers.set(name, value);
+    }
     headers.set(TOKEN_HEADER, target.token);
     return fetch(gatewayUrl(target, url.pathname, url.search), {
       method: request.method,
