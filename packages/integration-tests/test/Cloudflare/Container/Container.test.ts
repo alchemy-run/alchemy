@@ -298,13 +298,14 @@ describe.concurrent.each([
               Effect.retry({ schedule: readinessSchedule, times: 6 }),
             );
 
-          // A fresh application also has no instance while it provisions, so
-          // retry until the first object holds the one instance.
+          // A fresh application also has no instance while it provisions,
+          // which has taken over 90 seconds, so retry until the first object
+          // holds the one instance.
           const first = yield* startCapped("first").pipe(
             Effect.repeat({
               schedule: Schedule.spaced("5 seconds"),
               until: (result) => result.tag === "running",
-              times: 18,
+              times: 48,
             }),
           );
           expect(first).toEqual({ phase: "monitor", tag: "running" });
@@ -314,7 +315,7 @@ describe.concurrent.each([
             tag: "NoContainerInstanceError",
           });
         }).pipe(logLevel),
-        { tags: ["live"], timeout },
+        { tags: ["live"], timeout: 360_000 },
       );
 
       // The proxy pattern from #1334 (`yield* fetch(yield* HttpServerRequest)`):
