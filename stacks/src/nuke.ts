@@ -4,6 +4,7 @@ import * as Boat from "@alchemy.run/boat";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Convex from "@alchemy.run/convex";
 import * as Daytona from "@alchemy.run/daytona";
+import * as Discord from "@alchemy.run/discord";
 import * as E2B from "@alchemy.run/e2b";
 import * as Fly from "@alchemy.run/fly";
 import * as GCP from "@alchemy.run/gcp";
@@ -29,6 +30,7 @@ export default Alchemy.Stack(
       Daytona.providers(),
       Fly.providers(),
       GCP.providers(),
+      Discord.providers(),
       Hetzner.providers(),
       Neon.providers(),
       Planetscale.providers(),
