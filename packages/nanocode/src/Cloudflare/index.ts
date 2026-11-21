@@ -45,7 +45,11 @@ export const DurableObjectHost: Layer.Layer<Host> = Layer.succeed(Host, {
     id: Option.match(state, { onNone: () => "", onSome: (state) => state.id?.toString() ?? "" }),
     module: Effect.tryPromise({
       // Imported only in the Worker, where the bundler has compiled it.
-      try: () => import("nanocode-ts/nanocode_wasm.wasm").then((wasm) => wasm.default),
+      try: () =>
+        // @ts-ignore -- a `.wasm` import has no types; the Worker's bundler makes it a compiled module
+        (import("nanocode-ts/nanocode_wasm.wasm") as Promise<{ default: WebAssembly.Module }>).then(
+          (wasm) => wasm.default,
+        ),
       catch: (cause) =>
         new NanocodeError({ message: "nanocode's WebAssembly module could not be loaded", cause }),
     }),
