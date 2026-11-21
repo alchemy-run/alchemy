@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import { conformanceTests, waitForReady } from "../Cloudflare/Workers/conformance/spec.ts";
+import { CLASS_SECRET, ClassSecretConfig } from "./fixtures/class-secret.ts";
 import { expectDurableStream } from "./fixtures/durable-stream-check.ts";
 import {
   instances,
@@ -41,7 +42,7 @@ const program = (phase: string) =>
     const front = yield* Front;
     const actors = yield* RustActors().pipe(Effect.provide(RustPool(phase)));
     return { url: front.uri, rust: rustTarget(actors) };
-  }).pipe(Effect.provide(CounterLive));
+  }).pipe(Effect.provide(CounterLive.pipe(Layer.provide(ClassSecretConfig))));
 const accessor = "roles/secretmanager.secretAccessor";
 /** Out-of-band reads run with the GCP credentials and project the stack deploys with. */
 const gcp = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -104,9 +105,15 @@ describe.skipIf(!!process.env.FAST)(
           // their own account granted that secret alone.
           const nodes = yield* instances(sharedStack, /rustnode\d+$/);
           expect(nodes).toHaveLength(2);
-          for (const node of nodes) {
+          // The pool hosting the class that reads a secret as config.
+          const defaults = yield* instances(sharedStack, /defaultnode\d+$/);
+          expect(defaults.length).toBeGreaterThan(0);
+          expect(JSON.stringify(defaults.map(metadataOf))).not.toContain(CLASS_SECRET);
+          for (const node of [...nodes, ...defaults]) {
             const metadata = metadataOf(node);
             expect(metadata["rivet-node-env"]).not.toMatch(/^RIVET_TOKEN=/m);
+            // Secrets the classes read as config come from Secret Manager too.
+            expect(metadata["rivet-node-secrets"]).toMatch(/^RIVET_SECRET_ENV=projects\//m);
             const version = /^RIVET_TOKEN=(.+)$/m.exec(metadata["rivet-node-secrets"] ?? "")?.[1];
             expect(version).toMatch(/^projects\/[^/]+\/secrets\/[^/]+\/versions\/\d+$/);
             const email = node.serviceAccounts?.[0]?.email;
