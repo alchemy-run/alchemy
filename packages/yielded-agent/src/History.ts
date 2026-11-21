@@ -1,5 +1,7 @@
+import { memoryRunStore, type RunStore } from "@alchemy.run/ai/Runs";
 import { InMemory } from "@yielded/agent";
 import type { ThreadHistory } from "@yielded/agent/thread-history";
+import type { Callbacks } from "alchemy/Callback";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -16,6 +18,14 @@ export interface InstanceHistory {
    * first run, and kept for as long as the instance lives.
    */
   readonly layer: Layer.Layer<ThreadHistory, unknown, RuntimeContext>;
+  /** Where submitted runs are recorded until they end. */
+  readonly runs: RunStore;
+  /**
+   * The durable callbacks of an instance that can be evicted: what the
+   * harness registers its wake-up with, so a submitted run an instance
+   * did not live to finish is run again.
+   */
+  readonly callbacks?: Layer.Layer<Callbacks>;
 }
 
 /**
@@ -44,5 +54,9 @@ let memoryInstances = 0;
  * @provides YieldedAgent.History
  */
 export const MemoryHistory: Layer.Layer<History> = Layer.succeed(History, {
-  instance: Effect.sync(() => ({ id: `memory-${++memoryInstances}`, layer: InMemory.layer })),
+  instance: Effect.sync(() => ({
+    id: `memory-${++memoryInstances}`,
+    layer: InMemory.layer,
+    runs: memoryRunStore(),
+  })),
 });

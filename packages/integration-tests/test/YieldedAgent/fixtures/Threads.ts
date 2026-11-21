@@ -10,13 +10,15 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Assistant, Clerk } from "./agents.ts";
+import { Assistant, Clerk, Patient } from "./agents.ts";
 import { Base, Gateway } from "./infra.ts";
 import {
   LookupCode,
   LookupCodeLive,
   ReadFile,
   ReadFileLive,
+  SlowCode,
+  SlowCodeLive,
   Withdraw,
   WithdrawLive,
   WriteFile,
@@ -34,6 +36,7 @@ const FastLive = AICloudflare.Model(Fast, {
 const HarnessLive = Layer.mergeAll(
   FastLive,
   LookupCodeLive,
+  SlowCodeLive,
   WithdrawLive,
   Layer.mergeAll(WriteFileLive, ReadFileLive).pipe(Layer.provideMerge(AIBoat.Sandboxes(Base))),
   YieldedCloudflare.DurableObjectHistory,
@@ -47,7 +50,8 @@ export default class YieldedThreads extends Cloudflare.DurableObject<YieldedThre
     const sandboxes = yield* Boat.CreateSandbox(yield* Base);
     const harness = yield* YieldedAgent.Harness({
       models: [Fast],
-      tools: [LookupCode, Withdraw, WriteFile, ReadFile],
+      tools: [LookupCode, Withdraw, WriteFile, ReadFile, SlowCode],
+      agents: [Patient],
     });
 
     return Effect.gen(function* () {
@@ -82,6 +86,19 @@ export default class YieldedThreads extends Cloudflare.DurableObject<YieldedThre
           if (found === undefined) return null;
           return found.state === "archiving" || found.state === "archived" ? "paused" : "running";
         }),
+        /** Accept a run and return at once. */
+        submit: Effect.fn(function* (thread: string, text: string, requestId: string) {
+          yield* harness.submit(Patient, text, { thread, requestId });
+        }, Effect.orDie),
+        submitted: Effect.fn(function* (requestId: string) {
+          const run = yield* harness.submitted(Patient, requestId);
+          if (run === undefined) return null;
+          return run.status === "done"
+            ? { status: run.status, output: String(run.output) }
+            : run.status === "failed"
+              ? { status: run.status, message: run.message }
+              : { status: run.status };
+        }, Effect.orDie),
         suspend: (thread: string) => harness.suspendSandbox(thread),
         remove: (thread: string) => harness.removeSandbox(thread),
         // Kill this instance; the next call builds a fresh one.

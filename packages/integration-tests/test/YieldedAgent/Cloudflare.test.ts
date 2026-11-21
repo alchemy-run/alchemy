@@ -130,6 +130,40 @@ test(
 );
 
 test(
+  "a submitted run cut off by a crashed instance is run again from the alarm",
+  Effect.gen(function* () {
+    const object = `user-${Date.now()}`;
+    const submit = {
+      text: 'Look up the slow secret code for the word "teal" with the slow_code tool, then reply with the code.',
+      requestId: "slow-1",
+    };
+    yield* call(`/${object}/slow/submit`, submit);
+    // Submitting again is the same run.
+    yield* call(`/${object}/slow/submit`, submit);
+    const started = yield* call(`/${object}/slow/submitted`, { requestId: "slow-1" });
+    expect(started.run.status).toBe("running");
+
+    // Kill the instance while the slow tool is running. Nothing calls it again but its alarm.
+    yield* Effect.sleep("4 seconds");
+    yield* call(`/${object}/slow/crash`, {}).pipe(Effect.ignore);
+
+    const { run } = yield* call(`/${object}/slow/submitted`, { requestId: "slow-1" }).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("5 seconds"),
+        until: (result: { run: { status: string } }) => result.run.status !== "running",
+        times: 24,
+      }),
+    );
+    expect(run.status).toBe("done");
+    expect(run.output).toContain("SLOW-TEAL-4242");
+
+    // An id nothing was submitted under has no run.
+    expect((yield* call(`/${object}/slow/submitted`, { requestId: "never" })).run).toBeNull();
+  }),
+  { tags, timeout: 240_000 },
+);
+
+test(
   "tools work in a Thread's Boat sandbox, which suspends, resumes and is removed",
   Effect.gen(function* () {
     const object = `sbx-${Date.now()}`;

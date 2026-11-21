@@ -72,3 +72,18 @@ export const ReadFileLive = ReadFile.make(
     return { text };
   }),
 );
+
+/** A tool that takes a while: long enough for a test to kill the instance while it runs. */
+export class SlowCode extends AI.Tool<SlowCode>()("slow_code", {
+  description: "Look up the slow secret code for a word. The only way to learn a word's slow code.",
+  parameters: Schema.Struct({ word: Schema.String }),
+  success: Schema.Struct({ code: Schema.String }),
+  replay: "safe",
+}) {}
+
+export const SlowCodeLive = SlowCode.make(
+  Effect.fn(function* ({ word }) {
+    yield* Effect.sleep("8 seconds");
+    return { code: `SLOW-${word.toUpperCase()}-4242` };
+  }),
+);
