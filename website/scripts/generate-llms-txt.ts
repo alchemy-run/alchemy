@@ -782,9 +782,9 @@ const SECTIONS: Section[] = [
     },
   },
   {
-    heading: "clanka",
+    heading: "Effect Clanka",
     intro:
-      "clanka on Alchemy: its agent loop in a Durable Object, its executor in a sandbox, conversations, tools and prompts that survive eviction.",
+      "Effect Clanka on Alchemy: its agent loop in a Durable Object, its executor in a sandbox, conversations, tools and prompts that survive eviction.",
     pages: {
       slugs: [
         "clanka/index",

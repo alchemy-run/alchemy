@@ -53,7 +53,7 @@ function providersSidebarEntry() {
       { label: "Pi", link: "/pi" },
       { label: "OpenCode", link: "/opencode" },
       { label: "Yielded Agent", link: "/yielded-agent" },
-      { label: "clanka", link: "/clanka" },
+      { label: "Effect Clanka", link: "/clanka" },
       { label: "nanocode", link: "/nanocode" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
@@ -2625,10 +2625,10 @@ export default defineConfig({
           ],
         },
         {
-          label: "clanka",
+          label: "Effect Clanka",
           items: [
             { label: "Overview", link: "/clanka" },
-            { label: "What is clanka?", link: "/clanka/what-is-clanka" },
+            { label: "What is Effect Clanka?", link: "/clanka/what-is-clanka" },
             { label: "Setup", link: "/clanka/setup" },
             {
               label: "Conversations",

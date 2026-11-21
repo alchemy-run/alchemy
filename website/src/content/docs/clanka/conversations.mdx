@@ -1,6 +1,6 @@
 ---
 title: Conversations & prompts
-description: Name a clanka conversation, prompt it, follow the scripts it writes, choose the model, and read or reset its history.
+description: Name a Clanka conversation, prompt it, follow the scripts it writes, choose the model, and read or reset its history.
 ---
 
 A conversation is one history of prompts, scripts and output, with one sandbox. A prompt adds to it and runs until the agent finishes the task.
@@ -25,7 +25,7 @@ yield* harness.conversation("issue-42").prompt("Now add a test for negative pric
 
 ## Follow the agent's output
 
-`send` returns a Stream of clanka's own output parts as they happen: the model's reasoning, each script as it is written, and what each script printed.
+`send` returns a Stream of Clanka's own output parts as they happen: the model's reasoning, each script as it is written, and what each script printed.
 
 ```typescript
 const parts = yield* Stream.runCollect(conversation.send("Fix the failing test."));
@@ -43,7 +43,7 @@ const harness = yield* Clanka.Harness({ models: [Fast, Smart] });
 yield* harness.conversation("issue-42").prompt("Plan the refactor.", { model: Smart });
 ```
 
-clanka's model writes a program on every turn, so a small model that only handles simple tool calls does poorly. Use a model that is good at code.
+Clanka's model writes a program on every turn, so a small model that only handles simple tool calls does poorly. Use a model that is good at code.
 
 ## Add instructions to a prompt
 
@@ -53,7 +53,7 @@ yield* conversation.prompt("Fix the failing test.", {
 });
 ```
 
-clanka also reads an `AGENTS.md` in the executor's directory, and offers the skills it finds under `.agents/skills` there.
+Clanka also reads an `AGENTS.md` in the executor's directory, and offers the skills it finds under `.agents/skills` there.
 
 ## Read or reset the history
 

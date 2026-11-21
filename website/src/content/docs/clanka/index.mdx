@@ -1,17 +1,17 @@
 ---
-title: clanka
-description: Run the clanka coding agent with Alchemy. Its agent loop in a Durable Object on your models, its executor in a sandbox for each conversation.
+title: Effect Clanka
+description: Run the Effect Clanka coding agent with Alchemy. Its agent loop in a Durable Object on your models, its executor in a sandbox for each conversation.
 ---
 
 import HubMap from "../../../components/HubMap.astro";
 
-[clanka](https://github.com/Effectful-Tech/clanka) is a coding agent built with Effect. Its model has one tool: it writes JavaScript, and an executor runs that script, which reads and edits files, runs commands and calls your tools. Alchemy runs clanka's agent loop in a Durable Object on a model you declare, and its executor in a sandbox for each conversation. Models, tools and sandboxes are the ones you declare with [`@alchemy.run/ai`](/ai).
+[Effect Clanka](https://github.com/Effectful-Tech/clanka) is a coding agent built with Effect. Its model has one tool: it writes JavaScript, and an executor runs that script, which reads and edits files, runs commands and calls your tools. Alchemy runs Clanka's agent loop in a Durable Object on a model you declare, and its executor in a sandbox for each conversation. Models, tools and sandboxes are the ones you declare with [`@alchemy.run/ai`](/ai).
 
-**New to clanka?** Start with [What is clanka?](/clanka/what-is-clanka).
+**New to Effect Clanka?** Start with [What is Effect Clanka?](/clanka/what-is-clanka).
 
 ## A quick example
 
-A model, and where sandboxes run. The snapshot has clanka installed:
+A model, and where sandboxes run. The snapshot has Clanka installed:
 
 ```typescript title="src/agent.ts"
 import * as AI from "@alchemy.run/ai";
