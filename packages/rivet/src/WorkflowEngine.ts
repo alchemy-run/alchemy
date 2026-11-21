@@ -1,6 +1,6 @@
 import type { Callbacks } from "alchemy/Callback";
 import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
-import { RuntimeContext } from "alchemy/RuntimeContext";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
 import { InputGate } from "alchemy/Workers/InputGate";
 import * as Config from "effect/Config";
@@ -14,7 +14,6 @@ import type { WorkflowEngine } from "effect/workflow";
 import {
   DurableObject,
   type DurableObjectNamespace,
-  DurableObjectTypeId,
   type DurableObjectRuntimeContext,
   makeNamespace,
   PlatformDeclaration,
@@ -103,6 +102,14 @@ const engineState = (state: DurableObjectState["Service"]): EngineStateShape => 
   },
 });
 
+/**
+ * Set while a class's phase builds the workflows' Layer: the engine inside it
+ * registers with that class instead of hosting it again.
+ */
+class BuildingClass extends Context.Service<BuildingClass, string>()(
+  "Rivet/WorkflowEngine/BuildingClass",
+) {}
+
 /** The workflows each class runs, keyed by class name, as its class phase registers them. */
 const hosted = new Map<string, Map<string, ExecutionBuild>>();
 const workflowsOf = (name: string) => {
@@ -124,8 +131,12 @@ const hostClassPhase = (options: WorkflowEngineOptions<unknown>) =>
     // The engine's executions were written for Cloudflare's input gate.
     yield* Layer.buildWithScope(InputGate, scope);
     const handler = options.handler ?? "default";
-    const module = yield* Effect.promise(() => import(options.main));
-    const layer: unknown = module[handler];
+    // On a node, the bootstrap is building that export now: importing `main`
+    // would wait on its own evaluation.
+    const node = yield* Effect.serviceOption(NodeHost);
+    const layer: unknown = Option.isSome(node)
+      ? node.value.entrypoint
+      : (yield* Effect.promise(() => import(options.main)))[handler];
     if (!Layer.isLayer(layer)) {
       return yield* Effect.die(
         new WorkflowsLayerNotFound({
@@ -140,7 +151,7 @@ const hostClassPhase = (options: WorkflowEngineOptions<unknown>) =>
       layer as Layer.Layer<unknown>,
       yield* Layer.makeMemoMap,
       scope,
-    ).pipe(Effect.orDie);
+    ).pipe(Effect.provideService(BuildingClass, options.name), Effect.orDie);
     const workflows = workflowsOf(options.name);
     return Effect.gen(function* () {
       const state = yield* DurableObjectState;
@@ -283,8 +294,8 @@ export const layerWorkflowEngine = <PoolReq>(
   // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the class is declared dynamically; its requirements are the pool's and the providers'
   Layer.unwrap(
     Effect.gen(function* () {
-      const ctx = Option.getOrUndefined(yield* Effect.serviceOption(RuntimeContext));
-      if (ctx?.Type === DurableObjectTypeId && ctx.id === options.name) {
+      const building = yield* Effect.serviceOption(BuildingClass);
+      if (Option.isSome(building) && building.value === options.name) {
         // Built by the class's own phase: register the workflows with it. A
         // run reaches other executions (its children, its parent) through
         // the control plane: they may run on another node.
