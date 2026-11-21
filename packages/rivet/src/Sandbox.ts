@@ -10,7 +10,7 @@ import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { decodeActionError, decodeActionResponse, encodeActionRequest } from "./internal/Bare.ts";
 import { encodeCbor } from "./internal/Cbor.ts";
-import { gatewaySend, gatewayUrl } from "./internal/Gateway.ts";
+import { engineSend, gatewaySend, gatewayUrl } from "./internal/Gateway.ts";
 import type { Software } from "./Registry.ts";
 import { Services, SERVICES_POOL } from "./Services.ts";
 
@@ -389,11 +389,7 @@ const makeHandle = (target: Target | undefined, template: SandboxTemplate, key: 
       const engine = (method: "GET" | "DELETE", path: string) =>
         Effect.tryPromise({
           try: async (signal) => {
-            const response = await fetch(`${base}${path}`, {
-              method,
-              headers: { authorization: `Bearer ${target.token}` },
-              signal,
-            });
+            const response = await engineSend(`${base}${path}`, target.token, { method, signal });
             const text = await response.text();
             return { ok: response.ok, status: response.status, text };
           },

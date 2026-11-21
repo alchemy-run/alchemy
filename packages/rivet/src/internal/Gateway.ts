@@ -275,3 +275,18 @@ export const gatewaySend = (
     body: init.body as BodyInit | undefined,
     signal: init.signal,
   });
+
+/**
+ * Send one request to the control plane's own API (`/actors`, …) over the
+ * runtime's own `fetch`, with the caller's token as a bearer token.
+ */
+export const engineSend = (
+  url: string,
+  token: string,
+  init: { readonly method: "GET" | "DELETE"; readonly signal: AbortSignal },
+) =>
+  fetch(url, {
+    method: init.method,
+    headers: { authorization: `Bearer ${token}` },
+    signal: init.signal,
+  });
