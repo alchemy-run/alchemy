@@ -11,7 +11,10 @@ export const DomainDatabase = ClusterDocker.Database("ClusterDomain");
 /** How many connections each of a runner's pools to the database holds at most. */
 export const DOMAIN_DATABASE_CONNECTIONS = 4;
 
+/** The pool's runners. */
+export const DOMAIN_RUNNERS = 2;
+
 export const DomainPool = ClusterDocker.SwarmPool("DomainPool", {
-  replicas: 2,
+  replicas: DOMAIN_RUNNERS,
   databaseConnections: DOMAIN_DATABASE_CONNECTIONS,
 }).pipe(Layer.provide(DomainDatabase));

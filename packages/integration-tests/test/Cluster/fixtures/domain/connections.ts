@@ -9,7 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
-import { DOMAIN_DATABASE_CONNECTIONS } from "./cluster.ts";
+import { DOMAIN_DATABASE_CONNECTIONS, DOMAIN_RUNNERS as RUNNERS } from "./cluster.ts";
 import { docker } from "./crash.ts";
 
 type TestFn = (
@@ -54,8 +54,12 @@ const postgres = Effect.fn(function* (stack: ConnectionsOptions["stack"]) {
   return container!;
 });
 
-/** The connections each client address (one per runner) holds to the cluster's database. */
-const connectionsByClient = (container: string) =>
+/**
+ * The connections clients hold to the cluster's database. Swarm's load
+ * balancer gives every runner's connection the same source address, so
+ * this counts them all: the front opens none, so they are the runners'.
+ */
+const databaseConnections = (container: string) =>
   docker([
     "exec",
     container,
@@ -65,17 +69,8 @@ const connectionsByClient = (container: string) =>
     "-d",
     "cluster",
     "-tAc",
-    "SELECT client_addr, count(*) FROM pg_stat_activity WHERE datname = 'cluster' AND client_addr IS NOT NULL GROUP BY 1",
-  ]).pipe(
-    Effect.map((out) =>
-      out === ""
-        ? []
-        : out.split("\n").map((line) => {
-            const [client, count] = line.split("|");
-            return { client: client!, count: Number(count) };
-          }),
-    ),
-  );
+    "SELECT count(*) FROM pg_stat_activity WHERE datname = 'cluster' AND client_addr IS NOT NULL",
+  ]).pipe(Effect.map(Number));
 
 export const connections = ({ test, url, stack }: ConnectionsOptions) =>
   test(
@@ -93,12 +88,12 @@ export const connections = ({ test, url, stack }: ConnectionsOptions) =>
           ),
           Effect.retry({ schedule: Schedule.spaced("500 millis"), times: 10 }),
         );
-      // The most connections any one client held, sampled through the burst.
+      // The most connections the runners held at once, sampled through the burst.
       let most = 0;
-      const sampler = yield* connectionsByClient(container).pipe(
-        Effect.tap((rows) =>
+      const sampler = yield* databaseConnections(container).pipe(
+        Effect.tap((count) =>
           Effect.sync(() => {
-            for (const { count } of rows) most = Math.max(most, count);
+            most = Math.max(most, count);
           }),
         ),
         Effect.repeat(Schedule.spaced("200 millis")),
@@ -114,10 +109,11 @@ export const connections = ({ test, url, stack }: ConnectionsOptions) =>
       );
       yield* Effect.sleep("1 second");
       yield* Fiber.interrupt(sampler);
-      // The cluster's own pool and one storage pool, each of at most
-      // `databaseConnections`, however many models the runner hosts.
+      // Each of the two runners: the cluster's own pool and one storage
+      // pool, each of at most `databaseConnections`, however many models
+      // the runner hosts.
       expect(most).toBeGreaterThan(0);
-      expect(most).toBeLessThanOrEqual(2 * DOMAIN_DATABASE_CONNECTIONS);
+      expect(most).toBeLessThanOrEqual(RUNNERS * 2 * DOMAIN_DATABASE_CONNECTIONS);
     }),
     { timeout: 180_000 },
   );
