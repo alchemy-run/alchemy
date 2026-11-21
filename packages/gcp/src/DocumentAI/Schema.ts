@@ -200,13 +200,7 @@ export const SchemaProvider = () =>
 
       if (current === undefined) {
         current = yield* retryTransient(
-          documentai.createProjectsLocationsSchemas({
-            parent,
-            body: {
-              displayName,
-              labels: desiredLabels,
-            },
-          }),
+          documentai.createProjectsLocationsSchemas({ displayName, labels: desiredLabels, parent }),
         ).pipe(
           Effect.catchTag("Conflict", (error) =>
             findOwned(id, env.project, parent, hinted).pipe(
@@ -233,15 +227,13 @@ export const SchemaProvider = () =>
       if (labelsChanged || displayChanged) {
         current = yield* retryTransient(
           documentai.patchProjectsLocationsSchemas({
+            displayName,
+            labels: desiredLabels,
             name: currentName,
             updateMask: updateMaskOf(
               displayChanged ? "displayName" : undefined,
               labelsChanged ? "labels" : undefined,
             ),
-            body: {
-              displayName,
-              labels: desiredLabels,
-            },
           }),
         );
       }

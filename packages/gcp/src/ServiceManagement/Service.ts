@@ -240,12 +240,7 @@ export const ServiceProvider = () =>
       if (current === undefined) {
         // A name deleted in the last 30 days is soft-deleted: undelete it.
         const created = yield* servicemanagement
-          .createServices({
-            body: {
-              serviceName,
-              producerProjectId,
-            },
-          })
+          .createServices({ serviceName, producerProjectId })
           .pipe(Effect.catchTag(["Conflict", "ServiceSoftDeleted"], () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -260,12 +255,10 @@ export const ServiceProvider = () =>
         // A new service is briefly invisible to the config API.
         yield* servicemanagement
           .createServicesConfigs({
+            name: serviceName,
+            title: news.title,
+            producerProjectId,
             serviceName,
-            body: {
-              name: serviceName,
-              title: news.title,
-              producerProjectId,
-            },
           })
           .pipe(
             Effect.retry({

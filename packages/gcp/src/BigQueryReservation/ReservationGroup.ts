@@ -245,11 +245,7 @@ export const ReservationGroupProvider = () =>
 
       if (current === undefined) {
         const created = yield* bigqueryreservation
-          .createProjectsLocationsReservationGroups({
-            parent,
-            reservationGroupId,
-            body: {},
-          })
+          .createProjectsLocationsReservationGroups({ parent, reservationGroupId })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }

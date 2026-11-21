@@ -4,6 +4,7 @@ import * as RivetDocker from "@alchemy.run/rivet/Docker";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as RivetApi from "@distilled.cloud/rivet";
+import * as Pools from "@distilled.cloud/rivet/pools";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -38,7 +39,7 @@ const deployPool = (props: { drainOnVersionUpgrade?: boolean; actorEvictionPerio
 
 /** Read the pool straight from the control plane. */
 const observe = (deployed: { name: string; namespace: string; token: unknown }) =>
-  RivetApi.pools.getPool({ pool: deployed.name, namespace: deployed.namespace }).pipe(
+  Pools.getPool({ pool: deployed.name, namespace: deployed.namespace }).pipe(
     Effect.map((res) => res.pool),
     Effect.catchTag("PoolNotFound", () => Effect.undefined),
     Effect.provide(

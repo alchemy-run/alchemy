@@ -329,21 +329,19 @@ export const DataScanProvider = () =>
       if (current === undefined) {
         const created = yield* retryQuota(
           dataplex.createProjectsLocationsDataScans({
+            description: news.description,
+            displayName: news.displayName,
+            labels: desiredLabels,
+            data: news.data,
+            executionSpec: news.executionSpec,
+            executionIdentity: news.executionIdentity,
+            dataQualitySpec: news.dataQualitySpec,
+            dataProfileSpec: news.dataProfileSpec,
+            dataDiscoverySpec: news.dataDiscoverySpec,
+            dataDocumentationSpec: news.dataDocumentationSpec,
+            unstructuredDataProfileSpec: news.unstructuredDataProfileSpec,
             parent: parentOf(env.project, location),
             dataScanId,
-            body: {
-              description: news.description,
-              displayName: news.displayName,
-              labels: desiredLabels,
-              data: news.data,
-              executionSpec: news.executionSpec,
-              executionIdentity: news.executionIdentity,
-              dataQualitySpec: news.dataQualitySpec,
-              dataProfileSpec: news.dataProfileSpec,
-              dataDiscoverySpec: news.dataDiscoverySpec,
-              dataDocumentationSpec: news.dataDocumentationSpec,
-              unstructuredDataProfileSpec: news.unstructuredDataProfileSpec,
-            },
           }),
         ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -388,6 +386,15 @@ export const DataScanProvider = () =>
       ) {
         const operation = yield* retryQuota(
           dataplex.patchProjectsLocationsDataScans({
+            description: news.description,
+            displayName: news.displayName,
+            labels: desiredLabels,
+            executionSpec: news.executionSpec,
+            dataQualitySpec: news.dataQualitySpec,
+            dataProfileSpec: news.dataProfileSpec,
+            dataDiscoverySpec: news.dataDiscoverySpec,
+            dataDocumentationSpec: news.dataDocumentationSpec,
+            unstructuredDataProfileSpec: news.unstructuredDataProfileSpec,
             name: current.name ?? name,
             updateMask: [
               labelsChanged ? "labels" : undefined,
@@ -402,18 +409,6 @@ export const DataScanProvider = () =>
             ]
               .filter((field): field is string => field !== undefined)
               .join(","),
-            body: {
-              name: current.name ?? name,
-              description: news.description,
-              displayName: news.displayName,
-              labels: desiredLabels,
-              executionSpec: news.executionSpec,
-              dataQualitySpec: news.dataQualitySpec,
-              dataProfileSpec: news.dataProfileSpec,
-              dataDiscoverySpec: news.dataDiscoverySpec,
-              dataDocumentationSpec: news.dataDocumentationSpec,
-              unstructuredDataProfileSpec: news.unstructuredDataProfileSpec,
-            },
           }),
         );
         yield* waitForOperation(operation);

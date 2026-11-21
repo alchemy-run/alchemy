@@ -236,9 +236,9 @@ export const AdminReservationProvider = () =>
       if (current === undefined) {
         const created = yield* pubsublite
           .createAdminProjectsLocationsReservations({
+            throughputCapacity,
             parent: parentOf(env.project, location),
             reservationId,
-            body: { throughputCapacity },
           })
           .pipe(Effect.catchTag("Conflict", () => getReservation(name)));
         current = created ?? undefined;
@@ -254,12 +254,9 @@ export const AdminReservationProvider = () =>
       ]);
       if (mask.length > 0) {
         current = yield* pubsublite.patchAdminProjectsLocationsReservations({
+          throughputCapacity,
           name: observedName,
           updateMask: mask,
-          body: {
-            name: observedName,
-            throughputCapacity,
-          },
         });
       }
 

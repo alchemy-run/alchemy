@@ -50,6 +50,7 @@ import { TargetGroup, type TargetGroupArn } from "../ELBv2/TargetGroup.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import { plainJson } from "../internal/Observe.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
+import { type Partition } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
@@ -71,7 +72,8 @@ import {
 } from "./Task.ts";
 
 export type ServiceName = string;
-export type ServiceArn = `arn:aws:ecs:${RegionID}:${AccountID}:service/${string}/${ServiceName}`;
+export type ServiceArn =
+  `arn:${Partition}:ecs:${RegionID}:${AccountID}:service/${string}/${ServiceName}`;
 
 export const isService = (value: any): value is Service =>
   typeof value === "object" &&

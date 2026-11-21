@@ -444,11 +444,9 @@ export const ServiceProvider = () =>
       if (current === undefined) {
         const created = yield* servicedirectory
           .createProjectsLocationsNamespacesServices({
+            annotations: desiredAnnotations,
             parent: parent.parent,
             serviceId,
-            body: {
-              annotations: desiredAnnotations,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -462,12 +460,9 @@ export const ServiceProvider = () =>
       const { upsert, removed } = diffLabels(observedAnnotations, desiredAnnotations);
       if (upsert.length > 0 || removed.length > 0) {
         current = yield* servicedirectory.patchProjectsLocationsNamespacesServices({
+          annotations: desiredAnnotations,
           name,
           updateMask: "annotations",
-          body: {
-            name,
-            annotations: desiredAnnotations,
-          },
         });
       }
 

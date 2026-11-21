@@ -216,11 +216,9 @@ export const SchemaRegistryProvider = () =>
         const created = yield* retryTransient(
           kafka
             .createProjectsLocationsSchemaRegistries({
+              schemaRegistryId,
+              schemaRegistry: {},
               parent: locationParent(env.project, location),
-              body: {
-                schemaRegistryId,
-                schemaRegistry: {},
-              },
             })
             .pipe(Effect.catchTag("Conflict", () => getSchemaRegistry(name))),
         );

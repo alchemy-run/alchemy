@@ -396,10 +396,10 @@ export const CapacityCommitmentProvider = () =>
       if (current === undefined) {
         const created = yield* bigqueryreservation
           .createProjectsLocationsCapacityCommitments({
+            ...createBody,
             parent,
             capacityCommitmentId,
             enforceSingleAdminProjectPerOrg: news.enforceSingleAdminProjectPerOrg,
-            body: createBody,
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -425,12 +425,12 @@ export const CapacityCommitmentProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* bigqueryreservation.patchProjectsLocationsCapacityCommitments({
-          name: current.name ?? name,
-          updateMask: updateMask.join(","),
-          body: compact({
+          ...compact({
             plan: news.plan,
             renewalPlan: news.renewalPlan,
           }),
+          name: current.name ?? name,
+          updateMask: updateMask.join(","),
         });
       }
 

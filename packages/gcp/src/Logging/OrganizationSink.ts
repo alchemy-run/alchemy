@@ -399,10 +399,10 @@ export const OrganizationSinkProvider = () =>
       if (current === undefined) {
         const created = yield* logging
           .createOrganizationsSinks({
+            ...toCreateBody(sinkId, news, desiredDescription),
             parent: organization,
             uniqueWriterIdentity: news.uniqueWriterIdentity,
             customWriterIdentity: news.customWriterIdentity,
-            body: toCreateBody(sinkId, news, desiredDescription),
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -465,11 +465,11 @@ export const OrganizationSinkProvider = () =>
           body.interceptChildren = desiredInterceptChildren;
         }
         current = yield* logging.updateOrganizationsSinks({
+          ...body,
           sinkName: current.resourceName ?? name,
           uniqueWriterIdentity: news.uniqueWriterIdentity,
           customWriterIdentity: news.customWriterIdentity,
           updateMask: updateMask.join(","),
-          body,
         });
       }
 

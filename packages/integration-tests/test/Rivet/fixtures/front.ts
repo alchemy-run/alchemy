@@ -17,6 +17,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { conformanceFetch } from "../../Cloudflare/Workers/conformance/routes.ts";
 import AbandonedAlarm from "./abandoned-alarm.ts";
+import Callbacks from "./callbacks.ts";
 import { BinaryLog, ChatLog } from "./chat-log.ts";
 import { Cluster, FRONT_PORT, Services } from "./cluster.ts";
 import Counter from "./counter.ts";
@@ -46,6 +47,7 @@ export default class Front extends Docker.Service<Front>()(
     const greeters = yield* Greeter;
     const lifecycles = yield* Lifecycle;
     const abandonedAlarms = yield* AbandonedAlarm;
+    const callbacks = yield* Callbacks;
     const parallelTallies = yield* Tally;
     const gatedTallies = yield* GatedTally;
     const reentrants = yield* Reentrant;
@@ -263,6 +265,36 @@ export default class Front extends Docker.Service<Front>()(
             });
           }
           return yield* HttpServerResponse.json(yield* instance.alarmState());
+        }
+        // `/callbacks/<name>/<step>`: schedule, cancel or read durable
+        // callbacks; `counts` reads what ran without waking the instance.
+        if (group === "callbacks" && name !== undefined) {
+          const step = url.pathname.split("/").filter((segment) => segment.length > 0)[2];
+          const instance = callbacks.getByName(name);
+          const param = (key: string) => url.searchParams.get(key) ?? "";
+          if (step === "counts") {
+            const kinds = ["every", "cron", "once", "flaky", "alarm", "rolled-back", "slept"];
+            const counts = yield* Effect.forEach(kinds, (kind) =>
+              counters.getByName(`${kind}-${name}`).get(),
+            );
+            return yield* HttpServerResponse.json(
+              Object.fromEntries(kinds.map((kind, i) => [kind, counts[i]])),
+            );
+          }
+          if (step === "status") {
+            return yield* HttpServerResponse.json({
+              scheduledAt: yield* instance.status(param("id")),
+            });
+          }
+          if (step === "every") yield* instance.every();
+          else if (step === "cron") yield* instance.cron();
+          else if (step === "once") yield* instance.once(Number(param("after")));
+          else if (step === "flaky") yield* instance.flaky();
+          else if (step === "cancel") yield* instance.cancel(param("id"));
+          else if (step === "rolled-back") yield* instance.rolledBack();
+          else if (step === "alarm") yield* instance.armAlarm(Number(param("times")));
+          else return HttpServerResponse.text("Not Found", { status: 404 });
+          return yield* HttpServerResponse.json({ ok: true });
         }
         if (group === "greet" && name !== undefined) {
           const greeting = yield* greeters.getByName("front").greet(name);

@@ -442,11 +442,7 @@ export const AssignmentProvider = () =>
 
       if (current === undefined) {
         const created = yield* bigqueryreservation
-          .createProjectsLocationsReservationsAssignments({
-            parent,
-            assignmentId,
-            body,
-          })
+          .createProjectsLocationsReservationsAssignments({ ...body, parent, assignmentId })
           .pipe(
             Effect.catchTag("Conflict", () =>
               findExisting(parent, assignee, jobType, assignmentId),
@@ -472,9 +468,9 @@ export const AssignmentProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* bigqueryreservation.patchProjectsLocationsReservationsAssignments({
+          ...body,
           name: currentName,
           updateMask: updateMask.join(","),
-          body,
         });
       }
 

@@ -50,18 +50,12 @@ export default class DataConnectBindingsHost extends GCP.Function<DataConnectBin
 
     return {
       fetch: serveProbes({
-        executeGraphql: executeGraphql({ body: { query: "{ __typename }" } }),
-        executeGraphqlRead: executeGraphqlRead({
-          body: { query: "{ __typename }" },
-        }),
-        executeQuery: executeQuery({
-          body: { operationName: "ListAlchemyNotes" },
-        }),
+        executeGraphql: executeGraphql({ query: "{ __typename }" }),
+        executeGraphqlRead: executeGraphqlRead({ query: "{ __typename }" }),
+        executeQuery: executeQuery({ operationName: "ListAlchemyNotes" }),
         executeMutation: executeMutation({
-          body: {
-            operationName: "CreateAlchemyNote",
-            variables: { title: "hello" },
-          },
+          operationName: "CreateAlchemyNote",
+          variables: { title: "hello" },
         }),
       }),
     };

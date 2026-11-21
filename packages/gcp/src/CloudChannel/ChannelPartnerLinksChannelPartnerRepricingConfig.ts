@@ -221,8 +221,8 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfigProvider = () =>
       if (current === undefined) {
         const created = yield* cloudchannel
           .createAccountsChannelPartnerLinksChannelPartnerRepricingConfigs({
+            repricingConfig,
             parent,
-            body: { repricingConfig },
           })
           .pipe(
             Effect.catchTag("Conflict", () => findChannelPartnerRepricing(parent, name, month)),
@@ -251,8 +251,8 @@ export const ChannelPartnerLinksChannelPartnerRepricingConfigProvider = () =>
       if (changed && currentName.length > 0) {
         current =
           yield* cloudchannel.patchAccountsChannelPartnerLinksChannelPartnerRepricingConfigs({
+            repricingConfig,
             name: currentName,
-            body: { name: currentName, repricingConfig },
           });
       }
 

@@ -296,13 +296,11 @@ export const ImportJobProvider = () =>
       if (current === undefined) {
         const created = yield* mc
           .createProjectsLocationsImportJobs({
+            assetSource,
+            displayName,
+            labels: desiredLabels,
             parent: locationParent(env.project, location),
             importJobId,
-            body: {
-              assetSource,
-              displayName,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -323,13 +321,10 @@ export const ImportJobProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* mc.patchProjectsLocationsImportJobs({
+          displayName,
+          labels: desiredLabels,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            labels: desiredLabels,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

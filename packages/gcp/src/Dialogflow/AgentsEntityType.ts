@@ -297,9 +297,9 @@ export const AgentsEntityTypeProvider = () =>
       if (current === undefined) {
         const created = yield* dialogflow
           .createProjectsLocationsAgentsEntityTypes({
+            ...body,
             parent: agent,
             languageCode: news.languageCode,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(agent, displayName)));
         current = created ?? undefined;
@@ -333,6 +333,7 @@ export const AgentsEntityTypeProvider = () =>
         redactChanged
       ) {
         current = yield* dialogflow.patchProjectsLocationsAgentsEntityTypes({
+          ...body,
           name: currentName,
           languageCode: news.languageCode,
           updateMask: updateMaskOf(
@@ -344,7 +345,6 @@ export const AgentsEntityTypeProvider = () =>
             fuzzyChanged ? "enable_fuzzy_extraction" : undefined,
             redactChanged ? "redact" : undefined,
           ),
-          body: { ...body, name: currentName },
         });
       }
 

@@ -497,6 +497,121 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
+    describe("durable callbacks", () => {
+      type Counts = Record<
+        "every" | "cron" | "once" | "flaky" | "alarm" | "rolled-back" | "slept",
+        number
+      >;
+      // GET `/callbacks/<name>/<step>`, retried while the stack settles.
+      const step = <T>(name: string, path: string) =>
+        Effect.gen(function* () {
+          const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
+          return (yield* Effect.suspend(() =>
+            client.get(`${baseUrl}/callbacks/${name}/${path}`),
+          ).pipe(
+            Effect.flatMap((res) => res.json),
+            Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+          )) as T;
+        });
+      // Polls the counts, which never wake the instance, until `done`.
+      const countsUntil = (name: string, done: (counts: Counts) => boolean) =>
+        step<Counts>(name, "counts").pipe(
+          Effect.repeat({ schedule: Schedule.spaced("1 second"), until: done, times: 90 }),
+        );
+      const scheduledAt = (name: string, id: string) =>
+        step<{ scheduledAt: number | null }>(name, `status?id=${id}`).pipe(
+          Effect.map((body) => body.scheduledAt),
+        );
+
+      test(
+        "interval and cron jobs keep running until they are cancelled",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "every");
+          yield* step(name, "cron");
+          yield* countsUntil(name, (counts) => counts.every >= 3 && counts.cron >= 3);
+          expect(yield* scheduledAt(name, "every")).not.toBeNull();
+          yield* step(name, "cancel?id=every");
+          yield* step(name, "cancel?id=cron");
+          const cancelled = yield* step<Counts>(name, "counts");
+          expect(yield* scheduledAt(name, "every")).toBeNull();
+          // A run already under way when it was cancelled may still finish.
+          yield* Effect.sleep("3 seconds");
+          const settled = yield* step<Counts>(name, "counts");
+          expect(settled.every - cancelled.every).toBeLessThanOrEqual(1);
+          expect(settled.cron - cancelled.cron).toBeLessThanOrEqual(1);
+          yield* Effect.sleep("3 seconds");
+          expect(yield* step<Counts>(name, "counts")).toEqual(settled);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a one-off job runs once and is gone",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "once?after=1000");
+          expect(yield* scheduledAt(name, "once")).not.toBeNull();
+          yield* countsUntil(name, (counts) => counts.once >= 1);
+          yield* Effect.sleep("3 seconds");
+          expect((yield* step<Counts>(name, "counts")).once).toBe(1);
+          expect(yield* scheduledAt(name, "once")).toBeNull();
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a job scheduled in a transaction that rolls back never runs",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "rolled-back");
+          expect(yield* scheduledAt(name, "rolled-back")).toBeNull();
+          yield* Effect.sleep("4 seconds");
+          expect((yield* step<Counts>(name, "counts"))["rolled-back"]).toBe(0);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a run that dies is delivered again, and the job keeps running",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "flaky");
+          // The first run dies; its retry and the runs after it count.
+          yield* countsUntil(name, (counts) => counts.flaky >= 2);
+          yield* step(name, "cancel?id=flaky");
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "the instance's own alarm re-arms itself beside its callbacks",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "every");
+          yield* step(name, "alarm?times=3");
+          yield* countsUntil(name, (counts) => counts.alarm >= 3 && counts.every >= 3);
+          yield* step(name, "cancel?id=every");
+          yield* Effect.sleep("3 seconds");
+          expect((yield* step<Counts>(name, "counts")).alarm).toBe(3);
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a due job wakes an instance that has gone to sleep",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          // RivetKit sleeps an actor 30 seconds after its last call.
+          yield* step(name, "once?after=45000");
+          const counts = yield* countsUntil(name, (counts) => counts.once >= 1);
+          expect(counts.slept).toBeGreaterThanOrEqual(1);
+          expect(counts.once).toBe(1);
+        }),
+        { timeout: 180_000 },
+      );
+    });
+
     describe("WebSockets", () => {
       /** A WebSocket to `path` on the front, read one JSON frame at a time. */
       const connect = (path: string) =>

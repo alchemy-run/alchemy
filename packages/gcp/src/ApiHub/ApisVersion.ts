@@ -314,11 +314,7 @@ export const ApisVersionProvider = () =>
 
       if (current === undefined) {
         const created = yield* apihub
-          .createProjectsLocationsApisVersions({
-            parent: api,
-            versionId,
-            body: desired,
-          })
+          .createProjectsLocationsApisVersions({ ...desired, parent: api, versionId })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
       }
@@ -350,6 +346,7 @@ export const ApisVersionProvider = () =>
         accreditationChanged
       ) {
         current = yield* apihub.patchProjectsLocationsApisVersions({
+          ...desired,
           name: currentName,
           updateMask: updateMaskOf(
             displayChanged ? "display_name" : undefined,
@@ -362,7 +359,6 @@ export const ApisVersionProvider = () =>
             complianceChanged ? "compliance" : undefined,
             accreditationChanged ? "accreditation" : undefined,
           ),
-          body: { name: currentName, ...desired },
         });
       }
 

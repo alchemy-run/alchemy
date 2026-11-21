@@ -1,10 +1,4 @@
-import {
-  type Callback,
-  type CallbackFactory,
-  type CallbackStatus,
-  Callbacks,
-  makeCallback,
-} from "alchemy/Callback";
+import { Callbacks, makeCallback } from "alchemy/Callback";
 /**
  * A domain model on Durable Objects, for any runtime that hosts them:
  * Cloudflare, Rivet, Effect Cluster. Every aggregate instance, view key,
@@ -41,7 +35,7 @@ import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts"
 import * as Backfill from "./Backfill.ts";
 import { type Routed, targetId } from "./CatchUp.ts";
 import { DecisionsUnsupported, DefinitionError } from "./DefinitionError.ts";
-import { isAfter, mergeCheckpoints } from "./InMemory.ts";
+import { admitStreamWrite, advanceStreamMeta, mergeCheckpoints } from "./InMemory.ts";
 import {
   type Accepted,
   type AggregateKit,
@@ -70,6 +64,7 @@ import {
   type SendResult,
   type StoredEvent,
   type StreamEntry,
+  type StreamHandled,
   type StreamKit,
   type StreamMeta,
   type StreamWrite,
@@ -2081,8 +2076,13 @@ const streamObject = (kit: StreamKit) =>
     return {
       append: (key: string, write: StreamWrite) =>
         Effect.gen(function* () {
-          const meta = yield* readMeta;
-          if (!isAfter(write.origin, meta.origin)) return;
+          const before = yield* readMeta;
+          const { meta, appends } = admitStreamWrite(before, write);
+          if (!appends) {
+            // A rebuilt writer's first write still starts its generation.
+            if (meta !== before) yield* state.storage.put("meta", meta);
+            return;
+          }
           const added: Array<StreamEntry> = write.events.map((event, index) => {
             const seq = meta.seq + index + 1;
             return {
@@ -2097,13 +2097,7 @@ const streamObject = (kit: StreamKit) =>
               },
             };
           });
-          const next: StreamMeta = {
-            seq: meta.seq + added.length,
-            origin: write.origin,
-            checkpoints: mergeCheckpoints(meta.checkpoints, {
-              [write.source]: write.sourceSeq,
-            }),
-          };
+          const next: StreamMeta = { ...meta, seq: meta.seq + added.length };
           yield* state.storage.transaction(
             Effect.gen(function* () {
               const rows: Record<string, StreamEntry> = {};
@@ -2124,13 +2118,9 @@ const streamObject = (kit: StreamKit) =>
             }),
           );
         }).pipe(exclusively, reportDefects),
-      advance: (checkpoints: Readonly<Record<string, number>>) =>
+      advance: (handled: StreamHandled) =>
         Effect.gen(function* () {
-          const meta = yield* readMeta;
-          yield* state.storage.put("meta", {
-            ...meta,
-            checkpoints: mergeCheckpoints(meta.checkpoints, checkpoints),
-          } satisfies StreamMeta);
+          yield* state.storage.put("meta", advanceStreamMeta(yield* readMeta, handled));
         }).pipe(exclusively, reportDefects),
       read: () => reportDefects(readMeta),
       after: (after: number) => reportDefects(entriesAfter(after)),
@@ -2199,6 +2189,29 @@ const bindState = (impl: ObjectImpl): ObjectImpl =>
             : value;
     }
     return bound;
+  });
+
+/** Every runtime's claims, by host name; a process outside any runtime has one of its own. */
+const runtimeClaims = new WeakMap<object, Map<string, object>>();
+const noRuntime = {};
+
+/**
+ * The claim key of a host named `name` (a pool, or a class of objects) in
+ * the runtime building the model. Two models with one name fail in one
+ * runtime; a redeploy builds a new runtime, so the model it hosts replaces
+ * the old one even when both are built in one process (a test, or a reload
+ * in dev).
+ *
+ * @internal
+ */
+export const runtimeClaim = (name: string): Effect.Effect<object> =>
+  Effect.map(Effect.serviceOption(RuntimeContext), (context) => {
+    const runtime = Option.getOrElse(context, () => noRuntime);
+    let byName = runtimeClaims.get(runtime);
+    if (byName === undefined) runtimeClaims.set(runtime, (byName = new Map()));
+    let claim = byName.get(name);
+    if (claim === undefined) byName.set(name, (claim = {}));
+    return claim;
   });
 
 /** The models each host hosts, by name. */
@@ -2727,8 +2740,8 @@ export const makePlatform = <R>(
                   return {
                     append: (key, write) =>
                       unwrapDefects(namespace.getByName(key).append(key, write)),
-                    advance: (key, checkpoints) =>
-                      unwrapDefects(namespace.getByName(key).advance(checkpoints)),
+                    advance: (key, handled) =>
+                      unwrapDefects(namespace.getByName(key).advance(handled)),
                     read,
                     // Streamed responses poll; WebSocket reads (`connect`) are pushed on append.
                     changes: (key) =>
@@ -2828,165 +2841,4 @@ export const className = (modelName: string, name: string) =>
 export const parseMultiplexedName = (name: string) => {
   const slash = name.indexOf("/");
   return slash < 0 ? undefined : { className: name.slice(0, slash), key: name.slice(slash + 1) };
-};
-
-// ---------------------------------------------------------------- callbacks over one alarm
-
-/** One alarm per instance, as Durable Objects have: setting it replaces it. */
-export interface Alarm {
-  readonly set: (at: number) => Effect.Effect<void>;
-  readonly get: Effect.Effect<number | null>;
-}
-
-/** A pending callback job, stored under {@link jobKey}. */
-interface CallbackJob {
-  /** When it was asked for, kept across retries. */
-  readonly scheduledAt: number;
-  /** When it runs next: `scheduledAt`, or a retry's time. */
-  readonly due: number;
-  readonly payload: unknown;
-  /** Attempts that failed since it was scheduled. */
-  readonly attempts: number;
-  /** Replaced by every schedule: a job scheduled again while it ran isn't removed. */
-  readonly token: string;
-  readonly progress?: number;
-}
-
-const JOB_PREFIX = "cb:";
-const jobKey = (name: string, id: string) => `${JOB_PREFIX}${encodeURIComponent(name)}:${id}`;
-const jobName = (key: string) =>
-  decodeURIComponent(key.slice(JOB_PREFIX.length, key.indexOf(":", JOB_PREFIX.length)));
-
-const HOUR = 60 * 60 * 1000;
-
-/**
- * Durable callbacks (`alchemy/Callback`) over an instance's storage and its
- * one alarm, for hosts without a callbacks implementation of their own
- * (Rivet, Effect Cluster). Jobs are rows in the instance's storage; the alarm
- * is set for the soonest, and `fire` (the instance's alarm handler) runs the
- * due ones. A job whose handler dies is redelivered from 2 seconds doubling,
- * then hourly, and never dropped. Delivery is at least once.
- *
- * Handlers run in Node processes here, not workerd, so `fire` keeps an
- * in-memory flag to run one pass at a time.
- */
-export const alarmCallbacks = (storage: ObjectStorage, alarm: Alarm) => {
-  const handlers = new Map<
-    string,
-    {
-      readonly run: (payload: unknown) => Effect.Effect<unknown, unknown>;
-    }
-  >();
-  const arm = (due: number) =>
-    Effect.gen(function* () {
-      const current = yield* alarm.get;
-      if (current === null || due < current) yield* alarm.set(due);
-    });
-  const token = Effect.map(
-    Effect.all([Clock.currentTimeMillis, Random.nextInt]),
-    ([now, n]) => `${now.toString(36)}-${(n >>> 0).toString(36)}`,
-  );
-
-  const make: CallbackFactory = (name, handler) =>
-    Effect.gen(function* () {
-      const context = yield* Effect.context<never>();
-      handlers.set(name, {
-        // Each invocation gets a fresh Scope.
-        run: (payload) =>
-          Effect.scoped(handler(payload as never)).pipe(
-            Effect.provide(context),
-          ) as unknown as Effect.Effect<unknown, unknown>,
-      });
-      const callback: Callback<any> = {
-        schedule: (id, scheduled) =>
-          Effect.gen(function* () {
-            const now = yield* Clock.currentTimeMillis;
-            const due =
-              scheduled.at !== undefined
-                ? typeof scheduled.at === "number"
-                  ? scheduled.at
-                  : scheduled.at.getTime()
-                : now + Duration.toMillis(Duration.fromInputUnsafe(scheduled.after));
-            const key = jobKey(name, id);
-            const existing = yield* storage.get<CallbackJob>(key);
-            // A replayed schedule can't replace newer work.
-            if (
-              scheduled.progress !== undefined &&
-              existing?.progress !== undefined &&
-              scheduled.progress < existing.progress
-            )
-              return;
-            yield* storage.put(key, {
-              scheduledAt: due,
-              due,
-              payload: scheduled.payload,
-              attempts: 0,
-              token: yield* token,
-              progress: scheduled.progress ?? existing?.progress,
-            } satisfies CallbackJob);
-            yield* arm(due);
-          }),
-        cancel: (id) => Effect.asVoid(storage.delete(jobKey(name, id))),
-        getStatus: (id) =>
-          storage
-            .get<CallbackJob>(jobKey(name, id))
-            .pipe(
-              Effect.map(
-                (job): CallbackStatus | undefined =>
-                  job && { scheduledAt: job.scheduledAt, progress: job.progress },
-              ),
-            ),
-      };
-      return callback;
-    });
-
-  let firing = false;
-  let again = false;
-  const pass = Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
-    const jobs = yield* storage.list<CallbackJob>({ prefix: JOB_PREFIX });
-    for (const [key, job] of jobs) {
-      if (job.due > now) continue;
-      const handler = handlers.get(jobName(key));
-      // Not registered by this code: keep it for code that registers it.
-      if (handler === undefined) continue;
-      const exit = yield* Effect.exit(handler.run(job.payload));
-      const after = yield* storage.get<CallbackJob>(key);
-      // Scheduled again (or cancelled) while it ran: that stands.
-      if (after?.token !== job.token) continue;
-      if (exit._tag === "Success") {
-        yield* storage.delete(key);
-        continue;
-      }
-      const attempts = job.attempts + 1;
-      const wait = Math.min(HOUR, 2_000 * 2 ** (attempts - 1));
-      yield* Effect.logError(`Callback ${jobName(key)} failed; retrying`, exit.cause);
-      yield* storage.put(key, { ...job, attempts, due: (yield* Clock.currentTimeMillis) + wait });
-    }
-    // Arm the alarm for the soonest job left.
-    let next = Infinity;
-    for (const job of (yield* storage.list<CallbackJob>({ prefix: JOB_PREFIX })).values())
-      next = Math.min(next, job.due);
-    if (Number.isFinite(next)) yield* alarm.set(next);
-  });
-  /** Run every due job, then arm the alarm for the next. The instance's alarm handler. */
-  const fire: Effect.Effect<void> = Effect.suspend(() => {
-    if (firing) {
-      again = true;
-      return Effect.void;
-    }
-    firing = true;
-    const loop: Effect.Effect<void> = Effect.suspend(() => {
-      again = false;
-      return pass.pipe(Effect.andThen(Effect.suspend(() => (again ? loop : Effect.void))));
-    });
-    return loop.pipe(
-      Effect.ensuring(
-        Effect.sync(() => {
-          firing = false;
-        }),
-      ),
-    );
-  });
-  return { callbacks: Layer.succeed(Callbacks, { make }), fire };
 };
