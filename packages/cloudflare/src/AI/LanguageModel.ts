@@ -102,7 +102,8 @@ export const makeLanguageModel = ({
             try: () => resp.json() as Promise<Record<string, unknown>>,
             catch: (cause) => toAiError(cause, "generateText"),
           });
-          return yield* parseGenerateText(json, startsInThink);
+          const parts = yield* parseGenerateText(json, startsInThink);
+          return parts.map(numericToolArguments(options.tools));
         }),
       streamText: (options) =>
         Stream.unwrap(
@@ -111,7 +112,9 @@ export const makeLanguageModel = ({
             const body = toRequestBody({ options, parameters, stream: true });
             const resp = yield* callRaw(body, "streamText");
             const hasTools = options.tools.length > 0 && options.toolChoice !== "none";
-            return parseStreamText(resp, idGen, hasTools, startsInThink);
+            return parseStreamText(resp, idGen, hasTools, startsInThink).pipe(
+              Stream.map(numericToolArguments(options.tools)),
+            );
           }),
         ),
     });
@@ -338,6 +341,97 @@ const prepareTools = (
 };
 
 // ---------------------------------------------------------------------------
+// Tool-call arguments
+// ---------------------------------------------------------------------------
+
+type JsonSchemaNode = {
+  readonly type?: string | ReadonlyArray<string>;
+  readonly enum?: ReadonlyArray<unknown>;
+  readonly const?: unknown;
+  readonly properties?: Record<string, JsonSchemaNode>;
+  readonly items?: JsonSchemaNode;
+  readonly anyOf?: ReadonlyArray<JsonSchemaNode>;
+  readonly oneOf?: ReadonlyArray<JsonSchemaNode>;
+};
+
+const branchesOf = (schema: JsonSchemaNode): ReadonlyArray<JsonSchemaNode> => [
+  ...(schema.anyOf ?? []),
+  ...(schema.oneOf ?? []),
+];
+
+const typesOf = (schema: JsonSchemaNode): ReadonlyArray<string> =>
+  schema.type === undefined ? [] : typeof schema.type === "string" ? [schema.type] : schema.type;
+
+/** Whether the schema takes a number. */
+const takesNumber = (schema: JsonSchemaNode): boolean =>
+  typesOf(schema).some((type) => type === "number" || type === "integer") ||
+  branchesOf(schema).some(takesNumber);
+
+/** Whether the schema takes this string as it is. */
+const takesString = (schema: JsonSchemaNode, value: string): boolean =>
+  schema.enum !== undefined
+    ? schema.enum.includes(value)
+    : schema.const !== undefined
+      ? schema.const === value
+      : typesOf(schema).includes("string") ||
+        branchesOf(schema).some((branch) => takesString(branch, value));
+
+const NUMBER = /^-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
+
+/**
+ * Some Workers AI models (`@cf/meta/llama-3.3-70b`) write a number argument
+ * as a string (`{"a": "2"}`), which no number schema decodes. Where the
+ * tool's schema takes a number and not that string, read it as the number.
+ */
+const numericArguments = (value: unknown, schema: JsonSchemaNode | undefined): unknown => {
+  if (schema === undefined) return value;
+  if (typeof value === "string") {
+    const text = value.trim();
+    return takesNumber(schema) && !takesString(schema, value) && NUMBER.test(text)
+      ? Number(text)
+      : value;
+  }
+  if (Array.isArray(value)) {
+    return schema.items === undefined
+      ? value
+      : value.map((item) => numericArguments(item, schema.items));
+  }
+  if (value !== null && typeof value === "object") {
+    // An object's fields may be declared on a branch (`anyOf` of structs).
+    const properties = [schema, ...branchesOf(schema)].find(
+      (candidate) => candidate.properties !== undefined,
+    )?.properties;
+    if (properties === undefined) return value;
+    return Object.fromEntries(
+      Object.entries(value).map(([key, field]) => [key, numericArguments(field, properties[key])]),
+    );
+  }
+  return value;
+};
+
+/** Apply {@link numericArguments} to every tool call a response makes. */
+const numericToolArguments = (tools: ReadonlyArray<Tool.Any>) => {
+  const schemas = new Map<string, JsonSchemaNode>();
+  const schemaOf = (name: string) => {
+    if (!schemas.has(name)) {
+      const tool = tools.find((candidate) => candidate.name === name);
+      if (tool !== undefined) schemas.set(name, Tool.getJsonSchema(tool) as JsonSchemaNode);
+    }
+    return schemas.get(name);
+  };
+  return <Part extends { readonly type: string }>(part: Part): Part =>
+    part.type === "tool-call"
+      ? ({
+          ...part,
+          params: numericArguments(
+            (part as unknown as { params: unknown }).params,
+            schemaOf((part as unknown as { name: string }).name),
+          ),
+        } as Part)
+      : part;
+};
+
+// ---------------------------------------------------------------------------
 // Request body
 // ---------------------------------------------------------------------------
 
@@ -448,10 +542,13 @@ const mapUsage = (raw: Record<string, unknown> | undefined): Response.Usage => {
       cacheRead: cached ?? 0,
       cacheWrite: 0,
     },
+    // Workers AI reports one output count, not how it divides into text and
+    // reasoning: leaving those unset says so, where zeros would contradict
+    // the total.
     outputTokens: {
       total: completionTokens,
-      text: 0,
-      reasoning: 0,
+      text: undefined,
+      reasoning: undefined,
     },
   });
 };
