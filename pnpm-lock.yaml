@@ -12201,22 +12201,6 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
-  submodules/distilled/packages/boxd:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-    devDependencies:
-      '@distilled.cloud/dev':
-        specifier: workspace:*
-        version: link:../dev
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-
   submodules/distilled/packages/celld:
     dependencies:
       '@distilled.cloud/core':
@@ -12800,22 +12784,6 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
-  submodules/distilled/packages/hydradb:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-    devDependencies:
-      '@distilled.cloud/dev':
-        specifier: workspace:*
-        version: link:../dev
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-
   submodules/distilled/packages/iceberg:
     dependencies:
       '@distilled.cloud/core':
@@ -13043,22 +13011,6 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
-  submodules/distilled/packages/mux:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-    devDependencies:
-      '@distilled.cloud/dev':
-        specifier: workspace:*
-        version: link:../dev
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-
   submodules/distilled/packages/namespacelabs:
     dependencies:
       '@distilled.cloud/core':
@@ -13192,28 +13144,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
-
-  submodules/distilled/packages/opensearch:
-    dependencies:
-      '@distilled.cloud/aws4signer':
-        specifier: workspace:*
-        version: link:../aws4signer
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-    devDependencies:
-      '@distilled.cloud/dev':
-        specifier: workspace:*
-        version: link:../dev
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      yaml:
-        specifier: 'catalog:'
-        version: 2.9.1
 
   submodules/distilled/packages/ovh:
     dependencies:
@@ -13547,22 +13477,6 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
-  submodules/distilled/packages/scaleway:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-    devDependencies:
-      '@distilled.cloud/dev':
-        specifier: workspace:*
-        version: link:../dev
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-
   submodules/distilled/packages/sentry:
     dependencies:
       '@distilled.cloud/core':
@@ -13790,22 +13704,6 @@ importers:
         specifier: 'catalog:'
         version: 26.6.5
 
-  submodules/distilled/packages/tinybird:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-    devDependencies:
-      '@distilled.cloud/dev':
-        specifier: workspace:*
-        version: link:../dev
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-
   submodules/distilled/packages/trigger-dev:
     dependencies:
       '@distilled.cloud/core':
@@ -13839,22 +13737,6 @@ importers:
         version: 26.6.5
 
   submodules/distilled/packages/turso:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-    devDependencies:
-      '@distilled.cloud/dev':
-        specifier: workspace:*
-        version: link:../dev
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-
-  submodules/distilled/packages/twitch:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*
@@ -13936,25 +13818,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
-
-  submodules/distilled/packages/whatsapp:
-    dependencies:
-      '@distilled.cloud/core':
-        specifier: workspace:*
-        version: link:../core
-      effect:
-        specifier: 4.1.4
-        version: 4.1.4
-    devDependencies:
-      '@distilled.cloud/dev':
-        specifier: workspace:*
-        version: link:../dev
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.5
-      yaml:
-        specifier: 'catalog:'
-        version: 2.9.1
 
   submodules/distilled/packages/whop:
     dependencies:
@@ -41521,7 +41384,7 @@ snapshots:
 
   '@types/sax@1.2.7':
     dependencies:
-      '@types/node': 26.6.5
+      '@types/node': 24.13.3
 
   '@types/unist@2.0.11': {}
 
