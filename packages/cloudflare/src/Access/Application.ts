@@ -45,7 +45,9 @@ export type ApplicationType =
   | "infrastructure"
   | "app_launcher"
   | "biso"
-  | "dash_sso";
+  | "dash_sso"
+  | "mcp"
+  | "mcp_portal";
 
 /**
  * A destination that this Access application protects.
@@ -471,6 +473,35 @@ export type ApplicationLookup =
  *       allowAnyOnLoopback: true,
  *     },
  *   },
+ * });
+ * ```
+ *
+ * ### MCP server portals
+ * **Example:** Gate an MCP portal and the servers it routes to
+ * ```typescript
+ * const portal = yield* Cloudflare.Access.McpPortal("Portal", {
+ *   portalId: "team",
+ *   hostname: "mcp.example.com",
+ * });
+ * yield* Cloudflare.Access.Application("PortalAccess", {
+ *   type: "mcp_portal",
+ *   destinations: [{ type: "public", uri: portal.hostname }],
+ *   policies: [allowTeam],
+ *   oauthConfiguration: {
+ *     enabled: true,
+ *     dynamicClientRegistration: { enabled: true, allowAnyOnLocalhost: true },
+ *   },
+ * });
+ *
+ * const server = yield* Cloudflare.Access.McpServer("Docs", {
+ *   serverId: "docs",
+ *   hostname: "https://docs.example.com/mcp",
+ *   authType: "unauthenticated",
+ * });
+ * yield* Cloudflare.Access.Application("DocsAccess", {
+ *   type: "mcp",
+ *   destinations: [{ type: "via_mcp_server_portal", mcpServerId: server.serverId }],
+ *   policies: [allowTeam],
  * });
  * ```
  *

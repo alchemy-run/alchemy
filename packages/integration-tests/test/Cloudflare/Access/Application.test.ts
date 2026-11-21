@@ -122,6 +122,70 @@ test.provider(
 );
 
 test.provider(
+  "create and delete mcp_portal and mcp applications for an MCP server portal",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const hostname = `${testName("alchemy-test-mcp-app")}.${zoneName}`;
+      const { portalApp, serverApp } = yield* stack.deploy(
+        Effect.gen(function* () {
+          yield* Cloudflare.Zone.Zone("TestZone", { name: zoneName }).pipe(AdoptPolicy.adopt(true));
+          const policy = yield* Cloudflare.Access.Policy("McpAllowDomain", {
+            name: testName("Allow example.com"),
+            decision: "allow",
+            include: [{ emailDomain: { domain: "example.com" } }],
+          });
+          const portal = yield* Cloudflare.Access.McpPortal("McpAppPortal", {
+            portalId: testName("alc-mcp-app-portal"),
+            hostname,
+          });
+          const portalApp = yield* Cloudflare.Access.Application("McpPortalApp", {
+            type: "mcp_portal",
+            destinations: [{ type: "public", uri: portal.hostname }],
+            policies: [policy.policyId],
+            oauthConfiguration: {
+              enabled: true,
+              dynamicClientRegistration: { enabled: true, allowAnyOnLocalhost: true },
+            },
+          });
+          const server = yield* Cloudflare.Access.McpServer("McpAppServer", {
+            serverId: testName("alc-mcp-app-server"),
+            hostname: "https://docs.mcp.cloudflare.com/mcp",
+            authType: "unauthenticated",
+          });
+          const serverApp = yield* Cloudflare.Access.Application("McpServerApp", {
+            type: "mcp",
+            destinations: [{ type: "via_mcp_server_portal", mcpServerId: server.serverId }],
+            policies: [policy.policyId],
+          });
+          return { portalApp, serverApp };
+        }),
+      );
+
+      expect(portalApp.type).toEqual("mcp_portal");
+      expect(portalApp.oauthConfiguration?.dynamicClientRegistration?.enabled).toBe(true);
+      expect(serverApp.type).toEqual("mcp");
+
+      for (const app of [portalApp, serverApp]) {
+        const live = (yield* zeroTrust.getAccessApplicationForAccount({
+          accountId,
+          appId: app.applicationId,
+        })) as unknown as { type?: string | null };
+        expect(live.type).toEqual(app.type);
+      }
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:access", "provider:cloudflare:zone", "live"],
+    timeout: 120_000,
+  },
+);
+
+test.provider(
   "create and delete a warp device-enrollment application",
   (stack) =>
     Effect.gen(function* () {
