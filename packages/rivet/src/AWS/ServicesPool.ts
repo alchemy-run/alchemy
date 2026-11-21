@@ -1,11 +1,13 @@
 import * as ECS from "@alchemy.run/aws/ECS";
+import * as SecretsManager from "@alchemy.run/aws/SecretsManager";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import {
   makeServicesLayer,
-  servicesEnvironment,
+  secretServicesEnvironment,
   type ServicesPoolSettings,
 } from "../internal/ServicesHost.ts";
-import { poolNetworkOf, resolvePoolNetwork } from "./internal/Pool.ts";
+import { poolNetworkOf, resolvePoolNetwork, valueFrom } from "./internal/Pool.ts";
 
 export interface ServicesPoolOptions extends ServicesPoolSettings {
   /**
@@ -59,6 +61,11 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
       Effect.gen(function* () {
         const network = yield* resolvePoolNetwork(id, nodes.network, options.cidrBlock);
         const cluster = yield* ECS.Cluster(`${id}Cluster`, {});
+        const environment = secretServicesEnvironment(nodes);
+        // The token comes from Secrets Manager, never the task definition.
+        const token = yield* SecretsManager.Secret(`${id}Token`, {
+          secretString: environment.pipe(Output.map((env) => env.RIVET_TOKEN)),
+        });
         yield* ECS.Service(`${id}Nodes`, {
           image: nodes.image,
           cluster,
@@ -70,7 +77,8 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
           subnets: [...network.subnetIds],
           securityGroups: [network.securityGroupId],
           assignPublicIp: true,
-          env: servicesEnvironment(nodes),
+          env: environment.pipe(Output.map(({ RIVET_TOKEN: _, ...env }) => env)),
+          secrets: valueFrom(token).pipe(Output.map((token) => ({ RIVET_TOKEN: token }))),
         });
       }),
   });

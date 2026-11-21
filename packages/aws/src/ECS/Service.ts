@@ -805,7 +805,10 @@ export interface ImageOwningServicePropsBase
    * env-var name → SSM Parameter Store parameter ARN or Secrets Manager
    * secret ARN. Wired as container `secrets` (`valueFrom`), with the
    * execution role granted `ssm:GetParameters` /
-   * `secretsmanager:GetSecretValue` on exactly the referenced ARNs.
+   * `secretsmanager:GetSecretValue` on exactly the referenced ARNs. A
+   * Secrets Manager ARN may name a JSON key, version stage and version id
+   * after it (`${secretArn}:key:stage:versionId`, any of them empty); a
+   * version id makes a new secret value roll the tasks.
    */
   secrets?: Record<string, string>;
 
@@ -2475,7 +2478,16 @@ const syncTaskSecretsPolicy = Effect.fn(function* ({
   }
   const serviceOf = (arn: string) => arn.split(":")[2];
   const ssmArns = secretArns.filter((arn) => serviceOf(arn) === "ssm");
-  const secretsManagerArns = secretArns.filter((arn) => serviceOf(arn) === "secretsmanager");
+  // A `valueFrom` may name a JSON key, version stage or version id after the
+  // secret's ARN (`arn:…:secret:name-AbCdEf:key:stage:id`); IAM grants on
+  // the secret's ARN itself.
+  const secretsManagerArns = [
+    ...new Set(
+      secretArns
+        .filter((arn) => serviceOf(arn) === "secretsmanager")
+        .map((arn) => arn.split(":").slice(0, 7).join(":")),
+    ),
+  ];
   yield* iam.putRolePolicy({
     RoleName: roleName,
     PolicyName: SECRETS_POLICY_NAME,
