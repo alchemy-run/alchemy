@@ -145,6 +145,7 @@ A linear six-part walkthrough from zero to a tested, locally-developed, CI-deplo
 - [Browser rendering](https://alchemy.run/cloudflare/compute/browser-rendering) — Attach Cloudflare Browser Rendering to a Worker — run quick actions like markdown and scrape, stream screenshots and PDFs, or drive the raw binding with puppeteer.
 - [Worker Loader](https://alchemy.run/cloudflare/compute/worker-loader) — Load and run ephemeral Workers at runtime from inline source — each in its own sandboxed isolate, with optional outbound-network control and typed RPC entrypoints.
 - [Workers for Platforms](https://alchemy.run/cloudflare/compute/workers-for-platforms) — Run your customers' Workers in your own account — create a dispatch namespace, upload user Workers into it, and route requests from a platform Worker with the Get binding.
+- [Accept TCP connections](https://alchemy.run/cloudflare/compute/tcp) — Serve raw TCP from a Worker's connect handler, expose it on a public port with Spectrum, and open TCP connections to it from other Workers.
 - [Code updates](https://alchemy.run/cloudflare/compute/code-updates) — What happens to running Workers and Durable Objects when you deploy, how to choose when Durable Objects pick up new code, and how to write tests that see the code you just deployed.
 - [Container lifecycle](https://alchemy.run/cloudflare/compute/container-lifecycle) — Start, stop, wait for, and restore a Cloudflare Container from its Durable Object — and save its filesystem as a snapshot to restore later.
 - [Containers](https://alchemy.run/cloudflare/compute/containers) — Cloudflare Containers run long-lived processes beside a Durable Object — declare a typed container class, implement its runtime in a separate file, and alchemy builds the image, pushes it, and wires the DO pairing.
@@ -961,7 +962,7 @@ Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any W
 
 Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, AWS, GCP, Kubernetes, Fly, Hetzner or Railway (or Rivet Cloud), with key-value storage, SQL and alarms, called by name from any runtime.
 
-- [Rivet](https://alchemy.run/rivet) — Build on Rivet with Alchemy. Declare Durable Objects and Durable Streams in TypeScript, run the control plane and its nodes on the cloud you choose or on Rivet Cloud, and call any instance by name from any runtime.
+- [Rivet](https://alchemy.run/rivet) — Build on Rivet with Alchemy. Declare Durable Objects, Durable Streams and agentOS sandboxes in TypeScript, run the control plane and its nodes on the cloud you choose or on Rivet Cloud, and call any instance by name from any runtime.
 - [What is Rivet?](https://alchemy.run/rivet/what-is-rivet) — The concepts behind Rivet — Actors, one instance per name, state that lives with it, sleeping and waking, calls, the control plane, namespaces, pools, the gateway, Rivet Services and Rivet Cloud — and how @alchemy.run/rivet models each of them.
 - [Setup](https://alchemy.run/rivet/setup) — Install the Rivet provider, the provider for the cloud you run it on, and get Docker ready to run Rivet on your machine.
 - [Control planes and namespaces](https://alchemy.run/rivet/namespaces) — What holds a Rivet app — a control plane you run or Rivet Cloud, divided into namespaces — how Alchemy gives each stage its own namespace, and when to give an environment a control plane of its own.
@@ -980,6 +981,7 @@ Durable Objects on Rivet: a control plane and pools of nodes you run on Docker, 
 - [RivetKit Effect Actors](https://alchemy.run/rivet/rivetkit-effect) — Deploy Actors written with RivetKit's Effect SDK, unchanged, to a Rivet control plane and pool on any cloud.
 - [Rust Actors](https://alchemy.run/rivet/rivetkit-rust) — Deploy Actors written with RivetKit's Rust SDK, unchanged, to a Rivet control plane and pool. Alchemy compiles the crate into the pool's node image.
 - [Durable Streams](https://alchemy.run/rivet/durable-streams) — Append-only logs with a replayable history, one per key, served by Rivet Services — declare one with its message Schema, append, read from an offset, follow it live, and choose its wire format as a Layer.
+- [agentOS Sandboxes](https://alchemy.run/rivet/sandboxes) — agentOS VMs on Rivet Services as sandboxes — declare a base with its software and environment, get a VM by key, and run commands, read and write files, stream processes, open a terminal and reach servers inside it from any runtime.
 - [Control Plane](https://alchemy.run/rivet/control-planes) — What a Rivet control plane does, how to run one as a Layer on any cloud, how many engines it needs, and how to use one you already have.
 - [Pool](https://alchemy.run/rivet/pools) — How a Rivet pool decides which machines run your Durable Objects, and when to share a pool, split one, or scale it.
 - [Docker](https://alchemy.run/rivet/docker) — Run a Rivet control plane and pools of nodes on a Docker swarm, on your machine or a server.
@@ -1377,4 +1379,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~288 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~194 KB) — only fetch it when you need to locate a specific resource's reference page.
