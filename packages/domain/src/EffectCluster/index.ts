@@ -210,6 +210,44 @@ export class DomainClassNotHosted extends Data.TaggedError("Cluster.DomainClassN
   readonly message: string;
 }> {}
 
+/**
+ * A Domain host entity was called for an object of an earlier generation of
+ * a view or projection it hosts: a version bump replaced it.
+ */
+export class DomainClassSuperseded extends Data.TaggedError("Cluster.DomainClassSuperseded")<{
+  readonly message: string;
+}> {}
+
+/** A view's or projection's class, keys or run: `consumerClass`, then `runClass`. */
+const CONSUMER_CLASS = /^(.*(?:View|Projection))(?:V(\d+))?(Run)?$/;
+
+/**
+ * The class this code hosts that replaced `requested`, when `requested` is an
+ * earlier generation of a view's or projection's keys or run
+ * (`Bank.DepositsViewV1Run` when `Bank.DepositsViewV2Run` is hosted).
+ * `undefined` for any other class, a later generation included: a runner on
+ * older code during a rollout must leave those for the newer runners.
+ *
+ * @internal
+ */
+export const supersededBy = (requested: string, hosted: Iterable<string>): string | undefined => {
+  const wanted = CONSUMER_CLASS.exec(requested);
+  if (wanted === null) return undefined;
+  const [, consumer, generation = "0", run = ""] = wanted;
+  for (const cls of hosted) {
+    const match = CONSUMER_CLASS.exec(cls);
+    if (match === null) continue;
+    const [, hostedConsumer, hostedGeneration = "0", hostedRun = ""] = match;
+    if (
+      hostedConsumer === consumer &&
+      hostedRun === run &&
+      Number(hostedGeneration) > Number(generation)
+    )
+      return cls;
+  }
+  return undefined;
+};
+
 /** A saga's workflow engine was used before the runner joined the cluster. */
 export class DomainEngineNotStarted extends Data.TaggedError("Cluster.DomainEngineNotStarted")<{
   readonly message: string;
@@ -579,6 +617,21 @@ export const layerEntities = <PoolReq>(
           ? { className: WORKFLOWS, key: id.slice(WORKFLOWS.length + 1) }
           : parseMultiplexedName(id);
         const build = parsed === undefined ? undefined : classes.get(parsed.className);
+        const replaced =
+          parsed === undefined ? undefined : supersededBy(parsed.className, classes.keys());
+        if (build === undefined && replaced !== undefined) {
+          // A superseded generation's object: its pending wakes are taken and
+          // dropped, so they stop coming back, and it runs nothing.
+          const superseded = new DomainClassSuperseded({
+            message: `'${id}' is an earlier generation of '${replaced}', which replaced it.`,
+          });
+          return objects.of({
+            Call: () => Effect.die(superseded),
+            Live: () =>
+              Stream.make({ _tag: "Close", code: 1011, reason: superseded.message } as const),
+            Wake: () => Effect.void,
+          });
+        }
         if (build === undefined) {
           // A class this code no longer hosts, like a consumer's earlier
           // generation after a version bump. Its persisted wake-ups are
