@@ -18,6 +18,7 @@ import { entrypointLayer, entrypointTag } from "alchemy/Runtime/Bootstrap";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { makeDurableObjectEngine } from "alchemy/Workers/DurableObjectEngine";
 import { gateExclusive, InputGate } from "alchemy/Workers/InputGate";
+import { storageCallbacks } from "alchemy/Workers/StorageCallbacks";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -35,7 +36,6 @@ import type { WorkflowEngine } from "effect/workflow";
  * @module
  */
 import {
-  alarmCallbacks,
   type Attachment,
   className,
   type Host,
@@ -280,7 +280,7 @@ const hostClassPhase = (name: string, classes: ReadonlyMap<string, InstanceBuild
         );
       }
       const storage = objectStorage(state.storage);
-      const callbacks = alarmCallbacks(storage, {
+      const callbacks = storageCallbacks(storage, {
         set: (at) => state.storage.setAlarm(at),
         get: state.storage.getAlarm(),
       });
