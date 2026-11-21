@@ -1,0 +1,77 @@
+---
+title: Setup
+description: Install @alchemy.run/nanocode, the nanocode-ts release and @alchemy.run/ai, and add a nanocode harness to a Cloudflare Durable Object.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+You need:
+
+- [Node.js](https://nodejs.org) 24.11.1+ or [Bun](https://bun.sh)
+- An Alchemy app on Cloudflare. See [Cloudflare setup](/cloudflare/setup).
+
+nanocode needs no account.
+
+## Install
+
+Install the harness and the shared AI package:
+
+<PackageManagers add="@alchemy.run/nanocode @alchemy.run/ai" />
+
+`nanocode-ts`, which holds the WebAssembly module, is published as a release tarball on GitHub and not on npm. Install the release you want by its URL:
+
+<PackageManagers add="https://github.com/nanocodexyz/nanocode-ts/releases/download/build-887f3cc/nanocode-ts-887f3cc.tgz" />
+
+## A model
+
+A harness needs a model. See [Models](/ai/models).
+
+```typescript title="src/models.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AICloudflare.Model(Fast, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+});
+```
+
+## A harness
+
+Yield the harness in a Durable Object's outer Effect and provide its Layers once:
+
+```typescript title="src/Sessions.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Nanocode from "@alchemy.run/nanocode";
+import * as NanocodeCloudflare from "@alchemy.run/nanocode/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive } from "./models.ts";
+
+const HarnessLive = Layer.mergeAll(FastLive, NanocodeCloudflare.DurableObjectHost);
+
+export default class Sessions extends Cloudflare.DurableObject<Sessions>()(
+  "Sessions",
+  Effect.gen(function* () {
+    const harness = yield* Nanocode.Harness({ models: [Fast] });
+
+    return Effect.gen(function* () {
+      return {
+        prompt: (name: string, text: string, requestId: string) =>
+          harness.session(name).prompt(text, { requestId }).pipe(Effect.orDie),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+`NanocodeCloudflare.DurableObjectHost` loads the module and uses the object's SQLite as nanocode's journal.
+
+## Deploy
+
+<PackageManagers run="alchemy deploy" />
+
+The module is uploaded with the Worker, which adds about 8 MB to its compressed size.
+
+Next: [Sessions & prompts](/nanocode/sessions).

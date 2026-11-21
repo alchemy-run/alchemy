@@ -166,6 +166,9 @@
       "path": "./packages/clanka/tsconfig.json"
     },
     {
+      "path": "./packages/nanocode/tsconfig.json"
+    },
+    {
       "path": "./packages/rivet/tsconfig.json"
     },
     {

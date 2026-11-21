@@ -798,6 +798,21 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "nanocode",
+    intro:
+      "nanocode on Alchemy: its WebAssembly runtime in a Durable Object, sessions journaled in SQLite, tools, a sandbox and prompts that survive eviction.",
+    pages: {
+      slugs: [
+        "nanocode/index",
+        "nanocode/what-is-nanocode",
+        "nanocode/setup",
+        "nanocode/sessions",
+        "nanocode/tools",
+        "nanocode/eviction",
+      ],
+    },
+  },
+  {
     heading: "Boat",
     intro:
       "Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.",

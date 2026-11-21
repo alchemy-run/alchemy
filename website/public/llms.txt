@@ -959,6 +959,17 @@ clanka on Alchemy: its agent loop in a Durable Object, its executor in a sandbox
 - [The executor & sandbox](https://alchemy.run/clanka/sandbox) — clanka's executor runs in the conversation's sandbox. Install clanka into a snapshot, choose the working directory, and suspend or remove the sandbox.
 - [Surviving eviction](https://alchemy.run/clanka/eviction) — A Durable Object can be evicted or redeployed at any time. A clanka conversation is saved after every prompt, and a submitted prompt is run again from the object's alarm.
 
+## nanocode
+
+nanocode on Alchemy: its WebAssembly runtime in a Durable Object, sessions journaled in SQLite, tools, a sandbox and prompts that survive eviction.
+
+- [nanocode](https://alchemy.run/nanocode) — Run the nanocode agent runtime with Alchemy. Its WebAssembly module in a Durable Object, journaled in the object's SQLite, on your models, tools and sandboxes.
+- [What is nanocode?](https://alchemy.run/nanocode/what-is-nanocode) — The concepts behind nanocode on Alchemy — the WebAssembly runtime, its host, sessions, turns and the journal — and how @alchemy.run/nanocode is that host in a Durable Object.
+- [Setup](https://alchemy.run/nanocode/setup) — Install @alchemy.run/nanocode, the nanocode-ts release and @alchemy.run/ai, and add a nanocode harness to a Cloudflare Durable Object.
+- [Sessions & prompts](https://alchemy.run/nanocode/sessions) — Name a nanocode session, prompt it with a request id, choose its model, give it instructions, and read its log.
+- [Tools & the sandbox](https://alchemy.run/nanocode/tools) — Give nanocode tools declared with AI.Tool, which run in your Durable Object, and a sandbox for its own shell and file tools.
+- [Surviving eviction](https://alchemy.run/nanocode/eviction) — A Durable Object can be evicted or redeployed at any time. nanocode journals every step of a turn in the object's SQLite, and a submitted prompt is continued from the object's alarm.
+
 ## Boat
 
 Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.
@@ -1404,4 +1415,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~292 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~293 KB) — only fetch it when you need to locate a specific resource's reference page.

@@ -1,0 +1,81 @@
+---
+title: nanocode
+description: Run the nanocode agent runtime with Alchemy. Its WebAssembly module in a Durable Object, journaled in the object's SQLite, on your models, tools and sandboxes.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+[nanocode](https://nanocode.xyz) is an agent runtime written in Rust and compiled to one WebAssembly module. It runs the agent loop and journals every model call and tool call, so a turn can be finished after the process that started it has gone. Its host supplies SQL, model responses, tool results and a shell. Alchemy is that host in a Durable Object: the journal is the object's SQLite, and models, tools and sandboxes are the ones you declare with [`@alchemy.run/ai`](/ai).
+
+**New to nanocode?** Start with [What is nanocode?](/nanocode/what-is-nanocode).
+
+## A quick example
+
+A model and a tool:
+
+```typescript title="src/agent.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Schema from "effect/Schema";
+
+export class Fast extends AI.Model<Fast>()("fast") {}
+
+export const FastLive = AICloudflare.Model(Fast, {
+  model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+});
+
+export class LookupOrder extends AI.Tool<LookupOrder>()("lookup_order", {
+  description: "Look up an order by its number.",
+  parameters: Schema.Struct({ number: Schema.String }),
+  success: Schema.Struct({ status: Schema.String }),
+}) {}
+
+export const LookupOrderLive = LookupOrder.make(({ number }) => ({
+  status: number.startsWith("A") ? "shipped" : "processing",
+}));
+```
+
+A Durable Object yields the harness and prompts a session by name:
+
+```typescript title="src/Sessions.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Nanocode from "@alchemy.run/nanocode";
+import * as NanocodeCloudflare from "@alchemy.run/nanocode/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive, LookupOrder, LookupOrderLive } from "./agent.ts";
+
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  LookupOrderLive,
+  NanocodeCloudflare.DurableObjectHost,
+);
+
+export default class Sessions extends Cloudflare.DurableObject<Sessions>()(
+  "Sessions",
+  Effect.gen(function* () {
+    const harness = yield* Nanocode.Harness({
+      models: [Fast],
+      tools: [LookupOrder],
+      instructions: "Answer questions about orders. Look an order up before you answer.",
+    });
+
+    return Effect.gen(function* () {
+      return {
+        prompt: (name: string, text: string, requestId: string) =>
+          harness.session(name).prompt(text, { requestId }).pipe(Effect.orDie),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+## Where to start
+
+**Want to build?** Follow [Setup](/nanocode/setup), then [Sessions & prompts](/nanocode/sessions).
+
+**Looking for something specific?** Every section of these docs is listed below. Models, tools and sandboxes are shared by every harness, and are covered in the [AI docs](/ai).
+
+## The docs
+
+<HubMap />

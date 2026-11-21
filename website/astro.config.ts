@@ -54,6 +54,7 @@ function providersSidebarEntry() {
       { label: "OpenCode", link: "/opencode" },
       { label: "Yielded Agent", link: "/yielded-agent" },
       { label: "clanka", link: "/clanka" },
+      { label: "nanocode", link: "/nanocode" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -2642,6 +2643,25 @@ export default defineConfig({
                 { label: "The executor & sandbox", link: "/clanka/sandbox" },
                 { label: "Surviving eviction", link: "/clanka/eviction" },
               ],
+            },
+          ],
+        },
+        {
+          label: "nanocode",
+          items: [
+            { label: "Overview", link: "/nanocode" },
+            { label: "What is nanocode?", link: "/nanocode/what-is-nanocode" },
+            { label: "Setup", link: "/nanocode/setup" },
+            {
+              label: "Sessions",
+              items: [
+                { label: "Sessions & prompts", link: "/nanocode/sessions" },
+                { label: "Tools & the sandbox", link: "/nanocode/tools" },
+              ],
+            },
+            {
+              label: "Hosting",
+              items: [{ label: "Surviving eviction", link: "/nanocode/eviction" }],
             },
           ],
         },

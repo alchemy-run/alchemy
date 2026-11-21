@@ -1,0 +1,81 @@
+---
+title: What is nanocode?
+description: The concepts behind nanocode on Alchemy — the WebAssembly runtime, its host, sessions, turns and the journal — and how @alchemy.run/nanocode is that host in a Durable Object.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+nanocode is an agent loop compiled to one WebAssembly module. The module does no I/O of its own. Whenever it needs something from outside, it asks its **host**: run these SQL statements, send this model request, call this tool, run this shell command. The host answers, and the module carries on. Everything it does is written to SQL first, so the state of a session is a database, not a process.
+
+Take one small app: a `Sessions` Durable Object with a session `ticket-7`. The module runs in the object. The harness answers its SQL from the object's SQLite, its model requests from the `Fast` model, and its call to your `lookup_order` tool from the tool's handler.
+
+<Tree
+  nodes={[
+    {
+      id: "sessions", label: "Sessions", type: "Durable Object", icon: "box",
+      areas: ["module harness", "journal harness", "tool harness"],
+      phoneAreas: ["module", "harness", "journal", "tool"], colGap: 4.5,
+    },
+    { id: "module", label: "nanocode", type: "WebAssembly", parent: "sessions", icon: "cpu" },
+    { id: "harness", label: "harness", type: "the host", parent: "sessions", tone: "accent", icon: "refresh-cw" },
+    { id: "journal", label: "ticket-7", type: "journal", parent: "sessions", icon: "database" },
+    { id: "tool", label: "lookup", type: "your tool", parent: "sessions", icon: "wrench" },
+    { id: "fast", label: "Fast", type: "model · Workers AI", icon: "sparkles" },
+  ]}
+  areas={["sessions fast"]}
+  phoneAreas={["sessions", "fast"]}
+  colGap={4.5}
+  links={[
+    { from: "module", to: "harness", label: "asks" },
+    { from: "harness", to: "journal", label: "runs SQL" },
+    { from: "harness", to: "tool", label: "calls" },
+    { from: "harness", to: "fast", label: "asks" },
+  ]}
+  caption="The nanocode module runs in the Durable Object and does no I/O itself. It asks the harness, which runs its SQL on the object's SQLite, calls the lookup tool, and asks the Fast model."
+/>
+
+## The module
+
+The **module** is `nanocode_wasm.wasm`, about 8 MB compressed, from the `nanocode-ts` package. It is uploaded with your Worker and instantiated in the Durable Object when a session is used.
+
+## The host
+
+The **host** is whatever the module runs in. `@alchemy.run/nanocode` is a host: `NanocodeCloudflare.DurableObjectHost` supplies the module and the object's SQLite, and the harness supplies the rest.
+
+## The harness
+
+The **harness** is your side of nanocode: the models a session may run on and the tools it may call. You yield it in a Durable Object's outer Effect.
+
+```typescript
+const harness = yield* Nanocode.Harness({ models: [Fast], tools: [LookupOrder] });
+```
+
+## Sessions and turns
+
+A **session** is one conversation, which you name. A **turn** is one prompt and everything the agent does to answer it: model calls, tool calls, the final message.
+
+```typescript
+const message = yield* harness.session("ticket-7").prompt("Where is order A-1042?", {
+  requestId: "msg-1",
+});
+```
+
+See [Sessions & prompts](/nanocode/sessions).
+
+## The journal
+
+nanocode writes each step of a turn to SQL before it moves on. A turn that stops part way is finished later from the journal: steps that completed are read back, not done again.
+
+See [Surviving eviction](/nanocode/eviction).
+
+## Tools
+
+nanocode has its own shell and file tools, which need a machine. Your tools run in the Durable Object.
+
+See [Tools & the sandbox](/nanocode/tools).
+
+## How @alchemy.run/nanocode models these concepts
+
+`Nanocode.Harness` is an Effect you yield where its Layers are provided. nanocode brings its own model client, which sends chat-completions requests; the harness answers each one from the session's `AI.Model`, so nanocode holds no key. Tools are `AI.Tool` declarations, and a sandbox comes from an `AI.Sandboxes` Layer. A session's id in the journal is derived from its name, and its sandbox is found by a key made from the object's id and that name.
+
+Next: [Setup](/nanocode/setup).

@@ -1,0 +1,66 @@
+---
+title: Tools & the sandbox
+description: Give nanocode tools declared with AI.Tool, which run in your Durable Object, and a sandbox for its own shell and file tools.
+---
+
+nanocode offers the model two kinds of tool: yours, and its own. Yours run in the Durable Object. Its own need a machine, and get one when the harness has sandboxes.
+
+## Your tools
+
+Declare a tool with `AI.Tool`. See [Tools](/ai/tools).
+
+```typescript title="src/tools.ts"
+import * as AI from "@alchemy.run/ai";
+import * as Schema from "effect/Schema";
+
+export class LookupOrder extends AI.Tool<LookupOrder>()("lookup_order", {
+  description: "Look up an order by its number.",
+  parameters: Schema.Struct({ number: Schema.String }),
+  success: Schema.Struct({ status: Schema.String }),
+}) {}
+
+export const LookupOrderLive = LookupOrder.make(({ number }) => ({
+  status: number.startsWith("A") ? "shipped" : "processing",
+}));
+```
+
+List it on the harness, and provide its Layer where the harness is yielded:
+
+```typescript
+const harness = yield* Nanocode.Harness({ models: [Fast], tools: [LookupOrder] });
+```
+
+## nanocode's own tools
+
+Without a sandbox, nanocode's shell and file tools are off, and the model has only your tools.
+
+Provide an `AI.Sandboxes` Layer to turn them on. See [Sandbox platforms](/ai/sandbox-platforms).
+
+```typescript title="src/Sessions.ts"
+import * as AIBoat from "@alchemy.run/ai/Boat";
+import * as Boat from "@alchemy.run/boat";
+
+const Base = Boat.Snapshot("Base", { run: ["npm install --global pnpm"] });
+
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  LookupOrderLive,
+  NanocodeCloudflare.DurableObjectHost,
+  AIBoat.Sandboxes(Base),
+).pipe(Layer.provideMerge(Boat.CreateSandboxHttp));
+```
+
+The model can then run commands and read and write files in the session's sandbox. `directory` on the harness is where they start; the default is `/home/user`.
+
+## One sandbox per session
+
+Every turn of a session uses the same sandbox, opened by the first tool call that needs it. Stop it and keep its files, or delete it:
+
+```typescript
+yield* harness.session("ticket-7").suspendSandbox;
+yield* harness.session("ticket-7").removeSandbox;
+```
+
+## Not turned on
+
+nanocode's Code Mode, subagents and web search are off on this harness. Tool tags such as `AI.Bash` are not used: nanocode's shell and file tools come with a sandbox.

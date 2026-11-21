@@ -1,9 +1,11 @@
 /**
  * Answers an OpenAI chat-completions request with an Effect AI
- * `LanguageModel`. OpenCode's requests arrive in that format; tool calls
- * are returned to OpenCode, which runs them itself.
+ * `LanguageModel`. A coding agent that brings its own model client
+ * (OpenCode, nanocode) sends requests in that format; tool calls are
+ * returned to the agent, which runs them itself.
  *
  * @internal
+ * @module
  */
 import {
   Tool as AiTool,
@@ -129,7 +131,7 @@ const promptOf = (messages: ReadonlyArray<ChatMessage>): Prompt.RawInput => {
   return out;
 };
 
-/** The tools OpenCode offers, as an Effect toolkit that is declared but never run. */
+/** The tools the agent offers, as an Effect toolkit that is declared but never run. */
 const toolkitOf = (
   tools: NonNullable<ChatRequest["tools"]>,
 ): Toolkit.WithHandler<Record<string, AiTool.Any>> => ({
@@ -142,7 +144,7 @@ const toolkitOf = (
       }),
     ]),
   ) as Record<string, AiTool.Any>,
-  handle: (() => Effect.die(new Error("OpenCode runs tool calls itself"))) as never,
+  handle: (() => Effect.die(new Error("The agent runs tool calls itself"))) as never,
 });
 
 /** Answer one request. */
@@ -206,3 +208,48 @@ export const complete = (
       usage,
     }));
   });
+
+/**
+ * A reply as the server-sent events of a streamed chat completion: one
+ * chunk with everything the model said, one with why it stopped and what
+ * it used, then `[DONE]`.
+ */
+export const toEventStream = (reply: ChatReply, model: string, id: string): string => {
+  const chunk = (choice: object, usage?: object) =>
+    `data: ${JSON.stringify({
+      id,
+      object: "chat.completion.chunk",
+      model,
+      choices: [{ index: 0, ...choice }],
+      ...(usage === undefined ? {} : { usage }),
+    })}\n\n`;
+  return [
+    chunk({
+      delta: {
+        role: "assistant",
+        ...(reply.content.length > 0 ? { content: reply.content } : {}),
+        ...(reply.reasoning === undefined ? {} : { reasoning_content: reply.reasoning }),
+        ...(reply.toolCalls.length > 0
+          ? {
+              tool_calls: reply.toolCalls.map((call, index) => ({
+                index,
+                id: call.id,
+                type: "function",
+                function: { name: call.name, arguments: call.arguments },
+              })),
+            }
+          : {}),
+      },
+      finish_reason: null,
+    }),
+    chunk(
+      { delta: {}, finish_reason: reply.finishReason },
+      {
+        prompt_tokens: reply.usage.input,
+        completion_tokens: reply.usage.output,
+        total_tokens: reply.usage.input + reply.usage.output,
+      },
+    ),
+    "data: [DONE]\n\n",
+  ].join("");
+};
