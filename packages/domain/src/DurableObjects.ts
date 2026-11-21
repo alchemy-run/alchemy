@@ -381,6 +381,8 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
     const acquire = exclusively(acquireLease(state, lease));
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
     const drain: Effect.Effect<void> = Effect.gen(function* () {
+      // Nothing staged: nothing to do, and no lease to take.
+      if ((yield* state.storage.list({ prefix, limit: 1 })).size === 0) return;
       const held = yield* acquire;
       if (held !== undefined) {
         // Another drain holds the lease, or held it when its instance died
@@ -1021,7 +1023,9 @@ const aggregateObject = (
     const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
       Effect.gen(function* () {
         const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
-        if (duplicate) return { sent: duplicate, kick: false };
+        // A resend may follow an instance that died before delivering what the
+        // first commit staged: deliver it now rather than at the backstop.
+        if (duplicate) return { sent: duplicate, kick: duplicate._tag === "Accepted" };
         const current = yield* storedMeta;
         if (current.held) return yield* new InstanceHeld();
         const result = yield* kit.handle({
@@ -1060,7 +1064,8 @@ const aggregateObject = (
         const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
         if (duplicate?._tag === "Accepted") {
           const imported: ImportResult = { _tag: "Imported", receipt: duplicate.receipt };
-          return { imported, kick: false };
+          // As a resent command: deliver what the first import may have left staged.
+          return { imported, kick: true };
         }
         const current = yield* storedMeta;
         if (current.held) return yield* new InstanceHeld();

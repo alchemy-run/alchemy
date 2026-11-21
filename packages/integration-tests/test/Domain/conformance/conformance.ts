@@ -550,7 +550,9 @@ export interface RebuildOptions extends Omit<ConformanceOptions, "within"> {
 /**
  * A projection rebuilt by a version bump, writing a stream it wrote before:
  * every entry is kept, none is appended twice, and what happens after the
- * bump is appended. The case redeploys the front, so it runs alone and last.
+ * bump is appended. A view the bump adds is backfilled from every counter
+ * that recorded events before it. The case redeploys the front, so it runs
+ * alone and last.
  */
 export const rebuild = ({ test, url, kind, deploy }: RebuildOptions) => {
   const call = <T>(path: string) => Effect.flatMap(url, (base) => get<T>(base, path));
@@ -558,8 +560,19 @@ export const rebuild = ({ test, url, kind, deploy }: RebuildOptions) => {
   const tally = (counter: string, by: number) =>
     call<ReadonlyArray<number>>(`/tally/${counter}?by=${by}`);
 
+  type Replay = { readonly total: number; readonly increments: number };
+  /** Read the view version 1 adds for a counter, until it holds `expected` or time is up. */
+  const replay = (counter: string, expected: Replay) =>
+    call<Replay>(`/replay/${counter}`).pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("2 seconds"),
+        until: (view) => view.total === expected.total && view.increments === expected.increments,
+        times: 90,
+      }),
+    );
+
   test(
-    "a projection rebuilt by a version bump keeps its stream and appends what follows",
+    "a version bump rebuilds a projection, keeping its stream, and backfills a view it adds",
     Effect.gen(function* () {
       yield* deploy(0);
       const run = fresh("rebuild");
@@ -583,6 +596,20 @@ export const rebuild = ({ test, url, kind, deploy }: RebuildOptions) => {
       expect(yield* tally(`${run}~c`, 3)).toEqual([5, -2, 1, 3]);
       // The replay appends nothing again; the increments after the bump are appended.
       expect(yield* tally(`${run}~c`, 4)).toEqual([5, -2, 1, 3, 4]);
+
+      // The view version 1 adds holds what the counters recorded under version 0.
+      expect(yield* replay(`${run}~a`, { total: 4, increments: 2 })).toEqual({
+        total: 4,
+        increments: 2,
+      });
+      expect(yield* replay(`${run}~b`, { total: 2, increments: 0 })).toEqual({
+        total: 2,
+        increments: 0,
+      });
+      expect(yield* replay(`${run}~c`, { total: 7, increments: 2 })).toEqual({
+        total: 7,
+        increments: 2,
+      });
     }),
     { timeout: 900_000, tags: [kind], exclusive: true },
   );
