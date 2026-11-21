@@ -421,7 +421,7 @@ const syncValue = Effect.fn(function* (name: string, value: string | Redacted.Re
   }
   const added = yield* secretmanager.addVersionProjectsSecrets({
     parent: name,
-    body: { payload: { data: Buffer.from(desired, "utf8").toString("base64") } },
+    payload: { data: Buffer.from(desired, "utf8").toString("base64") },
   });
   return added.name;
 });

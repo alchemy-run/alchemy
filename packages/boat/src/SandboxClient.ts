@@ -37,6 +37,7 @@ export type BoatError =
   | boat.MemberSandboxLimitReached
   | boat.MonitoringOffForAccount
   | boat.NoReadyMachine
+  | boat.OutOfCapacity
   | boat.NoRunningTurn
   | boat.NotOrgSandbox
   | boat.RecoverResetFailed
