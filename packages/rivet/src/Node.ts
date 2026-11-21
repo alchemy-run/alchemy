@@ -18,6 +18,7 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import {
+  actorOptionsOf,
   DurableObjectHasNoPool,
   namespaceAt,
   PlatformDeclaration,
@@ -64,8 +65,9 @@ export interface ServeOptions extends NodeConnection {
   /** Further RivetKit registry settings, such as message size limits. */
   readonly registry?: Readonly<Record<string, unknown>>;
   /**
-   * RivetKit actor options by class (its `LogicalId`), such as
-   * `sleepGracePeriod`. A class not listed runs with RivetKit's defaults.
+   * RivetKit actor options by class (its `LogicalId`), in milliseconds,
+   * such as `sleepGracePeriod`. Each wins over the same option the class
+   * sets in its props; an option neither sets keeps RivetKit's default.
    */
   readonly options?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
   /**
@@ -109,10 +111,12 @@ const host = (classes: ReadonlyArray<DurableObjectClass<unknown>>) =>
       const context = yield* Layer.build(
         Option.isSome(stack) ? entry : entry.pipe(Layer.provide(stackConstant("rivet", "node"))),
       );
-      const runtime = Context.get(context, entrypointTag)
-        .RuntimeContext as DurableObjectRuntimeContext;
+      const self = Context.get(context, entrypointTag);
+      const runtime = self.RuntimeContext as DurableObjectRuntimeContext;
       const built = runtime.hosted();
-      if (built !== undefined) return built;
+      if (built !== undefined) {
+        return { built, options: yield* actorOptionsOf(runtime.id, self.Props) };
+      }
       return yield* Effect.die(
         new DurableObjectHasNoPool({
           message: `Rivet.DurableObject '${runtime.id}' did not finish its class phase.`,
@@ -148,13 +152,22 @@ export const serve = (
   Effect.gen(function* () {
     const connection = yield* resolveConnection(options);
     const hosted = yield* inRuntimePhase(host(classes));
-    return yield* runDurableObjects(hosted, {
-      ...connection,
-      registry: options.registry,
-      options: options.options,
-      shutdown: options.shutdown,
-      connected: options.connected,
-    });
+    return yield* runDurableObjects(
+      hosted.map(({ built }) => built),
+      // What a class sets in its props, under what `options` sets for it.
+      Object.fromEntries(
+        hosted.flatMap(({ built, options: declared }) => {
+          const merged = { ...declared, ...options.options?.[built.name] };
+          return Object.keys(merged).length === 0 ? [] : [[built.name, merged]];
+        }),
+      ),
+      {
+        ...connection,
+        registry: options.registry,
+        shutdown: options.shutdown,
+        connected: options.connected,
+      },
+    );
   }) satisfies Effect.Effect<never, Config.ConfigError, Scope.Scope>;
 
 /** Reach the instances of any Durable Object class through the gateway. */

@@ -415,6 +415,40 @@ describe.skipIf(!!process.env.FAST)(
       );
 
       test(
+        "a class's sleepTimeout puts an idle instance to sleep that soon",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          yield* step(name, "put?value=3&class=quick");
+          // QuickLifecycle sleeps 2 seconds after its last call, not RivetKit's 30.
+          const hooks = yield* step<Hooks>(name, "hooks").pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("2 seconds"),
+              until: (hooks) => hooks.slept > 0,
+              times: 6,
+            }),
+          );
+          expect(hooks).toEqual({ slept: 1, destroyed: 0 });
+          expect(yield* step<{ value: number | null }>(name, "value?class=quick")).toEqual({
+            value: 3,
+          });
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
+        "a call still running past a class's sleepGracePeriod fails as one that never arrived",
+        Effect.gen(function* () {
+          const name = crypto.randomUUID();
+          // QuickLifecycle closes storage 3 seconds into the sleep, not 15; the
+          // call writes at 6.
+          expect(yield* step<{ late: string }>(name, "late?ms=6000&class=quick")).toEqual({
+            late: "RpcCallError 503",
+          });
+        }),
+        { timeout: 120_000 },
+      );
+
+      test(
         "onSleep and onDestroy can't be called as methods",
         Effect.gen(function* () {
           const name = crypto.randomUUID();
