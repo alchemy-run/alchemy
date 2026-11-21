@@ -1,0 +1,61 @@
+---
+title: Discord
+description: Discord channels, roles, webhooks, slash commands and AutoMod rules as Stack resources, with bot bindings and verified interactions for Workers.
+---
+
+import HubMap from "../../../components/HubMap.astro";
+
+Discord is a chat platform organized into guilds (servers). A guild holds channels, roles that grant permissions, webhooks that post into channels, and moderation rules. An application adds a bot user and slash commands to the guilds it's installed in.
+
+Alchemy manages a guild's structure as Stack resources, and gives a runtime typed calls into Discord's bot API.
+
+**New to Discord?** Start with [What is Discord?](/discord/what-is-discord).
+
+## A quick example
+
+A channel and a role that can see it:
+
+```typescript title="alchemy.run.ts"
+const guild = yield* Discord.Guild("Community", { name: "Alchemy" });
+const staff = yield* Discord.Role("Staff", { guildId: guild.guildId, name: "Staff" });
+const room = yield* Discord.Channel("StaffRoom", {
+  guildId: guild.guildId,
+  name: "staff-room",
+  permissionOverwrites: [
+    { id: guild.everyoneRoleId, type: "role", deny: Discord.Permissions.ViewChannel },
+    { id: staff.roleId, type: "role", allow: Discord.Permissions.ViewChannel },
+  ],
+});
+```
+
+A slash command, answered by a Worker:
+
+```typescript title="src/bot.ts"
+export default class Bot extends Cloudflare.Worker<Bot>()(
+  "Bot",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    yield* Discord.ApplicationCommand("Ping", { name: "ping", description: "Pong!" });
+    yield* Discord.consumeInteractions(() => Effect.succeed(Discord.reply("pong")));
+    return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+  }).pipe(Effect.provide(Discord.InteractionsLive)),
+) {}
+```
+
+## Where to start
+
+**Want to build?** Create a bot and connect its token in [Setup](/discord/setup).
+
+**Looking for something specific?** Every resource and binding is in the generated [API reference](/providers).
+
+## Out of scope
+
+- **Creating guilds.** Bots can't create servers; `Discord.Guild` references one the bot was invited to.
+- **Creating applications.** The Developer Portal creates an application and its bot token; `Discord.Application` manages the settings of the one the token belongs to.
+- **End-user OAuth2 APIs** (`/users/@me/connections`, `/oauth2/@me`, a user's role connection, group DMs): they need a user's access token, not a bot token.
+- **The Gateway.** Bindings use the HTTP API; the Gateway WebSocket needs a long-lived process. `Discord.GetBotGateway` returns its URL for one.
+- **Deprecated pin routes** (`/channels/{id}/pins/{message_id}`): superseded by `PinMessage` / `ListPins`.
+
+## The docs
+
+<HubMap />

@@ -56,6 +56,7 @@ function providersSidebarEntry() {
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
       { label: "GitHub", link: "/github" },
+      { label: "Discord", link: "/discord" },
       { label: "Stripe", link: "/stripe" },
       { label: "Docker", link: "/docker" },
       { label: "Kubernetes", link: "/kubernetes" },
@@ -2159,6 +2160,15 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("GitHub"),
+          ],
+        },
+        {
+          label: "Discord",
+          items: [
+            { label: "Overview", link: "/discord" },
+            { label: "What is Discord?", link: "/discord/what-is-discord" },
+            { label: "Setup", link: "/discord/setup" },
+            providerResourcesEntry("Discord"),
           ],
         },
         {

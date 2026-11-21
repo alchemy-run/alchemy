@@ -78,6 +78,9 @@
       "path": "./submodules/distilled/packages/github/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/discord/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/acme/tsconfig.json"
     },
     {
@@ -194,6 +197,9 @@
     },
     {
       "path": "./packages/github/tsconfig.json"
+    },
+    {
+      "path": "./packages/discord/tsconfig.json"
     },
     {
       "path": "./packages/stripe/tsconfig.json"
@@ -564,6 +570,9 @@
     },
     {
       "path": "./examples/stripe-billing/tsconfig.json"
+    },
+    {
+      "path": "./examples/discord-bot/tsconfig.json"
     },
     {
       "path": "./examples/stripe-connect/tsconfig.json"

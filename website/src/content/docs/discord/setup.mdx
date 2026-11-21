@@ -1,0 +1,40 @@
+---
+title: Setup
+description: Create a Discord application and bot, invite it to a server, and connect its token to alchemy.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Install `@alchemy.run/discord`:
+
+<PackageManagers add="@alchemy.run/discord" />
+
+Then register the provider next to your cloud's:
+
+```typescript title="alchemy.run.ts"
+import * as Discord from "@alchemy.run/discord";
+
+providers: Layer.mergeAll(Cloudflare.providers(), Discord.providers()),
+```
+
+## Create a bot
+
+1. Open the [Developer Portal](https://discord.com/developers/applications) and click **New Application**.
+2. Under **Bot**, click **Reset Token** and copy it. Discord shows it once.
+3. Turn on **Server Members Intent** if you'll list members.
+4. Under **Installation**, add the `bot` and `applications.commands` scopes and the permissions your stack needs (Administrator is simplest for a test server).
+5. Open the install link and add the bot to your server.
+
+## Connect the token
+
+```sh
+alchemy profile edit --add Discord
+```
+
+Paste the bot token when asked. It's stored under `~/.alchemy/credentials/<profile>/`.
+
+In CI, profiles are bypassed and Alchemy reads `DISCORD_BOT_TOKEN` (or `DISCORD_TOKEN`).
+
+## How hosts call Discord
+
+Discord issues no workload identity and can't mint a second token for a bot. A Worker or Lambda that uses a bot binding (`Discord.SendMessage`, `Discord.GetMember`, ...) gets the deploy's bot token as a secret. Webhook bindings (`Discord.ExecuteWebhook`) bind only the webhook's own token; prefer them for hosts that only post messages.

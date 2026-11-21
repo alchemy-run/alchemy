@@ -94,6 +94,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/1password/src",
   },
   {
+    srcRoot: "packages/discord/src",
+    providerPrefix: "Discord",
+    sourceDisplayPrefix: "packages/discord/src",
+  },
+  {
     srcRoot: "packages/turso/src",
     providerPrefix: "Turso",
     sourceDisplayPrefix: "packages/turso/src",

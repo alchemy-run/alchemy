@@ -4667,6 +4667,37 @@ importers:
         specifier: 'catalog:'
         version: 8.20.4
 
+  examples/discord-bot:
+    dependencies:
+      '@alchemy.run/cloudflare':
+        specifier: workspace:*
+        version: link:../../packages/cloudflare
+      '@alchemy.run/discord':
+        specifier: workspace:*
+        version: link:../../packages/discord
+      '@cloudflare/workers-types':
+        specifier: 5.20261117.1
+        version: 5.20261117.1
+      '@distilled.cloud/discord':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/discord
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.4(effect@4.1.4)(redis@6.2.1(@opentelemetry/api@1.10.0))
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
   examples/docker-postgres:
     dependencies:
       '@alchemy.run/docker':
@@ -9890,6 +9921,28 @@ importers:
         specifier: 'catalog:'
         version: 7.1.0-beta
 
+  packages/discord:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/discord':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/discord
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-beta
+
   packages/docker:
     dependencies:
       rolldown:
@@ -11158,6 +11211,9 @@ importers:
       '@alchemy.run/digitalocean':
         specifier: workspace:*
         version: link:../digitalocean
+      '@alchemy.run/discord':
+        specifier: workspace:*
+        version: link:../discord
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
@@ -11272,6 +11328,9 @@ importers:
       '@distilled.cloud/digitalocean':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/digitalocean
+      '@distilled.cloud/discord':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/discord
       '@distilled.cloud/e2b':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/e2b
@@ -12149,6 +12208,9 @@ importers:
       '@alchemy.run/daytona':
         specifier: workspace:*
         version: link:../packages/daytona
+      '@alchemy.run/discord':
+        specifier: workspace:*
+        version: link:../packages/discord
       '@alchemy.run/e2b':
         specifier: workspace:*
         version: link:../packages/e2b

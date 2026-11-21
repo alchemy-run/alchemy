@@ -1,0 +1,50 @@
+---
+title: What is Discord?
+description: Guilds, channels, roles, permissions, applications, bots, webhooks and interactions.
+---
+
+Discord groups people into **guilds** (called servers in the app). Everything else on this page lives in one.
+
+## Guilds and channels
+
+A guild has **channels**: text channels for messages, voice and stage channels for talking, announcement channels whose posts other guilds can follow, and forum channels made of posts. **Categories** group channels in the sidebar.
+
+```typescript
+const category = yield* Discord.Channel("Help", { guildId, name: "Help", type: "category" });
+yield* Discord.Channel("Questions", { guildId, name: "questions", type: "forum", parentId: category.channelId });
+```
+
+## Roles and permissions
+
+**Roles** carry a set of permission bits (send messages, manage channels, ban members). A member has the permissions of all their roles. Every guild has an `@everyone` role whose id is the guild's id.
+
+A channel can override them with **permission overwrites**: allow or deny bits for one role or member, in that channel only.
+
+```typescript
+yield* Discord.PermissionOverwrite("ReadOnly", {
+  channelId: announcements.channelId,
+  targetId: guildId,
+  type: "role",
+  deny: Discord.Permissions.SendMessages,
+});
+```
+
+## Applications and bots
+
+An **application** is created in the [Developer Portal](https://discord.com/developers/applications). It owns a **bot user**, which joins guilds through an install link and acts with a **bot token**. Alchemy deploys with that token: every Discord resource is created by the bot, which needs permissions for it in the guild.
+
+Discord has no tags, so Alchemy treats a guild object as its own when the bot created it, per the guild's audit log or the object's creator field.
+
+## Webhooks
+
+A **webhook** posts messages into one channel. Its URL contains a secret token, and anything holding the URL can post without a bot token.
+
+```typescript
+const hook = yield* Discord.Webhook("Deploys", { channelId: deploys.channelId });
+```
+
+## Interactions
+
+**Slash commands** and context-menu commands belong to the application. When someone uses one, or clicks a button, Discord sends an **interaction** to the application's interactions endpoint: an HTTPS URL that verifies Discord's signature and answers within three seconds.
+
+`Discord.consumeInteractions` makes a Worker that endpoint.
