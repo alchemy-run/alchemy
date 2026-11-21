@@ -136,21 +136,27 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
     }),
   );
 
-  // #2987: a scheduled `alchemy drift` must tell drift (2) from a clean
-  // stage (0) and a failed check (1) without parsing the printed plan.
-  it.live("drift exits 0 in sync, 2 on unrepaired drift, 1 when it can't check", () =>
+  // #2987, #3525: a scheduled `alchemy drift` must tell drift (2) from a clean
+  // stage (0), a failed check (1) and an interrupted deploy it could not
+  // check (3) without parsing the printed plan. A resource whose provider has
+  // no `read` never fails the check.
+  it.live("drift exits 0 in sync, 2 on drift, 1 if it fails, 3 if unchecked", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-exit-codes-" });
       const project = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-drift-project-" });
-      const run = (args: ReadonlyArray<string>, cloud?: string) =>
+      const run = (args: ReadonlyArray<string>, cloud?: string, stuck = false) =>
         Effect.gen(function* () {
           const handle = yield* ChildProcess.make(
             "bun",
             [CLI, ...args, "--config", DRIFT_FIXTURE, "--stage", "cli_drift"],
             {
               cwd: project,
-              env: { ALCHEMY_HOME: home, ...(cloud ? { DRIFT_FIXTURE_CLOUD: cloud } : {}) },
+              env: {
+                ALCHEMY_HOME: home,
+                ...(cloud ? { DRIFT_FIXTURE_CLOUD: cloud } : {}),
+                ...(stuck ? { DRIFT_FIXTURE_STUCK: "true" } : {}),
+              },
               extendEnv: true,
               stdin: "ignore",
               stdout: "pipe",
@@ -175,6 +181,9 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
         drifted: (yield* run(["drift"], "missing")).exitCode,
         unreadable: (yield* run(["drift"], "broken")).exitCode,
         repaired: (yield* run(["drift", "--repair", "--yes"], "missing")).exitCode,
+        interruptedDeploy: (yield* run(["deploy", "--yes"], undefined, true)).exitCode,
+        unchecked: (yield* run(["drift"])).exitCode,
+        driftedAndUnchecked: (yield* run(["drift"], "missing")).exitCode,
         destroy: (yield* run(["destroy", "--yes"])).exitCode,
       };
       expect(exitCodes).toEqual({
@@ -183,6 +192,9 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
         drifted: 2,
         unreadable: 1,
         repaired: 0,
+        interruptedDeploy: 1,
+        unchecked: 3,
+        driftedAndUnchecked: 2,
         destroy: 0,
       });
     }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
