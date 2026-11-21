@@ -698,6 +698,73 @@ const SECTIONS: Section[] = [
     pages: { directory: "archil/storage" },
   },
   {
+    heading: "AI",
+    intro:
+      "What every agent harness shares: models, tools and their failures, the coding tools, MCP servers, skills, and the sandboxes tools work in.",
+    pages: {
+      slugs: [
+        "ai/index",
+        "ai/what-is-a-harness",
+        "ai/models",
+        "ai/tools",
+        "ai/coding-tools",
+        "ai/mcp-servers",
+        "ai/skills",
+        "ai/sandboxes",
+        "ai/sandbox-platforms",
+        "ai/custom-sandboxes",
+      ],
+    },
+  },
+  {
+    heading: "Pi",
+    intro:
+      "Pi Durable on Alchemy: conversations in a Durable Object, tools, extensions, skills, code mode, sandboxes, and runs that resume after a crash.",
+    pages: {
+      slugs: [
+        "pi/index",
+        "pi/what-is-pi",
+        "pi/setup",
+        "pi/tutorial/part-1",
+        "pi/tutorial/part-2",
+        "pi/tutorial/part-3",
+        "pi/tutorial/part-4",
+        "pi/conversations",
+        "pi/durability",
+        "pi/tools",
+        "pi/mcp-servers",
+        "pi/code-mode",
+        "pi/extensions",
+        "pi/skills",
+        "pi/sandboxes",
+        "pi/other-hosts",
+      ],
+    },
+  },
+  {
+    heading: "OpenCode",
+    intro:
+      "OpenCode on Alchemy: sessions in a sandbox, prompts, model requests answered by your Layers, tools, MCP servers and skills.",
+    pages: {
+      slugs: [
+        "opencode/index",
+        "opencode/what-is-opencode",
+        "opencode/setup",
+        "opencode/tutorial/part-1",
+        "opencode/tutorial/part-2",
+        "opencode/tutorial/part-3",
+        "opencode/tutorial/part-4",
+        "opencode/sessions",
+        "opencode/model-requests",
+        "opencode/tools",
+        "opencode/mcp-servers",
+        "opencode/skills",
+        "opencode/sandbox",
+        "opencode/api",
+      ],
+    },
+  },
+  {
     heading: "Boat",
     intro:
       "Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.",

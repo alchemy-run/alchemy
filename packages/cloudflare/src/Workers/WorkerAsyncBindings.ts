@@ -151,6 +151,8 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
       const bindingEff = props.env?.[bindingName] as
         | WorkerBindingResource
         | Effect.Effect<WorkerBindingResource>;
+      // An `undefined` entry is no binding.
+      if (bindingEff === undefined) continue;
       // A Container bound directly in `env` declares a container-backed
       // Durable Object class: the Container IS the DO namespace binding plus
       // its ContainerApplication. Handled before the generic Effect

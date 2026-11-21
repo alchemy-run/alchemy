@@ -49,6 +49,9 @@ function providersSidebarEntry() {
       { label: "Modal", link: "/modal" },
       { label: "Archil", link: "/archil" },
       { label: "Boat", link: "/boat" },
+      { label: "AI", link: "/ai" },
+      { label: "Pi", link: "/pi" },
+      { label: "OpenCode", link: "/opencode" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -2489,6 +2492,106 @@ export default defineConfig({
               ],
             },
             providerApiReferenceEntry("SQL", "Drizzle"),
+          ],
+        },
+        {
+          label: "AI",
+          items: [
+            { label: "Overview", link: "/ai" },
+            { label: "What is an agent harness?", link: "/ai/what-is-a-harness" },
+            {
+              label: "Models & tools",
+              items: [
+                { label: "Models", link: "/ai/models" },
+                { label: "Tools", link: "/ai/tools" },
+                { label: "Coding tools", link: "/ai/coding-tools" },
+                { label: "MCP servers", link: "/ai/mcp-servers" },
+                { label: "Skills", link: "/ai/skills" },
+              ],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Sandboxes", link: "/ai/sandboxes" },
+                { label: "Sandbox platforms", link: "/ai/sandbox-platforms" },
+                { label: "Build your own", link: "/ai/custom-sandboxes" },
+              ],
+            },
+          ],
+        },
+        {
+          label: "Pi",
+          items: [
+            { label: "Overview", link: "/pi" },
+            { label: "What is Pi?", link: "/pi/what-is-pi" },
+            { label: "Setup", link: "/pi/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "pi/tutorial" } }],
+            },
+            {
+              label: "Conversations",
+              items: [
+                { label: "Conversations", link: "/pi/conversations" },
+                { label: "Surviving a crash", link: "/pi/durability" },
+              ],
+            },
+            {
+              label: "Tools",
+              items: [
+                { label: "Tools", link: "/pi/tools" },
+                { label: "MCP servers", link: "/pi/mcp-servers" },
+                { label: "Code mode", link: "/pi/code-mode" },
+              ],
+            },
+            {
+              label: "Extensions & skills",
+              items: [
+                { label: "Extensions", link: "/pi/extensions" },
+                { label: "Skills", link: "/pi/skills" },
+              ],
+            },
+            {
+              label: "Hosting",
+              items: [
+                { label: "Sandboxes", link: "/pi/sandboxes" },
+                { label: "Other hosts", link: "/pi/other-hosts" },
+              ],
+            },
+          ],
+        },
+        {
+          label: "OpenCode",
+          items: [
+            { label: "Overview", link: "/opencode" },
+            { label: "What is OpenCode?", link: "/opencode/what-is-opencode" },
+            { label: "Setup", link: "/opencode/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "opencode/tutorial" } }],
+            },
+            {
+              label: "Sessions",
+              items: [
+                { label: "Sessions & prompts", link: "/opencode/sessions" },
+                { label: "Model requests", link: "/opencode/model-requests" },
+              ],
+            },
+            {
+              label: "Tools",
+              items: [
+                { label: "Tools", link: "/opencode/tools" },
+                { label: "MCP servers", link: "/opencode/mcp-servers" },
+                { label: "Skills", link: "/opencode/skills" },
+              ],
+            },
+            {
+              label: "Hosting",
+              items: [
+                { label: "The session's sandbox", link: "/opencode/sandbox" },
+                { label: "OpenCode's own API", link: "/opencode/api" },
+              ],
+            },
           ],
         },
         {
