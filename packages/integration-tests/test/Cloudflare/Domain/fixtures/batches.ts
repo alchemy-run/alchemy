@@ -25,8 +25,11 @@ const RESET_WITHIN_MILLIS = 30_000;
 /** A group of pings, projected together. */
 export const GroupId = Schema.String.pipe(Schema.brand("GroupId"));
 
-/** Which object resets (as an eviction does) while it handles a ping, the first time. */
-export const Reset = Schema.Literals(["none", "projection", "policy"]);
+/**
+ * Which object resets (as an eviction does) while it handles a ping, the
+ * first time; `view` fails the ping's first delivery to {@link PingCount}.
+ */
+export const Reset = Schema.Literals(["none", "projection", "policy", "view"]);
 export type Reset = typeof Reset.Type;
 
 /** Whether the policy answers a ping with a ping of its own, and how. */
@@ -138,8 +141,35 @@ export const AnswererLive = Answerer.toLayer(
   }),
 );
 
+/** The pingers whose first delivery to {@link PingCount} failed, in this isolate. */
+const failedOnce = new Set<string>();
+
+/**
+ * How many pings each group has seen. A ping told to reset the view fails
+ * its first delivery, as a crash of the pinger's object before it delivers
+ * does: the delivery stays staged on the pinger.
+ */
+export class PingCount extends Domain.View("PingCount", {
+  from: [Pinger],
+  key: GroupId,
+  keyOf: { Pinger: ({ event }) => event.group },
+  state: Schema.Struct({ pings: Schema.Number }),
+  initial: { pings: 0 },
+  evolve: {
+    Pinged: (s, e, { source }) => {
+      if (e.reset === "view" && !failedOnce.has(source.id)) {
+        failedOnce.add(source.id);
+        // A defect, as a crash is: evolve has no error channel to fail on.
+        throw new Error(`the first delivery of ${source.id}'s ping fails`);
+      }
+      return { pings: s.pings + 1 };
+    },
+  },
+}) {}
+
 export class Batches extends Domain.Model("Batches", {
   aggregates: [Pinger],
+  views: [PingCount],
   projections: [PongWriter],
   streams: [Pongs],
   policies: [Answerer],
