@@ -51,8 +51,8 @@ const uploadSource = Effect.fn(function* () {
     },
   ]);
   const uploaded = yield* cloudfunctions.generateUploadUrlProjectsLocationsFunctions({
+    environment: "GEN_2",
     parent: `projects/${project}/locations/${LOCATION}`,
-    body: { environment: "GEN_2" },
   });
   if (uploaded.uploadUrl === undefined) {
     return yield* Effect.die(new Error("generateUploadUrl did not return uploadUrl"));

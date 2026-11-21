@@ -66,11 +66,9 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         appengine.createAppsDomainMappings({
+          id: "alchemy-missing.example.com",
+          sslSettings: { sslManagementType: "AUTOMATIC" },
           appsId: project,
-          body: {
-            id: "alchemy-missing.example.com",
-            sslSettings: { sslManagementType: "AUTOMATIC" },
-          },
         }),
       );
       expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);

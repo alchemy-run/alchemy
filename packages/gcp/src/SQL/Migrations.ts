@@ -79,14 +79,14 @@ const withStagedPassword = <A, E, R>(
       );
       yield* secretmanager
         .createProjectsLocationsSecrets({
+          labels: options.labels,
           parent,
           secretId: options.secretId,
-          body: { labels: options.labels },
         })
         .pipe(Effect.catchTag("Conflict", () => Effect.void));
       const version = yield* secretmanager.addVersionProjectsLocationsSecrets({
+        payload: { data },
         parent: name,
-        body: { payload: { data } },
       });
       return version.name ?? `${name}/versions/latest`;
     }).pipe(Effect.mapError(migrationError(`Staging the migrations password in ${name}`))),
@@ -118,14 +118,12 @@ const makeDataApiExecutor = Effect.fn(function* (options: {
     batch: "transaction",
     execute: (sqlStatement) =>
       executeSql({
+        database: options.database,
+        user: options.user,
+        passwordSecretVersion: options.passwordSecretVersion,
+        sqlStatement,
         project: options.project,
         instance: options.instance,
-        body: {
-          database: options.database,
-          user: options.user,
-          passwordSecretVersion: options.passwordSecretVersion,
-          sqlStatement,
-        },
       }).pipe(
         Effect.mapError(migrationError(`executeSql on '${options.instance}'`)),
         // SQL errors come back inside a 200 response.
@@ -175,9 +173,9 @@ const dialConnector = Effect.fn(function* (options: { project: string; instance:
   );
   const ephemeral = yield* sqladmin
     .generateEphemeralCertConnect({
+      public_key: keys.publicKey,
       project: options.project,
       instance: options.instance,
-      body: { public_key: keys.publicKey },
     })
     .pipe(
       Effect.mapError(migrationError(`Requesting a client certificate for '${options.instance}'`)),

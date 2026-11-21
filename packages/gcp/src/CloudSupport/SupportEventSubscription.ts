@@ -291,12 +291,7 @@ export const SupportEventSubscriptionProvider = () =>
 
       if (current === undefined || isDeleted(current)) {
         const created = yield* cloudsupport
-          .createOrganizationsSupportEventSubscriptions({
-            parent,
-            body: {
-              pubSubTopic: topicName,
-            },
-          })
+          .createOrganizationsSupportEventSubscriptions({ pubSubTopic: topicName, parent })
           .pipe(
             Effect.catchTag("Conflict", () => findOwnedSubscription(parent, id, lookup, topicName)),
           );
@@ -328,11 +323,9 @@ export const SupportEventSubscriptionProvider = () =>
       const name = current.name;
       if (!sameTopic(current.pubSubTopic, topicName)) {
         current = yield* cloudsupport.patchOrganizationsSupportEventSubscriptions({
+          pubSubTopic: topicName,
           name,
           updateMask: "pub_sub_topic",
-          body: {
-            pubSubTopic: topicName,
-          },
         });
       }
 

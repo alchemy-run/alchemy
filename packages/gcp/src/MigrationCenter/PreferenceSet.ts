@@ -294,13 +294,11 @@ export const PreferenceSetProvider = () =>
       if (current === undefined) {
         const created = yield* mc
           .createProjectsLocationsPreferenceSets({
+            displayName,
+            description,
+            virtualMachinePreferences,
             parent: locationParent(env.project, location),
             preferenceSetId,
-            body: {
-              displayName,
-              description,
-              virtualMachinePreferences,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -325,14 +323,11 @@ export const PreferenceSetProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* mc.patchProjectsLocationsPreferenceSets({
+          displayName,
+          description,
+          virtualMachinePreferences,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            description,
-            virtualMachinePreferences,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

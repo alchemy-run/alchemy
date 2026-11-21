@@ -319,8 +319,8 @@ export const AchievementConfigurationProvider = () =>
 
       if (current === undefined) {
         current = yield* gamesConfiguration.insertAchievementConfigurations({
+          ...desired,
           applicationId,
-          body: desired,
         });
       }
 
@@ -340,8 +340,8 @@ export const AchievementConfigurationProvider = () =>
       });
       if (needsSync(current, synced)) {
         current = yield* gamesConfiguration.updateAchievementConfigurations({
+          ...synced,
           achievementId: current.id ?? news.achievementId ?? "",
-          body: synced,
         });
       }
 

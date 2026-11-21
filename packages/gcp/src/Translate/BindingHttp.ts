@@ -44,11 +44,12 @@ const makeLocationParentHttpBinding = <
   I extends { parent: string },
   A,
   E,
+  R,
 >(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
-  withBody: (name: string, request: Omit<I, "parent"> | undefined) => I;
+  withBody: (name: string, request: R | undefined) => I;
 }) =>
   Effect.gen(function* () {
     const bind = yield* GCPBindings.Bind;
@@ -60,9 +61,7 @@ const makeLocationParentHttpBinding = <
         });
       }
       const name = yield* resource.name;
-      return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
-        request?: Omit<I, "parent">,
-      ) {
+      return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (request?: R) {
         return yield* run(options.withBody(yield* name, request));
       });
     });
@@ -90,18 +89,18 @@ export const makeModelHttpBinding = <I extends { name: string }, A, E>(options: 
   operation: GcpHttpOp<I, A, E>;
 }) => makeNamedHttpBinding<Model, I, A, E>(options);
 
-export const makeAdaptiveMtTranslateBinding = <I extends { parent: string }, A, E>(options: {
+export const makeAdaptiveMtTranslateBinding = <I extends { parent: string }, A, E, R>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
-  withBody: (name: string, request: Omit<I, "parent"> | undefined) => I;
-}) => makeLocationParentHttpBinding<AdaptiveMtDataset, I, A, E>(options);
+  withBody: (name: string, request: R | undefined) => I;
+}) => makeLocationParentHttpBinding<AdaptiveMtDataset, I, A, E, R>(options);
 
-export const makeTranslateTextBinding = <I extends { parent: string }, A, E>(options: {
+export const makeTranslateTextBinding = <I extends { parent: string }, A, E, R>(options: {
   tag: string;
   iam: BindingIam;
   operation: GcpHttpOp<I, A, E>;
-  withBody: (name: string, request: Omit<I, "parent"> | undefined) => I;
-}) => makeLocationParentHttpBinding<Model, I, A, E>(options);
+  withBody: (name: string, request: R | undefined) => I;
+}) => makeLocationParentHttpBinding<Model, I, A, E, R>(options);
 
 export { locationParentOf };

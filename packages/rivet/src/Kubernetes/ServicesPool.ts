@@ -3,7 +3,7 @@ import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
 import {
   makeServicesLayer,
-  servicesEnvironment,
+  secretServicesEnvironment,
   type ServicesPoolSettings,
 } from "../internal/ServicesHost.ts";
 
@@ -70,7 +70,8 @@ export const ServicesPool = (id: string, options: ServicesPoolOptions = {}) =>
           replicas: options.replicas ?? 1,
           serviceType: "ClusterIP",
           ...(options.resources === undefined ? {} : { resources: options.resources }),
-          env: servicesEnvironment(nodes),
+          // The token stays Redacted: the Deployment keeps it in its Secret.
+          env: secretServicesEnvironment(nodes),
         });
       }),
   });

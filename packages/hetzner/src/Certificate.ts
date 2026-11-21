@@ -1,4 +1,4 @@
-import * as Hetzner from "@distilled.cloud/hetzner";
+import * as Certificates from "@distilled.cloud/hetzner/certificates";
 import type { GetCertificateResponseCertificate } from "@distilled.cloud/hetzner/certificates";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
@@ -256,23 +256,21 @@ const toName = (id: string, name: string | undefined, existing?: string) =>
 const normalizePem = (pem: string | undefined): string => (pem ?? "").replace(/\r\n/g, "\n").trim();
 
 const getById = (id: number) =>
-  Hetzner.certificates.getCertificate({ id }).pipe(
+  Certificates.getCertificate({ id }).pipe(
     Effect.map(({ certificate }) => certificate),
     Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
-  Hetzner.certificates
-    .listCertificates({ name, per_page: 50 })
-    .pipe(Effect.map(({ certificates }) => certificates.find((cert) => cert.name === name)));
+  Certificates.listCertificates({ name, per_page: 50 }).pipe(
+    Effect.map(({ certificates }) => certificates.find((cert) => cert.name === name)),
+  );
 
 const findByLabels = (labels: Record<string, string>) =>
-  Hetzner.certificates
-    .listCertificates({
-      label_selector: labelSelector(labels),
-      per_page: 50,
-    })
-    .pipe(Effect.map(({ certificates }) => certificates[0]));
+  Certificates.listCertificates({
+    label_selector: labelSelector(labels),
+    per_page: 50,
+  }).pipe(Effect.map(({ certificates }) => certificates[0]));
 
 const observe = Effect.fn(function* (input: { id?: number; name?: string; logicalId: string }) {
   if (input.id !== undefined) {
@@ -288,12 +286,10 @@ const observe = Effect.fn(function* (input: { id?: number; name?: string; logica
 });
 
 const deleteById = (id: number) =>
-  Hetzner.certificates
-    .deleteCertificate({ id })
-    .pipe(Effect.catchTag("NotFound", () => Effect.void));
+  Certificates.deleteCertificate({ id }).pipe(Effect.catchTag("NotFound", () => Effect.void));
 
 const waitForManagedIssuance = (id: number) =>
-  Hetzner.certificates.getCertificate({ id }).pipe(
+  Certificates.getCertificate({ id }).pipe(
     Effect.flatMap(({ certificate }) =>
       Effect.gen(function* () {
         const issuance = certificate.status?.issuance;
@@ -341,23 +337,19 @@ const ensureCreated = Effect.fn(function* ({
 }) {
   const created =
     news.type === "managed"
-      ? yield* Hetzner.certificates
-          .createCertificate({
-            name,
-            type: "managed",
-            domain_names: news.domainNames,
-            labels: desiredLabels,
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.undefined))
-      : yield* Hetzner.certificates
-          .createCertificate({
-            name,
-            type: "uploaded",
-            certificate: news.certificate,
-            private_key: news.privateKey,
-            labels: desiredLabels,
-          })
-          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
+      ? yield* Certificates.createCertificate({
+          name,
+          type: "managed",
+          domain_names: news.domainNames,
+          labels: desiredLabels,
+        }).pipe(Effect.catchTag("Conflict", () => Effect.undefined))
+      : yield* Certificates.createCertificate({
+          name,
+          type: "uploaded",
+          certificate: news.certificate,
+          private_key: news.privateKey,
+          labels: desiredLabels,
+        }).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
 
   if (created === undefined) {
     return undefined;
@@ -447,7 +439,7 @@ export const CertificateProvider = () =>
     }),
 
     list: () =>
-      Hetzner.certificates.listCertificates
+      Certificates.listCertificates
         .items({ label_selector: alchemyStackSelector, per_page: 50 })
         .pipe(
           Stream.runCollect,
@@ -504,7 +496,7 @@ export const CertificateProvider = () =>
       const nameChanged = current.name !== name;
       const labelsChanged = upsert.length > 0 || removed.length > 0;
       if (nameChanged || labelsChanged) {
-        const updated = yield* Hetzner.certificates.updateCertificate({
+        const updated = yield* Certificates.updateCertificate({
           id: current.id,
           name: nameChanged ? name : undefined,
           labels: labelsChanged ? desiredLabels : undefined,

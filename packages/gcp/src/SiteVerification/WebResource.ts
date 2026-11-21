@@ -268,11 +268,9 @@ export const WebResourceProvider = () =>
       if (current === undefined) {
         const created = yield* siteVerification
           .insertWebResource({
+            site: { identifier, type: siteType },
+            owners: news.owners,
             verificationMethod,
-            body: {
-              site: { identifier, type: siteType },
-              owners: news.owners,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findWebResource(identifier, siteType)));
         current = created ?? undefined;
@@ -285,14 +283,12 @@ export const WebResourceProvider = () =>
       if (news.owners !== undefined && !sameOwners(current.owners, news.owners)) {
         const pathId = toPathId(current.id ?? output?.webResourceId);
         current = yield* siteVerification.updateWebResource({
-          id: pathId,
-          body: {
-            site: {
-              identifier: current.site?.identifier ?? identifier,
-              type: current.site?.type ?? siteType,
-            },
-            owners: sortedOwners(news.owners),
+          site: {
+            identifier: current.site?.identifier ?? identifier,
+            type: current.site?.type ?? siteType,
           },
+          owners: sortedOwners(news.owners),
+          id: pathId,
         });
       }
 

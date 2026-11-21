@@ -16,6 +16,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import { canonicalJson } from "../internal/Observe.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
@@ -56,7 +57,7 @@ export type {
 
 export type RuleName = string;
 
-export type RuleArn = `arn:aws:events:${RegionID}:${AccountID}:rule/${string}`;
+export type RuleArn = `arn:${Partition}:events:${RegionID}:${AccountID}:rule/${string}`;
 
 export interface RuleTarget {
   /** Unique identifier for this target within the rule. */
@@ -670,8 +671,8 @@ const toRuleArn = (
   ruleName: string,
 ): RuleArn =>
   (eventBusName === "default"
-    ? `arn:aws:events:${region}:${accountId}:rule/${ruleName}`
-    : `arn:aws:events:${region}:${accountId}:rule/${eventBusName}/${ruleName}`) as RuleArn;
+    ? `arn:${partitionOf(region)}:events:${region}:${accountId}:rule/${ruleName}`
+    : `arn:${partitionOf(region)}:events:${region}:${accountId}:rule/${eventBusName}/${ruleName}`) as RuleArn;
 
 const validateRuleProps = Effect.fn(function* (props: RuleProps) {
   if (!props.eventPattern && !props.scheduleExpression) {

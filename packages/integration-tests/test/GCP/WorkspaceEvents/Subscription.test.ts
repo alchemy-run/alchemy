@@ -56,12 +56,10 @@ test.provider.skipIf(runLifecycle)(
 
       const error = yield* Effect.flip(
         we.createSubscriptions({
-          body: {
-            targetResource: "//chat.googleapis.com/spaces/alchemy-missing",
-            eventTypes: ["google.workspace.chat.message.v1.created"],
-            notificationEndpoint: {
-              pubsubTopic: `projects/${project}/topics/alchemy-missing-topic`,
-            },
+          targetResource: "//chat.googleapis.com/spaces/alchemy-missing",
+          eventTypes: ["google.workspace.chat.message.v1.created"],
+          notificationEndpoint: {
+            pubsubTopic: `projects/${project}/topics/alchemy-missing-topic`,
           },
         }),
       );

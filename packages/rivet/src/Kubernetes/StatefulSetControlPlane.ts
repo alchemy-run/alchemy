@@ -103,18 +103,42 @@ export class LoadBalancerNotReady extends Data.TaggedError("RivetKubernetes.Load
   readonly message: string;
 }> {}
 
-/** The engine environment for the chosen object storage. */
-const storageEnvironment = (storage: ObjectStorage | undefined) =>
-  storage === undefined
-    ? Effect.succeed([
+/** Object storage settings that are credentials, kept in a Secret. */
+const SECRET_SETTINGS = /__(SECRET_ACCESS_KEY|SERVICE_ACCOUNT_KEY)$/;
+
+/**
+ * The engine environment for the chosen object storage. A credential (an
+ * access key, a service account key) is kept in the control plane's Secret
+ * under `secrets`, and the engine reads it through `secretKeyRef`.
+ */
+const storageEnvironment = Effect.fn(function* (
+  storage: ObjectStorage | undefined,
+  secretName: string,
+) {
+  if (storage === undefined) {
+    return {
+      env: [
         {
           name: "RIVET__OBJECT_STORAGE__PRIMARY__FILE_SYSTEM__PATH",
           value: `${DATA_PATH}/objects` as unknown,
         },
-      ])
-    : objectStorageEnvironment(storage).pipe(
-        Effect.map((entries) => entries.map(([name, value]) => ({ name, value }))),
-      );
+      ],
+      secrets: {} as Record<string, unknown>,
+    };
+  }
+  const entries = yield* objectStorageEnvironment(storage);
+  const secrets: Record<string, unknown> = {};
+  const env = entries.map(([name, value]) => {
+    if (!SECRET_SETTINGS.test(name)) return { name, value };
+    const key = name
+      .slice(name.lastIndexOf("__") + 2)
+      .toLowerCase()
+      .replaceAll("_", "-");
+    secrets[key] = value;
+    return { name, valueFrom: { secretKeyRef: { name: secretName, key } } as unknown };
+  });
+  return { env, secrets };
+});
 
 /**
  * A Rivet control plane on Kubernetes, as a `Rivet.Cluster` Layer: a
@@ -165,7 +189,6 @@ export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPla
           }),
         );
       }
-      const storageEnv = yield* storageEnvironment(props.objectStorage);
       const cluster = Effect.isEffect(props.cluster) ? yield* props.cluster : props.cluster;
       const k8sNamespace = props.namespace ?? "default";
       const name = props.name ?? (yield* stackDnsLabel(id, 40));
@@ -173,14 +196,18 @@ export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPla
       const expose = props.expose ?? { type: "LoadBalancer" as const };
 
       const token = yield* adminToken(id);
+      const secretName = `${name}-token`;
+      // The admin token and any secret object storage setting, never in the
+      // StatefulSet's pod template.
+      const storage = yield* storageEnvironment(props.objectStorage, secretName);
       const secret = yield* Kubernetes.Manifest(`${id}TokenSecret`, {
         cluster,
         manifest: {
           apiVersion: "v1",
           kind: "Secret",
-          metadata: { name: `${name}-token`, namespace: k8sNamespace, labels },
+          metadata: { name: secretName, namespace: k8sNamespace, labels },
           type: "Opaque",
-          stringData: { token: token.text },
+          stringData: { token: token.text, ...storage.secrets },
         },
       });
       const peers = yield* Kubernetes.Manifest(`${id}PeerService`, {
@@ -234,7 +261,7 @@ export const StatefulSetControlPlane = (id: string, props: StatefulSetControlPla
                         value: `$(POD_IP):${PEER_PORT}`,
                       },
                       { name: "RIVET__TELEMETRY__ENABLED", value: "false" },
-                      ...storageEnv,
+                      ...storage.env,
                     ],
                     volumeMounts: [{ name: "data", mountPath: DATA_PATH }],
                     readinessProbe: {

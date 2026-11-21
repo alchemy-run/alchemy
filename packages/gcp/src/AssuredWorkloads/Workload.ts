@@ -494,9 +494,9 @@ export const WorkloadProvider = () =>
       if (current === undefined) {
         const created = yield* assuredworkloads
           .createOrganizationsLocationsWorkloads({
+            ...desiredBody(news, displayName, desiredLabels),
             parent,
             externalId: news.externalId,
-            body: desiredBody(news, displayName, desiredLabels),
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -540,16 +540,13 @@ export const WorkloadProvider = () =>
 
       if (mask.length > 0) {
         current = yield* assuredworkloads.patchOrganizationsLocationsWorkloads({
+          displayName,
+          labels: desiredLabels,
+          violationNotificationsEnabled:
+            news.violationNotificationsEnabled ?? current.violationNotificationsEnabled,
+          etag: current.etag,
           name,
           updateMask: mask,
-          body: {
-            name,
-            displayName,
-            labels: desiredLabels,
-            violationNotificationsEnabled:
-              news.violationNotificationsEnabled ?? current.violationNotificationsEnabled,
-            etag: current.etag,
-          },
         });
       }
 
@@ -558,12 +555,10 @@ export const WorkloadProvider = () =>
         fingerprint(current.partnerPermissions) !== fingerprint(news.partnerPermissions);
       if (partnerChanged) {
         current = yield* assuredworkloads.mutatePartnerPermissionsOrganizationsLocationsWorkloads({
+          etag: current.etag,
+          partnerPermissions: news.partnerPermissions,
+          updateMask: "partner_permissions",
           name,
-          body: {
-            etag: current.etag,
-            partnerPermissions: news.partnerPermissions,
-            updateMask: "partner_permissions",
-          },
         });
       }
 

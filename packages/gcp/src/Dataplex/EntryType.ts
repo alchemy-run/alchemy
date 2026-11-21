@@ -337,18 +337,16 @@ export const EntryTypeProvider = () =>
       if (current === undefined) {
         const created = yield* dataplex
           .createProjectsLocationsEntryTypes({
+            description: news.description,
+            displayName: news.displayName,
+            labels: desiredLabels,
+            typeAliases: desiredAliases,
+            platform: news.platform,
+            system: news.system,
+            requiredAspects: desiredAspects,
+            authorization: news.authorization,
             parent: parentOf(env.project, location),
             entryTypeId,
-            body: {
-              description: news.description,
-              displayName: news.displayName,
-              labels: desiredLabels,
-              typeAliases: desiredAliases,
-              platform: news.platform,
-              system: news.system,
-              requiredAspects: desiredAspects,
-              authorization: news.authorization,
-            },
           })
           .pipe(
             retryQuota,
@@ -390,6 +388,14 @@ export const EntryTypeProvider = () =>
       ) {
         const operation = yield* retryQuota(
           dataplex.patchProjectsLocationsEntryTypes({
+            etag: current.etag,
+            labels: desiredLabels,
+            description: news.description,
+            displayName: news.displayName,
+            typeAliases: desiredAliases ?? current.typeAliases,
+            platform: news.platform ?? current.platform,
+            system: news.system ?? current.system,
+            requiredAspects: desiredAspects ?? current.requiredAspects,
             name: current.name ?? name,
             updateMask: [
               labelsChanged ? "labels" : undefined,
@@ -402,17 +408,6 @@ export const EntryTypeProvider = () =>
             ]
               .filter((field): field is string => field !== undefined)
               .join(","),
-            body: {
-              name: current.name ?? name,
-              etag: current.etag,
-              labels: desiredLabels,
-              description: news.description,
-              displayName: news.displayName,
-              typeAliases: desiredAliases ?? current.typeAliases,
-              platform: news.platform ?? current.platform,
-              system: news.system ?? current.system,
-              requiredAspects: desiredAspects ?? current.requiredAspects,
-            },
           }),
         );
         yield* waitForOperation(operation);
