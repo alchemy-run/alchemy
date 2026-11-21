@@ -66,28 +66,16 @@ export default S3PresignTestFunction.make(
           return yield* HttpServerResponse.json({ bucketName });
         }
 
-        if (request.method === "GET" && pathname === "/presign-get") {
-          if (!key) return requireKey();
-          const expiresIn = url.searchParams.get("expiresIn");
-          const contentType = url.searchParams.get("contentType");
-          const presignedUrl = yield* presignGetObject({
-            key,
-            expiresIn: expiresIn ? Number(expiresIn) : undefined,
-            contentType: contentType ?? undefined,
-          });
-          return yield* HttpServerResponse.json({ url: presignedUrl });
+        // The request as JSON (any field of the binding's input) → the
+        // presigned request (`url`, `method`, `headers`).
+        if (request.method === "POST" && pathname === "/presign-get") {
+          const input = (yield* request.json) as unknown as S3.PresignGetObjectRequest;
+          return yield* HttpServerResponse.json(yield* presignGetObject(input));
         }
 
-        if (request.method === "GET" && pathname === "/presign-put") {
-          if (!key) return requireKey();
-          const expiresIn = url.searchParams.get("expiresIn");
-          const contentType = url.searchParams.get("contentType");
-          const presignedUrl = yield* presignPutObject({
-            key,
-            expiresIn: expiresIn ? Number(expiresIn) : undefined,
-            contentType: contentType ?? undefined,
-          });
-          return yield* HttpServerResponse.json({ url: presignedUrl });
+        if (request.method === "POST" && pathname === "/presign-put") {
+          const input = (yield* request.json) as unknown as S3.PresignPutObjectRequest;
+          return yield* HttpServerResponse.json(yield* presignPutObject(input));
         }
 
         if (request.method === "GET" && pathname === "/delete-objects") {

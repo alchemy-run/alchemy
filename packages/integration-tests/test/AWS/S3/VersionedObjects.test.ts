@@ -265,7 +265,15 @@ describe.sequential(
             GetObjectTagging: { objects: ["GetObjectTagging", "GetObjectVersionTagging"] },
             PutObjectTagging: { objects: ["PutObjectTagging", "PutObjectVersionTagging"] },
             DeleteObjectTagging: { objects: ["DeleteObjectTagging", "DeleteObjectVersionTagging"] },
-            PresignPutObject: { objects: ["PutObject"] },
+            PresignPutObject: {
+              objects: [
+                "PutObject",
+                "PutObjectTagging",
+                "PutObjectAcl",
+                "PutObjectRetention",
+                "PutObjectLegalHold",
+              ],
+            },
           };
           const expected = Object.entries(grants)
             .flatMap(([operation, grants]) => [

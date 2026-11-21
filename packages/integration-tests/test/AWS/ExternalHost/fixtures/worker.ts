@@ -62,7 +62,7 @@ export default class ExternalHostWorker extends Cloudflare.Worker<ExternalHostWo
             return yield* respond(
               Effect.gen(function* () {
                 yield* putObject({ Key: key, Body: "presigned" });
-                return { url: yield* presignGetObject({ key }) };
+                return { url: (yield* presignGetObject({ Key: key })).url };
               }),
             );
           case "/dynamodb":
