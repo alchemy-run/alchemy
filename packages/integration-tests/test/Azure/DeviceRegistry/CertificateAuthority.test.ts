@@ -75,8 +75,11 @@ test.provider(
       const observedIca = yield* get(ica.certificateAuthorityName);
       expect(caOf(observedIca.properties)?.certificateAuthorityType).toEqual("ICA");
       expect(icaOf(observedIca.properties)?.issuer.issuerType).toEqual("Microsoft");
+      const icaIssuer = icaOf(observedIca.properties)?.issuer;
       expect(
-        icaOf(observedIca.properties)?.issuer.certificateAuthorityResourceId?.toLowerCase(),
+        icaIssuer?.issuerType === "Microsoft"
+          ? icaIssuer.certificateAuthorityResourceId.toLowerCase()
+          : undefined,
       ).toEqual(root.certificateAuthorityId.toLowerCase());
       expect(ica.issuerType).toEqual("Microsoft");
 
