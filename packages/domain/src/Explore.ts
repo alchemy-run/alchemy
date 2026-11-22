@@ -34,7 +34,7 @@ import * as Value from "./Prove/internal/Value.ts";
 export type { Move, Outcome, Story } from "./Explore/internal/Search.ts";
 export type { Asked, Ending, Skipped, Step } from "./Explore/internal/ModelSearch.ts";
 
-export interface Options {
+export interface Options extends Source.Reading {
   /** The file the aggregate is declared in: `new URL("../src/Account.ts", import.meta.url)`, or a path. */
   readonly source: URL | string;
   /**
@@ -54,7 +54,7 @@ export interface Options {
   };
 }
 
-export interface ModelOptions {
+export interface ModelOptions extends Source.Reading {
   /** The file the model is declared in: `new URL("../src/Bank.model.ts", import.meta.url)`, or a path. */
   readonly source: URL | string;
   /** The Apis callers reach the model through: their commands are the ones a sequence is made of. */
@@ -224,7 +224,7 @@ const reportModel = (
                 (error) => new ExploreError({ message: `${String(source)}: ${error.message}` }),
               ),
             );
-    const loader = yield* Source.loader;
+    const loader = yield* Source.loader(options);
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
     loader.adopt(model);
@@ -278,7 +278,7 @@ const reportAggregate = (
   options: Options,
 ): Effect.Effect<Report, ExploreError, Requirements> =>
   Effect.gen(function* () {
-    const { loader, definition } = yield* Paths.load(aggregate, options.source);
+    const { loader, definition } = yield* Paths.load(aggregate, options.source, options);
     const solver = yield* Smt.solver;
     const interpreter = Interpreter.make(loader, new Value.Run([]));
     const depth = options.depth ?? 3;

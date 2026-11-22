@@ -578,6 +578,12 @@ A proof also covers two things you didn't write down. Every command leaves the s
 
 The prover reads `decide`, `evolve` and the rules as written, so they have to be plain functions of their inputs. Most ordinary TypeScript is read: conditions, `switch`, spreads, rest patterns, local variables that change, `+=` and `++`, array methods, and helpers from `effect/Option`, `effect/Array`, `effect/Record`, `effect/Struct` and `effect/Match`. The whole list is in [What the prover reads](/domain/verifiable-code).
 
+A helper the prover cannot read, such as a hash, is named as opaque. Rules that do not depend on its result are still proved. A package of shared rules is named in `packages`, and is read like your own files.
+
+```typescript title="packages/domain/test/Ticket.test.ts"
+Verify.aggregate(Ticket, { opaque: [idOf], packages: ["@acme/rules"] });
+```
+
 Whole numbers are exact, and so is a `bigint`. A division is read where its result is exact: through `Math.floor`, `Math.ceil` or `Math.trunc`, or compared with a whole number.
 
 ```typescript title="packages/domain/src/Window.aggregate.ts"

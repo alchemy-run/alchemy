@@ -35,7 +35,7 @@ import * as Lock from "./Prove/internal/Lock.ts";
 import * as Symbolic from "./Prove/internal/Symbolic.ts";
 import { Story } from "./Story.ts";
 
-export interface Options {
+export interface Options extends Prove.Reading {
   /** The Apis callers reach the model through: their commands are the ones a sequence is made of. */
   readonly apis: ReadonlyArray<Api.Any>;
   /**
@@ -140,6 +140,7 @@ const locking = Effect.fn(function* (options: {
   readonly aggregates: ReadonlyArray<Aggregate.Any>;
   readonly decisions?: ReadonlyArray<{ readonly decisionName: string; readonly command: unknown }>;
   readonly model?: string;
+  readonly reading: Prove.Reading;
 }) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -168,6 +169,7 @@ const locking = Effect.fn(function* (options: {
     ...(options.decisions === undefined ? {} : { decisions: options.decisions }),
     ...(options.model === undefined ? {} : { model: options.model }),
     qualified: options.model !== undefined,
+    reading: options.reading,
     locked: new Map(Object.entries(entries).map(([name, entry]) => [name, entry.source])),
   }).pipe(Effect.scoped, Effect.mapError(failed));
   const ci = yield* Config.Boolean("CI").pipe(
@@ -527,8 +529,10 @@ export const report = (
   const from = callers(new Error("caller").stack, OWN);
   return Effect.gen(function* () {
     const source = options.source ?? (yield* locate(model.modelName, "Model", from));
+    const reading: Prove.Reading = { packages: options.packages, opaque: options.opaque };
     const explored = yield* Explore.report(model, {
       source,
+      ...reading,
       apis: options.apis,
       ...(options.depth === undefined ? {} : { depth: options.depth }),
       ...(options.budget === undefined ? {} : { budget: options.budget }),
@@ -579,6 +583,7 @@ export const report = (
             aggregates: model.aggregates as ReadonlyArray<Aggregate.Any>,
             decisions: model.decisions,
             model: model.modelName,
+            reading,
           });
     const made: Report = {
       model: model.modelName,
@@ -594,7 +599,11 @@ export const report = (
       ],
       relocked: unlocked.relocked,
       // Only a model with a decision takes its commit for granted.
-      assumptions: explored.decisions.length > 0 ? [...ASSUMPTIONS, Prove.ATOMIC] : ASSUMPTIONS,
+      assumptions: [
+        ...ASSUMPTIONS,
+        ...(explored.decisions.length > 0 ? [Prove.ATOMIC] : []),
+        ...Prove.pure((options.opaque ?? []).flatMap((fn) => (fn.name === "" ? [] : [fn.name]))),
+      ],
     };
     return made;
   });
@@ -643,7 +652,7 @@ export const model = (
     ),
   );
 
-export interface AggregateOptions {
+export interface AggregateOptions extends Prove.Reading {
   /**
    * The file the aggregate is declared in. Left out, it is found from the
    * test file that calls.
@@ -793,6 +802,15 @@ const renderAggregate = (report: AggregateReport): string => {
  *   Verify.aggregate(Account).pipe(Effect.provide(NodeServices.layer)),
  * );
  * ```
+ *
+ * **Example:** With a helper the prover cannot read, and rules from another package
+ * ```typescript
+ * it.effect("a ticket keeps its rules", () =>
+ *   Verify.aggregate(Ticket, { opaque: [idOf], packages: ["@acme/rules"] }).pipe(
+ *     Effect.provide(NodeServices.layer),
+ *   ),
+ * );
+ * ```
  */
 export const aggregate = (
   target: Aggregate.Any,
@@ -804,7 +822,8 @@ export const aggregate = (
     const source = options.source ?? (yield* locate(target.aggregateName, "Aggregate", from));
     const failed = (error: { readonly message: string }) =>
       new VerifyError({ message: error.message });
-    const proof = yield* Prove.report(target, { source }).pipe(Effect.mapError(failed));
+    const reading: Prove.Reading = { packages: options.packages, opaque: options.opaque };
+    const proof = yield* Prove.report(target, { source, ...reading }).pipe(Effect.mapError(failed));
     const unlocked =
       options.lock === undefined
         ? UNLOCKED
@@ -815,9 +834,11 @@ export const aggregate = (
             source,
             target,
             aggregates: [target],
+            reading,
           });
     const explored = yield* Explore.report(target, {
       source,
+      ...reading,
       ...(options.depth === undefined ? {} : { depth: options.depth }),
       ...(options.budget === undefined ? {} : { budget: options.budget }),
     }).pipe(Effect.mapError(failed));
