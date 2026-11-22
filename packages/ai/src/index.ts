@@ -1,3 +1,10 @@
+export {
+  DuplicateDeclaration,
+  renderDeclarations,
+  type DeclarationForm,
+  type DeclaredNamespace,
+  type DeclaredTool,
+} from "./Declarations.ts";
 export { isModel, Model, type AnyModel, type ModelClass, type ModelOptions } from "./Model.ts";
 export {
   Sandbox,
