@@ -9,12 +9,7 @@ import type { Terminal } from "effect/Terminal";
 import type { HttpEffect } from "../Http.ts";
 import * as Http from "../Http.ts";
 import * as Output from "../Output.ts";
-import {
-  packEnvValue,
-  RuntimeContext,
-  unpackEnvValue,
-  type BaseRuntimeContext,
-} from "../RuntimeContext.ts";
+import { packEnvValue, unpackEnvValue, type BaseRuntimeContext } from "../RuntimeContext.ts";
 import { serveSandboxAgent, type SandboxAgentConfig } from "../SandboxAgent.ts";
 import { SANDBOX_IDLE_TIMEOUT_ENV, SANDBOX_TOKEN_ENV } from "../SandboxAgentClient.ts";
 import { ManagedHttpShutdown } from "./ManagedHttpShutdown.ts";
@@ -22,14 +17,9 @@ import { ManagedHttpShutdown } from "./ManagedHttpShutdown.ts";
 export type ProcessServices = ChildProcessSpawner | FileSystem | Path | Stdio | Terminal;
 
 export interface ProcessContext extends BaseRuntimeContext {
-  /**
-   * Register a background loop. The host runs it with its own
-   * {@link RuntimeContext}, so runtime-only binding clients may be called
-   * inside it.
-   */
   run: <Req = never, RunReq = never>(
     effect: Effect.Effect<void, never, RunReq>,
-  ) => Effect.Effect<void, never, Req | Exclude<RunReq, RuntimeContext>>;
+  ) => Effect.Effect<void, never, Req | RunReq>;
 }
 
 /**
@@ -79,7 +69,7 @@ export const createHostRuntimeContext =
     const runners: Effect.Effect<void, never, any>[] = [];
     const env: Record<string, any> = {};
 
-    const context: HostRuntimeContext = {
+    return {
       Type: type,
       id,
       env,
@@ -98,7 +88,7 @@ export const createHostRuntimeContext =
         Effect.sync(() => unpackEnvValue<T>(process.env[key]) as T),
       run: (effect: Effect.Effect<void, never, any>) =>
         Effect.sync(() => {
-          runners.push(Effect.provideService(effect, RuntimeContext, context));
+          runners.push(effect);
         }),
       serve: ((handler) =>
         Effect.sync(() => {
@@ -131,8 +121,7 @@ export const createHostRuntimeContext =
           }),
         ),
       })),
-    };
-    return context;
+    } satisfies HostRuntimeContext;
   };
 
 /**

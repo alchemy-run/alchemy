@@ -1,5 +1,6 @@
 import * as chromemanagement from "@distilled.cloud/gcp/chromemanagement_v1";
 import { createPhysicalName } from "alchemy/PhysicalName";
+import { unwrapRedacted } from "alchemy/Util/data";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -125,14 +126,16 @@ const secretSlice = (
   details: chromemanagement.GoogleChromeManagementVersionsV1ConnectorConfigDetails | undefined,
 ) => {
   if (!details) return undefined;
-  return {
+  // A key may be `Redacted`, which JSON-stringifies to a fixed placeholder:
+  // compare the plain values.
+  return unwrapRedacted({
     splunkHecToken: details.splunkConfig?.hecToken,
     paloAltoApiKey: details.paloAltoNetworksConfig?.apiKey,
     crowdStrikeApiKey: details.crowdStrikeConfig?.apiKey,
     crowdStrikeFalconApiKey: details.crowdStrikeFalconNextGenConfig?.apiKey,
     crowdStrikeXdrApiKey: details.crowdStrikeXdrConfig?.apiKey,
     googleSecOpsApiKey: details.googleSecOpsConfig?.apiKey,
-  };
+  });
 };
 
 export const detailsNeedSync = (

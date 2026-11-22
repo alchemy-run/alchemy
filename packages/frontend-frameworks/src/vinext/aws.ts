@@ -38,7 +38,6 @@ import {
   resolveVinextCli,
   runVinextBuild,
   spawnVinextDev,
-  VINEXT_APP_FETCH_HANDLER_SOURCE,
   VINEXT_RSC_ENTRY,
 } from "./cli.ts";
 
@@ -85,7 +84,19 @@ export const SERVE_ENTRY_NAME = "server/serve-aws-lambda.mjs";
 export const WEB_SERVE_ENTRY_NAME = `server/${NODE_SERVE_ENTRY_FILE_NAME}`;
 
 /** vinext's App Router fetch handler, as both entries call it. */
-const FETCH_HANDLER_SOURCE = VINEXT_APP_FETCH_HANDLER_SOURCE;
+const FETCH_HANDLER_SOURCE = `import rsc from "./index.js";
+
+const fetchHandler = (request) => {
+  const ctx = {
+    hostRuntime: "node",
+    waitUntil(promise) {
+      Promise.resolve(promise).catch(() => {});
+    },
+    passThroughOnException() {},
+  };
+  if (typeof rsc === "function") return rsc(request, ctx);
+  return rsc.fetch(request, process.env, ctx);
+};`;
 
 /**
  * The generated Web Function entry: a Node HTTP server around vinext's App
