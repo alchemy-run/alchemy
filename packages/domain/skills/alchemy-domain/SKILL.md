@@ -34,6 +34,8 @@ Read the requirements as a story of facts, and name each kind of thing you find:
 - A question someone asks (balance, statement, dashboard): a **View**, keyed by what it's about.
 - "Whenever X happens, do Y": a **Policy**.
 - A process with steps, waits and undo (move money: debit, credit, refund on failure): a **Saga**, started by a policy.
+- Events already recorded have to change (a person asks to be forgotten): a **Rewrite** per aggregate, run by a saga.
+- An instance's log grows without end (an account open for years): a **Compaction**.
 - Something outside the model you call (fraud scoring, payments): an **External System**.
 - Writes to a store outside the model (a ledger table): a **Projection**. An ordered, readable log per key (account cards): a **Stream** that a projection appends to.
 - A question across keys, answered from that store (an account's ledger, paged; large withdrawals across all accounts, largest first): a **Query**. Never a hand-written route.

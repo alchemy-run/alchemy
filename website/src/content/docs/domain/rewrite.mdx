@@ -1,0 +1,255 @@
+---
+title: Rewrite
+description: How a rewrite changes events an aggregate instance has already recorded, and how its state, views, projections and streams follow.
+---
+
+import DAG from "../../../components/DAG.astro";
+
+A rewrite changes the events an [aggregate](/domain/aggregate) instance has already recorded. Each event is kept, replaced or removed, and everything built from those events is rebuilt to match.
+
+Events are the record, and nothing else in a model changes them. A rewrite is for the two cases where the record itself has to change: a person asks for their data to be removed, or something was stored that never should have been.
+
+## Declare a rewrite
+
+A rewrite names its aggregate, what a run of it is given, and a handler for each event it changes. An event without a handler is left as it is.
+
+```typescript title="packages/domain/src/Account/ForgetOwner.rewrite.ts"
+import * as Domain from "@alchemy.run/domain";
+import { CustomerId } from "../Customer/Customer.id.ts";
+import { Account } from "./Account.aggregate.ts";
+import { AccountOpened } from "./OpenAccount.command.ts";
+
+/** Removes a customer's name from an account they opened. What the account did stays. */
+export class ForgetOwner extends Domain.Rewrite("ForgetOwner", {
+  of: Account,
+  input: { customerId: CustomerId },
+  events: {
+    AccountOpened: (event, { customerId }) =>
+      event.customerId === customerId ? new AccountOpened({ ...event, owner: "" }) : event,
+  },
+}) {}
+```
+
+A handler is pure. It returns the same event to keep it, another of the aggregate's events to put in its place, or `null` to remove it. Given the same event and input it gives the same answer, so a rewrite that runs twice changes nothing the second time.
+
+## Remove an event
+
+Returning `null` removes the event. Sequence numbers never change: the events after it keep theirs, and the removed one leaves a gap.
+
+```typescript title="src/Guestbook.aggregate.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+
+export class Signed extends Domain.Event("Signed", { by: Schema.String }) {}
+export class NoteAdded extends Domain.Event("NoteAdded", { text: Schema.String }) {}
+
+export class Sign extends Domain.Command("Sign", {
+  input: { bookId: Schema.String, by: Schema.String },
+  events: [Signed],
+}) {}
+export class AddNote extends Domain.Command("AddNote", {
+  input: { bookId: Schema.String, text: Schema.String },
+  events: [NoteAdded],
+}) {}
+
+export class Guestbook extends Domain.Aggregate("Guestbook", {
+  id: Schema.String,
+  state: Schema.Struct({ signatures: Schema.Int, notes: Schema.Int }),
+  initial: { signatures: 0, notes: 0 },
+  commands: [Sign, AddNote],
+  keyOf: (command) => command.bookId,
+  decide: {
+    Sign: (_, { by }) => [new Signed({ by })],
+    AddNote: (_, { text }) => [new NoteAdded({ text })],
+  },
+  evolve: {
+    Signed: (book) => ({ ...book, signatures: book.signatures + 1 }),
+    NoteAdded: (book) => ({ ...book, notes: book.notes + 1 }),
+  },
+}) {}
+
+/** Removes every note left in a guestbook. The signatures stay. */
+export class DropNotes extends Domain.Rewrite("DropNotes", {
+  of: Guestbook,
+  events: { NoteAdded: () => null },
+}) {}
+```
+
+## Remove an instance
+
+`delete: true` removes every event of the instance, its state, and what it keeps of the commands it handled and scheduled.
+
+```typescript title="packages/domain/src/Customer/DeleteCustomer.rewrite.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Customer } from "./Customer.aggregate.ts";
+
+/** Removes a customer: every event, and with them the name and the username. */
+export class DeleteCustomer extends Domain.Rewrite("DeleteCustomer", {
+  of: Customer,
+  delete: true,
+}) {}
+```
+
+The id is not reused for another history. A command sent to it later starts from `initial`, and its first event follows the last sequence number the instance had.
+
+## List it in the model
+
+A model lists the rewrites that may be run on its aggregates.
+
+```diff lang="typescript" title="packages/domain/src/Bank.model.ts"
+ export class Bank extends Domain.Model("Bank", {
+   aggregates: [Customer, UsernameClaim, Account, Transfer],
+   projections: [Ledger, AccountCards],
++  rewrites: [ForgetOwner, DeleteCustomer],
+ }) {}
+```
+
+## Run it on one instance
+
+A rewrite runs on one instance, through the aggregate's client. `rewrite` returns once the instance's own events and state are rewritten. `rewritten` waits until everything built from them has caught up.
+
+```typescript title="packages/server/src/forgetOwner.ts"
+import { Account } from "@bank/domain/Account/Account.aggregate";
+import type { AccountId } from "@bank/domain/Account/Account.id";
+import { ForgetOwner } from "@bank/domain/Account/ForgetOwner.rewrite";
+import type { CustomerId } from "@bank/domain/Customer/Customer.id";
+import * as Effect from "effect/Effect";
+
+/** Remove a customer's name from one account, everywhere it was copied to. */
+export const forgetOwner = Effect.fn(function* (accountId: AccountId, customerId: CustomerId) {
+  const accounts = yield* Account;
+  const receipt = yield* accounts.rewrite(accountId, new ForgetOwner({ customerId }));
+  yield* accounts.rewritten(receipt);
+  return receipt.changed;
+});
+```
+
+No command commits to the instance while its rewrite runs. A command sent meanwhile waits and then runs against the rewritten state.
+
+## What follows a rewrite
+
+The instance's state is folded again from the rewritten events. Then each consumer of those events is told which ones changed.
+
+A [view](/domain/view) key folds its inputs again with the changed events swapped in, and tells its own consumers what changed among the entries it emitted. A [projection](/domain/projection) gets each changed event in its `rewrite` handler. A [stream](/domain/stream) changes when its writer's `rewrite` handler rewrites its entries.
+
+<DAG
+  nodes={[
+    { id: "account", label: "Account", type: "events rewritten", kind: "aggregate", layer: 0 },
+    { id: "summary", label: "AccountSummary", type: "folds again", kind: "view", layer: 1 },
+    { id: "dashboard", label: "CustomerDashboard", type: "folds again", kind: "view", layer: 2 },
+    { id: "cards", label: "AccountCards", type: "rewrite handler", kind: "projection", layer: 2 },
+    { id: "card", label: "AccountCard", type: "entries rewritten", kind: "stream", layer: 3 },
+  ]}
+  edges={[
+    { from: "account", to: "summary", dashed: true },
+    { from: "summary", to: "dashboard", dashed: true },
+    { from: "summary", to: "cards", dashed: true },
+    { from: "cards", to: "card" },
+  ]}
+  caption="A rewrite of one account reaches everything built from its events, through any views between."
+/>
+
+A command sent again under its command id answers with its events as they are now, because an instance stores where a command's events are and not a copy of them.
+
+[Policies](/domain/policy) and [sagas](/domain/saga) are not told. What they did has already happened: a command they sent is its own event on its own instance, and stays unless you rewrite that too.
+
+## A rewrite can't break an invariant
+
+Before anything changes, the rewritten state is checked against the aggregate's [invariants](/domain/aggregate). A rewrite that would break one fails with `InvariantBroken`, and nothing is changed.
+
+```typescript title="packages/server/src/forgetOwnerOrReport.ts"
+import { Account } from "@bank/domain/Account/Account.aggregate";
+import type { AccountId } from "@bank/domain/Account/Account.id";
+import { ForgetOwner } from "@bank/domain/Account/ForgetOwner.rewrite";
+import type { CustomerId } from "@bank/domain/Customer/Customer.id";
+import * as Effect from "effect/Effect";
+
+/** Remove a customer's name from one account, or say which rule that would break. */
+export const forgetOwnerOrReport = Effect.fn(function* (
+  accountId: AccountId,
+  customerId: CustomerId,
+) {
+  const accounts = yield* Account;
+  return yield* accounts.rewrite(accountId, new ForgetOwner({ customerId })).pipe(
+    Effect.map((receipt) => `rewrote ${receipt.changed} events`),
+    Effect.catchTag("InvariantBroken", (broken) =>
+      Effect.succeed(`refused: it would break ${broken.invariant}`),
+    ),
+  );
+});
+```
+
+A rewrite that removes the instance is not checked, since it leaves no state to check.
+
+## It runs once per id
+
+Each run has a `rewriteId`. Running a rewrite again with an id the instance has seen changes nothing and returns the first receipt.
+
+Inside a [saga](/domain/saga) step the id is the step's own, so a step that runs again rewrites once. Elsewhere, pass one when the caller may retry.
+
+```typescript title="packages/server/src/forgetOwnerOnce.ts"
+import { Account } from "@bank/domain/Account/Account.aggregate";
+import type { AccountId } from "@bank/domain/Account/Account.id";
+import { ForgetOwner } from "@bank/domain/Account/ForgetOwner.rewrite";
+import type { CustomerId } from "@bank/domain/Customer/Customer.id";
+import * as Effect from "effect/Effect";
+
+/** Safe to call again for the same request: the account is rewritten once. */
+export const forgetOwnerOnce = Effect.fn(function* (
+  requestId: string,
+  accountId: AccountId,
+  customerId: CustomerId,
+) {
+  const accounts = yield* Account;
+  return yield* accounts.rewrite(accountId, new ForgetOwner({ customerId }), {
+    rewriteId: requestId,
+  });
+});
+```
+
+## What a rewrite doesn't reach
+
+A rewrite changes what the model stores. It doesn't reach what left the model: a row a projection wrote before you gave it a `rewrite` handler, a message a policy sent to an [external system](/domain/external-system), the events a [compaction](/domain/compaction) handed to your archive, your logs and traces.
+
+A client that is reading a view's or a stream's events live keeps the events it already received. It sees the rewritten ones the next time it reads from the start.
+
+## Test it
+
+A [story](/domain/story) runs a rewrite as a step, and waits until every view, projection and stream reflects it.
+
+```typescript title="packages/domain/test/ForgetOwner.test.ts"
+import { Story } from "@alchemy.run/domain/Story";
+import { it } from "@effect/vitest";
+import * as Layer from "effect/Layer";
+import { Account } from "../src/Account/Account.aggregate.ts";
+import { AccountSummary } from "../src/Account/AccountSummary.view.ts";
+import { MoneyDeposited } from "../src/Account/DepositMoney.command.ts";
+import { ForgetOwner } from "../src/Account/ForgetOwner.rewrite.ts";
+import { AccountOpened } from "../src/Account/OpenAccount.command.ts";
+import { Bank, BankHandlers } from "../src/Bank.model.ts";
+import { CustomerId } from "../src/Customer/Customer.id.ts";
+import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
+import { Payments } from "../src/Settlement/Payments.external.ts";
+
+const story = Story.make(Bank, {
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
+  stub: [FraudCheck, Payments],
+});
+const account = Account.ref("a-1");
+const sam = CustomerId.make("c-1");
+
+it.effect("forgetting the owner keeps the balance", () =>
+  story(
+    Story.given(
+      account,
+      new AccountOpened({ customerId: sam, owner: "sam" }),
+      new MoneyDeposited({ amount: 500, balanceAfter: 500 }),
+    ),
+    Story.rewrite(account, new ForgetOwner({ customerId: sam })),
+    Story.view(AccountSummary, account, { owner: "", balance: 500 }),
+  ),
+);
+```
+
+To remove a person's data from several instances as one process, see [Erasing personal data](/domain/erasing-personal-data).

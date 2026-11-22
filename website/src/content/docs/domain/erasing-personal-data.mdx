@@ -1,0 +1,347 @@
+---
+title: Erasing personal data
+description: Remove a person's data from every aggregate that recorded it and everything built from those events, as one process that survives failures.
+---
+
+A customer asks the bank to forget them. Their name is in the events of several aggregates, and in every view, projection and stream built from those events. Each aggregate gets a [rewrite](/domain/rewrite), and a [saga](/domain/saga) runs them as one process.
+
+## Find where the data is
+
+Start from the events, since everything else is built from them. In the bank, a customer's name is recorded three times.
+
+`CustomerRegistered` on the `Customer` holds the name and the username. `UsernameClaimed` on the `UsernameClaim` ties the username to the customer. `AccountOpened` on each `Account` holds the name as the account's owner.
+
+The copies follow from those: `AccountSummary` and `CustomerDashboard` fold the name into their state, and the `AccountCard` stream has a card with the owner's name for every money movement.
+
+## Decide what each aggregate forgets
+
+An account's history is the bank's record of money moving, and it has to stay. Only the name goes: the rewrite replaces `AccountOpened` with the same event and an empty owner.
+
+```typescript title="packages/domain/src/Account/ForgetOwner.rewrite.ts"
+import * as Domain from "@alchemy.run/domain";
+import { CustomerId } from "../Customer/Customer.id.ts";
+import { Account } from "./Account.aggregate.ts";
+import { AccountOpened } from "./OpenAccount.command.ts";
+
+/** Removes a customer's name from an account they opened. What the account did stays. */
+export class ForgetOwner extends Domain.Rewrite("ForgetOwner", {
+  of: Account,
+  input: { customerId: CustomerId },
+  events: {
+    AccountOpened: (event, { customerId }) =>
+      event.customerId === customerId ? new AccountOpened({ ...event, owner: "" }) : event,
+  },
+}) {}
+```
+
+Nothing of the customer or of their username's claim needs to stay, so each is removed whole.
+
+```typescript title="packages/domain/src/Customer/DeleteCustomer.rewrite.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Customer } from "./Customer.aggregate.ts";
+
+/** Removes a customer: every event, and with them the name and the username. */
+export class DeleteCustomer extends Domain.Rewrite("DeleteCustomer", {
+  of: Customer,
+  delete: true,
+}) {}
+```
+
+```typescript title="packages/domain/src/Customer/ReleaseUsername.rewrite.ts"
+import * as Domain from "@alchemy.run/domain";
+import { UsernameClaim } from "./UsernameClaim.aggregate.ts";
+
+/** Removes a username's claim, so the name no longer leads to anyone. */
+export class ReleaseUsername extends Domain.Rewrite("ReleaseUsername", {
+  of: UsernameClaim,
+  delete: true,
+}) {}
+```
+
+## Say what a rewrite means for each projection
+
+Views follow a rewrite by themselves. A [projection](/domain/projection) writes to a store of yours, so its Layer says what a changed event means there.
+
+`AccountCards` appends a card to the `AccountCard` stream for each money movement, with the owner's name from the account's summary. Its `rewrite` handler appends the card again as the summary now reads, or removes it when the summary has no owner.
+
+```typescript title="packages/domain/src/Account/AccountCards.projection.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import { Account } from "./Account.aggregate.ts";
+import { AccountCard, CardChanged } from "./AccountCard.stream.ts";
+import { AccountSummary } from "./AccountSummary.view.ts";
+import { TransferCredited } from "./CreditTransfer.command.ts";
+import { TransferDebited } from "./DebitTransfer.command.ts";
+import { MoneyDeposited } from "./DepositMoney.command.ts";
+import { AccountFrozen } from "./FreezeAccount.command.ts";
+import { SettlementReceived } from "./RecordSettlement.command.ts";
+import { TransferRefunded } from "./RefundTransfer.command.ts";
+import { MoneyWithdrawn } from "./WithdrawMoney.command.ts";
+
+/** A card for each account, appended to a stream as its summary changes. */
+export class AccountCards extends Domain.Projection("AccountCards", {
+  from: [AccountSummary],
+  key: Account,
+  on: [
+    MoneyDeposited,
+    MoneyWithdrawn,
+    TransferDebited,
+    TransferCredited,
+    TransferRefunded,
+    SettlementReceived,
+    AccountFrozen,
+  ],
+  writes: [AccountCard],
+}) {}
+
+export const AccountCardsLive = AccountCards.toLayer(
+  Effect.gen(function* () {
+    const cards = yield* AccountCard;
+    return {
+      write: Effect.fn(function* (batch) {
+        for (const input of batch) {
+          const summary = input.state;
+          if (!summary?.customerId || !summary.owner) continue;
+          yield* cards.append(
+            input,
+            new CardChanged({
+              customerId: summary.customerId,
+              owner: summary.owner,
+              balance: summary.balance,
+              frozen: summary.frozen,
+            }),
+          );
+        }
+      }),
+      // A rewrite changed what the summary read when a card was appended: the
+      // card is appended again as the summary now reads, or removed.
+      rewrite: Effect.fn(function* (batch) {
+        for (const input of batch) {
+          const summary = input.state;
+          if (input.after === undefined || !summary?.customerId || !summary.owner) {
+            yield* cards.rewrite(input);
+            continue;
+          }
+          yield* cards.rewrite(
+            input,
+            new CardChanged({
+              customerId: summary.customerId,
+              owner: summary.owner,
+              balance: summary.balance,
+              frozen: summary.frozen,
+            }),
+          );
+        }
+      }),
+    };
+  }),
+);
+```
+
+A model with a rewrite won't build until every projection the rewrite reaches has a `rewrite` handler. A projection whose store should keep its rows writes a handler that does nothing, so the choice is on the page.
+
+## Run it as one process
+
+Three aggregates have to be rewritten, and a failure between two of them must not leave the customer half forgotten. A saga runs each rewrite as a step and picks up where it stopped.
+
+```typescript title="packages/domain/src/Customer/EraseCustomer.saga.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import { Activity } from "effect/workflow";
+import { Account } from "../Account/Account.aggregate.ts";
+import { AccountId } from "../Account/Account.id.ts";
+import { ForgetOwner } from "../Account/ForgetOwner.rewrite.ts";
+import { Customer } from "./Customer.aggregate.ts";
+import { CustomerId } from "./Customer.id.ts";
+import { CustomerDashboard } from "./CustomerDashboard.view.ts";
+import { DeleteCustomer } from "./DeleteCustomer.rewrite.ts";
+import { ReleaseUsername } from "./ReleaseUsername.rewrite.ts";
+import { Username } from "./Username.ts";
+import { UsernameClaim } from "./UsernameClaim.aggregate.ts";
+
+/**
+ * Removes everything that identifies a customer: their name on each account
+ * they opened, their username's claim, and the customer. Each step waits
+ * until every view, projection and stream built from what it rewrote has
+ * caught up, so the run ends only once the name is gone everywhere.
+ *
+ * No command of the bank starts it: the operator who handles the customer's
+ * request does, with `erasures.start(customerId, {})`.
+ */
+export class EraseCustomer extends Domain.Saga("EraseCustomer", {
+  key: CustomerId,
+  input: {},
+}) {}
+
+export const EraseCustomerLive = EraseCustomer.toLayer(
+  Effect.gen(function* () {
+    const accounts = yield* Account;
+    const customers = yield* Customer;
+    const claims = yield* UsernameClaim;
+    const dashboards = yield* CustomerDashboard;
+
+    return Effect.fn(function* ({ key }) {
+      // Read before anything is removed: the steps after this one need them.
+      const found = yield* Activity.make({
+        name: "find",
+        success: Schema.Struct({
+          accounts: Schema.Array(AccountId),
+          username: Schema.NullOr(Username),
+        }),
+        execute: Effect.gen(function* () {
+          const customer = yield* customers.get(key);
+          const dashboard = yield* dashboards.get(Customer.ref(key)).pipe(Effect.orDie);
+          return {
+            accounts: Object.keys(Option.getOrUndefined(dashboard)?.balances ?? {}).map(
+              (id) => Account.ref(id).id,
+            ),
+            username: customer._tag === "Registered" ? customer.username : null,
+          };
+        }),
+      });
+
+      for (const accountId of found.accounts) {
+        yield* Activity.make({
+          name: `forget-owner:${accountId}`,
+          execute: accounts
+            .rewrite(accountId, new ForgetOwner({ customerId: key }))
+            .pipe(Effect.flatMap(accounts.rewritten), Effect.orDie),
+        });
+      }
+
+      const username = found.username;
+      if (username !== null) {
+        yield* Activity.make({
+          name: "release-username",
+          execute: claims
+            .rewrite(username, new ReleaseUsername())
+            .pipe(Effect.flatMap(claims.rewritten), Effect.orDie),
+        });
+      }
+
+      yield* Activity.make({
+        name: "delete-customer",
+        execute: customers
+          .rewrite(key, new DeleteCustomer())
+          .pipe(Effect.flatMap(customers.rewritten), Effect.orDie),
+      });
+    });
+  }),
+);
+```
+
+The first step reads which accounts and which username belong to the customer, and keeps the answer as the step's result. The steps after it would not find them once the customer is gone.
+
+Inside a step, a rewrite runs under the step's own id. A step that runs again after a failure rewrites nothing twice.
+
+Each step ends with `rewritten`, which waits for every view, projection and stream the rewrite reaches. When the saga completes, the name is gone from all of them.
+
+## List it in the model
+
+The model lists the three rewrites and the saga, and its handlers include the saga's Layer.
+
+```diff lang="typescript" title="packages/domain/src/Bank.model.ts"
+ export class Bank extends Domain.Model("Bank", {
+   aggregates: [Customer, UsernameClaim, Account, Transfer],
+   projections: [Ledger, AccountCards],
+   streams: [AccountCard],
+-  sagas: [ExecuteTransfer],
++  sagas: [ExecuteTransfer, EraseCustomer],
++  rewrites: [ForgetOwner, ReleaseUsername, DeleteCustomer],
+ }) {}
+```
+
+## Start it
+
+An erasure is not something the bank's own events cause, so no policy starts it. Whoever handles the customer's request does.
+
+```typescript title="packages/server/src/eraseCustomer.ts"
+import type { CustomerId } from "@bank/domain/Customer/Customer.id";
+import { EraseCustomer } from "@bank/domain/Customer/EraseCustomer.saga";
+import * as Effect from "effect/Effect";
+
+/** Start forgetting a customer. Starting it again for the same customer returns the same run. */
+export const eraseCustomer = Effect.fn(function* (customerId: CustomerId) {
+  const erasures = yield* EraseCustomer;
+  const run = yield* erasures.start(customerId, {});
+  return yield* run.status;
+});
+```
+
+## Test it
+
+A [story](/domain/story) starts the saga and checks what is left: the account keeps its balance, without the name, and the username is free for someone else.
+
+```typescript title="packages/domain/test/Erasure.test.ts"
+import { Story } from "@alchemy.run/domain/Story";
+import { expect, it } from "@effect/vitest";
+import * as Layer from "effect/Layer";
+import { Account } from "../src/Account/Account.aggregate.ts";
+import { AccountCard, CardChanged } from "../src/Account/AccountCard.stream.ts";
+import { AccountSummary } from "../src/Account/AccountSummary.view.ts";
+import { DepositMoney, MoneyDeposited } from "../src/Account/DepositMoney.command.ts";
+import { AccountOpened } from "../src/Account/OpenAccount.command.ts";
+import { customer } from "../src/Actor.ts";
+import { Bank, BankHandlers } from "../src/Bank.model.ts";
+import { CurrentActor } from "../src/CurrentActor.context.ts";
+import { Customer } from "../src/Customer/Customer.aggregate.ts";
+import { CustomerDashboard } from "../src/Customer/CustomerDashboard.view.ts";
+import { EraseCustomer } from "../src/Customer/EraseCustomer.saga.ts";
+import { RegisterCustomer } from "../src/Customer/RegisterCustomer.command.ts";
+import { Username } from "../src/Customer/Username.ts";
+import { UsernameClaim } from "../src/Customer/UsernameClaim.aggregate.ts";
+import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
+import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
+import { Payments } from "../src/Settlement/Payments.external.ts";
+
+const story = Story.make(Bank, {
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
+  stub: [FraudCheck, Payments],
+});
+const sam = Customer.ref("c-1");
+const main = Account.ref("c-1-main");
+
+it.effect("erasing a customer removes their name from everything built from it", () =>
+  story(
+    Story.provide(CurrentActor, customer("c-1")),
+    Story.when(
+      new RegisterCustomer({ customerId: sam.id, name: "sam", username: Username.make("sam") }),
+    ),
+    Story.when(new DepositMoney({ accountId: main.id, amount: 500 })),
+    Story.streamed(
+      AccountCard,
+      main,
+      new CardChanged({ customerId: sam.id, owner: "sam", balance: 500, frozen: false }),
+    ),
+    Story.start(EraseCustomer, sam.id, {}),
+    Story.saga(EraseCustomer, sam.id, { _tag: "Completed", result: undefined }),
+    // The customer and the claim on their username are gone.
+    Story.state(sam, { _tag: "New" }),
+    Story.state(UsernameClaim.ref("sam"), { _tag: "Free" }),
+    // The account keeps what it did, without the name: its first event was rewritten.
+    Story.then(
+      main,
+      new AccountOpened({ customerId: sam.id, owner: "" }),
+      new MoneyDeposited({ amount: 500, balanceAfter: 500 }),
+    ),
+    Story.view(AccountSummary, main, { owner: "", balance: 500 }),
+    Story.view(CustomerDashboard, sam, (dashboard) => expect(dashboard.name).toBeNull()),
+    // The card that carried the name was removed from its stream.
+    Story.streamed(AccountCard, main),
+  ),
+);
+```
+
+## Check what the model doesn't hold
+
+A rewrite reaches what the model stores. Look for the person's data in what left it: an email a policy sent through an [external system](/domain/external-system), rows a projection wrote before it had a `rewrite` handler, the events a [compaction](/domain/compaction) handed to your archive, and your logs and traces.
+
+A command's reply is stored with its receipt and returned when the command is sent again. Keep personal data out of replies, or remove the instance.
+
+## Or keep the data out of the events
+
+A rewrite costs as much as the history it changes. Where you can choose, record an id in the event and keep what it identifies in a store of your own. Erasing a person is then one delete in that store, and no event changes.
+
+The bank records `owner: "sam"` in `AccountOpened`, so it needs the rewrite. Had it recorded only `customerId`, forgetting the customer's name would not have touched a single account.

@@ -11,6 +11,7 @@ import * as Aggregate from "./Aggregate.ts";
 import type { Plan } from "./Backfill.ts";
 import * as CatchUp from "./CatchUp.ts";
 import * as Command from "./Command.ts";
+import type * as Compaction from "./Compaction.ts";
 import * as Decision from "./Decision.ts";
 import {
   ConsumesItself,
@@ -21,6 +22,7 @@ import {
   ImplementedTwice,
   InitialNotJson,
   InvalidInitial,
+  InvalidRewrite,
   MissingInitial,
   MissingKeyOf,
   NoEmitter,
@@ -33,7 +35,9 @@ import {
   UndeclaredEmit,
   UndeclaredEvent,
   UnhandledCommand,
+  UnknownAggregate,
   UnknownEvent,
+  UnlistedRewrite,
   UnknownRead,
   UnknownSource,
   UnreadRecord,
@@ -45,32 +49,37 @@ import {
 import type * as Event from "./Event.ts";
 import { judge, pathsWithoutJson, rejectionTag, settle } from "./internal.ts";
 import * as Key from "./Key.ts";
-import type {
-  Accepted,
-  AggregateKit,
-  DecideResult,
-  DecisionKit,
-  DecisionRead,
-  DecisionReceiptJson,
-  DecisionWrite,
-  Delivery,
-  EmittedRange,
-  EnvelopeJson,
-  HandleResult,
-  Json,
-  PolicyKit,
-  ReceiptJson,
-  Root,
-  StoredEvent,
-  StreamEntry,
-  ViewEntry,
-  ViewKit,
-  ViewSnapshot,
+import {
+  type Accepted,
+  type AggregateKit,
+  type Change,
+  type DecideResult,
+  type DecisionKit,
+  type DecisionRead,
+  type DecisionReceiptJson,
+  type DecisionWrite,
+  type Delivery,
+  type EmittedRange,
+  type EnvelopeJson,
+  type HandleResult,
+  type Json,
+  type PolicyKit,
+  type ReceiptJson,
+  type Root,
+  type StoredEvent,
+  type StreamEntry,
+  type ViewEntry,
+  type ViewKit,
+  type ViewInput,
+  type ViewSnapshot,
+  sameJson,
+  viewInputOf,
 } from "./Platform.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import type * as Query from "./Query.ts";
 import * as RequestContext from "./RequestContext.ts";
+import type * as Rewrite from "./Rewrite.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
 import type * as View from "./View.ts";
@@ -87,6 +96,16 @@ export interface Definitions {
   readonly projections: ReadonlyArray<Projection.Any>;
   readonly streams: ReadonlyArray<DomainStream.Any>;
   readonly queries?: ReadonlyArray<Query.Any>;
+  /** The rewrites that may be run on the model's aggregates. */
+  readonly rewrites?: ReadonlyArray<Rewrite.Any>;
+  /** The compactions of the model's aggregates. */
+  readonly compactions?: ReadonlyArray<Compaction.Any>;
+}
+
+/** What a compaction's Layer gives the kernel. */
+export interface CompactionRuntime {
+  readonly afterEvents: number | undefined;
+  readonly archive: (id: string, events: ReadonlyArray<StoredEvent>) => Effect.Effect<void>;
 }
 
 /**
@@ -195,6 +214,22 @@ export interface Kernel {
     key: string,
     batch: ReadonlyArray<Accepted>,
   ) => Effect.Effect<ReadonlyArray<unknown>>;
+  /** Decode a run of revisions in a projection key's input log into `rewrite` inputs. */
+  readonly projectionRewrites: (
+    projection: Projection.Any,
+    key: string,
+    batch: ReadonlyArray<Accepted>,
+  ) => Effect.Effect<ReadonlyArray<unknown>>;
+  /** The projections a rewrite can reach: those given an event it changes, through any views. */
+  readonly rewriteReach: (rewrite: Rewrite.Any) => ReadonlyArray<string>;
+  /** A rewrite's encoded input. */
+  readonly encodeRewrite: (rewrite: { readonly _tag: string }) => Effect.Effect<Json>;
+  /** What a compaction's Layer says, once it is built: set before the platform starts. */
+  readonly setCompaction: (name: string, runtime: CompactionRuntime) => void;
+  /** Decode a stored event with its envelope. */
+  readonly decodeStored: (
+    row: StoredEvent,
+  ) => Effect.Effect<{ readonly event: unknown; readonly envelope: Aggregate.Envelope }>;
   /**
    * The keys of a projection an event of a source (an aggregate instance, or
    * a view key with its encoded `state` after the event) is routed to: empty
@@ -447,6 +482,38 @@ const build = (
     });
   }
   const codecsOf = (aggregate: Aggregate.Any) => aggregateCodecs.get(aggregate.aggregateName)!;
+
+  // ------------------------------------------------ rewrites and compactions
+  const rewriteByName = new Map<string, { readonly cls: Rewrite.Any; readonly codec: JsonCodec }>();
+  for (const rewrite of definitions.rewrites ?? []) {
+    const name = rewrite.rewriteName;
+    if (rewriteByName.has(name)) {
+      problem(new DuplicateDefinition({ kind: "rewrite", entity: name }));
+      continue;
+    }
+    const of = rewrite.definition.of;
+    if (aggregateByName.get(of.aggregateName) !== of) {
+      problem(new UnknownAggregate({ owner: `Rewrite ${name}`, aggregate: of.aggregateName }));
+      continue;
+    }
+    requireJson(rewrite, `Rewrite ${name}`);
+    rewriteByName.set(name, { cls: rewrite, codec: jsonCodec(rewrite) });
+  }
+  const compactionByName = new Map<string, Compaction.Any>();
+  const compactionRuntimes = new Map<string, CompactionRuntime>();
+  for (const compaction of definitions.compactions ?? []) {
+    const name = compaction.compactionName;
+    if (compactionByName.has(name)) {
+      problem(new DuplicateDefinition({ kind: "compaction", entity: name }));
+      continue;
+    }
+    const of = compaction.definition.of;
+    if (aggregateByName.get(of.aggregateName) !== of) {
+      problem(new UnknownAggregate({ owner: `Compaction ${name}`, aggregate: of.aggregateName }));
+      continue;
+    }
+    compactionByName.set(name, compaction);
+  }
 
   // ------------------------------------------------------ decision codecs
   interface DecisionCodecs {
@@ -1077,6 +1144,66 @@ const build = (
       ? json
       : viewCodec(entry.view).decode(json);
 
+  // ------------------------------------------------------------- revisions
+  const beforeOf = (delivery: Delivery): NonNullable<Delivery["revision"]>["before"] => ({
+    tag: delivery.tag,
+    event: delivery.event,
+    ...(delivery.state === undefined ? {} : { state: delivery.state }),
+    ...(delivery.routes ? { routes: delivery.routes } : {}),
+  });
+  /**
+   * What one changed row is to each view and projection key: the row as it
+   * is now for a key that still gets it, `gone` for one that no longer does.
+   * Policies are not told: what they did has happened.
+   */
+  const revisions = (
+    root: string,
+    before: ReadonlyArray<Delivery>,
+    after: ReadonlyArray<Delivery>,
+  ): Array<Delivery> => {
+    const id = (delivery: Delivery) => `${CatchUp.targetId(delivery.target)}|${delivery.key}`;
+    const consumer = (delivery: Delivery) => delivery.target.kind !== "policy";
+    const was = new Map(before.filter(consumer).map((delivery) => [id(delivery), delivery]));
+    const out: Array<Delivery> = [];
+    const still = new Set<string>();
+    for (const delivery of after.filter(consumer)) {
+      const old = was.get(id(delivery));
+      still.add(id(delivery));
+      out.push({
+        ...delivery,
+        history: true,
+        revision: { root, n: 0, ...(old ? { before: beforeOf(old) } : {}) },
+      });
+    }
+    for (const [key, old] of was) {
+      if (still.has(key)) continue;
+      out.push({
+        ...old,
+        history: true,
+        revision: { root, n: 0, before: beforeOf(old), gone: true },
+      });
+    }
+    return out;
+  };
+  /** The revisions of a run of changes, given how a row is routed. */
+  const revise = <Row>(
+    root: string,
+    changes: ReadonlyArray<Change<Row>>,
+    route: (row: Row) => Effect.Effect<ReadonlyArray<Delivery>>,
+  ): Effect.Effect<ReadonlyArray<Delivery>> =>
+    Effect.map(
+      Effect.forEach(changes, (change) =>
+        Effect.map(
+          Effect.all([
+            change.before === undefined ? Effect.succeed([]) : route(change.before),
+            change.after === undefined ? Effect.succeed([]) : route(change.after),
+          ]),
+          ([before, after]) => revisions(root, before, after),
+        ),
+      ),
+      (all) => all.flat(),
+    );
+
   // ------------------------------------------------------------------ kits
   /** Fold decided events into an instance's state, stamp them, and route them. */
   const commitOf = (aggregate: Aggregate.Any) => {
@@ -1220,6 +1347,157 @@ const build = (
               ),
             ),
         );
+      },
+      rewrite: Effect.fnUntraced(function* (run) {
+        const rewrite = rewriteByName.get(run.name);
+        if (rewrite === undefined || rewrite.cls.definition.of !== aggregate) {
+          return yield* Effect.die(
+            new DefinitionError({
+              reason: new UnlistedRewrite({ kind: "rewrite", entity: run.name }),
+            }),
+          );
+        }
+        const definition = rewrite.cls.definition as {
+          readonly delete?: boolean;
+          readonly events?: Record<string, ((...args: any[]) => unknown) | undefined>;
+        };
+        const input = rewrite.codec.decode(run.input);
+        let state = codecs.state.decode(run.state ?? codecs.initial);
+        const changes: Array<Change<StoredEvent>> = [];
+        for (const row of run.events) {
+          const event = (yield* decodeEvent(row.event)) as { readonly _tag: string };
+          const envelope = decodeEnvelope(row.envelope);
+          const seq = row.envelope.seq;
+          const handler = definition.delete ? () => null : definition.events?.[event._tag];
+          const next = (handler ? handler(event, input, envelope) : event) as
+            | { readonly _tag: string }
+            | null
+            | undefined;
+          if (next === undefined) {
+            return yield* Effect.die(
+              new DefinitionError({
+                reason: new InvalidRewrite({ rewrite: run.name, event: event._tag }),
+              }),
+            );
+          }
+          if (next === null) {
+            changes.push({ seq, before: row });
+            continue;
+          }
+          if (next !== event) {
+            if (!codecs.events.has(next._tag)) {
+              return yield* Effect.die(
+                new DefinitionError({
+                  reason: new UndeclaredEvent({
+                    aggregate: aggregate.aggregateName,
+                    event: next._tag,
+                  }),
+                }),
+              );
+            }
+            const encoded = yield* encodeEvent(next);
+            if (!sameJson(encoded, row.event)) {
+              changes.push({ seq, before: row, after: { event: encoded, envelope: row.envelope } });
+            }
+          }
+          state = (def.evolve as Record<string, (...args: any[]) => unknown>)[next._tag](
+            state,
+            next,
+            envelope,
+          );
+        }
+        return { state: definition.delete ? null : codecs.state.encode(state), changes };
+      }),
+      deletes: (name) =>
+        (rewriteByName.get(name)?.cls.definition as { readonly delete?: boolean } | undefined)
+          ?.delete === true,
+      broken: (json) => {
+        const state = codecs.state.decode(json ?? codecs.initial);
+        for (const [name, holds] of Object.entries(def.invariants ?? {})) {
+          if (!(holds as (state: unknown) => boolean)(state)) return name;
+        }
+        return undefined;
+      },
+      revise: (rawId, root, changes) => {
+        const id = decodeId(rawId) as string;
+        const stream = `${aggregate.aggregateName}/${id}`;
+        const sourceRef = Aggregate.makeRef(aggregate, id);
+        return revise(root, changes, (row) =>
+          Effect.map(decodeEvent(row.event), (event) =>
+            fanOut(
+              {
+                event,
+                source: sourceRef,
+                envelope: decodeEnvelope(row.envelope),
+                state: undefined,
+                stream,
+              },
+              {
+                source: stream,
+                seq: row.envelope.seq,
+                origin: aggregate.aggregateName,
+                tag: (row.event as { readonly _tag: string })._tag,
+                event: row.event,
+                envelope: row.envelope,
+                history: true,
+              },
+            ),
+          ),
+        );
+      },
+      rollup: Effect.fnUntraced(function* (input) {
+        const compaction = compactionByName.get(input.name);
+        if (compaction === undefined || compaction.definition.of !== aggregate) {
+          return yield* Effect.die(
+            new DefinitionError({
+              reason: new UnlistedRewrite({ kind: "compaction", entity: input.name }),
+            }),
+          );
+        }
+        const id = decodeId(input.id) as string;
+        const state = codecs.state.decode(input.state ?? codecs.initial);
+        const same = (other: unknown) =>
+          sameJson(codecs.state.encode(other), codecs.state.encode(state));
+        const now = DateTime.makeUnsafe(input.now);
+        const commandId = `compact:${input.name}:${input.version}`;
+        const events = (
+          compaction.definition.rollup as (
+            state: unknown,
+            ctx: { readonly id: string; readonly version: number },
+          ) => ReadonlyArray<{ readonly _tag: string }>
+        )(state, { id, version: input.version });
+        // From nothing: what a consumer rebuilt after the compaction folds.
+        const fresh = yield* commit(
+          id,
+          codecs.state.decode(codecs.initial),
+          input.version,
+          events,
+          now,
+          commandId,
+          true,
+        );
+        if (!same(fresh.next)) return undefined;
+        // On the instance itself: what it folds now.
+        const result = yield* commit(id, state, input.version, events, now, commandId, true);
+        if (!same(result.next)) return undefined;
+        return {
+          state: codecs.state.encode(result.next),
+          version: input.version + events.length,
+          events: result.events,
+          deliveries: result.deliveries,
+        };
+      }),
+      get compactions() {
+        return [...compactionByName.values()]
+          .filter((compaction) => compaction.definition.of === aggregate)
+          .map((compaction) => {
+            const runtime = compactionRuntimes.get(compaction.compactionName);
+            return {
+              name: compaction.compactionName,
+              afterEvents: runtime?.afterEvents,
+              archive: runtime?.archive ?? (() => Effect.void),
+            };
+          });
       },
       seed: Effect.fnUntraced(function* (input) {
         const id = decodeId(input.id) as string;
@@ -1497,6 +1775,8 @@ const build = (
           // Each event goes to the instance it was recorded on, in the order recorded.
           const recorded = new Map<string, Array<{ readonly _tag: string }>>();
           const events: Array<{ readonly _tag: string }> = [];
+          // Where each event commits: its stream, and its place among that stream's.
+          const at: Array<{ readonly stream: string; readonly seq: number }> = [];
           for (const item of decision as ReadonlyArray<unknown>) {
             const stream = Decision.recordedOn(item);
             if (stream === undefined || !current.has(stream)) {
@@ -1517,6 +1797,10 @@ const build = (
             if (list) list.push(event);
             else recorded.set(stream, [event]);
             events.push(event);
+            at.push({
+              stream,
+              seq: current.get(stream)!.version + recorded.get(stream)!.length,
+            });
           }
           const trace = yield* Telemetry.currentTrace;
           const writes: Array<DecisionWrite> = [];
@@ -1579,6 +1863,7 @@ const build = (
                 version: write.version + write.events.length,
               })),
               events: yield* Effect.forEach(events, encodeEvent),
+              at,
               reply:
                 def.reply && codecs.reply
                   ? codecs.reply.encode(
@@ -1647,7 +1932,7 @@ const build = (
     const emit = handlers(def.emit);
     const encodeState = (state: unknown) =>
       codec && state !== null && state !== undefined ? codec.encode(state) : null;
-    return {
+    const kit: Omit<ViewKit, "push" | "refold" | "revise"> = {
       name: view.viewName,
       deliver,
       consumerSingleSource: (target: string) => singleSource(target),
@@ -1738,6 +2023,7 @@ const build = (
         let changed = false;
         const entries: Array<ViewEntry> = [];
         const downstream: Array<Delivery> = [];
+        const inputs: Array<ViewInput> = [];
         const keyRef = Key.refOf(def.key, key);
         const stream = `${view.viewName}/${key}`;
         const generation = generationOf("view", view.viewName);
@@ -1756,6 +2042,8 @@ const build = (
           checkpoints[delivery.source] = delivery.seq;
           changed = true;
           const emittedBefore = seq;
+          const seqs: Array<number> = [];
+          inputs.push({ delivery, seqs });
           const origin = sources.get(delivery.origin)!;
           const event = (yield* decodeEvent(delivery.event)) as { readonly _tag: string };
           const envelope = decodeEnvelope(delivery.envelope);
@@ -1795,6 +2083,7 @@ const build = (
                 );
               }
               seq += 1;
+              seqs.push(seq);
               const outEnvelope: Aggregate.Envelope = {
                 id: key,
                 stream,
@@ -1847,9 +2136,87 @@ const build = (
           ...(generation > 0 ? { generation } : {}),
           emitted,
         };
-        return { snapshot: next, changed, entries, downstream };
+        return { snapshot: next, changed, entries, downstream, inputs };
       }),
     };
+    /** `kit.apply`, which `refold` runs one input at a time. */
+    const applyOne = kit.apply;
+    return Object.assign(kit, {
+      refold: Effect.fnUntraced(function* (
+        key: string,
+        cursor: { readonly snapshot: ViewSnapshot; readonly top: number },
+        rows: ReadonlyArray<ViewInput | Delivery>,
+      ) {
+        let snapshot = cursor.snapshot;
+        let top = cursor.top;
+        const inputs: Array<ViewInput> = [];
+        const entries: Array<ViewEntry> = [];
+        for (const row of rows) {
+          const { delivery, seqs: had } = viewInputOf(row);
+          for (const seq of had ?? []) top = Math.max(top, seq);
+          const emitted = snapshot.emitted;
+          const step = yield* applyOne(key, snapshot, [delivery]);
+          if (!step.changed) continue;
+          // Each entry keeps the seq its input's entry had; one more takes a new seq.
+          const seqs: Array<number> = [];
+          for (const [index, entry] of step.entries.entries()) {
+            const seq = had?.[index] ?? ++top;
+            seqs.push(seq);
+            entries.push({ ...entry, seq, envelope: { ...entry.envelope, seq } });
+          }
+          const last = emitted?.[delivery.source];
+          const commandId = delivery.envelope.commandId;
+          const after =
+            last?.commandId === commandId
+              ? last.after
+              : seqs.length > 0
+                ? Math.min(...seqs) - 1
+                : top;
+          snapshot = {
+            ...step.snapshot,
+            emitted: {
+              ...step.snapshot.emitted,
+              [delivery.source]: {
+                commandId,
+                sourceSeq: delivery.seq,
+                after,
+                through: seqs.length > 0 ? Math.max(...seqs) : after,
+              },
+            },
+          };
+          inputs.push({ delivery, seqs });
+        }
+        return { snapshot, top, inputs, entries };
+      }),
+      revise: (key: string, root: string, changes: ReadonlyArray<Change<ViewEntry>>) => {
+        const keyRef = Key.refOf(def.key, key);
+        const stream = `${view.viewName}/${key}`;
+        return revise(root, changes, (row) =>
+          Effect.map(decodeEvent(row.event), (event) =>
+            fanOut(
+              {
+                event,
+                source: keyRef,
+                envelope: decodeEnvelope(row.envelope),
+                state: codec && row.state !== null ? codec.decode(row.state) : null,
+                stream,
+              },
+              {
+                source: stream,
+                seq: row.seq,
+                origin: view.viewName,
+                tag: (row.event as { readonly _tag: string })._tag,
+                event: row.event,
+                envelope: row.envelope,
+                state: row.state,
+                ...(row.root ? { root: row.root } : {}),
+                history: true,
+              },
+            ),
+          ),
+        );
+      },
+    });
   };
 
   const policyKit = (policy: Policy.Any, handler: Policy.Handler<unknown>): PolicyKit => {
@@ -1858,7 +2225,8 @@ const build = (
       name: policy.policyName,
       run: (delivery) => {
         // Seeded history is the past; policies only react to what happens now.
-        if (delivery.history) return Effect.void;
+        // A rewrite's revision is the past changed: what a policy did has happened.
+        if (delivery.history || delivery.revision) return Effect.void;
         const upstream = sources.get(delivery.origin)!;
         const envelope = decodeEnvelope(delivery.envelope);
         const source = Key.refOf(keyOfSource(upstream), envelope.id);
@@ -1946,6 +2314,100 @@ const build = (
       return inputs;
     });
 
+  const projectionRewrites = (
+    projection: Projection.Any,
+    key: string,
+    batch: ReadonlyArray<Accepted>,
+  ): Effect.Effect<ReadonlyArray<unknown>> =>
+    Effect.gen(function* () {
+      const keyRef = Key.refOf(projection.definition.key, key);
+      const inputs: Array<unknown> = [];
+      for (const { delivery, position } of batch) {
+        const revision = delivery.revision;
+        if (revision?.before === undefined) continue;
+        const upstream = sources.get(delivery.origin)!;
+        const envelope = decodeEnvelope(delivery.envelope);
+        const source = Key.refOf(keyOfSource(upstream), envelope.id);
+        const before = yield* decodeEvent(revision.before.event);
+        const after = revision.gone ? undefined : yield* decodeEvent(delivery.event);
+        const state = revision.gone ? undefined : sourceState(upstream, delivery.state);
+        // An event that changed routes is one input per route it had or has.
+        // What `Stream.rewrite` reads: the source event whose entries it replaces.
+        const meta: InputMetaValue = {
+          projection: projection.projectionName,
+          key,
+          generation: generationOf("projection", projection.projectionName),
+          position,
+          source: delivery.source,
+          sourceSeq: delivery.seq,
+          root: rootOf(delivery),
+          at: delivery.envelope.at,
+          commandId: delivery.envelope.commandId,
+          appends: 0,
+        };
+        const was: ReadonlyArray<string | undefined> = revision.before.routes ?? [undefined];
+        const is: ReadonlyArray<string | undefined> = revision.gone
+          ? []
+          : (delivery.routes ?? [undefined]);
+        for (const route of new Set([...was, ...is])) {
+          const had = was.includes(route);
+          const has = is.includes(route);
+          const input = {
+            key: keyRef,
+            route,
+            source,
+            envelope,
+            before: had ? before : undefined,
+            after: has ? after : undefined,
+            state,
+            position,
+          };
+          Object.defineProperty(input, InputMeta, { value: meta, enumerable: false });
+          inputs.push(input);
+        }
+      }
+      return inputs;
+    });
+
+  const rewriteReach = (rewrite: Rewrite.Any): ReadonlyArray<string> => {
+    const of = rewrite.definition.of;
+    const definition = rewrite.definition as {
+      readonly delete?: boolean;
+      readonly events?: Record<string, unknown>;
+    };
+    const changed: ReadonlySet<string> = definition.delete
+      ? (aggregateCodecs.get(of.aggregateName)?.events ?? new Set())
+      : new Set(Object.keys(definition.events ?? {}));
+    // The tags of each source whose events the rewrite can change.
+    const reached = new Map<string, ReadonlySet<string>>([[of.aggregateName, changed]]);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const view of definitions.views) {
+        if (reached.has(view.viewName)) continue;
+        const entry = sources.get(view.viewName);
+        if (entry === undefined) continue;
+        const takes = view.definition.from.some((source) => {
+          const name = nameOf(source);
+          return [...(reached.get(name) ?? [])].some((tag) => consumes(view, tag, name));
+        });
+        if (!takes) continue;
+        // A view's state rides on every entry, so any of them may change.
+        reached.set(view.viewName, outputTags(entry));
+        grew = true;
+      }
+    }
+    return definitions.projections
+      .filter((projection) =>
+        projection.definition.from.some((source) => {
+          const tags = reached.get(nameOf(source));
+          return (
+            tags !== undefined && projection.definition.on.some((event) => tags.has(event.tag))
+          );
+        }),
+      )
+      .map((projection) => projection.projectionName);
+  };
+
   const consumerKeys = (
     kind: "view" | "projection",
     name: string,
@@ -2007,6 +2469,24 @@ const build = (
     viewKit,
     policyKit,
     projectionInputs,
+    projectionRewrites,
+    rewriteReach,
+    encodeRewrite: (rewrite) => {
+      const entry = rewriteByName.get(rewrite._tag);
+      return entry
+        ? Effect.sync(() => entry.codec.encode(rewrite))
+        : Effect.die(
+            new DefinitionError({
+              reason: new UnlistedRewrite({ kind: "rewrite", entity: rewrite._tag }),
+            }),
+          );
+    },
+    setCompaction: (name, runtime) => void compactionRuntimes.set(name, runtime),
+    decodeStored: (row) =>
+      Effect.map(decodeEvent(row.event), (event) => ({
+        event,
+        envelope: decodeEnvelope(row.envelope),
+      })),
     projectionKeys,
     viewKeys,
     get targets() {

@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as SecureRandom from "effect/crypto/SecureRandom";
@@ -14,6 +15,7 @@ import * as Aggregate from "./Aggregate.ts";
 import type { Annotations } from "./Annotations.ts";
 import * as CatchUp from "./CatchUp.ts";
 import type * as Command from "./Command.ts";
+import * as Compaction from "./Compaction.ts";
 import type * as Decision from "./Decision.ts";
 import {
   DecisionsUnsupported,
@@ -21,6 +23,7 @@ import {
   UnhandledCommand,
   ForeignAppend,
   LazyViewNeedsOneSource,
+  MissingRewriteHandler,
   MissingWorkflowEngine,
   UnvalidatedRead,
 } from "./DefinitionError.ts";
@@ -39,6 +42,7 @@ import {
   Platform,
   type PolicyStore,
   type ProjectionStore,
+  type Revised,
   type StoredEvent,
   type StreamEntry,
   type StreamMeta,
@@ -55,6 +59,7 @@ import * as Query from "./Query.ts";
 import * as Read from "./Read.ts";
 import type * as Relation from "./Relation.ts";
 import * as RequestContext from "./RequestContext.ts";
+import * as Rewrite from "./Rewrite.ts";
 import * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
 import * as Telemetry from "./Telemetry.ts";
@@ -123,8 +128,17 @@ export interface Members<
   G extends ReadonlyArray<Saga.Any> = readonly [],
   Q extends ReadonlyArray<Query.Any> = readonly [],
   D extends ReadonlyArray<Decision.Any> = readonly [],
+  C extends ReadonlyArray<Compaction.Any> = readonly [],
 > {
   readonly aggregates: A;
+  /**
+   * The rewrites that may be run on the model's aggregates. A projection
+   * given events one of them changes needs a `rewrite` handler in its Layer:
+   * the model fails to build without it.
+   */
+  readonly rewrites?: ReadonlyArray<Rewrite.Any>;
+  /** The compactions of the model's aggregates. `layer` requires each one's Layer. */
+  readonly compactions?: C;
   /**
    * The decisions that implement commands across several aggregates. Each
    * command has one implementation: listing a decision for a command an
@@ -413,9 +427,11 @@ type HandledBy<
   Q extends ReadonlyArray<Query.Any> = readonly [],
   V extends ReadonlyArray<View.Any> = readonly [],
   S extends ReadonlyArray<DomainStream.Any> = readonly [],
+  C extends ReadonlyArray<Compaction.Any> = readonly [],
 > =
   | Identifier<P[number]>
   | Identifier<J[number]>
+  | Compaction.Identifier<C[number]>
   | Saga.ImplementationIdentifier<G[number]>
   | Query.Identifier<Q[number]>
   | ValidatorOf<V[number]>
@@ -510,14 +526,15 @@ export const make = <
   const G extends ReadonlyArray<Saga.Any> = readonly [],
   const Q extends ReadonlyArray<Query.Any> = readonly [],
   const D extends ReadonlyArray<Decision.Any> = readonly [],
+  const C extends ReadonlyArray<Compaction.Any> = readonly [],
 >(
   name: Name,
-  members: Members<A, V, P, J, S, G, Q, D>,
+  members: Members<A, V, P, J, S, G, Q, D, C>,
   annotations: Annotations = {},
 ): ModelClass<
   Name,
   ProvidedBy<A, V, J, S, G, D>,
-  HandledBy<P, J, G, Q, V, S>,
+  HandledBy<P, J, G, Q, V, S, C>,
   ServableBy<A, V, S, Q, D>
 > => {
   const decisions = (members.decisions ?? []) as ReadonlyArray<Decision.Any>;
@@ -529,6 +546,8 @@ export const make = <
     projections: members.projections ?? [],
     streams: members.streams ?? [],
     queries: members.queries ?? [],
+    rewrites: members.rewrites ?? [],
+    compactions: members.compactions ?? [],
   };
   return class {
     static readonly kind = "Model" as const;
@@ -558,7 +577,7 @@ export const make = <
     static readonly streams = definitions.streams;
     static readonly queries: ReadonlyArray<Query.Any> = members.queries ?? [];
     static layer<E, R>(
-      handlers: Layer.Layer<HandledBy<P, J, G, Q, V, S>, E, R>,
+      handlers: Layer.Layer<HandledBy<P, J, G, Q, V, S, C>, E, R>,
       options?: LayerOptions,
     ) {
       return Layer.effectContext(
@@ -577,7 +596,7 @@ export const make = <
   } as unknown as ModelClass<
     Name,
     ProvidedBy<A, V, J, S, G, D>,
-    HandledBy<P, J, G, Q, V, S>,
+    HandledBy<P, J, G, Q, V, S, C>,
     ServableBy<A, V, S, Q, D>
   >;
 };
@@ -751,6 +770,7 @@ const build = <A, E, R>(
         aggregate,
         aggregateStores.get(aggregate.aggregateName)!,
         random,
+        { views: viewStores, projections: projectionStores },
       );
       hosts = Context.add(hosts, aggregate, client);
       for (const command of aggregate.definition.commands) commands.set(command.tag, client);
@@ -778,6 +798,9 @@ const build = <A, E, R>(
         unschedule: () => Effect.die(new Error(`${decision.decisionName} cannot be scheduled`)),
         import: () => Effect.die(new Error(`${decision.decisionName} cannot import events`)),
         get: () => Effect.die(new Error(`${decision.decisionName} has no state`)),
+        rewrite: () => Effect.die(new Error(`${decision.decisionName} has no events to rewrite`)),
+        rewritten: () => Effect.die(new Error(`${decision.decisionName} has no events to rewrite`)),
+        compact: () => Effect.die(new Error(`${decision.decisionName} has no events to compact`)),
       });
     }
     const viewHosts = new Map<string, View.Host<unknown, Key.Any, unknown>>();
@@ -873,6 +896,53 @@ const build = <A, E, R>(
       const version = implementationOf(projection).options.version;
       if (version) kernel.setVersion(`projection:${projection.projectionName}`, version);
     }
+    // A rewrite changes what a projection was given: its Layer says what that means.
+    const unhandled = (definitions.rewrites ?? []).flatMap((rewrite) =>
+      kernel
+        .rewriteReach(rewrite)
+        .filter(
+          (name) =>
+            implementationOf(definitions.projections.find((p) => p.projectionName === name)!)
+              .rewrite === undefined,
+        )
+        .map(
+          (projection) =>
+            new DefinitionError({
+              reason: new MissingRewriteHandler({ projection, rewrite: rewrite.rewriteName }),
+            }),
+        ),
+    );
+    if (unhandled.length > 0) {
+      return yield* Effect.failCause(Cause.fromReasons(unhandled.map(Cause.makeDieReason)));
+    }
+    for (const compaction of definitions.compactions ?? []) {
+      const implementation = Context.getUnsafe(
+        implementations as Context.Context<unknown>,
+        compaction as Context.Key<unknown, Compaction.Implementation<Aggregate.Any>>,
+      );
+      const aggregate = compaction.definition.of.aggregateName;
+      kernel.setCompaction(compaction.compactionName, {
+        afterEvents: implementation.options.after?.events,
+        archive: (id, rows) =>
+          Effect.gen(function* () {
+            const events = yield* Effect.forEach(rows, kernel.decodeStored);
+            // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs handlers inside its runtime, which provides RuntimeContext
+            yield* implementation.handle({
+              id,
+              stream: `${aggregate}/${id}`,
+              events,
+            } as never) as Effect.Effect<void>;
+          }).pipe(
+            Effect.withSpan(`Domain.compaction ${compaction.compactionName}`, {
+              attributes: {
+                "domain.aggregate": aggregate,
+                "domain.id": id,
+                "domain.events": rows.length,
+              },
+            }),
+          ),
+      });
+    }
     for (const projection of definitions.projections) {
       const implementation = implementationOf(projection);
       const writes = (projection.definition.writes ?? []).map((stream) =>
@@ -890,9 +960,20 @@ const build = <A, E, R>(
           run: (key, batch) =>
             Effect.gen(function* () {
               // Platforms run handlers inside their runtime (a Durable Object, or this process).
-              const inputs = yield* kernel.projectionInputs(projection, key, batch);
-              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs handlers inside its runtime, which provides RuntimeContext
-              yield* implementation.handle(inputs) as Effect.Effect<void>;
+              // A rewrite's revisions go to `rewrite`, in order with the key's other inputs.
+              for (const run of projectionRuns(batch)) {
+                if (run.kind === "apply") {
+                  const inputs = yield* kernel.projectionInputs(projection, key, run.rows);
+                  // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs handlers inside its runtime, which provides RuntimeContext
+                  yield* implementation.handle(inputs) as Effect.Effect<void>;
+                  continue;
+                }
+                const rewrite = implementation.rewrite;
+                if (rewrite === undefined) continue;
+                const inputs = yield* kernel.projectionRewrites(projection, key, run.rows);
+                // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs handlers inside its runtime, which provides RuntimeContext
+                yield* rewrite(inputs as ReadonlyArray<never>) as Effect.Effect<void>;
+              }
               // What this run handled, so stream reads `atLeast` a receipt see it.
               if (writes.length === 0) return;
               const checkpoints: Record<string, number> = {};
@@ -989,11 +1070,118 @@ const build = <A, E, R>(
     });
   });
 
+/**
+ * A run of a projection key's input log as its handlers take it: runs of
+ * ordinary inputs for `write` and runs of revisions for `rewrite`, in order.
+ * A row that only marks progress (a rewrite's `done`, an input a rewrite
+ * removed before it was handled) is in neither.
+ */
+const projectionRuns = (batch: ReadonlyArray<Accepted>) => {
+  const runs: Array<{ readonly kind: "apply" | "rewrite"; readonly rows: Array<Accepted> }> = [];
+  for (const row of batch) {
+    const revision = row.delivery.revision;
+    if (revision !== undefined && revision.before === undefined) continue;
+    const kind = revision === undefined ? "apply" : "rewrite";
+    const last = runs[runs.length - 1];
+    if (last?.kind === kind) last.rows.push(row);
+    else runs.push({ kind, rows: [row] });
+  }
+  return runs;
+};
+
+/** The stores a rewrite's revisions reach on their way from an instance. */
+interface Consumers {
+  readonly views: ReadonlyMap<string, ViewStore>;
+  readonly projections: ReadonlyMap<string, ProjectionStore>;
+}
+
+/**
+ * Wait until everything built from a rewritten instance reflects the
+ * rewrite: follow its revisions from the instance through every view key
+ * they reach to the projections, waiting for each on the way. Every wait
+ * shares one `timeout`.
+ */
+const rewriteSettled = (
+  store: AggregateStore,
+  consumers: Consumers,
+  receipt: Rewrite.Receipt,
+  timeout: Duration.Input | undefined,
+) =>
+  Effect.gen(function* () {
+    const [aggregate = "", ...rest] = receipt.stream.split("/");
+    const id = rest.join("/");
+    const root = `${receipt.stream}#${receipt.rewriteId}`;
+    const deadline =
+      (yield* Clock.currentTimeMillis) +
+      Duration.toMillis(Duration.fromInputUnsafe(timeout ?? "10 seconds"));
+    const until = <A>(
+      check: Effect.Effect<A, "stale">,
+      view: string,
+      key: string,
+      stream: string,
+    ) =>
+      Effect.flatMap(Clock.currentTimeMillis, (now) =>
+        waitUntil(check, Duration.millis(Math.max(0, deadline - now)), () =>
+          View.ConsistencyTimeout.make({ view, key, stream, version: 0 }),
+        ),
+      );
+    const visit = (
+      revised: Revised,
+      source: string,
+    ): Effect.Effect<void, View.ConsistencyTimeout> =>
+      Effect.suspend(() => {
+        if (revised.kind === "projection") {
+          const settled = consumers.projections.get(revised.name)?.revised;
+          if (settled === undefined) return Effect.void;
+          return until(
+            Effect.flatMap(settled(revised.key, root, source), (done) =>
+              done ? Effect.void : Effect.fail("stale" as const),
+            ),
+            revised.name,
+            revised.key,
+            source,
+          );
+        }
+        const settled = consumers.views.get(revised.name)?.revised;
+        if (settled === undefined) return Effect.void;
+        return until(
+          Effect.flatMap(settled(revised.key, root, source), (sent) =>
+            sent === undefined ? Effect.fail("stale" as const) : Effect.succeed(sent),
+          ),
+          revised.name,
+          revised.key,
+          source,
+        ).pipe(
+          Effect.flatMap((sent) =>
+            Effect.forEach(sent, (next) => visit(next, `${revised.name}/${revised.key}`), {
+              concurrency: "unbounded",
+              discard: true,
+            }),
+          ),
+        );
+      });
+    const status = store.rewriteStatus;
+    if (status === undefined) return;
+    const { sent } = yield* until(
+      Effect.flatMap(status(id, receipt.rewriteId), (found) =>
+        found?.done ? Effect.succeed(found) : Effect.fail("stale" as const),
+      ),
+      aggregate,
+      id,
+      receipt.stream,
+    );
+    yield* Effect.forEach(sent, (revised) => visit(revised, receipt.stream), {
+      concurrency: "unbounded",
+      discard: true,
+    });
+  }).pipe(Effect.withSpan("Domain.rewritten", { attributes: { "domain.stream": receipt.stream } }));
+
 const aggregateClient = (
   kernel: Kernel.Kernel,
   aggregate: Aggregate.Any,
   store: AggregateStore,
   random: SecureRandom.SecureRandom["Service"],
+  consumers: Consumers,
 ): Aggregate.ClientImpl => {
   /** What a send carries besides the command: its id, context, flow and trace. */
   const metaFor = (
@@ -1166,6 +1354,70 @@ const aggregateClient = (
       store
         .state(Aggregate.targetId(target))
         .pipe(Effect.map(({ state }) => kernel.decodeState(aggregate, state))),
+    rewrite: (target, rewrite, options) =>
+      Effect.gen(function* () {
+        const id = Aggregate.targetId(target);
+        const run = store.rewrite;
+        if (run === undefined) {
+          return yield* Effect.die(
+            new Error(`The platform cannot rewrite ${aggregate.aggregateName}`),
+          );
+        }
+        // Derived like a send's: a saga step that runs again rewrites once.
+        const rewriteId = yield* Aggregate.commandIdFor(
+          options?.rewriteId === undefined ? undefined : { commandId: options.rewriteId },
+          random,
+        );
+        yield* Effect.annotateCurrentSpan("domain.rewrite_id", rewriteId);
+        const result = yield* run(id, {
+          rewriteId,
+          name: rewrite._tag,
+          input: yield* kernel.encodeRewrite(rewrite),
+        });
+        if (result._tag === "InvariantBroken") {
+          return yield* Rewrite.InvariantBroken.make({
+            aggregate: aggregate.aggregateName,
+            id,
+            rewrite: rewrite._tag,
+            invariant: result.invariant,
+          });
+        }
+        return { stream: `${aggregate.aggregateName}/${id}`, rewriteId, changed: result.changed };
+      }).pipe(
+        Effect.withSpan(
+          `Domain.rewrite ${aggregate.aggregateName}.${rewrite._tag}`,
+          spanOptions(target),
+        ),
+      ),
+    rewritten: (receipt, options) => rewriteSettled(store, consumers, receipt, options?.timeout),
+    compact: (target, compaction) =>
+      Effect.gen(function* () {
+        const id = Aggregate.targetId(target);
+        const run = store.compact;
+        if (run === undefined) {
+          return yield* Effect.die(
+            new Error(`The platform cannot compact ${aggregate.aggregateName}`),
+          );
+        }
+        const result = yield* run(id, compaction.compactionName);
+        if (result._tag === "Lossy") {
+          return yield* Compaction.CompactionLossy.make({
+            aggregate: aggregate.aggregateName,
+            id,
+            compaction: compaction.compactionName,
+          });
+        }
+        return {
+          stream: `${aggregate.aggregateName}/${id}`,
+          version: result.version,
+          compacted: result.compacted,
+        };
+      }).pipe(
+        Effect.withSpan(
+          `Domain.compact ${aggregate.aggregateName}.${compaction.compactionName}`,
+          spanOptions(target),
+        ),
+      ),
   };
 };
 
@@ -1514,6 +1766,35 @@ const streamHost = (
               generation: meta.generation,
               origin: [meta.position, meta.appends],
               root: meta.root,
+              source: meta.source,
+              sourceSeq: meta.sourceSeq,
+              at: meta.at,
+              commandId: meta.commandId,
+              events: encoded,
+            }),
+          ),
+        );
+      }),
+    rewrite: (origin, ...events) =>
+      Effect.suspend(() => {
+        const meta = (origin as unknown as Record<symbol, Kernel.InputMetaValue | undefined>)[
+          Kernel.InputMeta
+        ];
+        const writer = kernel.writerOf(stream);
+        if (!meta || !writer || writer.projectionName !== meta.projection) {
+          return Effect.die(
+            new DefinitionError({ reason: new ForeignAppend({ stream: stream.streamName }) }),
+          );
+        }
+        const revise = store.revise;
+        if (revise === undefined) {
+          return Effect.die(new Error(`The platform cannot rewrite ${stream.streamName}`));
+        }
+        return Effect.forEach(events, (event) =>
+          kernel.encodeEvent(event as { readonly _tag: string }),
+        ).pipe(
+          Effect.flatMap((encoded) =>
+            revise(meta.key, {
               source: meta.source,
               sourceSeq: meta.sourceSeq,
               at: meta.at,

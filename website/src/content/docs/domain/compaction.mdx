@@ -1,0 +1,224 @@
+---
+title: Compaction
+description: How a compaction replaces an aggregate instance's history with a roll-up of its state, where the replaced events go, and when an instance compacts.
+---
+
+A compaction replaces the events an [aggregate](/domain/aggregate) instance has recorded with a few events that carry its state, so its log stops growing.
+
+An instance never replays its log to handle a command: its state is stored with every commit. The log matters when something is built from it later, such as a view you add or rebuild. A long-lived instance, an account open for ten years, keeps every event until you say what may stand in for them.
+
+## Declare the roll-up
+
+The roll-up is one or more ordinary events of the aggregate. Here it is one event that carries the whole state, and `evolve` folds it by taking that state.
+
+```typescript title="src/Wallet.aggregate.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+
+export const WalletState = Schema.Struct({ balance: Schema.Int, deposits: Schema.Int });
+
+export class Deposited extends Domain.Event("Deposited", {
+  amount: Schema.Int,
+  balanceAfter: Schema.Int,
+}) {}
+
+/** Everything a wallet was, in one event: what stands in for its history. */
+export class WalletBroughtForward extends Domain.Event("WalletBroughtForward", {
+  state: WalletState,
+}) {}
+
+export class Deposit extends Domain.Command("Deposit", {
+  input: { walletId: Schema.String, amount: Schema.Int },
+  events: [Deposited],
+}) {}
+
+export class Wallet extends Domain.Aggregate("Wallet", {
+  id: Schema.String,
+  state: WalletState,
+  initial: { balance: 0, deposits: 0 },
+  commands: [Deposit],
+  events: [WalletBroughtForward],
+  keyOf: (command) => command.walletId,
+  decide: {
+    Deposit: (wallet, { amount }) => [
+      new Deposited({ amount, balanceAfter: wallet.balance + amount }),
+    ],
+  },
+  evolve: {
+    Deposited: (wallet, e) => ({ balance: e.balanceAfter, deposits: wallet.deposits + 1 }),
+    WalletBroughtForward: (_, e) => e.state,
+  },
+}) {}
+```
+
+The compaction says which events to record for a given state.
+
+```typescript title="src/BringForward.compaction.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Wallet, WalletBroughtForward } from "./Wallet.aggregate.ts";
+
+/** Replaces a wallet's history with one event carrying its state. */
+export class BringForward extends Domain.Compaction("BringForward", {
+  of: Wallet,
+  rollup: (wallet) => [new WalletBroughtForward({ state: wallet })],
+}) {}
+```
+
+## Teach the views the roll-up
+
+After a compaction, the roll-up is all that is left of the events before it. A view that is added or rebuilt later is built from the roll-up, so it needs a handler for it.
+
+```typescript title="src/WalletSummary.view.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Schema from "effect/Schema";
+import { Wallet } from "./Wallet.aggregate.ts";
+
+/** A wallet's balance, as a client reads it. */
+export class WalletSummary extends Domain.View("WalletSummary", {
+  from: [Wallet],
+  key: Wallet,
+  state: Schema.Struct({ balance: Schema.Int }),
+  initial: { balance: 0 },
+  evolve: {
+    Deposited: (_, e) => ({ balance: e.balanceAfter }),
+    WalletBroughtForward: (_, e) => ({ balance: e.state.balance }),
+  },
+}) {}
+```
+
+A view that already applied the events keeps what it built. It receives the roll-up like any other event, and folds it into the same state.
+
+## Say where the replaced events go
+
+A compaction's Layer builds a handler. It is given each run of events before they are removed, and they are removed only once it succeeds. Build it with any binding: a bucket, another database, or nothing at all.
+
+```typescript title="src/BringForward.live.ts"
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import { BringForward } from "./BringForward.compaction.ts";
+
+/** Where compacted events are kept. */
+export const Archive = Cloudflare.R2.Bucket("Archive");
+
+/** A wallet's replaced events go to the archive, a file per run. */
+export const BringForwardLive = BringForward.toLayer(
+  Effect.gen(function* () {
+    const archive = yield* Cloudflare.R2.WriteBucket(Archive);
+    return Effect.fn(function* ({ stream, events }) {
+      const first = events[0]!.envelope.seq;
+      const last = events[events.length - 1]!.envelope.seq;
+      yield* archive
+        .put(`${stream}/${first}-${last}.json`, JSON.stringify(events))
+        .pipe(Effect.orDie);
+    });
+  }).pipe(Effect.provide(Cloudflare.R2.WriteBucketBinding)),
+  { after: { events: 1_000 } },
+);
+```
+
+The handler runs at least once per run of events, so make its write idempotent. A key made from the stream and the first and last sequence number is.
+
+Domain never reads what you archived. To bring history back, [import](/domain/aggregate) it into an instance of your choosing.
+
+## List it in the model
+
+```typescript title="src/Wallets.model.ts"
+import * as Domain from "@alchemy.run/domain";
+import { BringForward } from "./BringForward.compaction.ts";
+import { BringForwardLive } from "./BringForward.live.ts";
+import { Wallet } from "./Wallet.aggregate.ts";
+import { WalletSummary } from "./WalletSummary.view.ts";
+
+export class Wallets extends Domain.Model("Wallets", {
+  aggregates: [Wallet],
+  views: [WalletSummary],
+  compactions: [BringForward],
+}) {}
+
+/** The model's Layer requires the compaction's. */
+export const WalletsLive = Wallets.layer(BringForwardLive);
+```
+
+## When an instance compacts
+
+`after: { events: 1_000 }` on the Layer is a rule each instance keeps for itself. After each of its commits, an instance that holds more than 1,000 events since it last compacted commits a roll-up and hands the events before it to the handler.
+
+Changing the number is an ordinary deploy. Each instance applies the new rule at its next commit, and an instance that never commits again keeps its events.
+
+Commands keep committing while a compaction runs. The roll-up is one more commit, and the replaced events are handed over and removed afterwards.
+
+## Compact at a moment of your choosing
+
+Leave out `after`, and an instance compacts only when you say so. A [policy](/domain/policy) can compact at a moment that means something, such as a wallet being closed.
+
+```typescript title="src/CompactOnDeposit.policy.ts"
+import * as Domain from "@alchemy.run/domain";
+import * as Effect from "effect/Effect";
+import { BringForward } from "./BringForward.compaction.ts";
+import { Deposited, Wallet } from "./Wallet.aggregate.ts";
+
+/** Brings a wallet forward once it has had a hundred deposits since the last time. */
+export class CompactOnDeposit extends Domain.Policy("CompactOnDeposit", {
+  from: Wallet,
+  on: [Deposited],
+}) {}
+
+export const CompactOnDepositLive = CompactOnDeposit.toLayer(
+  Effect.gen(function* () {
+    const wallets = yield* Wallet;
+    return Effect.fn(function* ({ source, envelope }) {
+      if (envelope.seq % 100 !== 0) return;
+      yield* wallets.compact(source, BringForward).pipe(Effect.orDie);
+    });
+  }),
+);
+```
+
+## A roll-up must lose nothing
+
+Before it commits a roll-up, an instance folds it from `initial` and compares the result with its state. If they differ, the compaction is refused with `CompactionLossy` and nothing changes.
+
+A roll-up event that carries the whole state always passes. One that carries only part of it, or an `evolve` handler that forgets a field, is caught the first time it would lose something.
+
+## What a compaction leaves alone
+
+A compaction tells views and projections nothing but the roll-up events. They keep what they built from the events it removed: a ledger table keeps every row. To change what was built, use a [rewrite](/domain/rewrite).
+
+A view key also keeps its own copy of the events it applied, so it can fold them again after a rewrite. A compaction doesn't shrink that copy.
+
+## Test it
+
+A [story](/domain/story) compacts an instance as a step. The `then` after it sees the roll-up.
+
+```typescript title="test/BringForward.test.ts"
+import * as Domain from "@alchemy.run/domain";
+import { Story } from "@alchemy.run/domain/Story";
+import { it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import { BringForward } from "../src/BringForward.compaction.ts";
+import { Deposited, Wallet, WalletBroughtForward } from "../src/Wallet.aggregate.ts";
+import { Wallets } from "../src/Wallets.model.ts";
+import { WalletSummary } from "../src/WalletSummary.view.ts";
+
+/** In a test, the replaced events go nowhere. */
+const BringForwardTest = BringForward.toLayer(
+  Effect.succeed(Effect.fn(function* (_batch: Domain.Compaction.Batch<typeof Wallet>) {})),
+);
+
+const story = Story.make(Wallets, { layer: BringForwardTest });
+const wallet = Wallet.ref("w-1");
+
+it.effect("a wallet brought forward keeps its balance", () =>
+  story(
+    Story.given(
+      wallet,
+      new Deposited({ amount: 5, balanceAfter: 5 }),
+      new Deposited({ amount: 7, balanceAfter: 12 }),
+    ),
+    Story.compact(wallet, BringForward),
+    Story.then(wallet, new WalletBroughtForward({ state: { balance: 12, deposits: 2 } })),
+    Story.state(wallet, { balance: 12, deposits: 2 }),
+    Story.view(WalletSummary, wallet, { balance: 12 }),
+  ),
+);
+```

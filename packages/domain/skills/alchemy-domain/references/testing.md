@@ -143,6 +143,17 @@ The statuses are `NotStarted`, `Running`, `Completed`, `Rejected`, `Interrupted`
 
 More: [Saga: Test it](https://alchemy.run/domain/saga#test-it).
 
+A rewrite and a compaction are steps, and a saga no event starts is started by one:
+
+```ts
+Story.rewrite(account, new ForgetOwner({ customerId })), // waits for views, projections and streams
+Story.compact(account, BringForward),                    // the next `then` sees the roll-up
+Story.start(EraseCustomer, customerId, {}),
+Story.saga(EraseCustomer, customerId, { _tag: "Completed", result: undefined }),
+```
+
+More: [Story: Rewrite, compact and start a saga](https://alchemy.run/domain/story#rewrite-compact-and-start-a-saga).
+
 ### The declaration
 
 Building the model's Layer dies with a `Domain.DefinitionError` for every definition problem (missing `keyOf`, view `state` without `initial`, a policy or projection `on` an event no source emits, a stream with two writers, duplicate names, a schema with no JSON form such as `Schema.instanceOf(Foo)`, an `initial` that doesn't survive JSON). Every story builds it, so stories catch them; a model without stories keeps one test that builds it:
