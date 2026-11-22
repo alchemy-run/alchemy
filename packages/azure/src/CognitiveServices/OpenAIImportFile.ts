@@ -1,0 +1,52 @@
+import type * as authoring from "@distilled.cloud/azure/cognitiveservices-openai-authoring";
+import * as Binding from "alchemy/Binding";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
+import type * as Effect from "effect/Effect";
+import type { Account } from "./Account.ts";
+
+export interface OpenAIImportFileRequest extends Omit<authoring.ImportFileRequest, "endpoint"> {}
+
+/**
+ * Import a file into an Azure OpenAI account from a URL (e.g. a blob SAS
+ * URL).
+ *
+ * Binding assigns a custom role (`AzureOpenAIFileWriteRole`, one per stack)
+ * with exactly the data action `OpenAI/files/write`, on the account only.
+ * The built-in **Cognitive Services OpenAI User** role also reads every
+ * Azure OpenAI object and runs every deployment kind. The account needs a
+ * custom subdomain (`Azure.CognitiveServices.Account` sets one by default):
+ * Entra ID tokens only work on `{subdomain}.openai.azure.com`.
+ * On a host with a managed identity (an Azure Function, Function App, Web
+ * App, Container App, container group, VM, or AKS workload identity) the
+ * role goes to that identity; any other host (a Cloudflare Worker, an AWS
+ * Lambda) gets an Entra service principal (see `AzureBindings`).
+ * Provide {@link OpenAIImportFileHttp}.
+ *
+ * ### Calling OpenAIImportFile
+ * **Example:** OpenAIImportFile from a Function
+ * ```typescript
+ * // init
+ * const importFile = yield* Azure.CognitiveServices.OpenAIImportFile(account);
+ *
+ * // runtime
+ * const file = yield* importFile({ filename: "train.jsonl", content_url: sasUrl });
+ * ```
+ *
+ * @binding
+ * @category CognitiveServices
+ */
+export interface OpenAIImportFile extends Binding.Service<
+  OpenAIImportFile,
+  "Azure.CognitiveServices.OpenAIImportFile",
+  (
+    account: Account,
+  ) => Effect.Effect<
+    (
+      request: OpenAIImportFileRequest,
+    ) => Effect.Effect<authoring.ImportFileResponse, authoring.ImportFileError, RuntimeContext>
+  >
+> {}
+
+export const OpenAIImportFile = Binding.Service<OpenAIImportFile>(
+  "Azure.CognitiveServices.OpenAIImportFile",
+);

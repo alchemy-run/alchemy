@@ -21,6 +21,11 @@ export AXIOM_TOKEN=alchemy-fake-local-axiom-token
 export AXIOM_API_KEY="$AXIOM_TOKEN"
 export AXIOM_ORG_ID=alchemy-local
 
+export AZURE_TENANT_ID=00000000-0000-0000-0000-000000000000
+export AZURE_CLIENT_ID=00000000-0000-0000-0000-000000000000
+export AZURE_CLIENT_SECRET=alchemy-fake-local-azure-client-secret
+export AZURE_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000
+
 export CLOUDFLARE_ACCOUNT_ID=00000000000000000000000000000000
 export CLOUDFLARE_API_TOKEN=alchemy-fake-local-cloudflare-token
 export CLOUDFLARE_API_KEY=alchemy-fake-local-cloudflare-key

@@ -641,7 +641,7 @@ export const JobProvider = () =>
           const podTemplate = deepMerge(
             {
               metadata: {
-                labels,
+                labels: { ...identity?.podLabels, ...labels },
                 ...(env.digest === undefined
                   ? {}
                   : { annotations: { [ENV_SECRET_DIGEST]: env.digest } }),
