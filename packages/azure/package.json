@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/azure",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.87",
   "description": "Azure resources, Container Apps, Functions and websites for Alchemy.",
   "keywords": [
     "alchemy",
@@ -1037,7 +1037,8 @@
         "default": "./lib/*.js"
       },
       "./package.json": "./package.json"
-    }
+    },
+    "access": "public"
   },
   "scripts": {
     "build": "pnpm -r --filter \"{.}...\" run build:package",
