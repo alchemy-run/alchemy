@@ -1,0 +1,88 @@
+---
+title: What is Effect Clanka?
+description: The concepts behind Effect Clanka on Alchemy — the agent loop, scripts, the executor, conversations and tools — and how @alchemy.run/Clanka runs the loop in a Durable Object and the executor in a sandbox.
+---
+
+import Tree from "../../../components/diagrams/Tree.astro";
+
+Effect Clanka is a coding agent in two parts. The **agent loop** asks the model what to do next. The model answers with a **script**: JavaScript that calls functions such as `readFile`, `bash` and `applyPatch`. The **executor** runs the script and returns what it printed, and the loop asks the model again. The two parts speak a small RPC protocol, so they can run in different places.
+
+Take one small app: a `Coder` Durable Object with a conversation `issue-42`. The loop runs in the object and asks the `Smart` model. The conversation's sandbox on Boat runs the executor, which runs each script next to the files it works on. A script's call to your `lookupOrder` tool comes back to the object.
+
+<Tree
+  nodes={[
+    {
+      id: "coder", label: "Coder", type: "Durable Object", icon: "box",
+      areas: ["loop", "tool"], phoneAreas: ["loop", "tool"],
+    },
+    { id: "loop", label: "agent loop", type: "Clanka", parent: "coder", tone: "accent", icon: "refresh-cw" },
+    { id: "tool", label: "lookupOrder", type: "your tool", parent: "coder", icon: "wrench" },
+    {
+      id: "sandbox", label: "issue-42", type: "sandbox · Boat", icon: "box",
+      areas: ["executor"], phoneAreas: ["executor"],
+    },
+    {
+      id: "executor", label: "executor", type: "Clanka · Node", parent: "sandbox", icon: "terminal",
+      specs: [["runs", "scripts"], ["has", "readFile · bash · rg"]],
+    },
+    { id: "smart", label: "Smart", type: "model", icon: "sparkles" },
+  ]}
+  areas={["smart coder sandbox"]}
+  phoneAreas={["smart", "coder", "sandbox"]}
+  colGap={4.5}
+  links={[
+    { from: "loop", to: "smart", label: "asks" },
+    { from: "loop", to: "executor", label: "sends scripts" },
+    { from: "executor", to: "tool", label: "calls" },
+  ]}
+  caption="Clanka's agent loop runs in the Coder Durable Object and asks the Smart model. It sends each script to the executor in the sandbox of the conversation issue-42. A script's call to lookupOrder runs back in the Durable Object."
+/>
+
+## Scripts
+
+The model has one tool, `execute`, and its argument is a **script**. One script can read a file, search the project and write a change, and only what it prints goes back to the model.
+
+```typescript
+const text = await readFile({ path: "src/price.ts" });
+await applyPatch(patch);
+console.log(await bash({ command: "npm test", description: "Run the tests" }));
+await taskComplete("Fixed the rounding in price.ts.");
+```
+
+A script ends the task by calling `taskComplete` with a summary.
+
+## The executor
+
+The **executor** runs scripts. It is a Node program with Clanka's functions for files, search, shell commands and the web. It runs in the conversation's sandbox, because a Durable Object has no file system and cannot start a process.
+
+See [The executor & sandbox](/clanka/sandbox).
+
+## The harness
+
+The **harness** is what runs Clanka in your runtime: the models a prompt may use, your tools, and where sandboxes run. You yield it in a Durable Object's outer Effect.
+
+```typescript
+const harness = yield* Clanka.Harness({ models: [Smart], tools: [LookupOrder] });
+```
+
+## Conversations
+
+A **conversation** is a history of prompts, scripts and their output, with one sandbox. You name it, and each prompt continues it.
+
+```typescript
+const summary = yield* harness.conversation("issue-42").prompt("Fix the failing test.");
+```
+
+See [Conversations & prompts](/clanka/conversations).
+
+## Tools
+
+Clanka's own functions run in the sandbox. Your tools are functions a script calls the same way, and their handlers run in the Durable Object.
+
+See [Tools](/clanka/tools).
+
+## How @alchemy.run/Clanka models these concepts
+
+`Clanka.Harness` is an Effect you yield where its Layers are provided. It builds Clanka's agent with the executor reached over Clanka's own RPC protocol, carried through the sandbox's command execution. Models, tools and sandboxes are the [`@alchemy.run/ai`](/ai) declarations. `ClankaCloudflare.DurableObjectStore` keeps each conversation in the Durable Object's storage. A conversation's sandbox is found by a key made from the object's id and the conversation's name.
+
+Next: [Setup](/clanka/setup).

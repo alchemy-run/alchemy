@@ -782,6 +782,22 @@ const SECTIONS: Section[] = [
     },
   },
   {
+    heading: "Effect Clanka",
+    intro:
+      "Effect Clanka on Alchemy: its agent loop in a Durable Object, its executor in a sandbox, conversations, tools and prompts that survive eviction.",
+    pages: {
+      slugs: [
+        "clanka/index",
+        "clanka/what-is-clanka",
+        "clanka/setup",
+        "clanka/conversations",
+        "clanka/tools",
+        "clanka/sandbox",
+        "clanka/eviction",
+      ],
+    },
+  },
+  {
     heading: "Boat",
     intro:
       "Boat sandboxes: what Boat is, accounts and scoped API keys, sandboxes from any Worker and their lifecycle, programs served from a sandbox, snapshots and forks, environments, ports, and webhooks.",

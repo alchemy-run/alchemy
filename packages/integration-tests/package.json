@@ -16,6 +16,7 @@
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/axiom": "workspace:*",
     "@alchemy.run/boat": "workspace:*",
+    "@alchemy.run/clanka": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/convex": "workspace:*",

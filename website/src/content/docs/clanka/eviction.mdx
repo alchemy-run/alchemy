@@ -1,0 +1,62 @@
+---
+title: Surviving eviction
+description: A Durable Object can be evicted or redeployed at any time. A Clanka conversation is saved after every prompt, and a submitted prompt is run again from the object's alarm.
+---
+
+import Timeline from "../../../components/diagrams/Timeline.astro";
+
+Cloudflare can stop a Durable Object instance at any time: when it has been idle, on a deploy, or when it moves the object. What is in memory is lost. What the object wrote to its storage is kept, and its alarm still fires.
+
+## The conversation is kept
+
+`ClankaCloudflare.DurableObjectStore` saves a conversation's history when each prompt finishes. A new instance reads it from the object's storage, so the next prompt continues the conversation. The sandbox and its files are on the sandbox platform and are not affected.
+
+## A prompt that is cut off
+
+`conversation.prompt` runs inside the request that called it. If the instance stops while it is running, the request fails and the saved conversation is as it was before the prompt. Files the agent already changed in the sandbox stay changed.
+
+## Submit a prompt instead
+
+`conversation.submit` records the prompt in the object's storage, arms the object's alarm, and returns. The prompt runs in the background:
+
+```typescript title="src/Coder.ts"
+return Effect.gen(function* () {
+  return {
+    start: (name: string, text: string, requestId: string) =>
+      harness.conversation(name).submit(text, { requestId }).pipe(Effect.orDie),
+    result: (name: string, requestId: string) =>
+      harness.conversation(name).submitted(requestId).pipe(Effect.orDie),
+  };
+});
+```
+
+`submitted` returns `{ status: "running" }`, `{ status: "done", summary }` or `{ status: "failed", message }`, and `undefined` for an id nothing was submitted under.
+
+## What happens after a stop
+
+If the instance stops before a submitted prompt ends, the alarm wakes a new instance, which sends the prompt again to the conversation as it was last saved.
+
+<Timeline
+  end={10}
+  lanes={[
+    { id: "a", label: "instance A" },
+    { id: "b", label: "instance B" },
+  ]}
+  bars={[
+    { lane: "a", start: 0.4, end: 3.6, label: "prompt, attempt 1" },
+    { lane: "a", start: 3.6, end: 4.1, tone: "danger" },
+    { lane: "b", start: 5.2, end: 9.2, label: "prompt, attempt 2" },
+  ]}
+  marks={[
+    { at: 0.4, label: "submit" },
+    { at: 5.2, label: "alarm" },
+  ]}
+  legend={[{ tone: "accent", label: "the prompt" }, { tone: "danger", label: "instance stops" }]}
+  caption="Instance A accepts the prompt and stops part way through it. The alarm wakes instance B, which sends the prompt again and saves the conversation when the agent finishes."
+/>
+
+The second attempt starts the agent over on that prompt, in a sandbox that holds whatever the first attempt already changed. A prompt that does not finish in three starts is recorded as failed.
+
+## The same request twice
+
+`requestId` identifies a submitted prompt within its conversation. Submitting it again does not start a second one, so a caller that retries after a timeout is safe.

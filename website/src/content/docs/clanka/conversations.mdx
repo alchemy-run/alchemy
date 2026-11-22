@@ -1,0 +1,71 @@
+---
+title: Conversations & prompts
+description: Name a Clanka conversation, prompt it, follow the scripts it writes, choose the model, and read or reset its history.
+---
+
+A conversation is one history of prompts, scripts and output, with one sandbox. A prompt adds to it and runs until the agent finishes the task.
+
+## Prompt a conversation
+
+```typescript
+const conversation = harness.conversation("issue-42");
+
+const summary = yield* conversation.prompt("Fix the failing test in src/price.test.ts.");
+```
+
+`prompt` returns the summary the agent ended on, the text it passed to `taskComplete`. The conversation is saved when the prompt finishes.
+
+## Continue it
+
+Prompt the same name again. The model sees the earlier prompts, the scripts it wrote and what they printed:
+
+```typescript
+yield* harness.conversation("issue-42").prompt("Now add a test for negative prices.");
+```
+
+## Follow the agent's output
+
+`send` returns a Stream of Clanka's own output parts as they happen: the model's reasoning, each script as it is written, and what each script printed.
+
+```typescript
+const parts = yield* Stream.runCollect(conversation.send("Fix the failing test."));
+
+parts.flatMap((part) => (part._tag === "ScriptOutput" ? [part.output] : []));
+```
+
+## Choose the model
+
+A prompt runs on the first model the harness lists. Name another for one prompt:
+
+```typescript
+const harness = yield* Clanka.Harness({ models: [Fast, Smart] });
+
+yield* harness.conversation("issue-42").prompt("Plan the refactor.", { model: Smart });
+```
+
+Clanka's model writes a program on every turn, so a small model that only handles simple tool calls does poorly. Use a model that is good at code.
+
+## Add instructions to a prompt
+
+```typescript
+yield* conversation.prompt("Fix the failing test.", {
+  instructions: "Never edit files under vendor/.",
+});
+```
+
+Clanka also reads an `AGENTS.md` in the executor's directory, and offers the skills it finds under `.agents/skills` there.
+
+## Read or reset the history
+
+`history` is the conversation as an Effect AI `Prompt`. `reset` forgets it and leaves the sandbox as it is.
+
+```typescript
+const prompt = yield* conversation.history;
+yield* conversation.reset;
+```
+
+## Where conversations live
+
+A conversation belongs to the Durable Object that ran it, and is stored in that object's storage. Route a person or a repository to one object by name, and name its conversations within it.
+
+See [Surviving eviction](/clanka/eviction).
