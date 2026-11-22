@@ -186,26 +186,46 @@ export const make = (
       ),
     );
   };
+  /**
+   * Count the current run as waiting (or polling) from now, and return the
+   * end of that wait. The end counts once, whoever calls it first: the run
+   * when it resumes, or the run that wakes it (gives its turn, hands it a
+   * lock). A woken run's fiber resumes later, once scheduled; until then
+   * `quiet` would see it waiting, and `drain` return before it ran.
+   *
+   * `register` gets the end before the wait counts: counting it can let
+   * `drain` go on at once, which must find whatever wakes the run.
+   */
+  const begin = (
+    kind: keyof Run,
+    register: (end: () => void) => void = () => {},
+  ): Effect.Effect<() => void> =>
+    Effect.map(Effect.service(CurrentRun), (current) => {
+      // A wait outside any run of this platform counts on its own.
+      const run = current && runs.has(current) ? current : { waits: 0, polls: 0 };
+      const recount = (change: () => void) => {
+        const waited = run.waits + run.polls > 0;
+        const polled = run.polls > 0;
+        change();
+        waitingRuns += Number(run.waits + run.polls > 0) - Number(waited);
+        pollingRuns += Number(run.polls > 0) - Number(polled);
+        notify();
+      };
+      let open = true;
+      const end = () => {
+        if (!open) return;
+        open = false;
+        recount(() => run[kind]--);
+      };
+      register(end);
+      recount(() => run[kind]++);
+      return end;
+    });
   /** Count the current run as waiting (or polling) while `effect` runs. */
   const hold =
     (kind: keyof Run) =>
     <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
-      Effect.flatMap(Effect.service(CurrentRun), (current) =>
-        Effect.suspend(() => {
-          // A wait outside any run of this platform counts on its own.
-          const run = current && runs.has(current) ? current : { waits: 0, polls: 0 };
-          const recount = (change: () => void) => {
-            const waited = run.waits + run.polls > 0;
-            const polled = run.polls > 0;
-            change();
-            waitingRuns += Number(run.waits + run.polls > 0) - Number(waited);
-            pollingRuns += Number(run.polls > 0) - Number(polled);
-            notify();
-          };
-          recount(() => run[kind]++);
-          return effect.pipe(Effect.ensuring(Effect.sync(() => recount(() => run[kind]--))));
-        }),
-      );
+      Effect.flatMap(begin(kind), (end) => effect.pipe(Effect.ensuring(Effect.sync(end))));
   const waiting = hold("waits");
   /**
    * A poll for another run's work. The queue goes on while it polls (`quiet`),
@@ -241,13 +261,44 @@ export const make = (
       Effect.acquireUseRelease(
         acquire(lock),
         () => effect,
-        () => lock.release(1),
+        () => release(lock),
       );
+  // The ends of the runs' waits for each lock, in the order the lock wakes them.
+  const lockWaits = new WeakMap<Semaphore.Semaphore, Array<() => void>>();
+  const waitsFor = (lock: Semaphore.Semaphore) => {
+    let found = lockWaits.get(lock);
+    if (!found) lockWaits.set(lock, (found = []));
+    return found;
+  };
   /** Take `lock`, counted as waiting only when it is held. */
   const acquire = (lock: Semaphore.Semaphore): Effect.Effect<void> =>
-    lock
-      .takeIfAvailable(1)
-      .pipe(Effect.flatMap((taken) => (taken ? Effect.void : waiting(lock.take(1)))));
+    lock.takeIfAvailable(1).pipe(
+      Effect.flatMap((taken) =>
+        taken
+          ? Effect.void
+          : Effect.flatMap(
+              begin("waits", (end) => waitsFor(lock).push(end)),
+              (end) =>
+                lock.take(1).pipe(
+                  Effect.ensuring(
+                    Effect.sync(() => {
+                      const waits = waitsFor(lock);
+                      const at = waits.indexOf(end);
+                      if (at >= 0) waits.splice(at, 1);
+                      end();
+                    }),
+                  ),
+                  Effect.asVoid,
+                ),
+            ),
+      ),
+    );
+  /** Give `lock` back. The run it wakes (the first waiting) is running from now. */
+  const release = (lock: Semaphore.Semaphore): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      waitsFor(lock).shift()?.();
+      return Effect.asVoid(lock.release(1));
+    });
   /** Wait until every forked run is finished or waiting. */
   const quiet: Effect.Effect<void> = Effect.suspend(function wait(): Effect.Effect<void> {
     if (running === waitingRuns) return Effect.void;
@@ -409,15 +460,24 @@ export const make = (
       ? (key, activity) =>
           Effect.suspend(() => {
             const turn = Deferred.makeUnsafe<void>();
-            pending.push({
-              run: Deferred.succeed(turn, undefined).pipe(Effect.asVoid),
-              label: `saga ${key} → ${activity}`,
-              lane: `saga:${key}`,
-            });
-            return Deferred.await(turn).pipe(waiting);
+            return Effect.flatMap(
+              begin("waits", (end) =>
+                pending.push({
+                  // The run is running again from the moment its turn is given.
+                  run: Effect.sync(end).pipe(
+                    Effect.andThen(Deferred.succeed(turn, undefined)),
+                    Effect.asVoid,
+                  ),
+                  label: `saga ${key} → ${activity}`,
+                  lane: `saga:${key}`,
+                }),
+              ),
+              (end) => Deferred.await(turn).pipe(Effect.ensuring(Effect.sync(end))),
+            );
           })
       : undefined,
     acquire,
+    release,
     timer,
     failed: (cause) => void failures.push(cause),
     died: (saga, executionId, defect) => void deaths.push({ saga, executionId, defect }),
