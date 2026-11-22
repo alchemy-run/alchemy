@@ -51,9 +51,6 @@
       "path": "./submodules/distilled/packages/axiom/tsconfig.json"
     },
     {
-      "path": "./submodules/distilled/packages/azure/tsconfig.json"
-    },
-    {
       "path": "./submodules/distilled/packages/neon/tsconfig.json"
     },
     {
@@ -128,9 +125,6 @@
     },
     {
       "path": "./packages/axiom/tsconfig.json"
-    },
-    {
-      "path": "./packages/azure/tsconfig.json"
     },
     {
       "path": "./packages/doppler/tsconfig.json"
@@ -558,114 +552,6 @@
     },
     {
       "path": "./examples/docker-postgres/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-aks/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-container-app/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-container-app-job/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-cosmos/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-dev/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-effect-workflows/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-event-hubs/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-function/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-function-async/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-function-httpapi/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-key-vault/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-openai/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-postgres-drizzle/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-redis/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-schedule/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-service-bus/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-service-to-service/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-sql/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-storage/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-storage-queue/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-storage-uploads/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-vm/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-astro/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-foldkit/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-nextjs/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-nuxt/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-octane/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-react-router/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-solidstart/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-static/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-sveltekit/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-tanstack-start/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-vinext/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-vite/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-vocs/tsconfig.json"
-    },
-    {
-      "path": "./examples/azure-website-waku/tsconfig.json"
     },
     {
       "path": "./examples/hetzner-server/tsconfig.json"
