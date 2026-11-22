@@ -16,6 +16,7 @@
  *   to catch up, then lists its run's; `/generation` answers `TallyWriter`'s generation
  * - `/replay/:id` reads `CounterReplay`, the view the model's next version adds; 404 before it
  * - `/place/:id`, `/release/:id`, `/hold/:id` place, release and read a hold
+ * - `/relay/:chain?hops=n` sends the first hop of a relay; `/hop/:id` reads a hop
  * - `/import/:id?n=&id=commandId&expected=&at=ms&step=&on=echo` imports `n` events adding 1
  *   into the counter (or the echo), the i-th committed at `ms + i * step` when `at` is given;
  *   `{ version }`, `{ rejected: tag, version }` or `{ rejected: tag, index }`
@@ -43,10 +44,12 @@ import {
   Giving,
   HiddenTotal,
   Hold,
+  Hop,
   Incremented,
   Increment,
   LatencyApi,
   Mirrored,
+  Pass,
   PlaceHold,
   Recorded,
   ReleaseHold,
@@ -63,6 +66,7 @@ export const app = Effect.gen(function* () {
   const totals = yield* CounterTotal;
   const times = yield* CounterTimes;
   const holds = yield* Hold;
+  const hops = yield* Hop;
   const giving = yield* Giving;
   const hidden = yield* HiddenTotal;
   const api = yield* ConformanceApi.pipe(Effect.provide(TicketLive));
@@ -280,6 +284,13 @@ export const app = Effect.gen(function* () {
         return yield* HttpServerResponse.json(yield* holds.get(id));
       case "hold":
         return yield* HttpServerResponse.json(yield* holds.get(id));
+      case "relay": {
+        const left = Number(url.searchParams.get("hops") ?? "1");
+        yield* hops.send(new Pass({ id: `${id}-${left}`, chain: id, left }));
+        return yield* HttpServerResponse.json(yield* hops.get(`${id}-${left}`));
+      }
+      case "hop":
+        return yield* HttpServerResponse.json(yield* hops.get(id));
       default:
         return HttpServerResponse.text("Not Found", { status: 404 });
     }
