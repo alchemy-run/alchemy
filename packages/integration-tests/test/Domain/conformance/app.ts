@@ -3,7 +3,8 @@
  * platform's front over the conformance model. Every route is a GET that
  * answers JSON.
  *
- * - `/increment/:id?by=n` sends `Increment`; `{ accepted: total }` or `{ rejected: tag }`
+ * - `/increment/:id?by=n` sends `Increment`; `{ accepted: total }` or `{ rejected: tag }`;
+ *   `&command=c` sends it under the command id `c`
  * - `/again/:id?by=n` sends `Increment` twice under one command id
  * - `/give/:from?to=id&by=n&id=commandId` sends `Give`, decided across both counters;
  *   `{ accepted: total, commits }` or `{ rejected: tag }`
@@ -11,12 +12,21 @@
  * - `/totals/:id?order=&take=&after=` lists a page of the view's entries
  * - `/hidden/:id?version=n` waits, server-side, until the view no client may read has folded `n` commits
  * - `/record/:id?by=n` sends `Increment`, waits for `TotalWriter.caughtUp`, then lists what it recorded
+ * - `/tally/:id?by=n` sends `Increment` to a counter of the rebuild case, waits for the tallies
+ *   to catch up, then lists its run's; `/generation` answers `TallyWriter`'s generation
+ * - `/replay/:id` reads `CounterReplay`, the view the model's next version adds; 404 before it
  * - `/place/:id`, `/release/:id`, `/hold/:id` place, release and read a hold
+ * - `/import/:id?n=&id=commandId&expected=&at=ms&step=&on=echo` imports `n` events adding 1
+ *   into the counter (or the echo), the i-th committed at `ms + i * step` when `at` is given;
+ *   `{ version }`, `{ rejected: tag, version }` or `{ rejected: tag, index }`
+ * - `/times/:id` reads when the counter's first and latest events were committed
  * - `/api` serves {@link ConformanceApi}: calls over HTTP, live reads over WebSockets
  * - `/bench/:id?shape=&n=&consistency=&fresh=&lag=` times `n` commands sent one after
  *   another through {@link LatencyApi}, from inside the front: see `latency.ts`
  */
+import type { ImportOutOfOrder, UnexpectedVersion } from "@alchemy.run/domain";
 import * as Model from "@alchemy.run/domain/Model";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -25,17 +35,24 @@ import { One, OneView } from "./latency-model.ts";
 import {
   ConformanceApi,
   Counter,
+  CounterTimes,
+  CounterReplay,
   CounterTotal,
   Echo,
   Give,
   Giving,
   HiddenTotal,
   Hold,
+  Incremented,
   Increment,
   LatencyApi,
+  Mirrored,
   PlaceHold,
   Recorded,
   ReleaseHold,
+  Tallies,
+  tallyKey,
+  TicketLive,
   TotalWriter,
 } from "./model.ts";
 
@@ -44,14 +61,18 @@ export const app = Effect.gen(function* () {
   const counters = yield* Counter;
   const echoes = yield* Echo;
   const totals = yield* CounterTotal;
+  const times = yield* CounterTimes;
   const holds = yield* Hold;
   const giving = yield* Giving;
   const hidden = yield* HiddenTotal;
-  const api = yield* ConformanceApi;
+  const api = yield* ConformanceApi.pipe(Effect.provide(TicketLive));
   const recorded = yield* Recorded;
+  const tallies = yield* Tallies;
   const progress = yield* TotalWriter.Progress;
   const internals = yield* Model.Internals;
   const ones = yield* OneView;
+  // Only the model's next version has it.
+  const replays = yield* Effect.serviceOption(CounterReplay);
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest;
     const url = new URL(request.url, "http://front");
@@ -125,7 +146,9 @@ export const app = Effect.gen(function* () {
       case "ready":
         return HttpServerResponse.text("ok");
       case "increment":
-        return yield* HttpServerResponse.json(yield* increment());
+        return yield* HttpServerResponse.json(
+          yield* increment(url.searchParams.get("command") ?? undefined),
+        );
       case "again": {
         const first = yield* increment(`again-${id}`);
         const second = yield* increment(`again-${id}`);
@@ -146,6 +169,49 @@ export const app = Effect.gen(function* () {
               })),
               Effect.catchTag("Short", (rejection) => Effect.succeed({ rejected: rejection._tag })),
             ),
+        );
+      }
+      case "import": {
+        const n = Number(url.searchParams.get("n") ?? "1");
+        const at = url.searchParams.get("at");
+        const options = {
+          commandId: url.searchParams.get("id") ?? `import:${id}`,
+          expectedVersion: Number(url.searchParams.get("expected") ?? "0"),
+        };
+        const step = Number(url.searchParams.get("step") ?? "1");
+        const stamped = <E>(event: E, i: number) =>
+          at === null ? event : { event, at: DateTime.makeUnsafe(Number(at) + i * step) };
+        const imported: Effect.Effect<
+          { readonly version: number },
+          UnexpectedVersion | ImportOutOfOrder
+        > =
+          url.searchParams.get("on") === "echo"
+            ? echoes.import(
+                Echo.ref(id),
+                Array.from({ length: n }, (_, i) => stamped(new Mirrored({ by: 1 }), i)),
+                options,
+              )
+            : counters.import(
+                Counter.ref(id),
+                Array.from({ length: n }, (_, i) => stamped(new Incremented({ by: 1 }), i)),
+                options,
+              );
+        return yield* HttpServerResponse.json(
+          yield* imported.pipe(
+            Effect.map((receipt) => ({ version: receipt.version })),
+            Effect.catchTag("UnexpectedVersion", (refused) =>
+              Effect.succeed({ rejected: refused._tag, version: refused.version }),
+            ),
+            Effect.catchTag("ImportOutOfOrder", (refused) =>
+              Effect.succeed({ rejected: refused._tag, index: refused.index }),
+            ),
+          ),
+        );
+      }
+      case "times": {
+        const read = yield* times.get(Counter.ref(id)).pipe(Effect.orDie);
+        return yield* HttpServerResponse.json(
+          Option.getOrElse(read, () => ({ first: 0, last: 0 })),
         );
       }
       case "counter":
@@ -185,6 +251,26 @@ export const app = Effect.gen(function* () {
         yield* progress.caughtUp(receipt, { timeout: "60 seconds" }).pipe(Effect.orDie);
         const { entries } = yield* recorded.list(Counter.ref(id));
         return yield* HttpServerResponse.json(entries.map((entry) => entry.event.total));
+      }
+      case "tally": {
+        const receipt = yield* counters.send(new Increment({ id, by })).pipe(Effect.orDie);
+        // A rebuild's first input to a key waits for its catch-up run: allow minutes.
+        yield* internals.caughtUp.get("Tallies")!(receipt, { timeout: "5 minutes" }).pipe(
+          Effect.orDie,
+        );
+        const { entries } = yield* tallies.list(tallyKey(id) ?? id);
+        return yield* HttpServerResponse.json(entries.map((entry) => entry.event.by));
+      }
+      case "generation":
+        return yield* HttpServerResponse.json(
+          internals.kernel.generationOf("projection", "TallyWriter"),
+        );
+      case "replay": {
+        if (Option.isNone(replays)) return HttpServerResponse.text("Not Found", { status: 404 });
+        const replay = yield* replays.value.get(Counter.ref(id)).pipe(Effect.orDie);
+        return yield* HttpServerResponse.json(
+          Option.getOrElse(replay, () => ({ total: 0, increments: 0 })),
+        );
       }
       case "place":
         yield* holds.send(new PlaceHold({ id }));

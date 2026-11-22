@@ -12,6 +12,7 @@ import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { nameTagFilter, single } from "../internal/Lookup.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { RouteTableId } from "./RouteTable.ts";
@@ -30,7 +31,8 @@ export type VpcEndpointId<ID extends string = string> = `vpce-${ID}`;
 export const VpcEndpointId = <ID extends string>(id: ID): ID & VpcEndpointId<ID> =>
   `vpce-${id}` as ID & VpcEndpointId<ID>;
 
-export type VpcEndpointArn = `arn:aws:ec2:${RegionID}:${AccountID}:vpc-endpoint/${VpcEndpointId}`;
+export type VpcEndpointArn =
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:vpc-endpoint/${VpcEndpointId}`;
 
 export interface VpcEndpointProps {
   /**
@@ -380,7 +382,7 @@ export const VpcEndpointProvider = () =>
         return {
           vpcEndpointId: ep.VpcEndpointId as VpcEndpointId,
           vpcEndpointArn:
-            `arn:aws:ec2:${region}:${accountId}:vpc-endpoint/${ep.VpcEndpointId}` as VpcEndpointArn,
+            `arn:${partitionOf(region)}:ec2:${region}:${accountId}:vpc-endpoint/${ep.VpcEndpointId}` as VpcEndpointArn,
           vpcEndpointType: ep.VpcEndpointType!,
           vpcId: ep.VpcId as VpcId,
           serviceName: ep.ServiceName!,

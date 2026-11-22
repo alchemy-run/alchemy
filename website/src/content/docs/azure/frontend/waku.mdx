@@ -1,0 +1,113 @@
+---
+title: Waku
+description: "Deploy a Waku app to Azure with Azure.Website.Waku — React Server Components on a Flex Consumption Function, assets and prerendered pages on Blob Storage, both behind Azure Front Door."
+sidebar:
+  order: 24
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Azure.Website.Waku` deploys a [Waku](https://waku.gg) project to Azure. The
+React Server Components server runs on a Flex Consumption Function, which
+scales to zero. The client directory (`/assets/*`, `public/` files,
+prerendered HTML) goes to the static website endpoint of an Azure Storage
+account. Azure Front Door sends the client directory's paths to Blob
+Storage and every other path (pages, RSC payloads, API routes) to the
+Function. No Docker image and no App Service plan are involved.
+
+## Install
+
+The build integration ships separately. It only runs at deploy time, so a
+dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+## Configure Waku
+
+Your `waku.config.*` loads natively: Vite plugins go in its `vite` field.
+Do not set `unstable_adapter`. The
+`@alchemy.run/frontend-frameworks/waku/azure` target injects its own and
+fails the build with an actionable error if your config sets one.
+
+## Deploy the site
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Azure.Website.Waku("Website", { location: "eastus" });
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the Front Door endpoint,
+`https://{endpoint}.z01.azurefd.net`. A new endpoint takes 10-20 minutes to
+serve everywhere. Pick a `location` that offers Flex Consumption.
+
+A page with `render: "dynamic"` renders on the Function on every request. A
+`render: "static"` page is prerendered: Blob Storage serves its HTML at the
+directory path (`/about/`), and the Function answers `/about` from the
+prerendered output it bundles. The Function answers every RSC payload, so
+client-side navigation works for both kinds of page.
+
+## Pass environment variables
+
+```diff lang="typescript"
+-const site = yield* Azure.Website.Waku("Website", { location: "eastus" });
++const site = yield* Azure.Website.Waku("Website", {
++  location: "eastus",
++  env: { GREETING: "Hello from Azure!" },
++});
+```
+
+The values are set for the build and become app settings of the Function.
+A dynamic page or an API route reads them with `getEnv("GREETING")` from
+`waku`.
+
+## Size the Function
+
+```typescript
+const site = yield* Azure.Website.Waku("Website", {
+  instanceMemoryMB: 4096,
+  maximumInstanceCount: 40,
+});
+```
+
+## Share a Front Door profile
+
+```typescript
+const profile = yield* Azure.Cdn.Profile("Edge");
+const web = yield* Azure.Website.Waku("Website", { frontDoor: { profile } });
+const docs = yield* Azure.Website.Vocs("Docs", {
+  rootDir: "./docs",
+  frontDoor: { profile },
+});
+```
+
+Each profile bills a monthly base fee, so share one across sites. A Waku
+site needs Front Door: `frontDoor: false` fails the deploy. See
+[Websites](/azure/frontend/websites) for caching, purges, and the other
+shared settings.
+
+## Local development
+
+`alchemy dev` runs Waku's own dev server with hot reload and creates nothing
+in Azure. `env` reaches the dev server too. Wrap the site in
+`Alchemy.remote()` to deploy it for real during dev.
+
+See the [`azure-website-waku`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-waku)
+example.
+
+## Where next
+
+- [Websites](/azure/frontend/websites) — the settings every site shares.
+- [Website reference](/providers/azure/website#waku) — every prop.

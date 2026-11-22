@@ -1,5 +1,6 @@
 import type { HttpEffect } from "alchemy/Http";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
@@ -36,7 +37,13 @@ import { internalError, redactCause } from "./internal.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import * as Model from "./Model.ts";
-import { captureContext, type StreamStore, type Subscription, type ViewStore } from "./Platform.ts";
+import {
+  captureContext,
+  REAUTHORIZE_CLOSE_CODE,
+  type StreamStore,
+  type Subscription,
+  type ViewStore,
+} from "./Platform.ts";
 import * as Query from "./Query.ts";
 import type * as Read from "./Read.ts";
 import { nameOf, readRpcs } from "./ReadRpcs.ts";
@@ -968,13 +975,18 @@ const liveRequestOf = (request: { readonly url: string }): LiveRequest | undefin
   return raw === null ? undefined : Option.getOrUndefined(decodeLiveRequest(raw));
 };
 
+/** The shortest a live read stays open on one verdict (see `Domain.setExpiry`). */
+const MIN_VERDICT_MILLIS = 1_000;
+
 /**
  * Serve live reads (`watch` and `events`) as WebSockets. The read's
  * middleware runs here, in the Worker, against the upgrade request's own
  * headers (cookies, in a browser); the context it provides travels with
  * the subscription to the object that owns the key, which pushes to the
  * socket on every commit. A refused read still connects, to deliver its
- * typed rejection.
+ * typed rejection. When the middleware says how long its verdict holds
+ * (`Domain.setExpiry`), the subscription carries it, and the platform closes
+ * the read then so the client reconnects through the middleware again.
  */
 const liveReads = (
   entries: ReadonlyArray<Servable>,
@@ -1029,6 +1041,7 @@ const liveReads = (
         payload: payload.value,
       });
     }
+    const connectedAt = yield* Clock.currentTimeMillis;
     const subscription: Subscription = {
       requestId: live.id,
       mode: read.mode,
@@ -1036,8 +1049,18 @@ const liveReads = (
       context: {},
       cursor: live.cursor ?? (read.mode === "watch" ? -1 : (after ?? 0)),
     };
+    // Where the middleware set its verdict's expiry (`Domain.setExpiry`), read once they all ran.
+    const expiry: RequestContext.Expiry = { at: undefined };
     const judged = yield* authorized.pipe(
-      Effect.map((context): Subscription => ({ ...subscription, context })),
+      Effect.provideService(RequestContext.CurrentExpiry, expiry),
+      Effect.map((context): Subscription => ({
+        ...subscription,
+        context,
+        // At least a second: a verdict already out can't make a client reconnect in a loop.
+        ...(expiry.at === undefined
+          ? {}
+          : { validUntil: Math.max(expiry.at, connectedAt + MIN_VERDICT_MILLIS) }),
+      })),
       // A refusal, or a defect (already logged and redacted by the middleware), ends the read.
       Effect.catchCause((cause) =>
         Watch.refuse(
@@ -1579,6 +1602,20 @@ export const protocolWebSocket = (
           while (!ended) {
             const exit = yield* Effect.exit(connect);
             if (ended) return;
+            // The server wants the read's middleware to run again: reconnect now.
+            if (
+              Exit.isFailure(exit) &&
+              Option.exists(
+                Cause.findErrorOption(exit.cause),
+                (error) =>
+                  Socket.isSocketError(error) &&
+                  error.reason._tag === "SocketCloseError" &&
+                  error.reason.code === REAUTHORIZE_CLOSE_CODE,
+              )
+            ) {
+              failures = 0;
+              continue;
+            }
             // A close without an `Exit` (a deploy, an evicted object) reconnects and resumes.
             if (++failures > RECONNECTS) {
               return yield* RpcClientError.RpcClientError.make({

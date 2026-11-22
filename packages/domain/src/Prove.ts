@@ -21,10 +21,12 @@ import * as Interpreter from "./Prove/internal/Interpreter.ts";
 import * as Paths from "./Prove/internal/Paths.ts";
 import * as Smt from "./Prove/internal/Smt.ts";
 import * as Source from "./Prove/internal/Source.ts";
+import * as Suggest from "./Prove/internal/Suggest.ts";
 import * as Symbolic from "./Prove/internal/Symbolic.ts";
 import * as Value from "./Prove/internal/Value.ts";
 
 export type { Counterexample, Verdict } from "./Prove/internal/Check.ts";
+export type { Suggestion } from "./Prove/internal/Suggest.ts";
 
 export interface Options {
   /** The file the aggregate is declared in: `new URL("../src/Account.ts", import.meta.url)`, or a path. */
@@ -38,6 +40,12 @@ export interface Options {
     readonly decision: Decision.Any;
     readonly source: URL | string;
   }>;
+  /**
+   * Look for an invariant to add where a proof fails from a state the rules
+   * allow.
+   * @default true
+   */
+  readonly suggest?: boolean;
 }
 
 /** Where a decision is declared. */
@@ -124,6 +132,12 @@ export interface Report {
       /** The paths through the command that were checked. */
       readonly paths: number;
     }>;
+    /**
+     * Where the proof fails from a state the rules allow: an invariant that
+     * rules that state out and that every command keeps. With it written
+     * down, this one is proved. `undefined` where no simple one does.
+     */
+    readonly suggested: Suggest.Suggestion | undefined;
   }>;
   /** The aggregate's transitions: what each command may do in one step. */
   readonly transitions: ReadonlyArray<{
@@ -134,6 +148,8 @@ export interface Report {
       /** The paths through the command that were checked. */
       readonly paths: number;
     }>;
+    /** An invariant that makes it proved, as for an invariant. */
+    readonly suggested: Suggest.Suggestion | undefined;
   }>;
   /**
    * The checks of the state's and the commands' schemas the prover does not
@@ -152,6 +168,18 @@ export interface Report {
    * here says what it does to the invariants.
    */
   readonly outside: ReadonlyArray<string>;
+  /**
+   * How far the prover's reading was held against the real code: on inputs
+   * picked for each path through a command, the real `decide` and `evolve`
+   * were run. `differs` names each path where they did something else.
+   */
+  readonly agreement: {
+    /** The paths inputs were picked and run for. */
+    readonly compared: number;
+    /** The paths inputs take that could not be run on the real code. */
+    readonly uncompared: number;
+    readonly differs: ReadonlyArray<string>;
+  };
   /** What the proof takes for granted. */
   readonly assumptions: ReadonlyArray<string>;
 }
@@ -216,6 +244,19 @@ export const report = (
     }
 
     const initial = aggregate.definition.initial;
+    // A proof that fails on a real step, from a state the rules allow: the state
+    // may be one no sequence reaches, and an invariant that says so is looked for.
+    const suggested = new Map<string, Suggest.Suggestion | undefined>();
+    if (options.suggest !== false && (options.decisions ?? []).length === 0)
+      for (const name of Paths.ruleNames(definition))
+        if (
+          rows.some((row) => row.verdicts.get(name)?._tag === "Violated") &&
+          rows.every((row) => row.verdicts.get(name)?._tag !== "Misread")
+        )
+          suggested.set(
+            name,
+            yield* Suggest.suggest(solver, interpreter, aggregate, definition, name),
+          );
     const made: Report = {
       aggregate: aggregate.aggregateName,
       initial: Schema.is(aggregate.definition.state)(initial),
@@ -238,6 +279,7 @@ export const report = (
               verdict: row.verdicts.get(name)!,
               paths: row.paths,
             })),
+            suggested: suggested.get(name),
           })),
         ),
       ),
@@ -248,6 +290,7 @@ export const report = (
           verdict: row.verdicts.get(name)!,
           paths: row.paths,
         })),
+        suggested: suggested.get(name),
       })),
       unread: [
         ...Symbolic.unread(aggregate.definition.state, "state"),
@@ -261,6 +304,11 @@ export const report = (
       outside: aggregate.definition.events
         .map((event) => event.tag)
         .filter((tag) => !recorded.has(tag)),
+      agreement: {
+        compared: own.reduce((sum, row) => sum + row.compared, 0),
+        uncompared: own.reduce((sum, row) => sum + row.uncompared, 0),
+        differs: own.flatMap((row) => row.differs),
+      },
       assumptions: ASSUMPTIONS,
     };
     return made;
@@ -347,6 +395,7 @@ const LABEL = {
   Unconfirmed: "not proved",
   NotTranslated: "not read",
   Unknown: "not decided",
+  Misread: "read wrongly",
 } as const;
 
 /** A report as text, one invariant after another. */
@@ -363,6 +412,7 @@ export const render = (report: Report): string => {
     initial: boolean | undefined,
     commands: ReadonlyArray<{ readonly command: string; readonly verdict: Verdict }>,
     notes: ReadonlyArray<string>,
+    suggested?: Suggest.Suggestion,
   ) => {
     const failed = commands.filter((c) => c.verdict._tag !== "Proved");
     const ok = initial !== false && failed.length === 0 && notes.length === 0;
@@ -376,7 +426,9 @@ export const render = (report: Report): string => {
       lines.push(`    ✗ ${row.command}: ${LABEL[row.verdict._tag]}`);
       for (const line of detail(row.verdict)) lines.push(`        ${line}`);
     }
-    lines.push(...notes.map((note) => `    ✗ ${note}`), "");
+    lines.push(...notes.map((note) => `    ✗ ${note}`));
+    if (suggested) lines.push(...suggestion(suggested, "    "));
+    lines.push("");
   };
   // A command proved for short lists only is not known to leave the schema: its own line says so.
   const leaving = report.commands
@@ -396,9 +448,9 @@ export const render = (report: Report): string => {
         ? []
         : ["proved only from a state in the schema, and the initial state is not in it"];
   for (const invariant of report.invariants)
-    section(invariant.name, invariant.initial, invariant.commands, open);
+    section(invariant.name, invariant.initial, invariant.commands, open, invariant.suggested);
   for (const transition of report.transitions)
-    section(transition.name, undefined, transition.commands, open);
+    section(transition.name, undefined, transition.commands, open, transition.suggested);
   for (const c of report.commands.filter((c) => c.accepted === false))
     lines.push(
       `✗ ${c.command} is never accepted: no state the invariants allow lets it record an event`,
@@ -410,9 +462,32 @@ export const render = (report: Report): string => {
       "    pass that decision in `decisions`, or verify the model that hosts both",
       "",
     );
-  lines.push(...notes(report));
+  lines.push(agreed(report.agreement), "", ...notes(report));
   return lines.join("\n");
 };
+
+/** An invariant to add, as lines of a report. */
+export const suggestion = (
+  suggested: Suggest.Suggestion,
+  indent: string,
+): ReadonlyArray<string> => [
+  `${indent}Every command keeps this, and with it the rule is proved. Add it to the invariants:`,
+  `${indent}  ${suggested.name}: ${suggested.source},`,
+];
+
+/** How far a report's reading was held against the real code, as a line. */
+export const agreed = (agreement: {
+  readonly compared: number;
+  readonly uncompared: number;
+  readonly differs: ReadonlyArray<string>;
+}): string =>
+  agreement.differs.length > 0
+    ? `✗ The real code does something else on ${agreement.differs.length} of the ${agreement.compared} paths compared`
+    : `Agreed with the real code: inputs picked for each of ${agreement.compared} paths through the commands did what the prover read${
+        agreement.uncompared > 0
+          ? ` (${agreement.uncompared} more could not be run: the prover cannot build their inputs)`
+          : ""
+      }`;
 
 /** The schema checks a report could not read or prove kept, then what it takes for granted. */
 const notes = (report: {

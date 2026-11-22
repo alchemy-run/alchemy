@@ -1,4 +1,4 @@
-import * as Rivet from "@distilled.cloud/rivet";
+import * as Namespaces from "@distilled.cloud/rivet/namespaces";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -100,12 +100,12 @@ export const NamespaceProvider = () =>
     Namespace,
     Effect.gen(function* () {
       const observe = (connection: ConnectionProps, name: string, wait?: Duration.Input) =>
-        Rivet.namespaces.listNamespaces({ name }).pipe(
+        Namespaces.listNamespaces({ name }).pipe(
           Effect.map((res) => res.namespaces.find((ns) => ns.name === name)),
           withConnection(connection, wait === undefined ? {} : { unreachableWait: wait }),
         );
 
-      const toAttrs = (connection: ConnectionProps, ns: Rivet.namespaces.Namespace) => ({
+      const toAttrs = (connection: ConnectionProps, ns: Namespaces.Namespace) => ({
         name: ns.name,
         endpoint: connection.endpoint,
         createdAt: ns.create_ts,
@@ -158,7 +158,7 @@ export const NamespaceProvider = () =>
           // Ensure
           if (ns === undefined) {
             yield* session.note(`Creating namespace ${name}...`);
-            ns = yield* Rivet.namespaces.createNamespace({ name }).pipe(
+            ns = yield* Namespaces.createNamespace({ name }).pipe(
               Effect.map((res) => res.namespace),
               Effect.catchTag("NamespaceAlreadyExists", () => observe(news, name)),
               withConnection(news),

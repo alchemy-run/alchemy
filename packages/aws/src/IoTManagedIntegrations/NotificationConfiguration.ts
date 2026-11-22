@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import { syncManagedIntegrationsTags, toTagRecord } from "./internal.ts";
 
@@ -110,7 +111,7 @@ export const NotificationConfigurationProvider = () =>
       // approach as the Destination provider).
       const configurationArn = Effect.fn(function* (eventType: mi.EventType) {
         const { accountId, region } = yield* AWSEnvironment.current;
-        return `arn:aws:iotmanagedintegrations:${region}:${accountId}:notification-configuration/${eventType}`;
+        return `arn:${partitionOf(region)}:iotmanagedintegrations:${region}:${accountId}:notification-configuration/${eventType}`;
       });
 
       const toAttributes = Effect.fn(function* (

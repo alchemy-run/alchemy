@@ -1393,6 +1393,35 @@ export const capturedConfigHost = (mode: string) =>
     );
   });
 
+// HookHost — a Platform whose `onCreate` hook declares a child resource
+// (`<id>Token`), like a Cloudflare Worker minting the API token behind
+// `R2.S3Credentials`. Pins that a host's `renamedFrom` stays on the host
+// (#2219).
+export interface HookHost extends Resource<
+  "Test.HookHost",
+  CapturedConfigHostProps,
+  { ok: boolean }
+> {}
+
+export const HookHost: Platform<
+  HookHost,
+  ServerHost,
+  Main<ServerHost>,
+  HostRuntimeContext
+> = Platform("Test.HookHost", {
+  createRuntimeContext: createHostRuntimeContext("Test.HookHost"),
+  onCreate: (host) => Bucket(`${host.LogicalId}Token`, { name: "token" }).pipe(Effect.asVoid),
+});
+
+export const hookHostProvider = () =>
+  Provider.succeed(HookHost, {
+    list: () => Effect.succeed([]),
+    reconcile: Effect.fn(function* () {
+      return { ok: true };
+    }),
+    delete: Effect.fn(function* () {}),
+  });
+
 // LookupTarget — a resource found by `name` through `LookupTarget.lookup`.
 // `lookupTargets` stands in for the cloud: tests put the resources no stack
 // manages into it, keyed by a name unique to the test (files run their tests
@@ -1523,6 +1552,7 @@ export const TestLayers = () =>
     driftResourceProvider(),
     modalResourceProvider(),
     capturedConfigHostProvider(),
+    hookHostProvider(),
     lookupTargetProvider(),
     unsupportedLookupProvider(),
     optionalPropsProvider(),

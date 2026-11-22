@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { isS3Credentials } from "../R2/S3CredentialsBinding.ts";
 import { isSelfUrl } from "./Worker.ts";
 import { isContainerDecl } from "./WorkerAsyncBindings.ts";
 import { isWorkerLoader } from "./WorkerLoader.ts";
@@ -27,11 +28,14 @@ export const resolveBuildEnv = (
       // `Worker.URL` (bare tag or called). The bare tag is Effect-shaped,
       // so check before `Effect.isEffect`.
       if (isSelfUrl(value)) return [key, selfUrl];
-      // A `WorkerLoader` and a `Cloudflare.Container` declaration are
-      // Effect-shaped bindings, not env values: yielding a Container would
-      // resolve the started-instance tag, which only exists inside a Durable
-      // Object (#997).
-      if (isWorkerLoader(value) || isContainerDecl(value)) return [key, undefined];
+      // A `WorkerLoader`, a `Cloudflare.Container` declaration and
+      // `Cloudflare.R2.S3Credentials` are Effect-shaped bindings, not env
+      // values: yielding a Container would resolve the started-instance tag,
+      // which only exists inside a Durable Object (#997), and S3Credentials
+      // needs the host's `WorkerEnvironment` (#2219).
+      if (isWorkerLoader(value) || isContainerDecl(value) || isS3Credentials(value)) {
+        return [key, undefined];
+      }
       if (Effect.isEffect(value)) {
         const resolved: unknown = yield* value as any as Effect.Effect<any>;
         return [

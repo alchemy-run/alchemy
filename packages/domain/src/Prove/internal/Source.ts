@@ -20,6 +20,12 @@ export interface Loader {
    * those, the loader gives the caller's class in its place.
    */
   readonly adopt: (root: unknown) => void;
+  /**
+   * An expression written as text, as a node of a file's syntax: a rule kept
+   * from an earlier version of the file, to be read where the file's own
+   * names mean what they mean now.
+   */
+  readonly parse: (file: string, text: string) => Effect.Effect<Node, LoadError>;
 }
 
 /** What a domain class is and its name: two loads of one file give classes that agree on it. */
@@ -230,6 +236,7 @@ export const loader: Effect.Effect<Loader, LoadError, FileSystem.FileSystem | Pa
       }
       const module: Module = {
         path: file,
+        source,
         lineStarts: lineStartsOf(source),
         program,
         declarations,
@@ -242,5 +249,21 @@ export const loader: Effect.Effect<Loader, LoadError, FileSystem.FileSystem | Pa
       return module;
     });
 
-    return { load, adopt };
+    const parse: Loader["parse"] = Effect.fn(function* (file: string, text: string) {
+      const parsed = yield* Effect.try({
+        try: () => oxc.parseSync(file, `(${text}\n)`),
+        catch: (cause) => new LoadError({ file, message: `cannot parse: ${String(cause)}` }),
+      });
+      const statement = (parsed.program as unknown as Node).body[0] as Node | undefined;
+      if (parsed.errors.length > 0 || statement?.type !== "ExpressionStatement")
+        return yield* new LoadError({
+          file,
+          message: `cannot parse: ${parsed.errors[0]?.message ?? "not an expression"}`,
+        });
+      let expression = statement.expression as Node;
+      while (expression.type === "ParenthesizedExpression") expression = expression.expression;
+      return expression;
+    });
+
+    return { load, adopt, parse };
   });

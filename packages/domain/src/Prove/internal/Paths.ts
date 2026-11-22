@@ -36,10 +36,13 @@ export interface Inputs {
 
 export type Outcome =
   /** The command was rejected, or recorded nothing: the state is what it was. */
-  | { readonly _tag: "Unchanged" }
+  | { readonly _tag: "Unchanged"; readonly rejection?: V }
   /** The state after the command's events, and each invariant on it as a formula. */
   | {
       readonly _tag: "Changed";
+      /** What the command recorded, and the state that leaves. */
+      readonly events: ReadonlyArray<V>;
+      readonly after: V;
       readonly checks: ReadonlyArray<Check>;
       /** That the new state is one the state's schema allows, as a formula. */
       readonly fits: string;
@@ -557,7 +560,7 @@ const relationsOf = (model: Definition): ReadonlyArray<Node> => {
 };
 
 /** The `holds` of a relation, as its file writes it inside `Domain.Relation({ ... })`. */
-const relationNode = (model: Definition, name: string): Node | undefined => {
+export const relationNode = (model: Definition, name: string): Node | undefined => {
   const listed = relationsOf(model).find((p) => String(p.key.name ?? p.key.value) === name)?.value;
   // A relation declared on its own in the model's file, and listed by name.
   const value =
@@ -844,10 +847,14 @@ export const path = (
       "",
     );
     inputs = stepped.inputs;
+    if (stepped.applied._tag === "Rejected")
+      return { _tag: "Unchanged", rejection: stepped.applied.rejection } as const;
     if (stepped.applied._tag !== "Changed") return { _tag: "Unchanged" } as const;
     const after = stepped.applied.state;
     return {
       _tag: "Changed",
+      events: stepped.applied.events,
+      after,
       checks: yield* checks(interpreter, definition, stepped.applied.state, {
         before: state,
         command: stepped.inputs.command,
@@ -922,6 +929,43 @@ export const namesOf = (definition: Definition, key: string): ReadonlyArray<stri
       )
     : [];
 };
+
+/**
+ * An invariant or a transition of the definition, as its file writes it: the
+ * function, or what stands where one would be.
+ */
+export const ruleNode = (definition: Definition, name: string): Node | undefined => {
+  for (const key of ["invariants", "transitions"]) {
+    const node = property(definition, key);
+    const found =
+      node?.type === "ObjectExpression"
+        ? (node.properties as ReadonlyArray<Node>).find(
+            (p) => p.type === "Property" && !p.computed && (p.key.name ?? p.key.value) === name,
+          )
+        : undefined;
+    if (found) return found.value as Node;
+  }
+  return undefined;
+};
+
+/** The rules under one of the definition's objects of rules, each with the node that writes it. */
+export const written = (
+  definition: Definition,
+  key: string,
+): ReadonlyArray<readonly [string, Node]> => {
+  const node = property(definition, key);
+  return node?.type === "ObjectExpression"
+    ? (node.properties as ReadonlyArray<Node>).flatMap((p) =>
+        p.type === "Property" && !p.computed
+          ? [[String(p.key.name ?? p.key.value), p.value as Node] as const]
+          : [],
+      )
+    : [];
+};
+
+/** A node's text, as its file writes it. */
+export const textOf = (definition: Definition, node: Node): string =>
+  definition.module.source.slice(node.start, node.end);
 
 /** The names of the invariants the definition declares. */
 export const invariantNames = (definition: Definition): ReadonlyArray<string> =>

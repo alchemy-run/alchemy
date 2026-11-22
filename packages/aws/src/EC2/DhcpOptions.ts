@@ -10,6 +10,7 @@ import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import { nameTagFilter, single } from "../internal/Lookup.ts";
+import { type Partition, partitionOf } from "../Partition.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { getDefaultVpcScope } from "./defaultVpcScope.ts";
@@ -18,7 +19,7 @@ import type { VpcId } from "./Vpc.ts";
 export type DhcpOptionsId<ID extends string = string> = `dopt-${ID}`;
 
 export type DhcpOptionsArn<ID extends DhcpOptionsId = DhcpOptionsId> =
-  `arn:aws:ec2:${RegionID}:${AccountID}:dhcp-options/${ID}`;
+  `arn:${Partition}:ec2:${RegionID}:${AccountID}:dhcp-options/${ID}`;
 
 export interface DhcpOptionsProps {
   /**
@@ -236,7 +237,7 @@ export const DhcpOptionsProvider = () =>
           Effect.map((env) => ({
             dhcpOptionsId: opts.DhcpOptionsId as DhcpOptionsId,
             dhcpOptionsArn:
-              `arn:aws:ec2:${env.region}:${env.accountId}:dhcp-options/${opts.DhcpOptionsId}` as DhcpOptionsArn,
+              `arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:dhcp-options/${opts.DhcpOptionsId}` as DhcpOptionsArn,
             ownerId: opts.OwnerId!,
             vpcId,
           })),
@@ -268,7 +269,7 @@ export const DhcpOptionsProvider = () =>
                     .map((o) => ({
                       dhcpOptionsId: o.DhcpOptionsId as DhcpOptionsId,
                       dhcpOptionsArn:
-                        `arn:aws:ec2:${env.region}:${env.accountId}:dhcp-options/${o.DhcpOptionsId}` as DhcpOptionsArn,
+                        `arn:${partitionOf(env.region)}:ec2:${env.region}:${env.accountId}:dhcp-options/${o.DhcpOptionsId}` as DhcpOptionsArn,
                       ownerId: o.OwnerId!,
                       vpcId: undefined,
                     })),

@@ -1,6 +1,7 @@
 import * as DurableObjects from "@alchemy.run/domain/DurableObjects";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { type InputGateShape, makeInputGate } from "alchemy/Workers/InputGate";
+import { storageCallbacks } from "alchemy/Workers/StorageCallbacks";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -28,6 +29,8 @@ const makeStorage = (stats: Stats, data: Map<string, unknown>): DurableObjects.O
     put: ((keyOrEntries: string | Record<string, unknown>, value?: unknown) =>
       Effect.sync(() => {
         if (typeof keyOrEntries === "string") data.set(keyOrEntries, clone(value));
+        // Cloudflare's storage takes at most 128 keys a put.
+        else if (Object.keys(keyOrEntries).length > 128) throw new Error("more than 128 keys");
         else for (const [key, entry] of Object.entries(keyOrEntries)) data.set(key, clone(entry));
       })) as DurableObjects.ObjectStorage["put"],
     delete: ((keyOrKeys: string | ReadonlyArray<string>) =>
@@ -164,7 +167,7 @@ export const simHost = (
             saved.alarm = at;
             if (previous) yield* Fiber.interrupt(previous.fiber);
           });
-        const callbacks = DurableObjects.alarmCallbacks(storage, {
+        const callbacks = storageCallbacks(storage, {
           get: Effect.sync(() => timer?.at ?? null),
           set,
         });

@@ -563,11 +563,11 @@ export const ConnectionProfileProvider = () =>
       if (current === undefined) {
         const created = yield* dm
           .createProjectsLocationsConnectionProfiles({
+            ...body,
             parent: locationParent(env.project, location),
             connectionProfileId,
             skipValidation: news.skipValidation,
             validateOnly: news.validateOnly,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -638,21 +638,18 @@ export const ConnectionProfileProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* dm.patchProjectsLocationsConnectionProfiles({
+          displayName,
+          labels: desiredLabels,
+          provider: news.provider,
+          role: news.role,
+          mysql: news.mysql,
+          postgresql: news.postgresql,
+          oracle: news.oracle,
+          sqlserver: news.sqlserver,
           name: current.name ?? name,
           updateMask: mask,
           skipValidation: news.skipValidation,
           validateOnly: news.validateOnly,
-          body: {
-            name: current.name ?? name,
-            displayName,
-            labels: desiredLabels,
-            provider: news.provider,
-            role: news.role,
-            mysql: news.mysql,
-            postgresql: news.postgresql,
-            oracle: news.oracle,
-            sqlserver: news.sqlserver,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

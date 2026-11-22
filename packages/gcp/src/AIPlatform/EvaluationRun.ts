@@ -269,15 +269,13 @@ export const EvaluationRunProvider = () =>
       if (current === undefined) {
         current = yield* aiplatform
           .createProjectsLocationsEvaluationRuns({
+            displayName,
+            dataSource: news.dataSource,
+            inferenceConfigs: news.inferenceConfigs,
+            evaluationConfig: news.evaluationConfig,
+            metadata: news.metadata,
+            labels: desiredLabels,
             parent: `projects/${env.project}/locations/${location}`,
-            body: {
-              displayName,
-              dataSource: news.dataSource,
-              inferenceConfigs: news.inferenceConfigs,
-              evaluationConfig: news.evaluationConfig,
-              metadata: news.metadata,
-              labels: desiredLabels,
-            },
           })
           .pipe(Effect.catchTag("Conflict", () => findOwned(id, env.project, location)));
       }

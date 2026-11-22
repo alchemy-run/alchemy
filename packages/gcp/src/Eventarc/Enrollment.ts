@@ -328,9 +328,7 @@ export const EnrollmentProvider = () =>
       if (current === undefined) {
         const created = yield* eventarc
           .createProjectsLocationsEnrollments({
-            parent: parentOf(env.project, location),
-            enrollmentId,
-            body: compact({
+            ...compact({
               name,
               messageBus,
               destination,
@@ -339,6 +337,8 @@ export const EnrollmentProvider = () =>
               labels: desiredLabels,
               annotations: desiredAnnotations,
             }),
+            parent: parentOf(env.project, location),
+            enrollmentId,
           })
           .pipe(
             Effect.retry({
@@ -366,16 +366,13 @@ export const EnrollmentProvider = () =>
 
       if (updateMask.length > 0) {
         const patched = yield* eventarc.patchProjectsLocationsEnrollments({
+          destination,
+          celMatch: news.celMatch,
+          displayName: news.displayName,
+          labels: desiredLabels,
+          annotations: desiredAnnotations ?? {},
           name: current.name ?? name,
           updateMask: updateMask.join(","),
-          body: {
-            name: current.name ?? name,
-            destination,
-            celMatch: news.celMatch,
-            displayName: news.displayName,
-            labels: desiredLabels,
-            annotations: desiredAnnotations ?? {},
-          },
         });
         yield* waitForOperation(patched);
         current = yield* waitUntilPresent(getByName(current.name ?? name), current.name ?? name);

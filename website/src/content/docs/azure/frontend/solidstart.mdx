@@ -1,0 +1,125 @@
+---
+title: SolidStart
+description: "Deploy a SolidStart app to Azure with Azure.Website.SolidStart — the nitro server on a Flex Consumption Function, .output/public on Blob Storage, both behind Azure Front Door."
+sidebar:
+  order: 17
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Azure.Website.SolidStart` deploys a [SolidStart](https://start.solidjs.com)
+app to Azure. Alchemy runs your own `vite build` and appends a nitro plugin
+instance. The nitro server (SSR pages, API routes, server functions) runs
+on a Flex Consumption Function, which scales to zero. `.output/public` goes
+to the static website endpoint of an Azure Storage account. Azure Front
+Door sends `/_build/*` and the `public/` files to Blob Storage and every
+other path to the Function. No Docker image and no App Service plan are
+involved.
+
+## Install
+
+The build integration ships separately. It only runs at deploy time, so a
+dev dependency is enough:
+
+<PackageManagers dev={devDeps} />
+
+Your project also needs `@solidjs/start`, `@solidjs/vite-plugin-nitro-2`,
+and `vite`.
+
+## Deploy the site
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MySite",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Azure.Website.SolidStart("Website", { location: "eastus" });
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the Front Door endpoint,
+`https://{endpoint}.z01.azurefd.net`. A new endpoint takes 10-20 minutes to
+serve everywhere. Pick a `location` that offers Flex Consumption.
+
+Your `vite.config.ts` holds `solidStart()` and your own plugins only. Do not
+add `nitroV2Plugin()`: the integration appends its own instance, and the
+build fails if the config declares one.
+
+## Pass environment variables
+
+```diff lang="typescript"
+-const site = yield* Azure.Website.SolidStart("Website", { location: "eastus" });
++const site = yield* Azure.Website.SolidStart("Website", {
++  location: "eastus",
++  env: { GREETING: "Hello from Azure!" },
++});
+```
+
+The values become app settings of the Function. Server code reads them from
+`process.env`:
+
+```tsx
+// src/routes/index.tsx
+export default function Home() {
+  return <h1>{process.env.GREETING ?? "Hello!"}</h1>;
+}
+```
+
+## Prerender routes
+
+Nitro options go on the `nitro` prop, prerendering included:
+
+```typescript
+const site = yield* Azure.Website.SolidStart("Website", {
+  nitro: { prerender: { routes: ["/", "/about"] } },
+});
+```
+
+Nitro writes `/about` to `.output/public/about/index.html`, which is
+uploaded to Blob Storage. Front Door serves `/about/` from Blob Storage. A
+request for `/about` reaches the Function, which renders the same route.
+
+## Size the Function
+
+```typescript
+const site = yield* Azure.Website.SolidStart("Website", {
+  instanceMemoryMB: 512,
+  maximumInstanceCount: 40,
+});
+```
+
+## Share a Front Door profile
+
+```typescript
+const profile = yield* Azure.Cdn.Profile("Edge");
+const site = yield* Azure.Website.SolidStart("Website", { frontDoor: { profile } });
+```
+
+Each profile bills a monthly base fee, so share one across sites. See
+[Websites](/azure/frontend/websites) for caching, purges, and the other
+shared settings.
+
+## Local development
+
+`alchemy dev` runs SolidStart's Vite dev server with hot reload and creates
+nothing in Azure. `env` reaches the dev server's `process.env`. SolidStart
+2's dev server (through `srvx/node`) misrenders under Bun, so run
+`alchemy dev` with Node. Wrap the site in `Alchemy.remote()` to deploy it
+for real during dev.
+
+See the [`azure-website-solidstart`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-solidstart)
+example.
+
+## Where next
+
+- [Websites](/azure/frontend/websites) — the settings every site shares.
+- [Website reference](/providers/azure/website#solidstart) — every prop.

@@ -283,19 +283,19 @@ export const EnvironmentsResourcefileProvider = () =>
       if (current === undefined) {
         yield* apigee
           .createOrganizationsEnvironmentsResourcefiles({
+            ...body,
             parent,
             type: fileType,
             name: fileId,
-            body,
           })
           .pipe(Effect.catchTag("Conflict", () => getById(parent, fileType, fileId)));
         current = yield* getById(parent, fileType, fileId);
       } else if (news.content !== undefined) {
         yield* apigee.updateOrganizationsEnvironmentsResourcefiles({
+          ...body,
           parent,
           type: fileType,
           name: fileId,
-          body,
         });
       }
 

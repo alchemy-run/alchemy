@@ -151,7 +151,11 @@ export interface BundledServiceProps extends ServicePropsBase {
 export type ServiceProps = ImageServiceProps | BundledServiceProps;
 
 export declare namespace Service {
-  type Image = string | { imageRef: string };
+  /**
+   * A reference, or a `Docker.Image`. A `Docker.Image` also brings its
+   * `imageId`, so a rebuild under the same tag rolls the service.
+   */
+  type Image = string | { imageRef: string; imageId?: string };
 
   interface PortMapping {
     /** Published port on the swarm node. Omit to let Swarm assign one dynamically. */
@@ -740,6 +744,13 @@ export const ServiceProvider = () =>
                     ]
                   : [],
               );
+              // Swarm keeps tasks whose spec names the same tag, so a
+              // rebuilt image under that tag is rolled out by force.
+              const previousImageId =
+                olds !== undefined && !isBundledService(olds)
+                  ? normalizeImageId(olds.image)
+                  : undefined;
+              const rebuilt = desired.imageId !== undefined && desired.imageId !== previousImageId;
               // A rollback exits 0 but a paused rollout exits 1, so the
               // outcome is read from `UpdateStatus` either way.
               const updateError = yield* docker.service
@@ -747,6 +758,7 @@ export const ServiceProvider = () =>
                   context: desired.context,
                   id: output.id,
                   image,
+                  force: rebuilt,
                   replicas: desired.replicas,
                   "endpoint-mode": desired.endpointMode,
                   // Attaching a network the service is already on fails, so
@@ -953,6 +965,8 @@ const normalizeDesired = (id: string, props: ServiceProps, instanceId: string) =
       // separately in diff) — the `image` prop is only the environment base
       // there, and it participates in the hash.
       image: isBundledService(props) ? undefined : normalizeImageRef(props.image),
+      // A rebuilt image can keep its tag: its id tells the builds apart.
+      imageId: isBundledService(props) ? undefined : normalizeImageId(props.image),
       command: props.command ?? [],
       args: props.args ?? [],
       environment: {
@@ -988,6 +1002,7 @@ type DesiredService = Effect.Success<ReturnType<typeof normalizeDesired>>;
  */
 const inPlaceFields = new Set<keyof DesiredService>([
   "image",
+  "imageId",
   "replicas",
   "environment",
   "labels",
@@ -1050,6 +1065,9 @@ const requiresReplacement = (olds: DesiredService, news: DesiredService): boolea
 
 const normalizeImageRef = (image: Service.Image): string =>
   typeof image === "string" ? image : image.imageRef;
+
+const normalizeImageId = (image: Service.Image): string | undefined =>
+  typeof image === "string" ? undefined : image.imageId;
 
 const normalizeEnvironment = (
   environment: Record<string, string | Redacted.Redacted<string>> | undefined,

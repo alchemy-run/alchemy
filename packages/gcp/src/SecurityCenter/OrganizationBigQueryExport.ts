@@ -277,9 +277,11 @@ export const OrganizationBigQueryExportProvider = () =>
       if (current === undefined) {
         const created = yield* scc
           .createOrganizationsBigQueryExports({
+            dataset,
+            filter,
+            description,
             parent: organization,
             bigQueryExportId: exportId,
-            body: { dataset, filter, description },
           })
           .pipe(Effect.catchTag("Conflict", () => getByName(name)));
         current = created ?? undefined;
@@ -298,9 +300,11 @@ export const OrganizationBigQueryExportProvider = () =>
 
       if (updateMask.length > 0) {
         current = yield* scc.patchOrganizationsBigQueryExports({
+          dataset,
+          filter,
+          description,
           name: currentName,
           updateMask,
-          body: { dataset, filter, description },
         });
       }
 

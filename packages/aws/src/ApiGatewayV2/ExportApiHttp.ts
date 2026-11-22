@@ -3,6 +3,7 @@ import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as AWSBindings from "../AWSBindings.ts";
+import { partitionOf } from "../Partition.ts";
 import type { Api } from "./Api.ts";
 import { RegisterApiGatewayV2Binding } from "./BindingHttp.ts";
 import { ExportApi, type ExportApiRequest } from "./ExportApi.ts";
@@ -24,7 +25,7 @@ export const ExportApiHttp = Layer.effect(
         target: api,
         verb: "GET",
         paths: (region) => [
-          Output.interpolate`arn:aws:apigateway:${region}::/apis/${api.apiId}/exports/*`,
+          Output.interpolate`arn:${partitionOf(region)}:apigateway:${region}::/apis/${api.apiId}/exports/*`,
         ],
       });
       return Effect.fn(`AWS.ApiGatewayV2.ExportApi(${api.LogicalId})`)(function* (

@@ -261,14 +261,12 @@ export const RagCorporaProvider = () =>
 
       if (current === undefined) {
         const created = yield* aiplatform.createProjectsLocationsRagCorpora({
+          displayName,
+          description: stampedDescription,
+          encryptionSpec: news.encryptionSpec,
+          vertexAiSearchConfig: news.vertexAiSearchConfig,
+          vectorDbConfig: news.vectorDbConfig,
           parent,
-          body: {
-            displayName,
-            description: stampedDescription,
-            encryptionSpec: news.encryptionSpec,
-            vertexAiSearchConfig: news.vertexAiSearchConfig,
-            vectorDbConfig: news.vectorDbConfig,
-          },
         });
         yield* waitForOperation(created, { alreadyExistsOk: true });
         const createdName = resourceNameFromOperation(created);
@@ -291,12 +289,9 @@ export const RagCorporaProvider = () =>
 
       if (displayChanged || descriptionChanged) {
         const patched = yield* aiplatform.patchProjectsLocationsRagCorpora({
+          displayName,
+          description: stampedDescription,
           name: observedName,
-          body: {
-            name: observedName,
-            displayName,
-            description: stampedDescription,
-          },
         });
         yield* waitForOperation(patched);
         current = yield* getByName(observedName);

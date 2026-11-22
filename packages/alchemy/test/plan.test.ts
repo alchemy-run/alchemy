@@ -5,6 +5,7 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
@@ -47,6 +48,7 @@ import {
   BindingTarget,
   Bucket,
   capturedConfigHost,
+  HookHost,
   Function,
   inDev,
   KindStablesResource,
@@ -5633,6 +5635,79 @@ describe("renamed resources (renamedFrom)", { tags: ["unit", "local"] }, () => {
         const die = exit.cause.reasons.find(Cause.isDieReason);
         expect(String(die?.defect)).toContain("both claim former FQN 'Shared'");
       }
+    }),
+  );
+
+  test(
+    "resources declared by a renamed resource's props do not inherit its former ids (#2219)",
+    Effect.gen(function* () {
+      yield* seed({ "Site/Worker": bucketRow("Site/Worker") });
+
+      // A Website's Worker is `renamedFrom(`${id}/Worker`)`, and its props
+      // can declare resources of their own (the API token behind
+      // `R2.S3Credentials`). Only the Worker claims the former FQN.
+      const plan = yield* Effect.gen(function* () {
+        yield* Bucket(
+          "Site",
+          Effect.gen(function* () {
+            yield* Bucket("SiteToken", { name: "t" });
+            return { name: "b" };
+          }),
+        ).pipe(renamedFrom("Site/Worker"));
+        return {};
+      }).pipe(makePlan);
+
+      expect(plan.resources.Site?.renamedFrom).toEqual(["Site/Worker"]);
+      expect(plan.resources.SiteToken?.action).toEqual("create");
+      expect(plan.resources.SiteToken?.renamedFrom).toBeUndefined();
+    }),
+  );
+
+  const hostRow = (fqn: string): ResourceState => ({
+    ...bucketRow(fqn),
+    resourceType: "Test.HookHost",
+    props: { main: "index.ts" },
+    attr: { ok: true },
+  });
+
+  test(
+    "resources a renamed Platform's onCreate hook declares do not inherit its former ids (#2219)",
+    Effect.gen(function* () {
+      yield* seed({ "Site/Worker": hostRow("Site/Worker") });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* HookHost("Site", { main: "index.ts" }).pipe(renamedFrom("Site/Worker"));
+        return {};
+      }).pipe(makePlan);
+
+      expect(plan.resources.Site?.renamedFrom).toEqual(["Site/Worker"]);
+      expect(plan.resources.SiteToken?.action).toEqual("create");
+      expect(plan.resources.SiteToken?.renamedFrom).toBeUndefined();
+    }),
+  );
+
+  test(
+    "resources a renamed Platform's hook and init declare do not inherit its former ids (#2219)",
+    Effect.gen(function* () {
+      yield* seed({ "Site/Worker": hostRow("Site/Worker") });
+
+      const plan = yield* Effect.gen(function* () {
+        yield* HookHost(
+          "Site",
+          { main: "index.ts" },
+          Effect.gen(function* () {
+            yield* Bucket("SiteInit", { name: "init" });
+            return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+          }),
+        ).pipe(renamedFrom("Site/Worker"));
+        return {};
+      }).pipe(makePlan);
+
+      expect(plan.resources.Site?.renamedFrom).toEqual(["Site/Worker"]);
+      expect(plan.resources.SiteToken?.action).toEqual("create");
+      expect(plan.resources.SiteToken?.renamedFrom).toBeUndefined();
+      expect(plan.resources.SiteInit?.action).toEqual("create");
+      expect(plan.resources.SiteInit?.renamedFrom).toBeUndefined();
     }),
   );
 });

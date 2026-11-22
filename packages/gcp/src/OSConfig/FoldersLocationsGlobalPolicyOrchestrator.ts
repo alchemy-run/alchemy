@@ -284,9 +284,9 @@ export const FoldersLocationsGlobalPolicyOrchestratorProvider = () =>
       if (current === undefined) {
         const created = yield* osconfig
           .createFoldersLocationsGlobalPolicyOrchestrators({
+            ...desired,
             parent,
             policyOrchestratorId,
-            body: desired,
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
@@ -323,13 +323,10 @@ export const FoldersLocationsGlobalPolicyOrchestratorProvider = () =>
 
       if (mask.length > 0) {
         const operation = yield* osconfig.patchFoldersLocationsGlobalPolicyOrchestrators({
+          ...desired,
+          etag: current.etag,
           name: current.name ?? name,
           updateMask: mask,
-          body: {
-            ...desired,
-            name: current.name ?? name,
-            etag: current.etag,
-          },
         });
         yield* waitForOperation(operation);
         current = yield* waitUntilExists(getByName(current.name ?? name), current.name ?? name);

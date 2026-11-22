@@ -230,10 +230,7 @@ export const AgentsToolsVersionProvider = () =>
 
       if (current === undefined) {
         const created = yield* dialogflow
-          .createProjectsLocationsAgentsToolsVersions({
-            parent: tool,
-            body: { displayName },
-          })
+          .createProjectsLocationsAgentsToolsVersions({ displayName, parent: tool })
           .pipe(Effect.catchTag("Conflict", () => findByDisplayName(tool, displayName)));
         current = created ?? undefined;
       }

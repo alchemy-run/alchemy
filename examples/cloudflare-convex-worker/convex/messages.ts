@@ -1,13 +1,7 @@
 // convex/messages.ts
-import { mutationGeneric, queryGeneric } from "convex/server";
-import { v } from "convex/values";
+import * as Convex from "@alchemy.run/convex/Server";
+import { MessagesLive } from "../src/messages.live.ts";
+import { AddMessage, ListMessages } from "../src/messages.ts";
 
-export const list = queryGeneric({
-  args: {},
-  handler: (ctx) => ctx.db.query("messages").collect(),
-});
-
-export const add = mutationGeneric({
-  args: { body: v.string() },
-  handler: (ctx, { body }) => ctx.db.insert("messages", { body }),
-});
+export const list = Convex.serve(ListMessages, MessagesLive);
+export const add = Convex.serve(AddMessage, MessagesLive);

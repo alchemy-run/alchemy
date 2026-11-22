@@ -1,0 +1,56 @@
+---
+title: MCP servers
+description: Name an MCP server once with AI.McpServer, reach it with an Effect AI McpClient Layer, and give its tools to any harness.
+---
+
+An MCP server offers tools over the [Model Context Protocol](https://modelcontextprotocol.io). `AI.McpServer` gives a server a name, and an Effect AI `McpClient` Layer says how to reach it. The harness asks the server for its tools and gives them to the model beside your own.
+
+## Declare a server
+
+A server is a class with a name. Its Layer is the client: here a server reached over HTTP.
+
+```typescript title="src/mcp.ts"
+import * as AI from "@alchemy.run/ai";
+import { McpClient, McpProtocol } from "effect/ai";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
+
+export class Docs extends AI.McpServer<Docs>()("docs") {}
+
+export const DocsLive = Docs.layer(
+  McpClient.layerHttp({
+    name: "my-agent",
+    version: "1.0.0",
+    protocol: McpProtocol.v2025_11_25,
+    url: "https://docs.example.com/mcp",
+  }).pipe(Layer.provide(FetchHttpClient.layer)),
+);
+```
+
+The harness builds the client where it runs, so the client can use a Worker's service binding or any other transport Effect AI has.
+
+## List it on a harness
+
+List the server beside the harness's tools and provide its Layer:
+
+```typescript
+const harness = yield* Pi.Harness({ models: [Fast], tools: [Add, Docs] });
+```
+
+The harness asks the server for its tools when an instance opens, so the tools the model sees are the ones the server has then.
+
+## Select a server's tools
+
+In a conversation's or a prompt's tools, the server stands for all of its tools:
+
+```typescript
+yield* harness.configure("pr-142", { tools: { remove: [Docs] } });
+```
+
+## How its tools are named
+
+Each harness names an MCP server's tools its own way, so the model can tell two servers' tools apart. On Pi, the `search` tool of `docs` is `mcp__docs__search`. On OpenCode it is `docs_search`.
+
+The server's calls are made from your harness, with the client Layer you provided. Credentials for the server stay in your runtime.
+
+See [MCP servers on Pi](/pi/mcp-servers) and [MCP servers on OpenCode](/opencode/mcp-servers).

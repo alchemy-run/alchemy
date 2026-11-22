@@ -35,6 +35,7 @@ function providersSidebarEntry() {
     items: [
       { label: "AWS", link: "/aws" },
       { label: "GCP", link: "/gcp" },
+      { label: "Azure", link: "/azure" },
       { label: "Cloudflare", link: "/cloudflare" },
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
@@ -49,6 +50,9 @@ function providersSidebarEntry() {
       { label: "Modal", link: "/modal" },
       { label: "Archil", link: "/archil" },
       { label: "Boat", link: "/boat" },
+      { label: "AI", link: "/ai" },
+      { label: "Pi", link: "/pi" },
+      { label: "OpenCode", link: "/opencode" },
       { label: "Prisma", link: "/prisma" },
       { label: "Better Auth", link: "/better-auth" },
       { label: "Axiom", link: "/axiom" },
@@ -601,6 +605,7 @@ export default defineConfig({
                 { label: "Previews", link: "/cloudflare/compute/previews" },
                 { label: "Python Workers", link: "/cloudflare/compute/python-workers" },
                 { label: "Workers Cache", link: "/cloudflare/compute/cache" },
+                { label: "TCP connections", link: "/cloudflare/compute/tcp" },
                 { label: "Rate limiting", link: "/cloudflare/compute/rate-limiting" },
                 { label: "Browser rendering", link: "/cloudflare/compute/browser-rendering" },
                 { label: "Worker Loader", link: "/cloudflare/compute/worker-loader" },
@@ -1716,17 +1721,24 @@ export default defineConfig({
           label: "Convex",
           items: [
             { label: "Overview", link: "/convex" },
+            { label: "What is Convex?", link: "/convex/what-is-convex" },
             { label: "Setup", link: "/convex/setup" },
             {
               label: "Tutorial",
               items: [{ autogenerate: { directory: "convex/tutorial" } }],
             },
             {
+              label: "Accounts & access",
+              items: [
+                { label: "Teams and tokens", link: "/convex/teams-and-tokens" },
+                { label: "Deploy keys", link: "/convex/deployments/deploy-keys" },
+              ],
+            },
+            {
               label: "Deployments",
               items: [
                 { label: "Projects", link: "/convex/deployments/projects" },
                 { label: "Deployments", link: "/convex/deployments/deployments" },
-                { label: "Deploy keys", link: "/convex/deployments/deploy-keys" },
                 { label: "Custom domains", link: "/convex/deployments/custom-domains" },
                 { label: "Canonical URLs", link: "/convex/deployments/canonical-urls" },
                 { label: "Usage limits", link: "/convex/deployments/usage-limits" },
@@ -1735,10 +1747,15 @@ export default defineConfig({
             {
               label: "Functions",
               items: [
+                { label: "Tables", link: "/convex/functions/tables" },
+                {
+                  label: "Queries, mutations and actions",
+                  link: "/convex/functions/queries-mutations-actions",
+                },
                 { label: "Push functions", link: "/convex/functions/functions" },
                 { label: "Environment variables", link: "/convex/functions/environment-variables" },
-                { label: "Connect", link: "/convex/functions/connect" },
                 { label: "Calling functions", link: "/convex/functions/calling-functions" },
+                { label: "Connect", link: "/convex/functions/connect" },
               ],
             },
             {
@@ -2094,6 +2111,88 @@ export default defineConfig({
           ],
         },
         {
+          label: "Azure",
+          items: [
+            { label: "Overview", link: "/azure" },
+            { label: "Setup", link: "/azure/setup" },
+            { label: "Local development", link: "/azure/local-development" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "azure/tutorial" } }],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Choosing a runtime", link: "/azure/compute/choosing-a-runtime" },
+                { label: "Azure Functions", link: "/azure/compute/functions" },
+                { label: "Container Apps", link: "/azure/compute/container-apps" },
+                { label: "AKS", link: "/azure/compute/aks" },
+                { label: "Virtual machines", link: "/azure/compute/vms" },
+                { label: "Effect workflows", link: "/azure/compute/effect-workflows" },
+              ],
+            },
+            {
+              label: "Frontend",
+              items: sortFrontendItems([
+                { label: "Overview", link: "/azure/frontend/websites" },
+                { label: "Astro", link: "/azure/frontend/astro" },
+                { label: "Foldkit", link: "/azure/frontend/foldkit" },
+                { label: "SolidStart", link: "/azure/frontend/solidstart" },
+                { label: "SvelteKit", link: "/azure/frontend/sveltekit" },
+                { label: "Vite", link: "/azure/frontend/vite" },
+                { label: "Static sites", link: "/azure/frontend/static-site" },
+                { label: "Octane", link: "/azure/frontend/octane" },
+                { label: "React Router", link: "/azure/frontend/react-router" },
+                { label: "Vocs", link: "/azure/frontend/vocs" },
+                { label: "Waku", link: "/azure/frontend/waku" },
+                { label: "Next.js", link: "/azure/frontend/nextjs" },
+                { label: "Nuxt", link: "/azure/frontend/nuxt" },
+                { label: "TanStack Start", link: "/azure/frontend/tanstack-start" },
+                { label: "Vinext", link: "/azure/frontend/vinext" },
+              ]),
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "Storage", link: "/azure/data/storage" },
+                { label: "Cosmos DB", link: "/azure/data/cosmos-db" },
+                { label: "PostgreSQL", link: "/azure/data/postgres" },
+                { label: "SQL Database", link: "/azure/data/sql" },
+                { label: "Redis", link: "/azure/data/redis" },
+              ],
+            },
+            {
+              label: "AI",
+              items: [{ label: "Azure OpenAI", link: "/azure/ai/openai" }],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "Storage queues", link: "/azure/messaging/storage-queues" },
+                { label: "Service Bus", link: "/azure/messaging/service-bus" },
+                { label: "Event Hubs", link: "/azure/messaging/event-hubs" },
+                { label: "Event Grid", link: "/azure/messaging/event-grid" },
+              ],
+            },
+            {
+              label: "Security & identity",
+              items: [
+                { label: "Identity & bindings", link: "/azure/security/identity" },
+                { label: "Key Vault", link: "/azure/security/key-vault" },
+              ],
+            },
+            {
+              label: "Observability",
+              items: [{ label: "Azure Monitor", link: "/azure/observability/monitor" }],
+            },
+            {
+              label: "Networking",
+              items: [{ label: "Virtual networks", link: "/azure/networking" }],
+            },
+            providerResourcesEntry("Azure"),
+          ],
+        },
+        {
           label: "Axiom",
           items: [
             { label: "Overview", link: "/axiom" },
@@ -2370,7 +2469,10 @@ export default defineConfig({
             },
             {
               label: "Rivet Services",
-              items: [{ label: "Durable Streams", link: "/rivet/durable-streams" }],
+              items: [
+                { label: "Durable Streams", link: "/rivet/durable-streams" },
+                { label: "agentOS Sandboxes", link: "/rivet/sandboxes" },
+              ],
             },
             {
               label: "Running Rivet",
@@ -2478,6 +2580,106 @@ export default defineConfig({
               ],
             },
             providerApiReferenceEntry("SQL", "Drizzle"),
+          ],
+        },
+        {
+          label: "AI",
+          items: [
+            { label: "Overview", link: "/ai" },
+            { label: "What is an agent harness?", link: "/ai/what-is-a-harness" },
+            {
+              label: "Models & tools",
+              items: [
+                { label: "Models", link: "/ai/models" },
+                { label: "Tools", link: "/ai/tools" },
+                { label: "Coding tools", link: "/ai/coding-tools" },
+                { label: "MCP servers", link: "/ai/mcp-servers" },
+                { label: "Skills", link: "/ai/skills" },
+              ],
+            },
+            {
+              label: "Sandboxes",
+              items: [
+                { label: "Sandboxes", link: "/ai/sandboxes" },
+                { label: "Sandbox platforms", link: "/ai/sandbox-platforms" },
+                { label: "Build your own", link: "/ai/custom-sandboxes" },
+              ],
+            },
+          ],
+        },
+        {
+          label: "Pi",
+          items: [
+            { label: "Overview", link: "/pi" },
+            { label: "What is Pi?", link: "/pi/what-is-pi" },
+            { label: "Setup", link: "/pi/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "pi/tutorial" } }],
+            },
+            {
+              label: "Conversations",
+              items: [
+                { label: "Conversations", link: "/pi/conversations" },
+                { label: "Surviving a crash", link: "/pi/durability" },
+              ],
+            },
+            {
+              label: "Tools",
+              items: [
+                { label: "Tools", link: "/pi/tools" },
+                { label: "MCP servers", link: "/pi/mcp-servers" },
+                { label: "Code mode", link: "/pi/code-mode" },
+              ],
+            },
+            {
+              label: "Extensions & skills",
+              items: [
+                { label: "Extensions", link: "/pi/extensions" },
+                { label: "Skills", link: "/pi/skills" },
+              ],
+            },
+            {
+              label: "Hosting",
+              items: [
+                { label: "Sandboxes", link: "/pi/sandboxes" },
+                { label: "Other hosts", link: "/pi/other-hosts" },
+              ],
+            },
+          ],
+        },
+        {
+          label: "OpenCode",
+          items: [
+            { label: "Overview", link: "/opencode" },
+            { label: "What is OpenCode?", link: "/opencode/what-is-opencode" },
+            { label: "Setup", link: "/opencode/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "opencode/tutorial" } }],
+            },
+            {
+              label: "Sessions",
+              items: [
+                { label: "Sessions & prompts", link: "/opencode/sessions" },
+                { label: "Model requests", link: "/opencode/model-requests" },
+              ],
+            },
+            {
+              label: "Tools",
+              items: [
+                { label: "Tools", link: "/opencode/tools" },
+                { label: "MCP servers", link: "/opencode/mcp-servers" },
+                { label: "Skills", link: "/opencode/skills" },
+              ],
+            },
+            {
+              label: "Hosting",
+              items: [
+                { label: "The session's sandbox", link: "/opencode/sandbox" },
+                { label: "OpenCode's own API", link: "/opencode/api" },
+              ],
+            },
           ],
         },
         {

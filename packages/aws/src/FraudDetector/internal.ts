@@ -3,6 +3,13 @@ import { diffTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 
 /**
+ * Lists and variables are named with lowercase letters, digits and
+ * underscores only (`^[0-9a-z_]+$`); a rule reads `$name` and `@name`, where a
+ * hyphen would be subtraction. Map anything else in a generated name to `_`.
+ */
+export const snakeName = (name: string): string => name.replace(/[^0-9a-z_]/g, "_");
+
+/**
  * Coerce a FraudDetector wire tag list (`{ key, value }[]`) into a plain
  * `Record<string, string>`.
  */
