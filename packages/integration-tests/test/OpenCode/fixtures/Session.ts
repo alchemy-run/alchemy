@@ -271,6 +271,21 @@ const session = Effect.gen(function* () {
           message.type === "idle" ? [String(message.outcome)] : [],
         );
       }),
+      /** Every table and index in this object's SQLite. */
+      tables: Effect.fn(function* () {
+        yield* harness.session("tables").id;
+        const storage = (
+          state.raw as unknown as {
+            storage: { sql: { exec(query: string): { toArray(): Array<{ name: string }> } } };
+          }
+        ).storage;
+        return storage.sql
+          .exec(
+            "SELECT name FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'",
+          )
+          .toArray()
+          .map((row) => row.name);
+      }),
       /** Kill this instance; the next call or the alarm builds a fresh one. */
       crash: () => state.abort("crash"),
       suspend: (name: string) => harness.session(name).suspendSandbox,

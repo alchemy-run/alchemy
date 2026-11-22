@@ -43,7 +43,7 @@ The harness always sets the model provider, and it turns off OpenCode's auto-upd
 
 ## Where OpenCode runs
 
-`OpenCode.Storage` is where a harness keeps its sessions, and so where OpenCode runs. `OpenCodeCloudflare.DurableObjectStorage` is the one Layer for it today: OpenCode in a Durable Object, on the object's SQLite, in tables prefixed `opencode_`.
+`OpenCode.Storage` is where a harness keeps its sessions, and so where OpenCode runs. `OpenCodeCloudflare.DurableObjectStorage` is the one Layer for it today: OpenCode in a Durable Object, on the object's SQLite. OpenCode names its tables plainly (`event`, `job`, `kv`), so the Layer puts every one under `opencode_`, apart from your own tables in the same object.
 
 OpenCode is closed when it has been idle for thirty seconds, so the object can leave memory, and started again by the next call.
 

@@ -59,7 +59,7 @@ A caller that retries after a timeout must not prompt twice. Give the prompt a `
 const reply = yield* session.prompt(text, { requestId: deliveryId });
 ```
 
-A second prompt with the same id waits for the first and returns its answer. This holds while the instance of the Durable Object runs.
+A second prompt with the same id waits for the first and returns its answer. OpenCode stores the id with the prompt, so this holds after the Durable Object restarts too.
 
 ## Submit without waiting
 

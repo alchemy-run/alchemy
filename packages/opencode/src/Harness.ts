@@ -31,7 +31,6 @@ import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import type * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
@@ -102,8 +101,9 @@ export interface PromptOptions {
   /** One of OpenCode's agents (`build`, `plan`, or one from `config`). */
   readonly agent?: string;
   /**
-   * Makes the prompt exactly-once while this instance runs: a retry with
-   * the same id waits for the original and gets its answer.
+   * Makes the prompt exactly-once: OpenCode keeps the id with the prompt,
+   * so a retry with the same id, from this instance or a later one, waits
+   * for the original and gets its answer.
    */
   readonly requestId?: string;
 }
@@ -238,6 +238,29 @@ export const sandboxKey = (instanceId: string, session: string): string => {
     .filter((part) => part.length > 0)
     .join("-");
 };
+
+const hex = (text: string) =>
+  [...new TextEncoder().encode(text)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+
+const fnv = (text: string) => {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193);
+  return (hash >>> 0).toString(16).padStart(8, "0");
+};
+
+/** A name as the tail of an OpenCode id: itself when it is short and plain, its bytes otherwise. */
+const idTail = (name: string) =>
+  /^[A-Za-z0-9._~-]{1,48}$/.test(name)
+    ? name
+    : name.length <= 24
+      ? `x${hex(name)}`
+      : `x${hex(name.slice(0, 16))}${fnv(name)}`;
+
+/** OpenCode's id for the session with this name. */
+const sessionIdFor = (name: string) => `ses_${idTail(name)}`;
+
+/** OpenCode's id for the user message of the prompt with this `requestId`. */
+const messageIdFor = (requestId: string) => `msg_${idTail(requestId)}`;
 
 const messageOf = (cause: unknown): string =>
   cause !== null && typeof cause === "object" && "message" in cause
@@ -1041,22 +1064,19 @@ export const Harness = <
         let id = sessionIds.get(session);
         if (id === undefined) {
           const finding = (async () => {
-            // The session is the one titled after its name. OpenCode's own
-            // search reads a name as a query, so the titles are compared here.
-            const title = sessionTitle(session);
-            let found: { readonly id: string } | undefined;
-            let cursor: string | undefined;
-            for (;;) {
-              const page = await client.session.list(
-                cursor === undefined ? { limit: 100 } : { cursor },
-              );
-              found = page.data.find((candidate) => candidate.title === title);
-              const next = page.cursor?.next;
-              if (found !== undefined || typeof next !== "string" || next.length === 0) break;
-              cursor = next;
+            // The session's id is made from its name, so it is fetched, not searched for.
+            const sessionID = sessionIdFor(session);
+            const exists = await client.session.get({ sessionID }).then(
+              () => true,
+              () => false,
+            );
+            if (!exists) {
+              await client.session.create({
+                id: sessionID,
+                title: sessionTitle(session),
+                location: { directory },
+              });
             }
-            const sessionID =
-              found?.id ?? (await client.session.create({ title, location: { directory } })).id;
             namesById.set(sessionID, session);
             return sessionID;
           })();
@@ -1213,9 +1233,6 @@ export const Harness = <
       }
       return lock;
     };
-    /** Prompts given a `requestId`, by that id. */
-    const prompts = new Map<string, Promise<Exit.Exit<Reply, OpenCodeError | NotOnHarness>>>();
-
     const onSandbox = (
       session: string,
       call: (
@@ -1268,12 +1285,33 @@ export const Harness = <
               ? entries(client).remove({ sessionID, key: "alchemy-codemode" })
               : entries(client).put({ sessionID, key: "alchemy-codemode", value: section }),
           );
-          const before = (yield* transcript(sessionID)).length;
-          yield* use((client) => client.session.prompt({ sessionID, text }), "prompt");
+          // OpenCode stores the prompt under this id, so one it already has is not given again.
+          // oxlint-disable-next-line effecttsgo/crypto-random-uuid-in-effect -- only a unique id for a prompt that gave none
+          const messageID = messageIdFor(chosen.requestId ?? crypto.randomUUID());
+          const known =
+            chosen.requestId !== undefined &&
+            ((yield* use((client) => client.session.inbox.list({ sessionID }), "inbox")).some(
+              (item) => item.id === messageID,
+            ) ||
+              (yield* transcript(sessionID)).some((message) => message.id === messageID));
+          // The alarm is armed first: an eviction right after the prompt is stored still wakes.
           yield* armWake(sessionID);
+          if (!known) {
+            yield* use(
+              (client) => client.session.prompt({ sessionID, id: messageID, text }),
+              "prompt",
+            );
+          }
           if (!waits) return { text: "", messages: [] } satisfies Reply;
           yield* use((client) => client.experimental.session.wait({ sessionID }), "wait");
-          const messages = (yield* transcript(sessionID)).slice(before);
+          // What this prompt added: from the prompt itself to the end of its run.
+          const all = yield* transcript(sessionID);
+          const start = Math.max(
+            0,
+            all.findIndex((message) => message.id === messageID),
+          );
+          const end = all.findIndex((message, index) => index > start && message.type === "idle");
+          const messages = all.slice(start, end === -1 ? undefined : end + 1);
           const idle = messages.findLast((message) => message.type === "idle") as
             | (Message & {
                 readonly outcome: "succeeded" | "failed" | "interrupted";
@@ -1289,19 +1327,7 @@ export const Harness = <
         name: sessionName,
         sandboxKey: sandboxKey(instanceId, sessionName),
         id: sessionIdOf(sessionName),
-        prompt: (text, promptOptions = {}) =>
-          Effect.gen(function* () {
-            const chosen = { ...defaults, ...promptOptions };
-            if (chosen.requestId === undefined) return yield* run(text, chosen, true);
-            // The first call runs the prompt; a retry waits for that run.
-            yield* build;
-            let running = prompts.get(chosen.requestId);
-            if (running === undefined) {
-              running = Effect.runPromiseExitWith(base!)(run(text, chosen, true));
-              prompts.set(chosen.requestId, running);
-            }
-            return yield* yield* Effect.promise(() => running!);
-          }),
+        prompt: (text, promptOptions = {}) => run(text, { ...defaults, ...promptOptions }, true),
         submit: (text, promptOptions = {}) =>
           Effect.asVoid(run(text, { ...defaults, ...promptOptions }, false)),
         wait: Effect.flatMap(sessionIdOf(sessionName), (sessionID) =>

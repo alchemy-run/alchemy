@@ -307,6 +307,42 @@ test(
   { tags, timeout: 240_000 },
 );
 
+test(
+  "a prompt's requestId makes it exactly-once, across a restart of the instance",
+  Effect.gen(function* () {
+    const name = `oc-once-${Date.now()}`;
+    const prompt = {
+      text: "What is 19 + 23? Use the alchemy_add tool, then tell me the number it returned.",
+      tools: ["add"],
+      requestId: "delivery-1",
+    };
+    const first = yield* call(`/${name}/prompt`, prompt);
+    // The instance that ran the prompt is gone: only OpenCode's storage knows the id.
+    yield* call(`/${name}/crash`, {}).pipe(Effect.ignore);
+    const again = yield* call(`/${name}/prompt`, prompt);
+    expect(again.text).toBe(first.text);
+    // The retry ran nothing: the session has the one run.
+    expect((yield* call(`/${name}/outcomes`)).outcomes).toEqual(["succeeded"]);
+  }),
+  { tags, timeout: 180_000 },
+);
+
+test(
+  "OpenCode's tables are named under opencode_, apart from the object's own",
+  Effect.gen(function* () {
+    const { tables } = (yield* call(`/oc-tables/tables`)) as { tables: ReadonlyArray<string> };
+    const opencode = tables.filter((table) => table.startsWith("opencode_"));
+    // OpenCode's own names are plain: `event`, `kv`, `job`.
+    expect(opencode).toContain("opencode_event");
+    expect(opencode).toContain("opencode_session_message");
+    // Everything else is the harness's alarms, whose tables and indexes Alchemy names with `alchemy_`.
+    expect(
+      tables.filter((table) => !table.startsWith("opencode_") && !table.includes("alchemy_")),
+    ).toEqual([]);
+  }),
+  { tags, timeout: 120_000 },
+);
+
 test.provider(
   "a harness given another harness's tool fails its deploy and says which Layer to provide",
   (stack) =>

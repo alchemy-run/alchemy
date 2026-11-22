@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { OpenCodeError } from "../Errors.ts";
+import { prefixTables } from "../internal/tablePrefix.ts";
 import { Storage, type HostOptions } from "../Storage.ts";
 
 const messageOf = (cause: unknown): string =>
@@ -18,7 +19,8 @@ const messageOf = (cause: unknown): string =>
 
 /**
  * Run OpenCode in the Durable Object that yields the harness, with its
- * sessions in the object's SQLite (tables prefixed `opencode_`). The
+ * sessions in the object's SQLite. Every table and index OpenCode makes is
+ * named under `opencode_`, apart from the object's own. The
  * harness keeps the object's alarm armed while a prompt runs, so an evicted
  * object wakes up and the prompt resumes where it stopped.
  *
@@ -57,7 +59,12 @@ export const DurableObjectStorage: Layer.Layer<Storage> = Layer.succeed(Storage,
               const { OpenCodeWorkerd } = await import("@opencode/sdk/workerd");
               return OpenCodeWorkerd.create({
                 ...options,
-                storage: (state.value.raw as unknown as { storage: never }).storage,
+                // OpenCode names its tables plainly (`event`, `job`, `kv`); the
+                // prefix keeps them apart from the object's other tables.
+                storage: prefixTables(
+                  (state.value.raw as unknown as { storage: object }).storage,
+                  "opencode_",
+                ) as never,
               });
             },
             catch: (cause) => new OpenCodeError({ message: messageOf(cause), cause }),
