@@ -9,15 +9,13 @@ import { Account } from "../src/Account/Account.aggregate.ts";
 import { Bank } from "../src/Bank.model.ts";
 import { CustomerApi } from "../src/CustomerApi.api.ts";
 import { SupportApi } from "../src/SupportApi.api.ts";
-import { idOf, isBlank } from "./fixtures/hash.ts";
 import { Receipt } from "./fixtures/Receipt.aggregate.ts";
 
 // What a project that installs the published package does first. This file
 // and `src` are also copied into a project outside the workspace and run
 // against the packed packages (`scripts/test-domain-consumer.ts`): there the
 // package is not source the test runner transforms, so the files it reads
-// are loaded a second time, and the classes and the opaque functions have to
-// be matched to the test's.
+// are loaded a second time, and the classes have to be matched to the test's.
 
 it.effect(
   "an aggregate is verified from the file the test imports",
@@ -41,12 +39,12 @@ it.effect(
 );
 
 it.effect(
-  "an opaque function the test names is the one the prover's files call",
+  "a helper the prover cannot read is found in the files it loads itself",
   () =>
     Effect.gen(function* () {
       const report = yield* Prove.report(Receipt, {
         source: new URL("./fixtures/Receipt.aggregate.ts", import.meta.url),
-        opaque: [idOf, isBlank, DateTime.formatIso],
+        opaque: [DateTime.formatIso],
       });
       const rule = report.invariants.find((rule) => rule.name === "TheCopyIsTheId")!;
       expect(rule.commands.map((command) => command.verdict)).toEqual([{ _tag: "Proved" }]);

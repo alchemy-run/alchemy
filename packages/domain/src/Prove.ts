@@ -194,7 +194,7 @@ const ASSUMPTIONS = [
   "an event or rejection whose fields fail its schema crashes the command, and nothing is committed",
 ];
 
-/** What a proof takes for granted of the functions the caller named as opaque. */
+/** What a proof takes for granted of the functions the prover did not read. */
 export const pure = (names: ReadonlyArray<string>): ReadonlyArray<string> =>
   names.length === 0
     ? []
@@ -318,7 +318,7 @@ export const report = (
         uncompared: own.reduce((sum, row) => sum + row.uncompared, 0),
         differs: own.flatMap((row) => row.differs),
       },
-      assumptions: [...ASSUMPTIONS, ...pure(loader.opaques)],
+      assumptions: [...ASSUMPTIONS, ...pure(loader.opaques())],
     };
     return made;
   }).pipe(
@@ -605,7 +605,7 @@ export const decisionReport = (
         ),
       ].map((check) => `${check.at}: ${check.check}`),
       unkept: Induction.unkept([row]),
-      assumptions: [...ASSUMPTIONS, ATOMIC, ...pure(loader.opaques)],
+      assumptions: [...ASSUMPTIONS, ATOMIC, ...pure(loader.opaques())],
     };
     return made;
   }).pipe(

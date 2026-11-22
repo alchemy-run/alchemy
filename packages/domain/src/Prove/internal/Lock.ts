@@ -146,7 +146,7 @@ export const inspect = Effect.fn(function* (options: {
   readonly qualified: boolean;
   /** For a rule that may have changed: the text it was locked as. */
   readonly locked: ReadonlyMap<string, string>;
-  /** The packages read and the functions not read, as for the verification itself. */
+  /** The functions not read, as for the verification itself. */
   readonly reading?: Source.Reading | undefined;
 }) {
   const loader = yield* Source.loader(options.reading);

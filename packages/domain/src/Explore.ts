@@ -158,6 +158,8 @@ export interface ModelReport extends ModelSearch.Found {
   readonly model: string;
   readonly apis: ReadonlyArray<string>;
   readonly depth: number;
+  /** The functions the explorer did not read, and took to be pure, by name. */
+  readonly opaque: ReadonlyArray<string>;
 }
 
 type Requirements = FileSystem.FileSystem | Path.Path;
@@ -264,6 +266,7 @@ const reportModel = (
       apis: options.apis.map((api) => api.apiName),
       depth,
       ...found,
+      opaque: loader.opaques(),
     };
     return made;
   }).pipe(

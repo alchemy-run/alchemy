@@ -177,9 +177,20 @@ export interface Hooks {
 const inside = (what: string, ...values: ReadonlyArray<V | undefined>): string | undefined => {
   const applied = values.find((value) => value?._tag === "Applied");
   return applied?._tag === "Applied"
-    ? `${what} what ${applied.name} returned, which the prover does not look inside: ${applied.name} is opaque`
+    ? `${what} what ${applied.name} returned, which the prover does not look inside: ${applied.name} ${applied.why}`
     : undefined;
 };
+
+/**
+ * The functions of Node's the prover takes to give the same result for the
+ * same arguments. It reads none of them, and a hash is not something a rule
+ * should depend on the inside of.
+ */
+const PURE: ReadonlySet<string> = new Set([
+  "node:crypto:createHash",
+  "node:crypto:createHmac",
+  "node:crypto:hash",
+]);
 
 /** Leaves the `switch` or the loop it is in. */
 const BREAK: V = { _tag: "Opaque", what: "break" };
@@ -280,8 +291,28 @@ export const make = (loader: Loader, run: Run): Interpreter => {
 
   const fail = (site: Site, reason: string) => Effect.fail(Value.notTranslated(site, reason));
 
+  /**
+   * Stop at code that reaches outside what the prover reads. A function that
+   * does is not taken to be pure, so it never stands as an opaque one.
+   */
+  const reaches = (site: Site, reason: string) =>
+    Effect.fail(Value.notTranslated(site, reason, true));
+
   const loadAt = (file: string, site: Site): Eval<Module> =>
-    loader.load(file).pipe(Effect.mapError((error) => Value.notTranslated(site, error.message)));
+    loader
+      .load(file)
+      .pipe(Effect.mapError((error) => Value.notTranslated(site, error.message, true)));
+
+  /** A function a file exports, with the real one: what a call gives where the body is not read. */
+  const exported = (value: V, module: Module, name: string): V => {
+    const real = module.exports[name];
+    return value._tag === "Fn" && typeof real === "function"
+      ? {
+          ...value,
+          real: { name, call: real as (...args: ReadonlyArray<unknown>) => unknown },
+        }
+      : value;
+  };
 
   /** A top-level name of a module: a declaration, an import, or a runtime export. */
   const top: (module: Module, name: string, site: Site) => Eval<V | undefined> = Effect.fnUntraced(
@@ -299,11 +330,11 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     Effect.fnUntraced(function* (module: Module, name: string, site: Site) {
       const declaration = module.declarations.get(name);
       // A function the caller named as opaque is not read, wherever it is written.
-      const named =
+      const given =
         declaration && name in module.exports
           ? loader.opaque(module.exports[name], name)
           : undefined;
-      if (named) return opaque(named);
+      if (given) return named(given);
       if (declaration?._tag === "Const") {
         if (!declaration.init) return Value.undef;
         // A constant the prover cannot build from its source, such as a schema, is the value Node loaded.
@@ -313,7 +344,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
           Effect.map((made) =>
             made._tag === "Opaque" && name in module.exports
               ? fromHost(module.exports[name], name)
-              : made,
+              : exported(made, module, name),
           ),
           Effect.catchTag("NotTranslated", (error) =>
             name in module.exports
@@ -323,26 +354,35 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         );
       }
       if (declaration?._tag === "Function") {
-        return {
-          _tag: "Fn",
-          node: declaration.node,
-          env: moduleEnv(module),
-          effectful: false,
-        } as V;
+        return exported(
+          { _tag: "Fn", node: declaration.node, env: moduleEnv(module), effectful: false },
+          module,
+          name,
+        );
       }
       if (declaration?._tag === "Class") {
         return name in module.exports
           ? fromHost(module.exports[name], name)
-          : yield* fail(site, `${name} is a class that its file does not export`);
+          : yield* reaches(site, `${name} is a class that its file does not export`);
       }
       const imported = module.imports.get(name);
       if (imported) {
-        const file = module.resolved.get(imported.specifier);
+        // A package the prover has no models for is read like the model's own files.
+        const read =
+          module.resolved.has(imported.specifier) || library.known(imported.specifier)
+            ? undefined
+            : yield* loader.resolve(module, imported.specifier).pipe(
+                Effect.flatMap((file) =>
+                  file === undefined ? Effect.succeed(undefined) : loader.load(file),
+                ),
+                Effect.catchTag("LoadError", () => Effect.succeed(undefined)),
+              );
+        const file = module.resolved.get(imported.specifier) ?? read?.path;
         if (file === undefined) {
           const namespace = yield* loader.runtime(module, imported.specifier);
           const host = imported.imported === "*" ? namespace : namespace?.[imported.imported];
           const given = loader.opaque(host, imported.imported);
-          if (given) return opaque(given);
+          if (given) return named(given);
           const at = host === undefined ? {} : { host };
           // A package: `import { Effect } from "effect"` is the module `effect/Effect`.
           return imported.imported === "*"
@@ -362,7 +402,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         if (found) return found;
         return imported.imported in other.exports
           ? fromHost(other.exports[imported.imported], imported.imported)
-          : yield* fail(site, `${name} is not exported by ${file}`);
+          : yield* reaches(site, `${name} is not exported by ${file}`);
       }
       for (const specifier of module.stars) {
         const file = module.resolved.get(specifier);
@@ -373,11 +413,17 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       return undefined;
     });
 
-  /** A function the caller named as opaque: a call gives a value the prover does not look inside. */
-  const opaque = (fn: OpaqueFunction): V => ({
+  /** A call of a function the prover does not read: a value it does not look inside. */
+  const applied = (fn: OpaqueFunction, args: ReadonlyArray<V>, why: string): V => {
+    loader.assume(fn.name);
+    return Value.applied(fn.name, fn.call, args, why);
+  };
+
+  /** A function the caller named as opaque. */
+  const named = (fn: OpaqueFunction): V => ({
     _tag: "Native",
     name: fn.name,
-    call: (args) => Effect.succeed(Value.applied(fn.name, fn.call, args)),
+    call: (args) => Effect.succeed(applied(fn, args, "is opaque")),
   });
 
   const lookup: (name: string, env: Env, site: Site) => Eval<V> = Effect.fnUntraced(function* (
@@ -406,7 +452,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
                 ? Effect.succeed<V>({ _tag: "Term", term: value.term, big: true })
                 : fail(at, "calls BigInt on a value the prover cannot see as a whole number"),
       } as V;
-    return yield* fail(site, `refers to ${name}, which the prover cannot find`);
+    return yield* reaches(site, `refers to ${name}, which the prover cannot find`);
   });
 
   const library = Library.make({
@@ -563,7 +609,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       Effect.succeed<V>({ _tag: "Arr", items: self.items.map((_, index) => Value.num(index)) }),
     values: (self) => Effect.succeed<V>({ _tag: "Arr", items: [...self.items] }),
     push: (self, args, at) => {
-      if (!mine(self)) return fail(at, "pushes onto an array it was given, which changes it");
+      if (!mine(self)) return reaches(at, "pushes onto an array it was given, which changes it");
       (self.items as Array<V>).push(...args);
       return Effect.succeed(Value.num(self.items.length));
     },
@@ -817,7 +863,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
     if (key._tag !== "Str" && key._tag !== "Num")
       return fail(site, "writes a property by a key the prover cannot see");
     if ((object._tag !== "Obj" && object._tag !== "Arr") || !mine(object))
-      return fail(
+      return reaches(
         site,
         "changes a value it was given: the prover reads code that changes only what it wrote itself",
       );
@@ -838,10 +884,10 @@ export const make = (loader: Loader, run: Run): Interpreter => {
             return;
           }
         }
-        return yield* fail(site, `assigns to ${target.name}, which is not a local variable`);
+        return yield* reaches(site, `assigns to ${target.name}, which is not a local variable`);
       }
       if (target.type !== "MemberExpression")
-        return yield* fail(site, "assigns in a way the prover does not read");
+        return yield* reaches(site, "assigns in a way the prover does not read");
       const object = yield* evaluate(target.object, env);
       const key = target.computed
         ? yield* evaluate(target.property, env)
@@ -870,30 +916,51 @@ export const make = (loader: Loader, run: Run): Interpreter => {
   const call: Interpreter["call"] = (fn, args, site) => {
     switch (fn._tag) {
       case "Fn":
-        if (fn.node.async) return fail(site, "calls an async function");
+        if (fn.node.async) return reaches(site, "calls an async function");
         // A generator's body runs when it is yielded, as an effect does.
-        return fn.node.generator || fn.effectful
-          ? Effect.succeed<V>({ _tag: "Effect", run: Effect.suspend(() => invoke(fn, args)) })
-          : invoke(fn, args);
+        if (fn.node.generator || fn.effectful)
+          return Effect.succeed<V>({ _tag: "Effect", run: Effect.suspend(() => invoke(fn, args)) });
+        const real = fn.real;
+        if (real === undefined) return invoke(fn, args);
+        // An exported function whose body the prover cannot read is a value it does not look inside.
+        // What the body chose and assumed before it stopped stays: the call is not read on
+        // the inputs of this path, and is read on the others.
+        return invoke(fn, args).pipe(
+          Effect.catchTag("NotTranslated", (stop) =>
+            stop.reaches ? Effect.fail(stop) : Effect.succeed(applied(real, args, stop.reason)),
+          ),
+        );
       case "Native":
         return fn.call(args, site);
       case "Lib": {
-        const given = library.models(fn) ? undefined : loader.opaque(fn.host, fn.path.at(-1));
-        return given
-          ? Effect.succeed(Value.applied(given.name, given.call, args))
+        if (library.models(fn)) return library.call(fn, args, site);
+        const given = loader.opaque(fn.host, fn.path.at(-1));
+        if (given) return Effect.succeed(applied(given, args, "is opaque"));
+        // A function of Node's that gives the same result for the same arguments.
+        return typeof fn.host === "function" && PURE.has(`${fn.module}:${fn.path.join(".")}`)
+          ? Effect.succeed(
+              applied(
+                {
+                  name: fn.path.at(-1)!,
+                  call: fn.host as (...args: ReadonlyArray<unknown>) => unknown,
+                },
+                args,
+                `is a function of ${fn.module}, which is not code the prover reads`,
+              ),
+            )
           : library.call(fn, args, site);
       }
       case "Host": {
         const given = loader.opaque(fn.value, fn.name.slice(fn.name.lastIndexOf(".") + 1));
         return given
-          ? Effect.succeed(Value.applied(given.name, given.call, args))
+          ? Effect.succeed(applied(given, args, "is opaque"))
           : (hooks.host?.(fn.value, args, site) ??
-              fail(site, `calls ${fn.name}, which is outside the code the prover reads`));
+              reaches(site, `calls ${fn.name}, which is outside the code the prover reads`));
       }
       case "Opaque":
-        return fail(site, `calls ${fn.what}, which the prover does not model`);
+        return reaches(site, `calls ${fn.what}, which the prover does not model`);
       default:
-        return fail(site, "calls something that is not a function");
+        return reaches(site, "calls something that is not a function");
     }
   };
 
@@ -923,13 +990,13 @@ export const make = (loader: Loader, run: Run): Interpreter => {
       current.run.contexts.set(key, { tag, value: made });
       return Effect.succeed(made);
     }
-    return fail(site, "yields a value the prover has no model for");
+    return reaches(site, "yields a value the prover has no model for");
   };
 
   const construct: (cls: V, args: ReadonlyArray<V>, site: Site) => Eval<V> = Effect.fnUntraced(
     function* (cls: V, args: ReadonlyArray<V>, site: Site) {
       if (cls._tag !== "Host" || !isDomainClass(cls.value))
-        return yield* fail(
+        return yield* reaches(
           site,
           `constructs ${cls._tag === "Host" ? cls.name : "a class"}, which is not an event, a rejection or a command`,
         );
@@ -1334,7 +1401,14 @@ export const make = (loader: Loader, run: Run): Interpreter => {
         return node.prefix ? after : before;
       }
       default:
-        return yield* fail(site, `uses a ${node.type}, which the prover does not read`);
+        // `this`, `await`, `import()` and `import.meta` are not a function of the arguments.
+        return yield* Value.notTranslated(
+          site,
+          `uses a ${node.type}, which the prover does not read`,
+          ["ThisExpression", "AwaitExpression", "ImportExpression", "MetaProperty"].includes(
+            node.type,
+          ),
+        );
     }
   });
 
@@ -1407,7 +1481,7 @@ export const make = (loader: Loader, run: Run): Interpreter => {
             return statement.label ? yield* fail(site, "continues to a label") : CONTINUE;
           case "ForOfStatement":
           case "ForInStatement": {
-            if (statement.await) return yield* fail(site, "loops with for await");
+            if (statement.await) return yield* reaches(site, "loops with for await");
             const subject = forced(yield* evaluate(statement.right, env));
             const items =
               statement.type === "ForOfStatement"

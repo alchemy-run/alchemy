@@ -5,22 +5,18 @@ import * as Path from "effect/Path";
 import * as Resolve from "./Resolve.ts";
 import type { Declaration, Import, Module, Node } from "./Value.ts";
 
-/** What the prover reads beyond the files a model is written in, and what it is told not to read. */
+/** What the prover is told not to read. */
 export interface Reading {
   /**
-   * The packages whose code is read like your own files: `["@acme/rules"]`.
-   * A function imported from any other package is read only where the
-   * prover has a model for it.
-   */
-  readonly packages?: ReadonlyArray<string> | undefined;
-  /**
    * Pure functions the prover does not read. A call gives a value it does
-   * not look inside, and the same value for the same arguments.
+   * not look inside, and the same value for the same arguments. The prover
+   * does this by itself for an exported function whose body it cannot read;
+   * name one here that it would read, or that it will not take to be pure.
    */
   readonly opaque?: ReadonlyArray<(...args: ReadonlyArray<never>) => unknown> | undefined;
 }
 
-/** A function the caller named as opaque, as the real code calls it. */
+/** A function the prover does not read, as the real code calls it. */
 export interface OpaqueFunction {
   readonly name: string;
   readonly call: (...args: ReadonlyArray<unknown>) => unknown;
@@ -55,12 +51,22 @@ export interface Loader {
    * for it.
    */
   readonly opaque: (value: unknown, exported?: string) => OpaqueFunction | undefined;
-  /** The functions the caller named as opaque, by name. */
-  readonly opaques: ReadonlyArray<string>;
+  /**
+   * The functions the proof takes to be pure, by name: the ones the caller
+   * named as opaque, and each one the prover met and could not read.
+   */
+  readonly opaques: () => ReadonlyArray<string>;
+  /** Record a function the prover could not read, and took to be pure. */
+  readonly assume: (name: string) => void;
+  /**
+   * The file a package specifier names, from the file that imports it:
+   * `undefined` when the package is not found.
+   */
+  readonly resolve: (from: Module, specifier: string) => Effect.Effect<string | undefined>;
   /**
    * What a package gives the file that imports it, as the runtime loads it:
-   * `undefined` when it is not found or does not load. Nothing is loaded
-   * unless the caller named an opaque function.
+   * `undefined` when it is not found or does not load. Only a package of
+   * Node's is loaded, unless the caller named an opaque function.
    */
   readonly runtime: (
     from: Module,
@@ -155,7 +161,6 @@ export const loader = (
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const resolver = yield* Resolve.make;
-    const followed = new Set(reading.packages ?? []);
     const given = new Set<unknown>(reading.opaque ?? []);
     /** The opaque functions by name: what a second load of a file exports one under. */
     const named = new Map<string, (...args: ReadonlyArray<unknown>) => unknown>();
@@ -170,11 +175,19 @@ export const loader = (
         ? { name: exported!, call: twin }
         : undefined;
     };
+    const assumed = new Set(named.keys());
+    const found = new Map<string, string | undefined>();
+    const resolve: Loader["resolve"] = Effect.fn(function* (from: Module, specifier: string) {
+      if (specifier.startsWith("node:")) return undefined;
+      const key = `${from.path}\n${specifier}`;
+      if (!found.has(key)) found.set(key, yield* resolver.bare(from.path, specifier));
+      return found.get(key);
+    });
     const runtimes = new Map<string, Readonly<Record<string, unknown>> | undefined>();
     const runtime: Loader["runtime"] = Effect.fn(function* (from: Module, specifier: string) {
-      if (given.size === 0) return undefined;
       const builtin = specifier.startsWith("node:");
-      const file = builtin ? specifier : yield* resolver.bare(from.path, specifier);
+      if (given.size === 0 && !builtin) return undefined;
+      const file = builtin ? specifier : yield* resolve(from, specifier);
       if (file === undefined) return undefined;
       if (runtimes.has(file)) return runtimes.get(file);
       const href = builtin
@@ -299,22 +312,9 @@ export const loader = (
         } else declare(declarations, statement);
       }
       const resolved = new Map<string, string>();
-      for (const specifier of specifiers) {
-        if (specifier.startsWith(".")) {
+      for (const specifier of specifiers)
+        if (specifier.startsWith("."))
           resolved.set(specifier, yield* resolver.relative(file, specifier));
-          continue;
-        }
-        // A package the caller named is read like the model's own files.
-        const name = Resolve.packageOf(specifier)?.name;
-        if (name === undefined || !followed.has(name)) continue;
-        const found = yield* resolver.bare(file, specifier);
-        if (found === undefined)
-          return yield* new LoadError({
-            file,
-            message: `cannot find ${specifier}: the prover looks for ${name} from ${file}, through its package.json`,
-          });
-        resolved.set(specifier, found);
-      }
       const module: Module = {
         path: file,
         source,
@@ -346,5 +346,14 @@ export const loader = (
       return expression;
     });
 
-    return { load, adopt, parse, opaque, opaques: [...named.keys()], runtime };
+    return {
+      load,
+      adopt,
+      parse,
+      opaque,
+      opaques: () => [...assumed],
+      assume: (name) => void assumed.add(name),
+      resolve,
+      runtime,
+    };
   });

@@ -103,6 +103,14 @@ export type V =
       readonly env: Env;
       /** Wrapped by `Effect.fn`: calling it gives an effect. */
       readonly effectful: boolean;
+      /**
+       * The function as its file exports it. Where the prover cannot read the
+       * body, a call is a value it does not look inside, and this gives it.
+       */
+      readonly real?: {
+        readonly name: string;
+        readonly call: (...args: ReadonlyArray<unknown>) => unknown;
+      };
     }
   | {
       readonly _tag: "Native";
@@ -123,7 +131,7 @@ export type V =
   | { readonly _tag: "Time"; readonly millis: Term }
   | { readonly _tag: "Opaque"; readonly what: string }
   /**
-   * What a function the caller named as opaque returned. The prover does not
+   * What a function the prover does not read returned. The prover does not
    * look inside it: it is passed along, kept and recorded, and it is the same
    * value as another call of the function on the same arguments.
    */
@@ -134,6 +142,8 @@ export type V =
       /** The real function: it gives the value where the real code is run. */
       readonly call: (...args: ReadonlyArray<unknown>) => unknown;
       readonly args: ReadonlyArray<V>;
+      /** Why the prover does not read the function, as what follows its name in a message. */
+      readonly why: string;
       /** Text two calls share only when they are the same function on the same arguments. */
       readonly key: string;
     };
@@ -217,11 +227,13 @@ export const applied = (
   name: string,
   call: (...args: ReadonlyArray<unknown>) => unknown,
   args: ReadonlyArray<V>,
+  why: string,
 ): V => ({
   _tag: "Applied",
   name,
   call,
   args,
+  why,
   key: `(call #${identityOf(call)} ${args.map(keyOf).join(" ")})`,
 });
 
@@ -242,6 +254,13 @@ export class NotTranslated extends Data.TaggedError("NotTranslated")<{
   readonly file: string;
   readonly line: number;
   readonly reason: string;
+  /**
+   * Whether the code reaches outside what the prover reads: a global, a
+   * function it has no model for, a value it was given and changes. Nothing
+   * then says the function it is in gives the same result for the same
+   * arguments.
+   */
+  readonly reaches: boolean;
 }> {}
 
 /** The inputs this path assumes cannot occur. */
@@ -261,11 +280,12 @@ export const lineOf = (module: Module, offset: number): number => {
   return low + 1;
 };
 
-export const notTranslated = (site: Site, reason: string): NotTranslated =>
+export const notTranslated = (site: Site, reason: string, reaches = false): NotTranslated =>
   new NotTranslated({
     file: site.module.path,
     line: lineOf(site.module, site.node.start),
     reason,
+    reaches,
   });
 
 /** A function the prover does not look inside: its real implementation checks each answer. */

@@ -529,7 +529,7 @@ export const report = (
   const from = callers(new Error("caller").stack, OWN);
   return Effect.gen(function* () {
     const source = options.source ?? (yield* locate(model.modelName, "Model", from));
-    const reading: Prove.Reading = { packages: options.packages, opaque: options.opaque };
+    const reading: Prove.Reading = { opaque: options.opaque };
     const explored = yield* Explore.report(model, {
       source,
       ...reading,
@@ -602,7 +602,7 @@ export const report = (
       assumptions: [
         ...ASSUMPTIONS,
         ...(explored.decisions.length > 0 ? [Prove.ATOMIC] : []),
-        ...Prove.pure((options.opaque ?? []).flatMap((fn) => (fn.name === "" ? [] : [fn.name]))),
+        ...Prove.pure(explored.opaque),
       ],
     };
     return made;
@@ -803,12 +803,10 @@ const renderAggregate = (report: AggregateReport): string => {
  * );
  * ```
  *
- * **Example:** With a helper the prover cannot read, and rules from another package
+ * **Example:** With a function the prover should not read
  * ```typescript
  * it.effect("a ticket keeps its rules", () =>
- *   Verify.aggregate(Ticket, { opaque: [idOf], packages: ["@acme/rules"] }).pipe(
- *     Effect.provide(NodeServices.layer),
- *   ),
+ *   Verify.aggregate(Ticket, { opaque: [priceOf] }).pipe(Effect.provide(NodeServices.layer)),
  * );
  * ```
  */
@@ -822,7 +820,7 @@ export const aggregate = (
     const source = options.source ?? (yield* locate(target.aggregateName, "Aggregate", from));
     const failed = (error: { readonly message: string }) =>
       new VerifyError({ message: error.message });
-    const reading: Prove.Reading = { packages: options.packages, opaque: options.opaque };
+    const reading: Prove.Reading = { opaque: options.opaque };
     const proof = yield* Prove.report(target, { source, ...reading }).pipe(Effect.mapError(failed));
     const unlocked =
       options.lock === undefined
