@@ -30,10 +30,68 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(Stack));
 const tags = ["provider:cloudflare", "provider:opencode", "provider:boat", "live"];
 
 /** What the async convention adds to a session's system prompt. */
-const ASYNC_SECTION = `TODO`;
+const ASYNC_SECTION = `# Code mode
+
+The tools declared below are called only from programs, which the \`alchemy_codemode\` tool runs.
+
+Tools scripts can call (\`await tools.<name>(args)\`):
+
+\`\`\`ts
+declare namespace tools {
+  class InsufficientFunds extends Error {
+    readonly _tag: "InsufficientFunds";
+    readonly balance: number;
+  }
+
+  class AccountFrozen extends Error {
+    readonly _tag: "AccountFrozen";
+    readonly account: string;
+  }
+
+  /** Add two integers. Always use this tool to add numbers; never add them yourself. */
+  function add(args: { a: number; b: number }): Promise<{ sum: number }>;
+
+  /**
+   * Withdraw money from an account. Always use this tool to withdraw.
+   * @throws {InsufficientFunds}
+   * @throws {AccountFrozen}
+   */
+  function withdraw(args: { account: string; amount: number }): Promise<{ balance: number }>;
+
+  namespace codes {
+    /** Look up the secret code for a word. The code cannot be guessed. */
+    function lookup_code(args: { word: string }): Promise<{ code: string }>;
+
+    /** A tool that always reports an error. */
+    function always_fails(): Promise<string>;
+  }
+}
+\`\`\``;
 
 /** The same, as the Effect convention declares it. */
-const EFFECT_SECTION = `TODO`;
+const EFFECT_SECTION = `# Code mode
+
+The tools declared below are called only from programs, which the \`alchemy_codemode\` tool runs.
+
+Tools scripts can call (\`yield* tools.<name>(args)\`):
+
+\`\`\`ts
+declare namespace tools {
+  class InsufficientFunds extends Data.TaggedError("InsufficientFunds")<{
+    readonly balance: number;
+  }> {}
+
+  class AccountFrozen extends Data.TaggedError("AccountFrozen")<{
+    readonly account: string;
+  }> {}
+
+  /** Add two integers. Always use this tool to add numbers; never add them yourself. */
+  function add(args: { a: number; b: number }): Effect<{ sum: number }>;
+
+  /** Withdraw money from an account. Always use this tool to withdraw. */
+  function withdraw(args: { account: string; amount: number }): Effect<{ balance: number }, InsufficientFunds | AccountFrozen>;
+}
+\`\`\``;
 
 /** Call the fixture's API; retries ride through a fresh workers.dev URL's first seconds. */
 const call = (path: string, body?: unknown) =>

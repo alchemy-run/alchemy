@@ -100,7 +100,7 @@ const calls = messages.flatMap((message) =>
 );
 ```
 
-A `tool` entry has the tool's name as OpenCode knows it and its `state`: `running`, `completed` with its `content`, or `error` with its `error`. In code mode the call is `execute`, and `state.metadata.toolCalls` lists the calls its program made.
+A `tool` entry has the tool's name as OpenCode knows it and its `state`: `running`, `completed` with its `content`, or `error` with its `error`. In [code mode](/opencode/code-mode) the call is the tool that ran the program: `alchemy_codemode`, or `execute` under OpenCode's own code mode, where `state.metadata.toolCalls` lists the calls its program made.
 
 ## Use one of OpenCode's agents
 

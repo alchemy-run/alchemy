@@ -1,0 +1,155 @@
+---
+title: Code mode
+description: On OpenCode, tools listed inside AI.CodeMode are called from a JavaScript program the model writes, run by the harness or by OpenCode's own code mode.
+---
+
+In [code mode](/ai/code-mode) the model writes a program that calls tools, and only what the program returns goes back to the model. On OpenCode, your tools and MCP servers can be reached this way. OpenCode's own tools (`shell`, `read`, `edit`) run inside OpenCode and stay direct calls.
+
+## Turn it on
+
+Wrap the tools a program may call in `AI.CodeMode`, and provide how programs are written and where they run:
+
+```typescript title="src/Session.ts"
+import * as AI from "@alchemy.run/ai";
+import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as OpenCode from "@alchemy.run/opencode";
+import * as OpenCodeCloudflare from "@alchemy.run/opencode/Cloudflare";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Fast, FastLive } from "./models.ts";
+import { SandboxLive } from "./sandbox.ts";
+import { Add, AddLive, Withdraw, WithdrawLive } from "./tools.ts";
+
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  AddLive,
+  WithdrawLive,
+  SandboxLive,
+  OpenCode.CodingTools,
+  OpenCodeCloudflare.DurableObjectInstance,
+  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalInline())),
+);
+
+export default class Session extends Cloudflare.DurableObject<Session>()(
+  "Session",
+  Effect.gen(function* () {
+    const harness = yield* OpenCode.Harness({
+      models: [Fast],
+      tools: [AI.CodingTools, AI.CodeMode(Add, Withdraw)],
+    });
+
+    return Effect.gen(function* () {
+      return {
+        prompt: Effect.fn(function* (name: string, text: string) {
+          const reply = yield* harness.session(name).prompt(text);
+          return reply.text;
+        }),
+      };
+    });
+  }).pipe(Effect.provide(HarnessLive)),
+) {}
+```
+
+The model calls files and shell directly. It reaches `add` and `withdraw` from programs, which it runs with the harness's `alchemy_codemode` tool.
+
+## Choose what goes through programs
+
+A tool outside the group is a direct call, and a tool listed both ways is offered both ways:
+
+```typescript
+const harness = yield* OpenCode.Harness({
+  models: [Fast],
+  tools: [AI.CodingTools, Add, AI.CodeMode(Add, Withdraw)],
+});
+```
+
+## What the model sees
+
+The harness adds the declarations of the tools a program may call to the session's system prompt, as an instruction entry:
+
+```typescript
+declare namespace tools {
+  class InsufficientFunds extends Error {
+    readonly _tag: "InsufficientFunds";
+    readonly balance: number;
+  }
+
+  /** Add two integers. */
+  function add(args: { a: number; b: number }): Promise<{ sum: number }>;
+
+  /**
+   * Withdraw money from an account.
+   * @throws {InsufficientFunds}
+   */
+  function withdraw(args: { account: string; amount: number }): Promise<{ balance: number }>;
+}
+```
+
+The entry follows the prompt: it declares the tools that prompt put in a group. See [what the model sees](/ai/code-mode#what-the-model-sees) for how schemas become declarations.
+
+## Write programs as Effects
+
+`AI.CodeModeEffect` declares each tool as an `Effect` with its failures in the error type:
+
+```typescript
+const CodeModeLive = AI.CodeModeEffect.pipe(Layer.provide(AICloudflare.EvalInline()));
+```
+
+```javascript
+const added = yield* tools.add({ a: 2, b: 3 });
+const balance = yield* tools.withdraw({ account: "checking", amount: 500 }).pipe(
+  Effect.map((result) => result.balance),
+  Effect.catchTag("InsufficientFunds", (error) => Effect.succeed(error.balance)),
+);
+return added.sum + balance;
+```
+
+See [Effect programs](/ai/code-mode#effect-programs).
+
+## Turn it on or off for one prompt
+
+A prompt's `tools` take the same groups. A list without one has no code mode:
+
+```typescript
+const reply = yield* session.prompt("Add 2 and 3.", { tools: [Add] });
+```
+
+A list with one reaches those tools from programs:
+
+```typescript
+const reply = yield* session.prompt("Settle every account.", {
+  tools: [AI.Bash, AI.CodeMode(Add, Withdraw)],
+});
+```
+
+## Where programs run
+
+Programs run where the harness runs, not in the sandbox: provide any `AI.Eval`, such as the Durable Object's thread or an isolate of its own. Each tool call a program makes runs its handler there too. See [where programs run](/ai/code-mode#where-programs-run).
+
+A program does not replay after a crash. A prompt cut off while one runs fails, and the next prompt starts a new one.
+
+## OpenCode's own code mode
+
+OpenCode has a code mode built in: its `execute` tool, which runs programs inside the sandbox against OpenCode's own declarations. `OpenCode.CodeModeNative` uses it in place of a convention and an `AI.Eval`:
+
+```typescript
+const HarnessLive = Layer.mergeAll(
+  FastLive,
+  AddLive,
+  WithdrawLive,
+  SandboxLive,
+  OpenCode.CodingTools,
+  OpenCodeCloudflare.DurableObjectInstance,
+  OpenCode.CodeModeNative,
+);
+```
+
+OpenCode writes the declarations, so a program calls your tools under the harness's name and an MCP server's under the server's:
+
+```javascript
+const { sum } = await tools.alchemy.add({ a: 2, b: 3 });
+return sum;
+```
+
+It differs from the shared conventions in three ways. Programs are async only. A declared failure rejects with an `Error` whose message is the failure's fields as JSON, not an instance of a class. And every tool of yours a prompt allows goes through programs, so a prompt that lists one directly beside a group fails.

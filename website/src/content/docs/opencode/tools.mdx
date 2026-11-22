@@ -35,21 +35,16 @@ const harness = yield* OpenCode.Harness({
 
 ## Code mode
 
-By default the model calls your tools from a program. OpenCode gives it one tool, `execute`, and a TypeScript declaration of each tool it may call, typed by the tool's `success` schema. The model writes JavaScript that calls them and composes their results, and only what the program returns reaches it:
-
-```javascript
-const sum = await tools.alchemy.add({ a: 19, b: 23 });
-const balance = await tools.alchemy.withdraw({ account: "checking", amount: 500 }).catch((error) => error.message);
-return { sum, balance };
-```
-
-A declared failure rejects with an `Error` whose message is the failure's fields as JSON, `_tag` among them. OpenCode's own tools stay direct calls.
-
-`codeMode: false` offers each tool directly instead, on the harness or on one prompt:
+A tool listed inside `AI.CodeMode(...)` is reached from a program the model writes, not one call at a time:
 
 ```typescript
-const reply = yield* session.prompt("Deploy it.", { codeMode: false });
+const harness = yield* OpenCode.Harness({
+  models: [Fast],
+  tools: [AI.CodingTools, AI.CodeMode(Add, Withdraw)],
+});
 ```
+
+See [Code mode](/opencode/code-mode).
 
 ## Your tools
 

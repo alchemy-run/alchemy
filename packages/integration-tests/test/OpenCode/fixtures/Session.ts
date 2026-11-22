@@ -189,8 +189,8 @@ const session = Effect.gen(function* () {
         const entries = (yield* open.request(
           "GET",
           `/api/experimental/session/${yield* open.id}/instructions/entries`,
-        )) as unknown;
-        return entries;
+        )) as { readonly data: ReadonlyArray<{ readonly key: string; readonly value: string }> };
+        return entries.data.find((entry) => entry.key === "alchemy-codemode")?.value ?? null;
       }),
       /** Every tool call the session made, as OpenCode names and reports it. */
       toolsUsed: Effect.fn(function* (name: string) {
