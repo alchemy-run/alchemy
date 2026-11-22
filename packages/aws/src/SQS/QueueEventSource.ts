@@ -12,8 +12,8 @@ export interface MessagesProps extends QueueEventSourceProps {
   /**
    * How long each `ReceiveMessage` long-polls for messages when using the
    * process (run) path (e.g. `"20 seconds"`). Rounded to whole seconds on
-   * the wire.
-   * @default 20 seconds
+   * the wire and capped at 20, the longest SQS waits.
+   * @default `maximumBatchingWindow` (capped at 20 seconds), else the queue's `receiveMessageWaitTime`
    */
   waitTime?: Duration.Input;
   /**

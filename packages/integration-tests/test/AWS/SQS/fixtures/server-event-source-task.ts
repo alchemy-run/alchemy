@@ -6,8 +6,9 @@ import * as Layer from "effect/Layer";
 export const SourceQueue = AWS.SQS.Queue("ServerEventSourceQueue");
 export const SinkQueue = AWS.SQS.Queue("ServerEventSourceSink");
 
-// An ECS consumer asking for batches of 100. SQS's ReceiveMessage returns at
-// most 10 messages per call, so the server loop must cap each receive at 10.
+// An ECS consumer with Lambda-sized batch settings: batches of 100 and a
+// 60-second batching window. SQS's ReceiveMessage returns at most 10 messages
+// and waits at most 20 seconds, so the server loop must cap both.
 export default class ServerQueueTask extends AWS.ECS.Task<ServerQueueTask>()(
   "SQSServerQueueTask",
   {
@@ -31,7 +32,7 @@ export default class ServerQueueTask extends AWS.ECS.Task<ServerQueueTask>()(
 
     yield* AWS.SQS.consumeQueueMessages(
       source,
-      { batchSize: 100, waitTime: "5 seconds" },
+      { batchSize: 100, maximumBatchingWindow: "60 seconds" },
       Effect.fn(function* (event) {
         yield* Effect.forEach(event.Records, (record) =>
           sendMessage({ MessageBody: record.body }).pipe(Effect.orDie),

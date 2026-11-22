@@ -35,10 +35,11 @@ const defaultSubnet = Effect.gen(function* () {
   return { vpcId: AWS.EC2.VpcId(vpcId), subnetId };
 });
 
-// A server consumer whose `batchSize` is above SQS's ReceiveMessage limit of
-// 10 must still receive: the loop caps each receive at 10 messages.
+// A server consumer with Lambda-sized settings (`batchSize` above 10, a
+// `maximumBatchingWindow` above 20 seconds) must still receive: the loop caps
+// each ReceiveMessage at 10 messages and a 20-second wait.
 test.provider.skipIf(!!process.env.FAST)(
-  "an ECS consumer with a batchSize above 10 receives messages",
+  "an ECS consumer with Lambda-sized batch settings receives messages",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
