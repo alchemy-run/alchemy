@@ -425,13 +425,20 @@ const toAttrs = (
 };
 
 /** Whether every field set in `desired` equals the observed field. */
+/** The order `Array.prototype.sort` uses without a comparator. */
+const byString = (a: unknown, b: unknown) => {
+  const x = String(a);
+  const y = String(b);
+  return x < y ? -1 : x > y ? 1 : 0;
+};
+
 const matches = <T extends object>(observed: object | undefined, desired: T): boolean =>
   Object.entries(desired).every(([key, value]) => {
     if (value === undefined) return true;
     const current = (observed as Record<string, unknown> | undefined)?.[key];
     if (Array.isArray(value)) {
-      const have = Array.isArray(current) ? [...current].sort() : [];
-      return JSON.stringify([...value].sort()) === JSON.stringify(have);
+      const have = Array.isArray(current) ? [...current].sort(byString) : [];
+      return JSON.stringify([...value].sort(byString)) === JSON.stringify(have);
     }
     return current === value;
   });

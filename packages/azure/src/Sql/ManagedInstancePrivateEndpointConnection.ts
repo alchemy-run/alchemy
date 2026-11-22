@@ -275,11 +275,9 @@ export const ManagedInstancePrivateEndpointConnectionProvider = () =>
           },
         });
       } else if (state?.status !== status) {
-        return yield* Effect.fail(
-          new ManagedInstancePrivateEndpointConnectionDecided({
-            message: `private endpoint connection ${name} on ${managedInstance} is already ${state?.status}; Azure SQL decisions are final (delete the private endpoint to start over)`,
-          }),
-        );
+        return yield* new ManagedInstancePrivateEndpointConnectionDecided({
+          message: `private endpoint connection ${name} on ${managedInstance} is already ${state?.status}; Azure SQL decisions are final (delete the private endpoint to start over)`,
+        });
       }
       const fresh = yield* waitForProvisioned(
         `private endpoint connection ${name}`,

@@ -63,7 +63,7 @@ const addressOf = Effect.fn(function* (account: Account | string, profile: Certi
 });
 
 /** A distilled signing operation, resolved with the host's credentials. */
-type Operation<I, A, E> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+type Operation<I, A, E, R> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 
 /**
  * Build the impl Effect for a certificate-profile operation: the runtime
@@ -75,11 +75,12 @@ export const makeCertificateProfileHttpBinding = <
   I extends { endpoint: string; accountName: string; certificateProfile: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.CodeSigning.Sign`. */
   tag: string;
   /** The distilled operation; the endpoint, account and profile are injected. */
-  operation: Operation<I, A, E>;
+  operation: Operation<I, A, E, R>;
 }) =>
   Effect.gen(function* () {
     const grant = yield* GrantOnProfile;
@@ -105,11 +106,12 @@ export const makeCertificateProfileListHttpBinding = <
   I extends { endpoint: string; accountName: string; certificateProfile: string },
   Item,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.CodeSigning.ListExtendedKeyUsages`. */
   tag: string;
   /** The distilled paginated operation. */
-  operation: Effect.Effect<{ readonly items: (input: I) => Stream.Stream<Item, E> }, never, any>;
+  operation: Effect.Effect<{ readonly items: (input: I) => Stream.Stream<Item, E> }, never, R>;
 }) =>
   Effect.gen(function* () {
     const grant = yield* GrantOnProfile;

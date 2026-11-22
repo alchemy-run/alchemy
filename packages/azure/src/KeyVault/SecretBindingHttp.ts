@@ -120,11 +120,12 @@ export const makeSecretHttpBinding = <
   I extends { vaultBaseUrl: string; secretName: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.KeyVault.GetSecret`. */
   tag: string;
   /** The distilled operation; the vault URL and secret name are injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Roles assigned on the secret. */
   grants: readonly SecretGrant[];
 }) =>
@@ -147,11 +148,11 @@ export const makeSecretHttpBinding = <
  * the runtime callable injects the bound {@link Vault}'s URL, and the
  * deploy-time half assigns `grants` on the vault.
  */
-export const makeVaultSecretsHttpBinding = <I extends { vaultBaseUrl: string }, A, E>(options: {
+export const makeVaultSecretsHttpBinding = <I extends { vaultBaseUrl: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.KeyVault.GetSecrets`. */
   tag: string;
   /** The distilled operation; the vault URL is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Roles assigned on the vault. */
   grants: readonly SecretGrant[];
 }) =>

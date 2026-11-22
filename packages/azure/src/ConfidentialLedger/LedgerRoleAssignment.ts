@@ -104,11 +104,9 @@ const ledgerClient = Effect.fn(function* (ledger: string) {
       ),
     /** Add roles to the principal (the merge patch keeps its other roles). */
     addRoles: (userId: string, roles: readonly string[]) =>
-      tls(
-        Effect.asVoid(
-          data.CreateOrUpdateLedgerUser({ ledgerEndpoint, userId, assignedRoles: [...roles] }),
-        ),
-      ),
+      data
+        .CreateOrUpdateLedgerUser({ ledgerEndpoint, userId, assignedRoles: [...roles] })
+        .pipe(Effect.asVoid, tls),
     /**
      * Leave the principal exactly `roles`. The merge patch never drops a
      * role, so delete the ledger user and re-add the roles it keeps.
@@ -177,13 +175,11 @@ export const LedgerRoleAssignmentProvider = () =>
     reconcile: Effect.fn(function* ({ news }) {
       const client = yield* ledgerClient(news.ledger);
       if (client === undefined) {
-        return yield* Effect.fail(
-          new LedgerRoleAssignmentNotConverged({
-            ledger: news.ledger,
-            principalId: news.principalId,
-            message: `ledger ${news.ledger} is unknown to the Confidential Ledger identity service`,
-          }),
-        );
+        return yield* new LedgerRoleAssignmentNotConverged({
+          ledger: news.ledger,
+          principalId: news.principalId,
+          message: `ledger ${news.ledger} is unknown to the Confidential Ledger identity service`,
+        });
       }
       // Observe the user's roles and add ours. Assignments of the same user
       // race on this read-modify-write, so re-observe until ours sticks.
@@ -194,13 +190,11 @@ export const LedgerRoleAssignmentProvider = () =>
         return false;
       }).pipe(Effect.repeat({ ...converge, until: (done) => done }));
       if (!ensured) {
-        return yield* Effect.fail(
-          new LedgerRoleAssignmentNotConverged({
-            ledger: news.ledger,
-            principalId: news.principalId,
-            message: `role ${news.role} did not stick on ledger user ${news.principalId}`,
-          }),
-        );
+        return yield* new LedgerRoleAssignmentNotConverged({
+          ledger: news.ledger,
+          principalId: news.principalId,
+          message: `role ${news.role} did not stick on ledger user ${news.principalId}`,
+        });
       }
       return toAttrs(news);
     }),
@@ -221,13 +215,11 @@ export const LedgerRoleAssignmentProvider = () =>
         return false;
       }).pipe(Effect.repeat({ ...converge, until: (done) => done }));
       if (!removed) {
-        return yield* Effect.fail(
-          new LedgerRoleAssignmentNotConverged({
-            ledger: output.ledgerName,
-            principalId: output.principalId,
-            message: `role ${output.role} could not be removed from ledger user ${output.principalId}`,
-          }),
-        );
+        return yield* new LedgerRoleAssignmentNotConverged({
+          ledger: output.ledgerName,
+          principalId: output.principalId,
+          message: `role ${output.role} could not be removed from ledger user ${output.principalId}`,
+        });
       }
     }),
   });

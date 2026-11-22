@@ -244,7 +244,7 @@ const scopeKey = (scopes: ReadonlyArray<storage.PermissionScope>) =>
       .map((scope) => ({
         service: scope.service.toLowerCase(),
         resourceName: scope.resourceName,
-        permissions: [...scope.permissions].sort().join(""),
+        permissions: scope.permissions.split("").sort().join(""),
       }))
       .sort((a, b) =>
         `${a.service}/${a.resourceName}`.localeCompare(`${b.service}/${b.resourceName}`),
@@ -267,7 +267,8 @@ const sameNumbers = (
   desired: ReadonlyArray<number> | undefined,
 ) =>
   desired === undefined ||
-  JSON.stringify([...(observed ?? [])].sort()) === JSON.stringify([...desired].sort());
+  JSON.stringify([...(observed ?? [])].sort((a, b) => a - b)) ===
+    JSON.stringify([...desired].sort((a, b) => a - b));
 
 /** Whether the observed user differs from the desired properties. */
 const differs = (

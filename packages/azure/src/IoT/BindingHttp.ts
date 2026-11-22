@@ -86,11 +86,11 @@ const GrantProvisioningRole = Effect.gen(function* () {
  * {@link ProvisioningService}'s name, and the deploy-time half assigns
  * `grant` on the service.
  */
-export const makeProvisioningHttpBinding = <I extends { dpsName: string }, A, E>(options: {
+export const makeProvisioningHttpBinding = <I extends { dpsName: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.IoT.GetEnrollmentGroup`. */
   tag: string;
   /** The distilled operation; the service name is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Custom role assigned on the service. */
   grant: ProvisioningGrant;
 }) =>

@@ -216,26 +216,22 @@ const toAttrs = (
   tags: userTags(i.tags),
 });
 
-const sourceInput = (news: CustomImageProps): devtestlabs.CustomImagePropertiesInput => {
-  return {
-    vm:
-      news.vm !== undefined
-        ? {
-            sourceVmId: news.vm.sourceVmId,
-            linuxOsInfo:
-              news.vm.linuxOsState === undefined
-                ? undefined
-                : { linuxOsState: news.vm.linuxOsState },
-            windowsOsInfo:
-              news.vm.windowsOsState === undefined
-                ? undefined
-                : { windowsOsState: news.vm.windowsOsState },
-          }
-        : undefined,
-    vhd: news.vhd,
-    dataDiskStorageInfo: news.dataDiskStorageInfo,
-  };
-};
+const sourceInput = (news: CustomImageProps): devtestlabs.CustomImagePropertiesInput => ({
+  vm:
+    news.vm !== undefined
+      ? {
+          sourceVmId: news.vm.sourceVmId,
+          linuxOsInfo:
+            news.vm.linuxOsState === undefined ? undefined : { linuxOsState: news.vm.linuxOsState },
+          windowsOsInfo:
+            news.vm.windowsOsState === undefined
+              ? undefined
+              : { windowsOsState: news.vm.windowsOsState },
+        }
+      : undefined,
+  vhd: news.vhd,
+  dataDiskStorageInfo: news.dataDiskStorageInfo,
+});
 
 export const CustomImageProvider = () =>
   Provider.succeed(CustomImage, {

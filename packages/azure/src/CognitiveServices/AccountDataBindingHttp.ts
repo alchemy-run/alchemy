@@ -162,11 +162,11 @@ type Operation<I, A, E> = (input: I) => Effect.Effect<A, E>;
  * {@link Account}'s endpoint, and the deploy-time half assigns `grant` on
  * the account.
  */
-export const makeAccountDataHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeAccountDataHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.CognitiveServices.AnalyzeText`. */
   tag: string;
   /** The distilled operation; the endpoint is injected. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
   /** Custom role assigned on the account. */
   grant: AccountDataGrant;
 }) =>

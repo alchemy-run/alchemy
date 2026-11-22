@@ -275,10 +275,12 @@ const identityDiffers = (
   ) {
     return true;
   }
-  const want = (desired.userAssignedIdentityIds ?? []).map(lower).sort();
+  const want = (desired.userAssignedIdentityIds ?? [])
+    .map(lower)
+    .sort((x, y) => (x ?? "").localeCompare(y ?? ""));
   const have = Object.keys(observed?.userAssignedIdentities ?? {})
     .map(lower)
-    .sort();
+    .sort((x, y) => (x ?? "").localeCompare(y ?? ""));
   return want.join(",") !== have.join(",");
 };
 

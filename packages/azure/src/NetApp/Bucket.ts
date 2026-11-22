@@ -396,7 +396,7 @@ export const BucketProvider = () =>
         volumeName: output.volume,
         bucketName: output.bucketName,
       };
-      yield* whileBusy(ignoreNotFound(netapp.DeleteBucket(where)));
+      yield* netapp.DeleteBucket(where).pipe(ignoreNotFound, whileBusy);
       yield* waitUntilGone(`netapp bucket ${output.bucketName}`, getBucket(where), LRO_BUDGET);
     }),
 

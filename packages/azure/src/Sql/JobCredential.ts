@@ -203,14 +203,12 @@ export const JobCredentialProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        retryWhileAgentBusy(
-          sql.DeleteJobCredentials({
-            ...jobAgentPath(subscriptionId, output),
-            credentialName: output.credentialName,
-          }),
-        ),
-      );
+      yield* sql
+        .DeleteJobCredentials({
+          ...jobAgentPath(subscriptionId, output),
+          credentialName: output.credentialName,
+        })
+        .pipe(retryWhileAgentBusy, ignoreNotFound);
       yield* waitUntilGone(
         `sql job credential ${output.credentialName}`,
         getChild(subscriptionId, output, output.credentialName),

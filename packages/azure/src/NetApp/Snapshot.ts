@@ -248,7 +248,7 @@ export const SnapshotProvider = () =>
         volumeName: output.volume,
         snapshotName: output.snapshotName,
       };
-      yield* whileBusy(ignoreNotFound(netapp.DeleteSnapshot(where)));
+      yield* netapp.DeleteSnapshot(where).pipe(ignoreNotFound, whileBusy);
       yield* waitUntilGone(
         `netapp snapshot ${output.snapshotName}`,
         getSnapshot(where),

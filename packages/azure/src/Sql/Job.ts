@@ -208,14 +208,12 @@ export const JobProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        retryWhileAgentBusy(
-          sql.DeleteJob({
-            ...jobAgentPath(subscriptionId, output),
-            jobName: output.jobName,
-          }),
-        ),
-      );
+      yield* sql
+        .DeleteJob({
+          ...jobAgentPath(subscriptionId, output),
+          jobName: output.jobName,
+        })
+        .pipe(retryWhileAgentBusy, ignoreNotFound);
       yield* waitUntilGone(
         `sql elastic job ${output.jobName}`,
         getChild(subscriptionId, output, output.jobName),

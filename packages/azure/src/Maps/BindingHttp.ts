@@ -84,11 +84,11 @@ type Operation<I, A, E> = (input: I) => Effect.Effect<A, E>;
  * deploy and returns `operation` with the account's unique ID sent as
  * `x-ms-client-id`.
  */
-export const makeMapsOperationBinding = <I extends { xMsClientId?: string }, A, E>(options: {
+export const makeMapsOperationBinding = <I extends { xMsClientId?: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Maps.GetTimezoneByID`. */
   tag: string;
   /** The distilled `maps-*` operation; `xMsClientId` is injected. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
   /** Roles assigned on the account. */
   grants: readonly MapsGrant[];
 }) =>

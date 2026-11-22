@@ -61,7 +61,7 @@ test.provider(
       yield* stack.destroy();
       expect((yield* localContainer(name)).status).toBe("gone");
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:azure", "provider:azure:storage", "local"], timeout: 180_000 },
 );
 
 const remoteContainer = (resourceGroupName: string, accountName: string, containerName: string) =>
@@ -106,5 +106,5 @@ test.provider(
       );
       expect(after).toBe("gone");
     }),
-  { timeout: 300_000 },
+  { tags: ["provider:azure", "provider:azure:storage", "live"], timeout: 300_000 },
 );

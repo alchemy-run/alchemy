@@ -122,11 +122,12 @@ export const makeSearchIndexHttpBinding = <
   I extends { endpoint: string; indexName: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Search.SearchDocuments`. */
   tag: string;
   /** The distilled operation; the endpoint and index name are injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Roles assigned on the index. */
   grants: readonly SearchGrant[];
 }) =>

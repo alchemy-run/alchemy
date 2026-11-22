@@ -188,10 +188,12 @@ const toIdentity = (identity: JobAgentIdentity | undefined): sql.JobAgentIdentit
 
 const identityDiffers = (observed: sql.JobAgentIdentity | undefined, desired: JobAgentIdentity) => {
   if (lower(observed?.type ?? "None") !== lower(desired.type)) return true;
-  const want = (desired.userAssignedIdentityIds ?? []).map(lower).sort();
+  const want = (desired.userAssignedIdentityIds ?? [])
+    .map(lower)
+    .sort((x, y) => (x ?? "").localeCompare(y ?? ""));
   const have = Object.keys(observed?.userAssignedIdentities ?? {})
     .map(lower)
-    .sort();
+    .sort((x, y) => (x ?? "").localeCompare(y ?? ""));
   return want.join(",") !== have.join(",");
 };
 

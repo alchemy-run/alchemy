@@ -99,11 +99,11 @@ const GrantArmActionRoles = Effect.gen(function* () {
  * names); the deploy-time half assigns `role` on `scope` (and the `also`
  * grants).
  */
-export const makeArmActionBinding = <Res extends ResourceLike, Req, I, A, E>(options: {
+export const makeArmActionBinding = <Res extends ResourceLike, Req, I, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Logic.RunWorkflowTrigger`. */
   tag: string;
   /** The distilled ARM operation. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** The custom role assigned on `scope`. */
   role: ArmActionRole;
   /**

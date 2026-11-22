@@ -116,11 +116,11 @@ type Operation<I, A, E> = (input: I) => Effect.Effect<A, E>;
  * {@link LoadTest}'s data-plane endpoint, and the deploy-time half assigns
  * `grants` on the load test resource.
  */
-export const makeLoadTestHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeLoadTestHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.LoadTesting.GetTest`. */
   tag: string;
   /** The distilled operation; the endpoint is injected. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
   /** Roles assigned on the load test resource. */
   grants: readonly LoadTestingGrant[];
 }) =>
@@ -168,11 +168,12 @@ export const makePlaywrightWorkspaceHttpBinding = <
   I extends { endpoint: string; workspaceId: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.LoadTesting.ListPlaywrightTestRuns`. */
   tag: string;
   /** The distilled operation; the endpoint and workspace ID are injected. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
   /** Roles assigned on the workspace. */
   grants: readonly LoadTestingGrant[];
   /**

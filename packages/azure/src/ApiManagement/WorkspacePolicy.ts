@@ -92,7 +92,7 @@ export const WorkspacePolicyProvider = () =>
       apim.GetWorkspacePolicyResponse
     >({
       label: (key) => `API Management workspace policy ${key.workspaceName}`,
-      keyOf: (props, id, output) =>
+      keyOf: (props) =>
         Effect.gen(function* () {
           return {
             resourceGroup: props.resourceGroup,

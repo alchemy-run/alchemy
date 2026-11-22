@@ -306,7 +306,7 @@ export const ManagementGroupProvider = () =>
         }),
       );
       if (!gone) {
-        return yield* Effect.fail(new ManagementGroupDeleteNotSettled({ groupName: name }));
+        return yield* new ManagementGroupDeleteNotSettled({ groupName: name });
       }
     }),
   });

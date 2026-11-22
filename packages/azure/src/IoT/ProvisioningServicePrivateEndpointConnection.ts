@@ -340,14 +340,12 @@ export const ProvisioningServicePrivateEndpointConnectionProvider = () =>
         resourceGroupName: output.resourceGroup,
         resourceName: output.provisioningService,
       };
-      yield* ignoreNotFound(
-        retryWhileTransitioning(
-          dps.DeleteIotDpsResourcePrivateEndpointConnection({
-            ...parent,
-            privateEndpointConnectionName: output.privateEndpointConnectionName,
-          }),
-        ),
-      );
+      yield* dps
+        .DeleteIotDpsResourcePrivateEndpointConnection({
+          ...parent,
+          privateEndpointConnectionName: output.privateEndpointConnectionName,
+        })
+        .pipe(retryWhileTransitioning, ignoreNotFound);
       yield* waitUntilGone(
         `dps private endpoint connection ${output.privateEndpointConnectionName}`,
         getConnection(parent, output.privateEndpointConnectionName),

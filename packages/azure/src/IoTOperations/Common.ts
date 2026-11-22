@@ -207,7 +207,9 @@ export const childLifecycle = <
       };
       const scope = spec.scopeOf(news) as Record<string, unknown>;
       const scopeChanged = Object.keys(scope).some(
-        (field) => !sameId(String(scope[field] ?? ""), String(recorded[field] ?? "")),
+        // Scope fields are ARM names and IDs (strings).
+        (field) =>
+          !sameId(scope[field] as string | undefined, recorded[field] as string | undefined),
       );
       const nameChanged = news.name !== undefined && !sameId(news.name, String(recorded.name));
       const immutableChanged =

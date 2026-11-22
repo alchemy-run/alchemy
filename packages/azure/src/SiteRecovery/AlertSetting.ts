@@ -133,7 +133,7 @@ interface Where {
 }
 
 const getAlertSetting = (where: Where) =>
-  orUndefinedIfNotFound(retryWhileVaultRegistering(asr.GetReplicationAlertSettings(where)));
+  asr.GetReplicationAlertSettings(where).pipe(retryWhileVaultRegistering, orUndefinedIfNotFound);
 
 const desiredOf = (news: AlertSettingProps) => ({
   sendToOwners: news.sendToOwners ?? "DoNotSend",
@@ -253,21 +253,21 @@ export const AlertSettingProvider = () =>
       // No delete API: reset to the vault default (gone with the vault).
       const observed = yield* getAlertSetting(where);
       if (observed === undefined) return;
-      yield* ignoreNotFound(
-        retryWhileVaultRegistering(
-          asr.CreateReplicationAlertSettings({
-            ...where,
-            properties: desiredOf({
-              resourceGroup: output.resourceGroup,
-              vault: output.vault,
-            }),
+      yield* asr
+        .CreateReplicationAlertSettings({
+          ...where,
+          properties: desiredOf({
+            resourceGroup: output.resourceGroup,
+            vault: output.vault,
           }),
-        ),
-      ).pipe(
-        // Once the vault's last fabric is unregistered the setting can no
-        // longer be written, and no alerts can fire: nothing to reset.
-        ignoreNoRegisteredServers,
-      );
+        })
+        .pipe(
+          retryWhileVaultRegistering,
+          ignoreNotFound,
+          // Once the vault's last fabric is unregistered the setting can no
+          // longer be written, and no alerts can fire: nothing to reset.
+          ignoreNoRegisteredServers,
+        );
     }),
 
     nuke: {

@@ -82,11 +82,11 @@ const hostOf = (endpoint: string) => endpoint.replace(/^https?:\/\//, "").split(
  * {@link Topic}'s hostname, and the deploy-time half assigns `grants` on the
  * topic.
  */
-export const makeTopicHttpBinding = <I extends { topicHostname: string }, A, E>(options: {
+export const makeTopicHttpBinding = <I extends { topicHostname: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.EventGrid.PublishEventGridEvents`. */
   tag: string;
   /** The distilled operation; the topic hostname is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Roles assigned on the topic. */
   grants: readonly EventGridGrant[];
 }) =>
@@ -124,11 +124,12 @@ export const makeNamespaceTopicHttpBinding = <
   I extends { endpoint: string; topicName: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.EventGrid.PublishCloudEvents`. */
   tag: string;
   /** The distilled operation; the namespace endpoint and topic name are injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Roles assigned on the namespace topic. */
   grants: readonly EventGridGrant[];
 }) =>
@@ -161,11 +162,12 @@ export const makeSubscriptionHttpBinding = <
   I extends { endpoint: string; topicName: string; eventSubscriptionName: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.EventGrid.ReceiveCloudEvents`. */
   tag: string;
   /** The distilled operation; the subscription's identifiers are injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Roles assigned on the event subscription. */
   grants: readonly EventGridGrant[];
 }) =>

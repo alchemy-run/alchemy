@@ -96,11 +96,12 @@ export const makeArmActionBinding = <
   I,
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.DataFactory.RunPipeline`. */
   tag: string;
   /** The distilled operation. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** The custom role assigned on the bound resource. */
   role: ArmActionRole;
   /** ARM ID the action runs on: the role's scope and the request's identifiers. */

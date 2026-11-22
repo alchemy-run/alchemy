@@ -195,8 +195,9 @@ export const StaticSite = (id: string, props: StaticSiteProps) =>
         cwd: props.dev.cwd ?? props.cwd,
         env: props.dev.env ?? props.env,
       }).pipe(Namespace.push(id));
-      return localWebsite(
-        Output.map((detected: string | undefined) => detected ?? props.dev?.url)(dev.url),
+      return dev.url.pipe(
+        Output.map((detected: string | undefined) => detected ?? props.dev?.url),
+        localWebsite,
       );
     }
 

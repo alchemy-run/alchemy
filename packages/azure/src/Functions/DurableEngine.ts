@@ -10,6 +10,7 @@ import {
 } from "alchemy/WorkflowEncoding";
 import { type Implemented, implemented } from "alchemy/Workflows";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -265,7 +266,7 @@ export const makeHubCalls = (ops: Ops, scheduler: Scheduler, taskHub: TaskHub) =
     ) =>
       Effect.gen(function* () {
         const target = yield* where;
-        const timestamp = yield* Effect.sync(() => new Date().toISOString());
+        const timestamp = DateTime.formatIso(yield* DateTime.now);
         return yield* ops
           .addEvents({ ...target, events: { [instanceId]: { eventId: -1, timestamp, ...event } } })
           .pipe(Effect.retry(whileRolePropagates));
@@ -350,7 +351,7 @@ const readResult = (calls: HubCalls, workflow: Workflow.AnyWithProps, instanceId
           exit: Exit.die(new Error(`Workflow run ${instanceId} failed: ${instance.failure ?? ""}`)),
         });
       default:
-        return new Workflow.Suspended({});
+        return Workflow.Suspended.make({});
     }
   });
 
@@ -664,7 +665,7 @@ export const makeEngine = (options: {
         yield* calls.start(workflow._tag, instanceId, input);
         if (opts.discard) return undefined;
         const result = yield* readResult(calls, typed, instanceId);
-        return result ?? new Workflow.Suspended({});
+        return result ?? Workflow.Suspended.make({});
       }) as Effect.Effect<any>,
 
     poll: (workflow, executionId) =>
@@ -784,7 +785,9 @@ export const makeEngine = (options: {
                 replay.sequence++;
                 replay.actions.push({
                   actionType: ActionType.CreateTimer,
-                  fireAt: new Date(replay.now + Duration.toMillis(duration)).toISOString(),
+                  fireAt: DateTime.formatIso(
+                    DateTime.makeUnsafe(replay.now + Duration.toMillis(duration)),
+                  ),
                   isCanceled: false,
                 });
                 return yield* freeze(replay);

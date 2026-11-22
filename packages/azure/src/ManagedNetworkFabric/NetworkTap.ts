@@ -22,7 +22,6 @@ import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
 import {
   createFabricName,
-  differs,
   FABRIC_NAMESPACE,
   propertyDelta,
   sameArm,

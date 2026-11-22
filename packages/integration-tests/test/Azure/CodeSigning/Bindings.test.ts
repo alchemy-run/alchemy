@@ -27,7 +27,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
 const live =
   runPaidOnly && Object.values(SIGNING_ENV).every((name) => process.env[name] !== undefined);
 
-describe("Artifact Signing request encoding", { tags: ["provider:azure"] }, () => {
+describe("Artifact Signing request encoding", { tags: ["unit", "provider:azure"] }, () => {
   /** Capture the one request an operation sends, with a token per audience. */
   const captured = <A, E>(operation: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>) =>
     Effect.gen(function* () {

@@ -144,7 +144,7 @@ export interface Database extends Resource<
 export const Database = GroupedResource<Database>("Azure.MySQL.Database");
 
 export class ReservedDatabaseName extends Data.TaggedError("Azure.MySQL.ReservedDatabaseName")<{
-  readonly name: string;
+  readonly databaseName: string;
   readonly message: string;
 }> {}
 
@@ -230,7 +230,7 @@ export const DatabaseProvider = () =>
       const databaseName = news.name ?? output?.databaseName ?? (yield* createDatabaseName(id));
       if (RESERVED.has(databaseName)) {
         return yield* new ReservedDatabaseName({
-          name: databaseName,
+          databaseName,
           message: `'${databaseName}' is a built-in database and cannot be managed`,
         });
       }

@@ -62,7 +62,7 @@ const parseResourceId = (resourceId: string) => {
 };
 
 /** A distilled operation, resolved with the host's credentials. */
-type Operation<I, A, E> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+type Operation<I, A, E, R> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 
 type ContainerGroupKeys = "subscriptionId" | "resourceGroupName" | "containerGroupName";
 
@@ -76,11 +76,12 @@ export const makeContainerGroupActionBinding = <
   I extends { subscriptionId: string; resourceGroupName: string; containerGroupName: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.ContainerInstance.StartContainerGroup`. */
   tag: string;
   /** The distilled operation; the group's identifiers are injected. */
-  operation: Operation<I, A, E>;
+  operation: Operation<I, A, E, R>;
   /** Custom role assigned on the group. */
   grant: ContainerInstanceGrant;
 }) =>

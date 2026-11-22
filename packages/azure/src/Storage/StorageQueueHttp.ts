@@ -185,7 +185,7 @@ export interface QueueServiceAddress {
 type QueueTarget = { url: string; queueName: string };
 
 /** A distilled operation resolved with the host's credentials. */
-type Operation<I, A, E> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+type Operation<I, A, E, R> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 
 /** Bind `op` to a queue: the callable injects the queue's `url` and `queueName`. */
 const onQueue =
@@ -221,11 +221,11 @@ const queueAddress = (tag: string, queue: Queue) =>
  * callable injects the bound {@link Queue}'s `url` and `queueName`, and the
  * deploy-time half assigns `grant` on the queue.
  */
-export const makeQueueOperationBinding = <I extends QueueTarget, A, E>(options: {
+export const makeQueueOperationBinding = <I extends QueueTarget, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Storage.SendQueueMessage`. */
   tag: string;
   /** The distilled `storage-queue` operation. */
-  operation: Operation<I, A, E>;
+  operation: Operation<I, A, E, R>;
   grant: QueueGrant;
 }) =>
   Effect.gen(function* () {
@@ -245,11 +245,11 @@ export const makeQueueOperationBinding = <I extends QueueTarget, A, E>(options: 
  * `-secondary` one when `secondary`), and the deploy-time half assigns
  * `grant` on the account.
  */
-export const makeQueueServiceOperationBinding = <I extends { url: string }, A, E>(options: {
+export const makeQueueServiceOperationBinding = <I extends { url: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Storage.ListQueues`. */
   tag: string;
   /** The distilled `storage-queue` operation. */
-  operation: Operation<I, A, E>;
+  operation: Operation<I, A, E, R>;
   grant: QueueGrant;
   /** Call the read-access geo-redundant secondary endpoint. */
   secondary?: boolean;

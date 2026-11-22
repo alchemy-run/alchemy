@@ -806,12 +806,13 @@ export const AccountProvider = () =>
         cognitiveservices.DeleteAccount(where).pipe(
           // Tearing down a managed network outlives the ARM gateway; the
           // delete continues server-side and waitUntilGone observes it.
-          Effect.catchTag("GatewayTimeout", () => Effect.void),
-          Effect.catchTag("CognitiveServicesRequestConflict", (error) =>
-            Effect.flatMap(alreadyDeleting, (deleting) =>
-              deleting ? Effect.void : Effect.fail(error),
-            ),
-          ),
+          Effect.catchTags({
+            GatewayTimeout: () => Effect.void,
+            CognitiveServicesRequestConflict: (error) =>
+              Effect.flatMap(alreadyDeleting, (deleting) =>
+                deleting ? Effect.void : Effect.fail(error),
+              ),
+          }),
           Effect.retry(whileAccountBusy),
         ),
       );

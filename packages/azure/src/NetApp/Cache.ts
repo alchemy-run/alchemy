@@ -504,7 +504,7 @@ export const CacheProvider = () =>
         poolName: output.pool,
         cacheName: output.cacheName,
       };
-      yield* whileBusy(ignoreNotFound(netapp.DeleteCach(where)));
+      yield* netapp.DeleteCach(where).pipe(ignoreNotFound, whileBusy);
       yield* waitUntilGone(`netapp cache ${output.cacheName}`, getCache(where), LRO_BUDGET);
     }),
 

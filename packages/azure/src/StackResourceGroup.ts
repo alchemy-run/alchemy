@@ -233,7 +233,7 @@ export const GroupedResource = <R extends ResourceLike>(
     (...args: [id: string, props: unknown] | [methods: object]) =>
       typeof args[0] === "object" ? Object.assign(cls, args[0]) : construct(args[0], args[1]),
     base,
-    Effectable.Prototype({
+    Effectable.Prototype<Effect.Effect<typeof construct>>({
       label: `Resource<${type}>`,
       evaluate: () => Effect.succeed(construct),
     }),

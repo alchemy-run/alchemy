@@ -332,17 +332,15 @@ export const BackupProtectionIntentProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        retryWhileConfiguring(
-          backup.DeleteProtectionIntent({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            vaultName: output.vault,
-            fabricName: BACKUP_FABRIC,
-            intentObjectName: output.intentObjectName,
-          }),
-        ),
-      );
+      yield* backup
+        .DeleteProtectionIntent({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          vaultName: output.vault,
+          fabricName: BACKUP_FABRIC,
+          intentObjectName: output.intentObjectName,
+        })
+        .pipe(retryWhileConfiguring, ignoreNotFound);
       yield* waitUntilGone(
         `backup protection intent ${output.intentObjectName}`,
         getIntent(subscriptionId, output.resourceGroup, output.vault, output.intentObjectName),

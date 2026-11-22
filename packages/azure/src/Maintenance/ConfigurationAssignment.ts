@@ -459,7 +459,7 @@ const GraphAssignments = Schema.Array(
   Schema.Struct({
     id: Schema.String,
     name: Schema.String,
-    location: Schema.optional(Schema.NullOr(Schema.String)),
+    location: Schema.String.pipe(Schema.NullOr, Schema.optional),
     properties: Schema.optional(
       Schema.Struct({
         resourceId: Schema.optional(Schema.String),

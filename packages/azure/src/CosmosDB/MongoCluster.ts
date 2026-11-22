@@ -324,8 +324,9 @@ const connectionStringOf = (
   const host = hostOf(template);
   const query = template.split("?")[1];
   return Redacted.make(
-    `mongodb+srv://${encodeURIComponent(user)}:${encodeURIComponent(
-      Redacted.value(password),
+    `mongodb+srv://${encodeURIComponent(user)}:${password.pipe(
+      Redacted.value,
+      encodeURIComponent,
     )}@${host}/${query ? `?${query}` : ""}`,
   );
 };

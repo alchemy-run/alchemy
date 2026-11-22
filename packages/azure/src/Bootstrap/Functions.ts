@@ -50,7 +50,7 @@ export const bootstrap = async (entrypoint: unknown): Promise<void> => {
       ),
     ),
   );
-  await Effect.runPromise(Deferred.await(initialized));
+  await initialized.pipe(Deferred.await, Effect.runPromise);
 
   const registry = functionRegistry();
   if (registry.http !== undefined) {

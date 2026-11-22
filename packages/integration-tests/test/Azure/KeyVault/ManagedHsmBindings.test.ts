@@ -75,7 +75,7 @@ const accepted = (body: unknown) =>
     headers: { "Azure-AsyncOperation": `${HSM_URL}/backup/job-1/pending`, "Retry-After": "10" },
   });
 
-describe("Managed HSM data plane encoding", { tags: ["provider:azure"] }, () => {
+describe("Managed HSM data plane encoding", { tags: ["unit", "provider:azure"] }, () => {
   test(
     "FullBackup asks for a Managed HSM token and decodes the 202 job body",
     Effect.gen(function* () {

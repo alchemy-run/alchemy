@@ -7,6 +7,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Config from "effect/Config";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import {
   collectAll,
@@ -237,10 +238,9 @@ const resourceGroupScope = (scope: string) =>
 /** `YYYY-MM-DD` part of a date or ISO timestamp. */
 const dateOf = (value: string | undefined) => value?.slice(0, 10);
 
-const firstOfMonth = Effect.sync(() => {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-01`;
-});
+const firstOfMonth = DateTime.now.pipe(
+  Effect.map((now) => `${DateTime.formatIso(now).slice(0, 7)}-01`),
+);
 
 const getBudget = (scope: string, name: string) =>
   orUndefinedIfNotFound(consumption.GetBudget({ scope, budgetName: name }));

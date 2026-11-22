@@ -65,11 +65,11 @@ export const onEventHub = <I, A, E>(
  * Build a per-operation binding: assigns Data Sender on the event hub at
  * deploy and returns `operation` with the hub's namespace and name filled in.
  */
-export const makeEventHubOperationBinding = <I, A, E>(options: {
+export const makeEventHubOperationBinding = <I, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.EventHub.SendEvent`. */
   tag: string;
   /** The distilled `eventhubs-messaging` operation. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
     const grantOnEventHub = yield* GrantOnEventHub;

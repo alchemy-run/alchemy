@@ -336,7 +336,7 @@ export const AutomationAccountProvider = () =>
           Effect.catchTag("AutomationAccountRegionLimit", (error) =>
             Effect.gen(function* () {
               const deleted = yield* findDeletedAccount(subscriptionId, resourceGroup, name);
-              if (deleted === undefined) return yield* Effect.fail(error);
+              if (deleted === undefined) return yield* error;
               return yield* create(deleted);
             }),
           ),

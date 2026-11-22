@@ -295,16 +295,14 @@ export const BackupPolicyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* whileBusy(
-        ignoreNotFound(
-          netapp.DeleteBackupPolicy({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            accountName: output.account,
-            backupPolicyName: output.backupPolicyName,
-          }),
-        ),
-      );
+      yield* netapp
+        .DeleteBackupPolicy({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          accountName: output.account,
+          backupPolicyName: output.backupPolicyName,
+        })
+        .pipe(ignoreNotFound, whileBusy);
       yield* waitUntilGone(
         `backup policy ${output.backupPolicyName}`,
         getBackupPolicy(

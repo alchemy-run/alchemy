@@ -111,11 +111,11 @@ const openAIHostOf = (account: Account) =>
  * (`https://{endpoint}/openai`) and the full URL for the authoring module
  * (`{endpoint}/openai`).
  */
-export const makeOpenAIHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeOpenAIHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.CognitiveServices.OpenAICreateChatCompletion`. */
   tag: string;
   /** The distilled operation; the account endpoint is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** How the operation takes the endpoint. */
   endpoint: "host" | "url";
   /** Roles assigned on the account. */

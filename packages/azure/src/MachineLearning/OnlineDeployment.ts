@@ -407,15 +407,13 @@ export const OnlineDeploymentProvider = () =>
               const content = result._tag === "Success" ? result.success.content : undefined;
               if (content) logs.push(`[${containerType}] ${content}`);
             }
-            return yield* Effect.fail(
-              logs.length === 0
-                ? failure
-                : new ProvisioningFailed({
-                    resource: failure.resource,
-                    state: failure.state,
-                    message: `${failure.message}\n${logs.join("\n")}`,
-                  }),
-            );
+            return yield* logs.length === 0
+              ? failure
+              : new ProvisioningFailed({
+                  resource: failure.resource,
+                  state: failure.state,
+                  message: `${failure.message}\n${logs.join("\n")}`,
+                });
           }),
         ),
       );

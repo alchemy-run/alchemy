@@ -28,7 +28,6 @@ import {
   identityInSync,
   NEXUS_NAMESPACE,
   NEXUS_SLOW_BUDGET,
-  propertyDelta,
   sameArm,
   secretsDiffer,
   waitNexusProvisioned,

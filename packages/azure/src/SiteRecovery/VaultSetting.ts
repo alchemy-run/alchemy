@@ -123,7 +123,7 @@ interface Where {
 }
 
 const getVaultSetting = (where: Where) =>
-  orUndefinedIfNotFound(retryWhileVaultRegistering(asr.GetReplicationVaultSetting(where)));
+  asr.GetReplicationVaultSetting(where).pipe(retryWhileVaultRegistering, orUndefinedIfNotFound);
 
 /** Whether every field the user set has the desired value in Azure. */
 const matches = (observed: Observed | undefined, news: VaultSettingProps) =>

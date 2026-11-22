@@ -110,7 +110,7 @@ export const WorkspaceDiagnosticProvider = () =>
       apim.GetWorkspaceDiagnosticResponse
     >({
       label: (key) => `API Management workspace diagnostic ${key.diagnosticName}`,
-      keyOf: (props, id, output) =>
+      keyOf: (props) =>
         Effect.gen(function* () {
           return {
             resourceGroup: props.resourceGroup,

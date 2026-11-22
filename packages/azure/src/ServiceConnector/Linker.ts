@@ -21,7 +21,6 @@ import {
   observedDiffers,
   targetEndpointOf,
   targetIdOf,
-  targetChanged,
   toLinkerInput,
 } from "./ConnectionProperties.ts";
 

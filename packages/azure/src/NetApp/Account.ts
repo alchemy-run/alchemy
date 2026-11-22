@@ -404,15 +404,13 @@ export const AccountProvider = () =>
       const { subscriptionId } = yield* AzureEnvironment.current;
       // Pools, policies, and vaults drain asynchronously; the account delete
       // is rejected until they are gone.
-      yield* whileBusy(
-        ignoreNotFound(
-          netapp.DeleteAccount({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            accountName: output.accountName,
-          }),
-        ),
-      );
+      yield* netapp
+        .DeleteAccount({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          accountName: output.accountName,
+        })
+        .pipe(ignoreNotFound, whileBusy);
       yield* waitUntilGone(
         `netapp account ${output.accountName}`,
         getAccount(subscriptionId, output.resourceGroup, output.accountName),

@@ -725,9 +725,7 @@ const connectionStringOf = (
 ) =>
   login !== undefined && password !== undefined && fqdn
     ? Redacted.make(
-        `mysql://${encodeURIComponent(login)}:${encodeURIComponent(
-          Redacted.value(password),
-        )}@${fqdn}:${port}/?ssl-mode=REQUIRED`,
+        `mysql://${encodeURIComponent(login)}:${password.pipe(Redacted.value, encodeURIComponent)}@${fqdn}:${port}/?ssl-mode=REQUIRED`,
       )
     : undefined;
 

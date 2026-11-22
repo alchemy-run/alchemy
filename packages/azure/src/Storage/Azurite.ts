@@ -156,8 +156,8 @@ const docker = (args: ReadonlyArray<string>) =>
       const handle = yield* spawner.spawn(ChildProcess.make("docker", [...args]));
       const [stdout, stderr, exitCode] = yield* Effect.all(
         [
-          Stream.mkString(Stream.decodeText(handle.stdout)),
-          Stream.mkString(Stream.decodeText(handle.stderr)),
+          handle.stdout.pipe(Stream.decodeText, Stream.mkString),
+          handle.stderr.pipe(Stream.decodeText, Stream.mkString),
           handle.exitCode,
         ],
         { concurrency: "unbounded" },
@@ -184,7 +184,7 @@ const docker = (args: ReadonlyArray<string>) =>
 const isServing = (endpoints: AzuriteEndpoints) =>
   onEmulator(blob.GetServiceProperties({ url: sasUrl(endpoints.blob, endpoints.sas) })).pipe(
     Effect.as(true),
-    Effect.catch(() => Effect.succeed(false)),
+    Effect.orElseSucceed(() => false),
   );
 
 const waitUntilServing = (endpoints: AzuriteEndpoints) =>

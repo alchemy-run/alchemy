@@ -74,8 +74,12 @@ export const sameList = (
   desired: readonly string[] | undefined,
 ) =>
   desired === undefined ||
-  JSON.stringify([...(observed ?? [])].map((v) => lower(v)).sort()) ===
-    JSON.stringify([...desired].map((v) => lower(v)).sort());
+  JSON.stringify(
+    [...(observed ?? [])].map((v) => lower(v)).sort((x, y) => (x ?? "").localeCompare(y ?? "")),
+  ) ===
+    JSON.stringify(
+      [...desired].map((v) => lower(v)).sort((x, y) => (x ?? "").localeCompare(y ?? "")),
+    );
 
 /** Location of a server-level setting or child. */
 export interface ServerScope {

@@ -137,11 +137,11 @@ type Operation<I, A, E> = (input: I) => Effect.Effect<A, E>;
  * the bound account's endpoint (plus `path`), and the deploy-time half
  * assigns `grant` on the account.
  */
-export const makeCognitiveHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeCognitiveHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.CognitiveServices.TranslateText`. */
   tag: string;
   /** The distilled operation; the endpoint is injected. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
   /** Data-plane path under the account endpoint. */
   path: string;
   /** Role assigned on the account. */

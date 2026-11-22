@@ -275,15 +275,13 @@ export const AzureTrafficCollectorProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        retryWhileCollectorBusy(
-          networkfunction.DeleteAzureTrafficCollector({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            azureTrafficCollectorName: output.azureTrafficCollectorName,
-          }),
-        ),
-      );
+      yield* networkfunction
+        .DeleteAzureTrafficCollector({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          azureTrafficCollectorName: output.azureTrafficCollectorName,
+        })
+        .pipe(retryWhileCollectorBusy, ignoreNotFound);
       yield* waitUntilGone(
         `Azure Traffic Collector ${output.azureTrafficCollectorName}`,
         getCollector(subscriptionId, output.resourceGroup, output.azureTrafficCollectorName),

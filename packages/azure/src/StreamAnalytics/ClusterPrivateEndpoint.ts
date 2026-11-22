@@ -169,8 +169,14 @@ export const ClusterPrivateEndpointProvider = () =>
         lower(news.cluster) !== lower(output.cluster) ||
         (news.name !== undefined && lower(news.name) !== lower(output.privateEndpointName)) ||
         lower(news.privateLinkServiceId) !== lower(output.privateLinkServiceId) ||
-        [...news.groupIds].map(lower).sort().join(",") !==
-          [...output.groupIds].map(lower).sort().join(",")
+        [...news.groupIds]
+          .map(lower)
+          .sort((x, y) => (x ?? "").localeCompare(y ?? ""))
+          .join(",") !==
+          [...output.groupIds]
+            .map(lower)
+            .sort((x, y) => (x ?? "").localeCompare(y ?? ""))
+            .join(",")
       ) {
         return { action: "replace" } as const;
       }

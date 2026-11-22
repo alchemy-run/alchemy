@@ -107,11 +107,11 @@ const GrantOnWorkspace: Effect.Effect<GrantOnWorkspace> = Effect.gen(function* (
  * (`https://{workspace}.dev.azuresynapse.net`), and the deploy-time half
  * assigns `grant` on the workspace.
  */
-export const makeLakeDatabaseHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeLakeDatabaseHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Synapse.GetDatabase`. */
   tag: string;
   /** The distilled operation; the endpoint is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Synapse role assigned on the workspace. */
   grant: LakeDatabaseGrant;
 }) =>

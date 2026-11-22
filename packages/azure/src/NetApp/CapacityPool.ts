@@ -320,16 +320,14 @@ export const CapacityPoolProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* whileBusy(
-        ignoreNotFound(
-          netapp.DeletePool({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            accountName: output.account,
-            poolName: output.poolName,
-          }),
-        ),
-      );
+      yield* netapp
+        .DeletePool({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          accountName: output.account,
+          poolName: output.poolName,
+        })
+        .pipe(ignoreNotFound, whileBusy);
       yield* waitUntilGone(
         `capacity pool ${output.poolName}`,
         getPool(subscriptionId, output.resourceGroup, output.account, output.poolName),

@@ -651,15 +651,13 @@ export const ProvisioningServiceProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        retryWhileTransitioning(
-          dps.DeleteIotDpsResource({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            provisioningServiceName: output.provisioningServiceName,
-          }),
-        ),
-      );
+      yield* dps
+        .DeleteIotDpsResource({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          provisioningServiceName: output.provisioningServiceName,
+        })
+        .pipe(retryWhileTransitioning, ignoreNotFound);
       yield* waitUntilGone(
         `provisioning service ${output.provisioningServiceName}`,
         getProvisioningService(

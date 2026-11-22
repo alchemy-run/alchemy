@@ -1,5 +1,4 @@
 import type * as guestconfiguration from "@distilled.cloud/azure/guestconfiguration";
-import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 
@@ -132,7 +131,7 @@ const canonical = (value: Record<string, string> | undefined) =>
   );
 
 const protectedKey = (value: Redacted.Redacted<Record<string, string>> | undefined) =>
-  value === undefined ? undefined : canonical(Redacted.value(value));
+  value === undefined ? undefined : value.pipe(Redacted.value, canonical);
 
 const toParameterList = (params: Record<string, string> | undefined) =>
   params === undefined

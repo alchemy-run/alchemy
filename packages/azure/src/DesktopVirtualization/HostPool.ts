@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -416,9 +417,9 @@ export const HostPoolProvider = () =>
           !!info.token && !!info.expirationTime && Date.parse(info.expirationTime) > now + HOUR;
         token = yield* desktopvirtualization.GetHostPoolRegistrationToken(request);
         if (!isValid(token)) {
-          const expirationTime = new Date(
-            now + news.registrationTokenTtlHours * HOUR,
-          ).toISOString();
+          const expirationTime = DateTime.formatIso(
+            DateTime.makeUnsafe(now + news.registrationTokenTtlHours * HOUR),
+          );
           yield* desktopvirtualization.UpdateHostPool({
             ...request,
             properties: {

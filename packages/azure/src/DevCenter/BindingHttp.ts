@@ -188,11 +188,12 @@ export const makeProjectHttpBinding = <
   I extends { endpoint: string; projectName: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.DevCenter.ListPools`. */
   tag: string;
   /** The distilled operation; the endpoint and project name are injected. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
   /** Roles assigned on the project. */
   grants: readonly DevCenterGrant[];
 }) =>
@@ -223,11 +224,12 @@ export const makeProjectUserHttpBinding = <
   I extends { endpoint: string; projectName: string; userId: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.DevCenter.ListDevBoxes`. */
   tag: string;
   /** The distilled operation; the endpoint, project name and user are injected. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
   /** Roles assigned on the project. */
   grants: readonly DevCenterGrant[];
 }) =>

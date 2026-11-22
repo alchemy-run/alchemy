@@ -194,11 +194,11 @@ type ContainerScoped = { url: string; containerName: string };
  * callable injects the bound container's `url` and `containerName`, and the
  * deploy-time half assigns `role` on the container.
  */
-export const makeBlobContainerOpBinding = <I extends ContainerScoped, A, E>(options: {
+export const makeBlobContainerOpBinding = <I extends ContainerScoped, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Storage.DownloadBlob`. */
   tag: string;
   /** The distilled `storage-blob` operation. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** The role assigned on the container. */
   role: BlobRole;
 }) =>
@@ -222,11 +222,11 @@ export const makeBlobContainerOpBinding = <I extends ContainerScoped, A, E>(opti
  * endpoint as `url` (its `-secondary` endpoint for `secondary`), and the
  * deploy-time half assigns `role` on the account.
  */
-export const makeBlobServiceOpBinding = <I extends { url: string }, A, E>(options: {
+export const makeBlobServiceOpBinding = <I extends { url: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Storage.ListBlobContainers`. */
   tag: string;
   /** The distilled `storage-blob` operation. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** The role assigned on the account. */
   role: BlobRole;
   /** Call the read-access geo-redundant secondary endpoint. */

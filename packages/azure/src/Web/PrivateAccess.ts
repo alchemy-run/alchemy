@@ -142,7 +142,7 @@ const fingerprint = (properties: web.PrivateAccessProperties | undefined) =>
         (vnet) =>
           `${lower(vnet.resourceId)}:${(vnet.subnets ?? [])
             .map((subnet) => lower(subnet.name))
-            .sort()
+            .sort((x, y) => (x ?? "").localeCompare(y ?? ""))
             .join(",")}`,
       )
       .sort(),

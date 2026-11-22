@@ -100,7 +100,7 @@ export const ensureRegistered = (subscriptionId: string, namespace: string) =>
 /** Ignore a not-found failure of an Azure operation (idempotent deletes). */
 export const ignoreNotFound = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E | AzureOpError, R>,
-) => Effect.asVoid(orUndefinedIfNotFound(effect));
+) => effect.pipe(orUndefinedIfNotFound, Effect.asVoid);
 
 export class ProvisioningFailed extends Data.TaggedError("Azure.ProvisioningFailed")<{
   readonly resource: string;

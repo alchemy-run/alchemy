@@ -341,8 +341,9 @@ const connectionStringOf = (
 ) =>
   login !== undefined && password !== undefined && fqdn
     ? Redacted.make(
-        `postgresql://${encodeURIComponent(login)}:${encodeURIComponent(
-          Redacted.value(password),
+        `postgresql://${encodeURIComponent(login)}:${password.pipe(
+          Redacted.value,
+          encodeURIComponent,
         )}@${fqdn}:5432/citus?sslmode=require`,
       )
     : undefined;

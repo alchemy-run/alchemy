@@ -269,18 +269,16 @@ export const TrafficControllerProvider = () =>
         label,
         get,
         (controller) => controller.properties?.provisioningState,
-        Effect.gen(function* () {
-          yield* servicenetworking.TrafficControllerInterfaceCreateOrUpdate({
-            ...where,
-            location,
-            tags,
-            properties:
-              news.securityPolicyConfigurations === undefined
-                ? undefined
-                : {
-                    securityPolicyConfigurations: toPolicyInput(desiredPolicies),
-                  },
-          });
+        servicenetworking.TrafficControllerInterfaceCreateOrUpdate({
+          ...where,
+          location,
+          tags,
+          properties:
+            news.securityPolicyConfigurations === undefined
+              ? undefined
+              : {
+                  securityPolicyConfigurations: toPolicyInput(desiredPolicies),
+                },
         }),
         AGC_BUDGET,
       );

@@ -506,7 +506,7 @@ export const VolumeGroupProvider = () =>
             poolName: pool,
             volumeName: name,
           };
-          yield* whileBusy(ignoreNotFound(netapp.DeleteVolume(target)));
+          yield* netapp.DeleteVolume(target).pipe(ignoreNotFound, whileBusy);
           yield* waitUntilGone(
             `netapp volume ${name}`,
             getVolume(subscriptionId, resourceGroup, account, pool, name),
@@ -515,7 +515,7 @@ export const VolumeGroupProvider = () =>
         }),
         { concurrency: "unbounded" },
       );
-      yield* whileBusy(ignoreNotFound(netapp.DeleteVolumeGroup(where)));
+      yield* netapp.DeleteVolumeGroup(where).pipe(ignoreNotFound, whileBusy);
       yield* waitUntilGone(
         `volume group ${output.volumeGroupName}`,
         getVolumeGroup(where),

@@ -21,7 +21,7 @@ import {
 import { AzureEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { GroupedResource } from "../StackResourceGroup.ts";
-import { AGC_BUDGET, childLocation, createAgcName, ensureProvisioned, sameArm } from "./Common.ts";
+import { childLocation, createAgcName, ensureProvisioned, sameArm } from "./Common.ts";
 
 export interface AssociationProps {
   /**

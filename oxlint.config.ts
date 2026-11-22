@@ -219,6 +219,12 @@ export default defineConfig({
         "packages/aws/src/Lambda/MicrovmProvider.ts",
         "packages/aws/src/Lambda/MicrovmRuntimeContext.ts",
         "packages/aws/src/StepFunctions/Asl/simulate.ts",
+        "packages/azure/src/AzureBindings.ts",
+        "packages/azure/src/ContainerApps/JobEventSources.ts",
+        "packages/azure/src/Functions/DurableEngine.ts",
+        "packages/azure/src/Functions/host/internal.ts",
+        "packages/azure/src/Providers.ts",
+        "packages/azure/src/StackResourceGroup.ts",
         "packages/cloudflare/src/Containers/ContainerPlatform.ts",
         "packages/cloudflare/src/LocalGateway.ts",
         "packages/cloudflare/src/Workers/Rpc.ts",
@@ -238,6 +244,13 @@ export default defineConfig({
         "packages/rivet/src/**",
       ],
       rules: { "effecttsgo/any-unknown-in-error-context": "off" },
+    },
+    {
+      // The Container Apps schedule loop runs the handler under the app's
+      // context, not its init context, so its requirements are cast away
+      // where it starts (see the comment in the file).
+      files: ["packages/azure/src/ContainerApps/AppEventSources.ts"],
+      rules: { "effecttsgo/unsafe-effect-type-assertion": "off" },
     },
     {
       // MCP servers are reached through Effect AI's `McpClient`, which Effect

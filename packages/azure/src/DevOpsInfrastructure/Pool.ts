@@ -700,15 +700,13 @@ export const PoolProvider = () =>
       // interrupted destroy) is rejected with a generic BadRequest, so only
       // issue it when no delete is in flight.
       if (existing.properties?.provisioningState !== "Deleting") {
-        yield* ignoreNotFound(
-          retryConflict(
-            mdp.DeletePool({
-              subscriptionId,
-              resourceGroupName: output.resourceGroup,
-              poolName: output.poolName,
-            }),
-          ),
-        );
+        yield* mdp
+          .DeletePool({
+            subscriptionId,
+            resourceGroupName: output.resourceGroup,
+            poolName: output.poolName,
+          })
+          .pipe(retryConflict, ignoreNotFound);
       }
       yield* waitUntilGone(
         `managed devops pool ${output.poolName}`,

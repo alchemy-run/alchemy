@@ -409,7 +409,7 @@ test.provider(
       });
       expect(observed.properties?.provisioningState).toEqual("Succeeded");
     }),
-  { timeout: 600_000 },
+  { tags: ["provider:azure", "provider:azure:web", "live"], timeout: 600_000 },
 );
 
 test.provider(
@@ -421,7 +421,7 @@ test.provider(
       const body = JSON.parse(yield* fetchOk(`${out.url}/blob?key=${key}&value=from-function-app`));
       expect(body).toEqual({ ok: true, result: { text: "from-function-app" } });
     }),
-  { timeout: 600_000 },
+  { tags: ["provider:azure", "provider:azure:web", "live"], timeout: 600_000 },
 );
 
 test.provider(
@@ -442,7 +442,7 @@ test.provider(
       expect(Date.parse(recorded.at)).toBeGreaterThanOrEqual(since);
       expect(recorded.isPastDue).toBe(false);
     }),
-  { timeout: 600_000 },
+  { tags: ["provider:azure", "provider:azure:web", "live"], timeout: 600_000 },
 );
 
 test.provider(
@@ -455,7 +455,7 @@ test.provider(
       const recorded = JSON.parse(yield* pollOk(`${out.url}/result?key=queue/${id}`));
       expect(recorded.dequeueCount).toEqual(1);
     }),
-  { timeout: 600_000 },
+  { tags: ["provider:azure", "provider:azure:web", "live"], timeout: 600_000 },
 );
 
 test.provider(
@@ -468,7 +468,7 @@ test.provider(
       const recorded = JSON.parse(yield* pollOk(`${out.url}/result?key=blob/${id}`));
       expect(recorded.url).toMatch(new RegExp(`/blob/${id}$`));
     }),
-  { timeout: 600_000 },
+  { tags: ["provider:azure", "provider:azure:web", "live"], timeout: 600_000 },
 );
 
 test.provider(
@@ -510,5 +510,5 @@ test.provider(
       const body = JSON.parse(yield* fetchOk(`${out.url}/blob?key=${key}&value=still-here`));
       expect(body).toEqual({ ok: true, result: { text: "still-here" } });
     }),
-  { timeout: 900_000 },
+  { tags: ["provider:azure", "provider:azure:web", "live"], timeout: 900_000 },
 );

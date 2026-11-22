@@ -147,7 +147,7 @@ export const HcxEnterpriseSiteProvider = () =>
       return [];
     }),
 
-    diff: Effect.fn(function* ({ news, olds, output }) {
+    diff: Effect.fn(function* ({ news, output }) {
       if (!isResolved(news) || output === undefined) return undefined;
       if (
         parentChanged(news, output) ||

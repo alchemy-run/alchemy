@@ -28,11 +28,11 @@ import type { Workspace } from "./Workspace.ts";
  * customer ID, and the deploy-time half assigns **Log Analytics Data
  * Reader** on the workspace.
  */
-export const makeWorkspaceQueryBinding = <I extends { workspaceId: string }, A, E>(options: {
+export const makeWorkspaceQueryBinding = <I extends { workspaceId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.LogAnalytics.ExecuteQuery`. */
   tag: string;
   /** The distilled operation; the workspace ID is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
     const grant = yield* GrantMonitorRoles;
@@ -93,11 +93,11 @@ export const makeQueryBatchBinding = (tag: string) =>
  * deploy-time half assigns the custom `AzureMonitorQueryResourceLogsRole`
  * (read every `Microsoft.Insights/logs` table) on that resource.
  */
-export const makeResourceQueryBinding = <I extends { resourceId: string }, A, E>(options: {
+export const makeResourceQueryBinding = <I extends { resourceId: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.LogAnalytics.ExecuteQueryWithResourceId`. */
   tag: string;
   /** The distilled operation; the resource ID is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
     const grant = yield* GrantMonitorRoles;

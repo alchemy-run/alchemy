@@ -1,4 +1,4 @@
-import type { AzureOpContext } from "@distilled.cloud/azure";
+import type { AzureOpContext, AzureOpError } from "@distilled.cloud/azure";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -9,11 +9,14 @@ import type { Stage } from "alchemy/Stage";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import {
+  type DeleteTimedOut,
   desiredTags,
   ensureRegistered,
   hasAnyAlchemyTag,
   ignoreNotFound,
   isOwned,
+  type ProvisioningFailed,
+  type ProvisioningTimedOut,
   resourceGroupOf,
   tagsDiffer,
   waitForProvisioned,
@@ -54,7 +57,11 @@ export interface ArmObserved {
   readonly properties?: object & { readonly provisioningState?: string };
 }
 
-type Op<A> = Effect.Effect<A, any, AzureOpContext>;
+type Op<A> = Effect.Effect<
+  A,
+  AzureOpError | ProvisioningFailed | ProvisioningTimedOut | DeleteTimedOut,
+  AzureOpContext
+>;
 
 /** PUT body fields besides the path (location, tags, sku, properties, ...). */
 export type NetworkBody = { readonly [key: string]: unknown };

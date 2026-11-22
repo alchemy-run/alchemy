@@ -109,11 +109,11 @@ const storeAddressOf = Effect.fn(function* (tag: string, store: ConfigurationSto
  * runtime callable injects the bound {@link ConfigurationStore}'s endpoint,
  * and the deploy-time half assigns `grants` on the store.
  */
-export const makeStoreHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeStoreHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.AppConfiguration.GetKeyValue`. */
   tag: string;
   /** The distilled operation; the store endpoint is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Roles assigned on the store. */
   grants: readonly AppConfigurationGrant[];
 }) =>

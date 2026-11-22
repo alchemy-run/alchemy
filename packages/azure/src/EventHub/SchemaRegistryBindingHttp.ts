@@ -141,11 +141,11 @@ type Operation<I, A, E> = (input: I) => Effect.Effect<A, E>;
  * the deploy-time half grants `access` (reads on the group, writes on its
  * namespace).
  */
-export const makeSchemaGroupOperationBinding = <I, A, E>(options: {
+export const makeSchemaGroupOperationBinding = <I, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.EventHub.RegisterSchema`. */
   tag: string;
   /** The distilled `schemaregistry-data` operation. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
   /** What the operation does in the group. */
   access: SchemaRegistryAccess;
   /** The members the group fills in; `GetSchemaById` takes no group name. */

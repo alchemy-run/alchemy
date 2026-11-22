@@ -19,6 +19,8 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Alchemy.localState(),
 });
 
+const tags = ["provider:azure", "provider:azure:functions", "live"];
+
 class NotReady extends Data.TaggedError("NotReady")<{ status: number; body: string }> {}
 
 /**
@@ -142,7 +144,7 @@ test.provider(
       yield* stack.destroy();
       expect(yield* siteGone(out.resourceGroup, out.name)).toBe("gone");
     }),
-  { timeout: 900_000 },
+  { tags, timeout: 900_000 },
 );
 
 const EffectStack = Alchemy.Stack(
@@ -203,7 +205,7 @@ test.provider(
         ].sort(),
       );
     }),
-  { timeout: 600_000 },
+  { tags, timeout: 600_000 },
 );
 
 test.provider(
@@ -224,7 +226,7 @@ test.provider(
       expect(Date.parse(recorded.at)).toBeGreaterThanOrEqual(since);
       expect(recorded.isPastDue).toBe(false);
     }),
-  { timeout: 600_000 },
+  { tags, timeout: 600_000 },
 );
 
 test.provider(
@@ -237,7 +239,7 @@ test.provider(
       const recorded = JSON.parse(yield* pollOk(`${out.url}/result?key=queue/${id}`));
       expect(recorded.dequeueCount).toBe(1);
     }),
-  { timeout: 600_000 },
+  { tags, timeout: 600_000 },
 );
 
 test.provider(
@@ -250,7 +252,7 @@ test.provider(
       const recorded = JSON.parse(yield* pollOk(`${out.url}/result?key=blob/${id}`));
       expect(recorded.url).toMatch(new RegExp(`/blob/${id}$`));
     }),
-  { timeout: 600_000 },
+  { tags, timeout: 600_000 },
 );
 
 test.provider(
@@ -263,7 +265,7 @@ test.provider(
       const recorded = JSON.parse(yield* pollOk(`${out.url}/result?key=eventgrid/${id}`));
       expect(recorded.eventType).toBe("Microsoft.Storage.BlobCreated");
     }),
-  { timeout: 600_000 },
+  { tags, timeout: 600_000 },
 );
 
 test.provider(
@@ -276,7 +278,7 @@ test.provider(
       const recorded = JSON.parse(yield* pollOk(`${out.url}/result?key=servicebus-queue/${id}`));
       expect(recorded.deliveryCount).toBe(1);
     }),
-  { timeout: 600_000 },
+  { tags, timeout: 600_000 },
 );
 
 test.provider(
@@ -289,7 +291,7 @@ test.provider(
       const recorded = JSON.parse(yield* pollOk(`${out.url}/result?key=servicebus-topic/${id}`));
       expect(typeof recorded.messageId).toBe("string");
     }),
-  { timeout: 600_000 },
+  { tags, timeout: 600_000 },
 );
 
 test.provider(
@@ -302,7 +304,7 @@ test.provider(
       const recorded = JSON.parse(yield* pollOk(`${out.url}/result?key=eventhub/${id}`));
       expect(recorded.size).toBeGreaterThanOrEqual(1);
     }),
-  { timeout: 600_000 },
+  { tags, timeout: 600_000 },
 );
 
 // Serverless Cosmos DB account in centralus (~$0; ~3 min create, ~8 min
@@ -355,7 +357,7 @@ test.provider(
       yield* stack.destroy();
       expect(yield* siteGone(out.resourceGroup, out.name)).toBe("gone");
     }),
-  { timeout: 1_800_000 },
+  { tags, timeout: 1_800_000 },
 );
 
 test.provider(
@@ -400,5 +402,5 @@ test.provider(
       };
       expect(read.result.text).toBe("still-here");
     }),
-  { timeout: 900_000 },
+  { tags, timeout: 900_000 },
 );

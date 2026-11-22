@@ -277,194 +277,202 @@ afterAll.skipIf(!!process.env.NO_DESTROY)(destroy(RuntimeStack), { timeout: 2_70
 const runId = (prefix: string) => `${prefix}${Date.now().toString(36)}`;
 
 // Sequential: the last case redeploys the shared stack.
-describe.sequential("runtime", () => {
-  test.provider(
-    "async container app serves fetch with literal, Config, secret, and resource env",
-    (_stack) =>
-      Effect.gen(function* () {
-        const out = (yield* runtime).async;
-        const body = JSON.parse(yield* fetchOk(`${out.url}/greet?name=azure`)) as {
-          message: string;
-          secretLength: number;
-          container: string;
-          path: string;
-          node: string;
-        };
-        expect(body.message).toBe("hello azure");
-        expect(body.secretLength).toBe("s3cret".length);
-        expect(body.container).toBe(out.container);
-        expect(body.path).toBe("/greet");
-        expect(body.node).toMatch(/^24\./);
+describe.sequential(
+  "runtime",
+  { tags: ["provider:azure", "provider:azure:containerapps", "live"] },
+  () => {
+    test.provider(
+      "async container app serves fetch with literal, Config, secret, and resource env",
+      (_stack) =>
+        Effect.gen(function* () {
+          const out = (yield* runtime).async;
+          const body = JSON.parse(yield* fetchOk(`${out.url}/greet?name=azure`)) as {
+            message: string;
+            secretLength: number;
+            container: string;
+            path: string;
+            node: string;
+          };
+          expect(body.message).toBe("hello azure");
+          expect(body.secretLength).toBe("s3cret".length);
+          expect(body.container).toBe(out.container);
+          expect(body.path).toBe("/greet");
+          expect(body.node).toMatch(/^24\./);
 
-        // Out of band: system identity, the pushed image, the registry token,
-        // and the secret behind the Redacted env value.
-        const observed = yield* getApp(out.resourceGroup, out.name);
-        expect(observed.identity?.type).toBe("SystemAssigned");
-        const container = observed.properties?.template?.containers?.[0];
-        expect(container?.name).toBe("main");
-        expect(container?.image).toBe(out.image);
-        expect(container?.env?.find((e) => e.name === "SECRET")?.secretRef).toBe("env-secret");
-        const loginServer = out.image!.split("/")[0]!;
-        expect(loginServer).toMatch(/\.azurecr\.io$/);
-        expect(
-          observed.properties?.configuration?.registries?.map((r) => [
-            r.server,
-            // The SDK marks the secret's name sensitive.
-            Redacted.isRedacted(r.passwordSecretRef)
-              ? Redacted.value(r.passwordSecretRef)
-              : r.passwordSecretRef,
-          ]),
-        ).toEqual([[loginServer, "alchemy-registry"]]);
-        const secrets = yield* listSecrets(out.resourceGroup, out.name);
-        expect(
-          JSON.parse(secrets.value.find((s) => s.name === "env-secret")?.value ?? "{}"),
-        ).toEqual({ _tag: "Redacted", value: "s3cret" });
+          // Out of band: system identity, the pushed image, the registry token,
+          // and the secret behind the Redacted env value.
+          const observed = yield* getApp(out.resourceGroup, out.name);
+          expect(observed.identity?.type).toBe("SystemAssigned");
+          const container = observed.properties?.template?.containers?.[0];
+          expect(container?.name).toBe("main");
+          expect(container?.image).toBe(out.image);
+          expect(container?.env?.find((e) => e.name === "SECRET")?.secretRef).toBe("env-secret");
+          const loginServer = out.image!.split("/")[0]!;
+          expect(loginServer).toMatch(/\.azurecr\.io$/);
+          expect(
+            observed.properties?.configuration?.registries?.map((r) => [
+              r.server,
+              // The SDK marks the secret's name sensitive.
+              Redacted.isRedacted(r.passwordSecretRef)
+                ? Redacted.value(r.passwordSecretRef)
+                : r.passwordSecretRef,
+            ]),
+          ).toEqual([[loginServer, "alchemy-registry"]]);
+          const secrets = yield* listSecrets(out.resourceGroup, out.name);
+          expect(
+            JSON.parse(secrets.value.find((s) => s.name === "env-secret")?.value ?? "{}"),
+          ).toEqual({ _tag: "Redacted", value: "s3cret" });
 
-        // The image is the base plus one program layer, tagged with the code hash.
-        const manifest = yield* acr.GetContainerRegistryManifest({
-          endpoint: `https://${loginServer}`,
-          name: out.name,
-          reference: out.codeHash!,
-        });
-        expect(out.image).toBe(`${loginServer}/${out.name}:${out.codeHash}`);
-        expect(manifest.layers?.at(-1)?.mediaType).toMatch(/tar\+gzip|tar\.gzip/);
-        expect((manifest.layers ?? []).length).toBeGreaterThanOrEqual(2);
-      }).pipe(logLevel),
-    { timeout: 600_000 },
-  );
+          // The image is the base plus one program layer, tagged with the code hash.
+          const manifest = yield* acr.GetContainerRegistryManifest({
+            endpoint: `https://${loginServer}`,
+            name: out.name,
+            reference: out.codeHash!,
+          });
+          expect(out.image).toBe(`${loginServer}/${out.name}:${out.codeHash}`);
+          expect(manifest.layers?.at(-1)?.mediaType).toMatch(/tar\+gzip|tar\.gzip/);
+          expect((manifest.layers ?? []).length).toBeGreaterThanOrEqual(2);
+        }).pipe(logLevel),
+      { timeout: 600_000 },
+    );
 
-  test.provider(
-    "effect container app serves fetch and adds one KEDA rule per event source",
-    (_stack) =>
-      Effect.gen(function* () {
-        const out = (yield* runtime).effect;
-        expect(yield* fetchOk(`${out.url}/hello`)).toBe("hello from container apps");
+    test.provider(
+      "effect container app serves fetch and adds one KEDA rule per event source",
+      (_stack) =>
+        Effect.gen(function* () {
+          const out = (yield* runtime).effect;
+          expect(yield* fetchOk(`${out.url}/hello`)).toBe("hello from container apps");
 
-        const observed = yield* getApp(out.resourceGroup, out.name);
-        const scale = observed.properties?.template?.scale;
-        expect(scale?.minReplicas).toBe(1);
-        const rules = (scale?.rules ?? []).map((r) => ({
-          name: r.name,
-          queue: r.azureQueue?.queueName !== undefined,
-          identity: r.azureQueue?.identity ?? r.custom?.identity,
-          type: r.custom?.type,
-        }));
-        expect(rules.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))).toEqual([
-          { name: "queue-appjobs", queue: true, identity: "system", type: undefined },
-          { name: "sbq-apporders", queue: false, identity: "system", type: "azure-servicebus" },
-          { name: "sbs-appaudit", queue: false, identity: "system", type: "azure-servicebus" },
-        ]);
-      }).pipe(logLevel),
-    { timeout: 600_000 },
-  );
+          const observed = yield* getApp(out.resourceGroup, out.name);
+          const scale = observed.properties?.template?.scale;
+          expect(scale?.minReplicas).toBe(1);
+          const rules = (scale?.rules ?? []).map((r) => ({
+            name: r.name,
+            queue: r.azureQueue?.queueName !== undefined,
+            identity: r.azureQueue?.identity ?? r.custom?.identity,
+            type: r.custom?.type,
+          }));
+          expect(rules.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""))).toEqual([
+            { name: "queue-appjobs", queue: true, identity: "system", type: undefined },
+            { name: "sbq-apporders", queue: false, identity: "system", type: "azure-servicebus" },
+            { name: "sbs-appaudit", queue: false, identity: "system", type: "azure-servicebus" },
+          ]);
+        }).pipe(logLevel),
+      { timeout: 600_000 },
+    );
 
-  test.provider(
-    "Storage.QueueEventSource runs the handler for an enqueued message",
-    (_stack) =>
-      Effect.gen(function* () {
-        const out = (yield* runtime).effect;
-        const id = runId("q");
-        yield* fetchOk(`${out.url}/queue/send?id=${id}`);
-        const recorded = JSON.parse(yield* pollOk(`${out.url}/result?key=queue/${id}`));
-        expect(recorded.dequeueCount).toBe(1);
-      }).pipe(logLevel),
-    { timeout: 600_000 },
-  );
+    test.provider(
+      "Storage.QueueEventSource runs the handler for an enqueued message",
+      (_stack) =>
+        Effect.gen(function* () {
+          const out = (yield* runtime).effect;
+          const id = runId("q");
+          yield* fetchOk(`${out.url}/queue/send?id=${id}`);
+          const recorded = JSON.parse(yield* pollOk(`${out.url}/result?key=queue/${id}`));
+          expect(recorded.dequeueCount).toBe(1);
+        }).pipe(logLevel),
+      { timeout: 600_000 },
+    );
 
-  test.provider(
-    "ServiceBus.QueueEventSource runs the handler for a sent message",
-    (_stack) =>
-      Effect.gen(function* () {
-        const out = (yield* runtime).effect;
-        const id = runId("s");
-        yield* fetchOk(`${out.url}/servicebus/queue?id=${id}`);
-        const recorded = JSON.parse(yield* pollOk(`${out.url}/result?key=servicebus-queue/${id}`));
-        expect(recorded.deliveryCount).toBe(1);
-      }).pipe(logLevel),
-    { timeout: 600_000 },
-  );
+    test.provider(
+      "ServiceBus.QueueEventSource runs the handler for a sent message",
+      (_stack) =>
+        Effect.gen(function* () {
+          const out = (yield* runtime).effect;
+          const id = runId("s");
+          yield* fetchOk(`${out.url}/servicebus/queue?id=${id}`);
+          const recorded = JSON.parse(
+            yield* pollOk(`${out.url}/result?key=servicebus-queue/${id}`),
+          );
+          expect(recorded.deliveryCount).toBe(1);
+        }).pipe(logLevel),
+      { timeout: 600_000 },
+    );
 
-  test.provider(
-    "ServiceBus.SubscriptionEventSource runs the handler for a published message",
-    (_stack) =>
-      Effect.gen(function* () {
-        const out = (yield* runtime).effect;
-        const id = runId("t");
-        yield* fetchOk(`${out.url}/servicebus/topic?id=${id}`);
-        const recorded = JSON.parse(yield* pollOk(`${out.url}/result?key=servicebus-topic/${id}`));
-        expect(recorded.messageId).toMatch(/.+/);
-      }).pipe(logLevel),
-    { timeout: 600_000 },
-  );
+    test.provider(
+      "ServiceBus.SubscriptionEventSource runs the handler for a published message",
+      (_stack) =>
+        Effect.gen(function* () {
+          const out = (yield* runtime).effect;
+          const id = runId("t");
+          yield* fetchOk(`${out.url}/servicebus/topic?id=${id}`);
+          const recorded = JSON.parse(
+            yield* pollOk(`${out.url}/result?key=servicebus-topic/${id}`),
+          );
+          expect(recorded.messageId).toMatch(/.+/);
+        }).pipe(logLevel),
+      { timeout: 600_000 },
+    );
 
-  test.provider(
-    "ContainerApps.appSchedule runs the handler on its schedule",
-    (_stack) =>
-      Effect.gen(function* () {
-        const out = (yield* runtime).effect;
-        const since = Date.now() - 60_000;
-        // The schedule fires every minute; wait for a run after this test began.
-        const recorded = yield* pollOk(`${out.url}/result?key=schedule/last`).pipe(
-          Effect.map((body) => JSON.parse(body) as { at: string; scheduledTime: string }),
-          Effect.repeat({
-            schedule: Schedule.spaced("15 seconds"),
-            until: (run) => Date.parse(run.at) >= since,
-            times: 12,
-          }),
-        );
-        expect(Date.parse(recorded.at)).toBeGreaterThanOrEqual(since);
-        expect(new Date(recorded.scheduledTime).getUTCSeconds()).toBe(0);
-      }).pipe(logLevel),
-    { timeout: 600_000 },
-  );
-
-  test.provider(
-    "redeploying the effect container app keeps its role assignments",
-    (_stack) =>
-      Effect.gen(function* () {
-        const out = yield* runtime;
-        expect(out.effect.principalId).toMatch(/^[0-9a-f-]{36}$/);
-        const before = yield* roleAssignmentsOf(out.effect.principalId!);
-        // The event sources' own grants are among them.
-        expect(before).toContain(
-          `${out.ordersQueueId.toLowerCase()}|090c5cfd-751d-490a-894a-3ce6f1109419`,
-        );
-        expect(before).toContain(
-          `${out.auditId.toLowerCase()}|090c5cfd-751d-490a-894a-3ce6f1109419`,
-        );
-        expect(before).toContain(
-          `${out.jobsQueueId.toLowerCase()}|${Azure.Authorization.BuiltInRole.StorageQueueDataReader}`,
-        );
-
-        // A changed env value rolls a new revision in place; the image stays.
-        const config = yield* ConfigProvider.ConfigProvider;
-        const redeployed = yield* deploy(RuntimeStack).pipe(
-          Effect.provideService(
-            ConfigProvider.ConfigProvider,
-            ConfigProvider.orElse(
-              ConfigProvider.fromEnv({ env: { AZURE_CA_EFFECT_GREETING: "hi" } }),
-              config,
-            ),
-          ),
-        );
-        expect(redeployed.effect.name).toBe(out.effect.name);
-        expect(redeployed.effect.image).toBe(out.effect.image);
-        expect(
-          yield* pollOk(`${out.effect.url}/hello`).pipe(
+    test.provider(
+      "ContainerApps.appSchedule runs the handler on its schedule",
+      (_stack) =>
+        Effect.gen(function* () {
+          const out = (yield* runtime).effect;
+          const since = Date.now() - 60_000;
+          // The schedule fires every minute; wait for a run after this test began.
+          const recorded = yield* pollOk(`${out.url}/result?key=schedule/last`).pipe(
+            Effect.map((body) => JSON.parse(body) as { at: string; scheduledTime: string }),
             Effect.repeat({
-              schedule: Schedule.spaced("10 seconds"),
-              until: (body) => body === "hi from container apps",
+              schedule: Schedule.spaced("15 seconds"),
+              until: (run) => Date.parse(run.at) >= since,
               times: 12,
             }),
-          ),
-        ).toBe("hi from container apps");
+          );
+          expect(Date.parse(recorded.at)).toBeGreaterThanOrEqual(since);
+          expect(new Date(recorded.scheduledTime).getUTCSeconds()).toBe(0);
+        }).pipe(logLevel),
+      { timeout: 600_000 },
+    );
 
-        expect(yield* roleAssignmentsOf(out.effect.principalId!)).toEqual(before);
-        // …and the bindings still work with them.
-        const id = runId("r");
-        yield* fetchOk(`${out.effect.url}/blob/write?key=redeploy/${id}&value=still-here`);
-        expect(yield* fetchOk(`${out.effect.url}/result?key=redeploy/${id}`)).toBe("still-here");
-      }).pipe(logLevel),
-    { timeout: 900_000 },
-  );
-});
+    test.provider(
+      "redeploying the effect container app keeps its role assignments",
+      (_stack) =>
+        Effect.gen(function* () {
+          const out = yield* runtime;
+          expect(out.effect.principalId).toMatch(/^[0-9a-f-]{36}$/);
+          const before = yield* roleAssignmentsOf(out.effect.principalId!);
+          // The event sources' own grants are among them.
+          expect(before).toContain(
+            `${out.ordersQueueId.toLowerCase()}|090c5cfd-751d-490a-894a-3ce6f1109419`,
+          );
+          expect(before).toContain(
+            `${out.auditId.toLowerCase()}|090c5cfd-751d-490a-894a-3ce6f1109419`,
+          );
+          expect(before).toContain(
+            `${out.jobsQueueId.toLowerCase()}|${Azure.Authorization.BuiltInRole.StorageQueueDataReader}`,
+          );
+
+          // A changed env value rolls a new revision in place; the image stays.
+          const config = yield* ConfigProvider.ConfigProvider;
+          const redeployed = yield* deploy(RuntimeStack).pipe(
+            Effect.provideService(
+              ConfigProvider.ConfigProvider,
+              ConfigProvider.orElse(
+                ConfigProvider.fromEnv({ env: { AZURE_CA_EFFECT_GREETING: "hi" } }),
+                config,
+              ),
+            ),
+          );
+          expect(redeployed.effect.name).toBe(out.effect.name);
+          expect(redeployed.effect.image).toBe(out.effect.image);
+          expect(
+            yield* pollOk(`${out.effect.url}/hello`).pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("10 seconds"),
+                until: (body) => body === "hi from container apps",
+                times: 12,
+              }),
+            ),
+          ).toBe("hi from container apps");
+
+          expect(yield* roleAssignmentsOf(out.effect.principalId!)).toEqual(before);
+          // …and the bindings still work with them.
+          const id = runId("r");
+          yield* fetchOk(`${out.effect.url}/blob/write?key=redeploy/${id}&value=still-here`);
+          expect(yield* fetchOk(`${out.effect.url}/result?key=redeploy/${id}`)).toBe("still-here");
+        }).pipe(logLevel),
+      { timeout: 900_000 },
+    );
+  },
+);

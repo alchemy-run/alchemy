@@ -5,9 +5,11 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { BuiltInRole } from "../Authorization/RoleAssignment.ts";
+import type { Queue as ServiceBusQueue } from "../ServiceBus/Queue.ts";
 import {
   QueueEventSource as ServiceBusQueueSource,
   type QueueEventSourceService as ServiceBusQueueEventSourceService,
+  type ServiceBusEventSourceProps,
   type ServiceBusMessage,
 } from "../ServiceBus/QueueEventSource.ts";
 import { QueueRead } from "../ServiceBus/QueueRead.ts";
@@ -16,14 +18,17 @@ import type {
   ReceiveServiceBusClient,
   ServiceBusLockedMessage,
 } from "../ServiceBus/ServiceBusTypes.ts";
+import type { Subscription } from "../ServiceBus/Subscription.ts";
 import {
   SubscriptionEventSource,
   type SubscriptionEventSourceService,
 } from "../ServiceBus/SubscriptionEventSource.ts";
 import { SubscriptionRead } from "../ServiceBus/SubscriptionRead.ts";
 import { SubscriptionReadHttp } from "../ServiceBus/SubscriptionReadHttp.ts";
+import type { Queue as StorageQueue } from "../Storage/Queue.ts";
 import {
   QueueEventSource as StorageQueueSource,
+  type QueueEventSourceProps as StorageQueueEventSourceProps,
   type QueueEventSourceService as StorageQueueEventSourceService,
   type QueueMessage,
 } from "../Storage/QueueEventSource.ts";
@@ -51,7 +56,7 @@ const tryJson = (text: string): unknown => {
 };
 
 /** Run one consumer iteration forever; a failed iteration logs and backs off. */
-const consumeForever = (label: string, iteration: Effect.Effect<boolean, unknown, any>) =>
+const consumeForever = <E, R>(label: string, iteration: Effect.Effect<boolean, E, R>) =>
   iteration.pipe(
     // An empty poll waits before the next one; a full one polls again at once.
     Effect.flatMap((received) => (received ? Effect.void : Effect.sleep("2 seconds"))),
@@ -84,7 +89,12 @@ export const AppStorageQueueEventSource = Layer.effect(
     const host = yield* ContainerApp;
     const { run } = yield* ServerHost;
     const receiveFrom = yield* QueueReceive;
-    return Effect.fn(function* (queue, _props, handler) {
+    // Cast below: the service type erases the handler's requirements.
+    return Effect.fn(function* <Req = never>(
+      queue: StorageQueue,
+      _props: StorageQueueEventSourceProps,
+      handler: (message: QueueMessage) => Effect.Effect<void, never, Req>,
+    ) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* host.bind`Allow(${host}, Azure.ContainerApps.AppStorageQueueEventSource(${queue}))`({
           scaleRules: [
@@ -194,7 +204,12 @@ export const AppServiceBusQueueEventSource = Layer.effect(
     const host = yield* ContainerApp;
     const { run } = yield* ServerHost;
     const readFrom = yield* QueueRead;
-    return Effect.fn(function* (queue, _props, handler) {
+    // Cast below: the service type erases the handler's requirements.
+    return Effect.fn(function* <Req = never>(
+      queue: ServiceBusQueue,
+      _props: ServiceBusEventSourceProps,
+      handler: (message: ServiceBusMessage) => Effect.Effect<void, never, Req>,
+    ) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* host.bind`Allow(${host}, Azure.ContainerApps.AppServiceBusQueueEventSource(${queue}))`(
           {
@@ -239,7 +254,12 @@ export const AppServiceBusSubscriptionEventSource = Layer.effect(
     const host = yield* ContainerApp;
     const { run } = yield* ServerHost;
     const readFrom = yield* SubscriptionRead;
-    return Effect.fn(function* (subscription, _props, handler) {
+    // Cast below: the service type erases the handler's requirements.
+    return Effect.fn(function* <Req = never>(
+      subscription: Subscription,
+      _props: ServiceBusEventSourceProps,
+      handler: (message: ServiceBusMessage) => Effect.Effect<void, never, Req>,
+    ) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* host.bind`Allow(${host}, Azure.ContainerApps.AppServiceBusSubscriptionEventSource(${subscription}))`(
           {

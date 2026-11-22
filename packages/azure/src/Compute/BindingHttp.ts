@@ -82,7 +82,7 @@ const parseResourceId = (resourceId: string) => {
 };
 
 /** A distilled operation, resolved with the host's credentials. */
-type Operation<I, A, E> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+type Operation<I, A, E, R> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 
 type VirtualMachineKeys = "subscriptionId" | "resourceGroupName" | "vmName";
 
@@ -96,11 +96,12 @@ export const makeVirtualMachineActionBinding = <
   I extends { subscriptionId: string; resourceGroupName: string; vmName: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Compute.StartVirtualMachine`. */
   tag: string;
   /** The distilled operation; the VM's identifiers are injected. */
-  operation: Operation<I, A, E>;
+  operation: Operation<I, A, E, R>;
   /** Custom role assigned on the VM. */
   grant: ComputeGrant;
 }) =>
@@ -133,11 +134,12 @@ export const makeScaleSetActionBinding = <
   I extends { subscriptionId: string; resourceGroupName: string; vmScaleSetName: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Compute.StartVirtualMachineScaleSet`. */
   tag: string;
   /** The distilled operation; the scale set's identifiers are injected. */
-  operation: Operation<I, A, E>;
+  operation: Operation<I, A, E, R>;
   /** Custom role assigned on the scale set. */
   grant: ComputeGrant;
 }) =>

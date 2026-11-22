@@ -316,7 +316,7 @@ export const VolumeQuotaRuleProvider = () =>
         volumeName: output.volume,
         volumeQuotaRuleName: output.volumeQuotaRuleName,
       };
-      yield* whileBusy(ignoreNotFound(netapp.DeleteVolumeQuotaRule(where)));
+      yield* netapp.DeleteVolumeQuotaRule(where).pipe(ignoreNotFound, whileBusy);
       yield* waitUntilGone(
         `volume quota rule ${output.volumeQuotaRuleName}`,
         getRule(where),

@@ -131,10 +131,10 @@ interface DiscoveryBindingOptions {
  * {@link Bookshelf}'s `bookshelfUri`, and the deploy-time half assigns
  * `grant` on the bookshelf.
  */
-export const makeBookshelfHttpBinding = <I extends { endpoint: string }, A, E>(
+export const makeBookshelfHttpBinding = <I extends { endpoint: string }, A, E, R>(
   options: DiscoveryBindingOptions & {
     /** The distilled operation; the endpoint is injected. */
-    operation: Effect.Effect<Operation<I, A, E>, never, any>;
+    operation: Effect.Effect<Operation<I, A, E>, never, R>;
   },
 ) =>
   Effect.gen(function* () {
@@ -159,10 +159,10 @@ export const makeBookshelfHttpBinding = <I extends { endpoint: string }, A, E>(
  * {@link Workspace}'s `workspaceApiUri`, and the deploy-time half assigns
  * `grant` on the workspace.
  */
-export const makeWorkspaceHttpBinding = <I extends { endpoint: string }, A, E>(
+export const makeWorkspaceHttpBinding = <I extends { endpoint: string }, A, E, R>(
   options: DiscoveryBindingOptions & {
     /** The distilled operation; the endpoint is injected. */
-    operation: Effect.Effect<Operation<I, A, E>, never, any>;
+    operation: Effect.Effect<Operation<I, A, E>, never, R>;
   },
 ) =>
   Effect.gen(function* () {

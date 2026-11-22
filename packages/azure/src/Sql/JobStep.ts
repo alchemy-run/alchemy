@@ -239,14 +239,12 @@ export const JobStepProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        retryWhileAgentBusy(
-          sql.DeleteJobStep({
-            ...jobPath(subscriptionId, output),
-            stepName: output.stepName,
-          }),
-        ),
-      );
+      yield* sql
+        .DeleteJobStep({
+          ...jobPath(subscriptionId, output),
+          stepName: output.stepName,
+        })
+        .pipe(retryWhileAgentBusy, ignoreNotFound);
       yield* waitUntilGone(
         `sql job step ${output.stepName}`,
         getChild(subscriptionId, output, output.stepName),

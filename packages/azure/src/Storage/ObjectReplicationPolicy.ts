@@ -453,8 +453,14 @@ export const ObjectReplicationPolicyProvider = () =>
       let source = yield* getPolicy(subscriptionId, sourceResourceGroup, sourceAccount, policyId);
       if (
         policyDiffers(source, destinationRules, news) ||
-        JSON.stringify((source?.properties?.rules ?? []).map((r) => r.ruleId).sort()) !==
-          JSON.stringify(destinationRules.map((r) => r.ruleId).sort())
+        JSON.stringify(
+          (source?.properties?.rules ?? [])
+            .map((r) => r.ruleId)
+            .sort((x, y) => (x ?? "").localeCompare(y ?? "")),
+        ) !==
+          JSON.stringify(
+            destinationRules.map((r) => r.ruleId).sort((x, y) => (x ?? "").localeCompare(y ?? "")),
+          )
       ) {
         source = yield* storage.ObjectReplicationPoliciesCreateOrUpdate({
           subscriptionId,

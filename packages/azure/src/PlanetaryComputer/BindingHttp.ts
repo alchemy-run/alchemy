@@ -46,11 +46,11 @@ const GrantGeoCatalogRole = Effect.gen(function* () {
  * callable injects the bound {@link GeoCatalog}'s `catalogUri` as
  * `endpoint`, and the deploy-time half assigns `grant` on the catalog.
  */
-export const makeGeoCatalogHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeGeoCatalogHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.PlanetaryComputer.GetStacItem`. */
   tag: string;
   /** The distilled operation; the endpoint is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Role assigned on the catalog. */
   grant: GeoCatalogGrant;
 }) =>

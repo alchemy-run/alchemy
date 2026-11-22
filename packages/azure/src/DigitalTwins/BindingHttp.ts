@@ -106,11 +106,11 @@ const GrantDigitalTwinsRole = Effect.gen(function* () {
  * {@link Instance}'s `https://{hostName}` endpoint, and the deploy-time half
  * assigns `grant` on the instance.
  */
-export const makeDigitalTwinsHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeDigitalTwinsHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.DigitalTwins.GetDigitalTwin`. */
   tag: string;
   /** The distilled operation; the endpoint is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Custom role assigned on the instance. */
   grant: DigitalTwinsGrant;
 }) =>

@@ -290,15 +290,13 @@ export const GatewayProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        retryTransitioning(
-          hybridcompute.DeleteGateway({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            gatewayName: output.gatewayName,
-          }),
-        ),
-      );
+      yield* hybridcompute
+        .DeleteGateway({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          gatewayName: output.gatewayName,
+        })
+        .pipe(retryTransitioning, ignoreNotFound);
       yield* waitUntilGone(
         `gateway ${output.gatewayName}`,
         getGateway(subscriptionId, output.resourceGroup, output.gatewayName),

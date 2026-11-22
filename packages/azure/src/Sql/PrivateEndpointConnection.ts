@@ -279,11 +279,9 @@ export const PrivateEndpointConnectionProvider = () =>
           },
         });
       } else if (state?.status !== status) {
-        return yield* Effect.fail(
-          new PrivateEndpointConnectionDecided({
-            message: `private endpoint connection ${name} on ${server} is already ${state?.status}; Azure SQL decisions are final (delete the private endpoint to start over)`,
-          }),
-        );
+        return yield* new PrivateEndpointConnectionDecided({
+          message: `private endpoint connection ${name} on ${server} is already ${state?.status}; Azure SQL decisions are final (delete the private endpoint to start over)`,
+        });
       }
       const fresh = yield* waitForProvisioned(
         `private endpoint connection ${name}`,

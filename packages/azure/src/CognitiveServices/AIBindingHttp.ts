@@ -341,11 +341,11 @@ type Operation<I, A, E> = (input: I) => Effect.Effect<A, E>;
  * {@link Project}'s endpoint, and the deploy-time half assigns `grant` on
  * the project.
  */
-export const makeProjectHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeProjectHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.CognitiveServices.CreateAgent`. */
   tag: string;
   /** The distilled operation; the endpoint is injected. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
   /** Role assigned on the project. */
   grant: AIGrant;
 }) =>
@@ -372,11 +372,11 @@ export const makeProjectHttpBinding = <I extends { endpoint: string }, A, E>(opt
  * {@link Account}'s endpoint, and the deploy-time half assigns `grant` on
  * the account.
  */
-export const makeAccountHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeAccountHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.CognitiveServices.AnalyzeDocument`. */
   tag: string;
   /** The distilled operation; the endpoint is injected. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
   /** Role assigned on the account. */
   grant: AIGrant;
 }) =>

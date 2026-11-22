@@ -68,7 +68,7 @@ const parseResourceId = (resourceId: string) => {
 };
 
 /** A distilled operation, resolved with the host's credentials. */
-type Operation<I, A, E> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+type Operation<I, A, E, R> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 
 type SiteKeys = "subscriptionId" | "resourceGroupName" | "name";
 
@@ -82,11 +82,12 @@ export const makeSiteActionBinding = <
   I extends { subscriptionId: string; resourceGroupName: string; name: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Web.StartWebApp`. */
   tag: string;
   /** The distilled operation; the app's identifiers are injected. */
-  operation: Operation<I, A, E>;
+  operation: Operation<I, A, E, R>;
   /** Custom role assigned on the app. */
   grant: WebGrant;
 }) =>

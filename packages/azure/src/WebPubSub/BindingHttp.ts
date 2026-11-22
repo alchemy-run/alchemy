@@ -142,13 +142,14 @@ export const makeHubOperationBinding = <
   I extends Record<HubIds, string>,
   A,
   E,
+  R,
   B = A,
   E2 = E,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.WebPubSub.SendToAll`. */
   tag: string;
   /** The distilled `webpubsub-data` operation; the endpoint and hub are injected. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
   /** Role assigned on the hub's service. */
   grant: WebPubSubGrant;
   finish?: (result: Effect.Effect<A, E>) => Effect.Effect<B, E2>;
@@ -175,11 +176,11 @@ export const makeHubOperationBinding = <
  * Build a service-level binding (`GetServiceStatus`): no role (the health
  * check needs none) and the service's endpoint filled in.
  */
-export const makeServiceOperationBinding = <A, E>(options: {
+export const makeServiceOperationBinding = <A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.WebPubSub.GetServiceStatus`. */
   tag: string;
   /** The distilled operation; the endpoint is injected. */
-  operation: Effect.Effect<Operation<{ endpoint: string }, A, E>, never, any>;
+  operation: Effect.Effect<Operation<{ endpoint: string }, A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
     const grant = yield* GrantWebPubSubRoles;

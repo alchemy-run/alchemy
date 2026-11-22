@@ -152,7 +152,7 @@ export const Database = GroupedResource<Database>("Azure.PostgreSQL.Database");
 
 export class ReservedDatabaseName extends Data.TaggedError(
   "Azure.PostgreSQL.ReservedDatabaseName",
-)<{ readonly name: string; readonly message: string }> {}
+)<{ readonly databaseName: string; readonly message: string }> {}
 
 const RESERVED = new Set(["postgres", "azure_maintenance", "azure_sys"]);
 const DEFAULT_CHARSET = "UTF8";
@@ -237,7 +237,7 @@ export const DatabaseProvider = () =>
       const databaseName = news.name ?? output?.databaseName ?? (yield* createDatabaseName(id));
       if (RESERVED.has(databaseName)) {
         return yield* new ReservedDatabaseName({
-          name: databaseName,
+          databaseName,
           message: `'${databaseName}' is a built-in database and cannot be managed`,
         });
       }

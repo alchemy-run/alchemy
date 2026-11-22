@@ -65,7 +65,7 @@ test.provider(
       yield* stack.destroy();
       expect((yield* localQueue(name)).status).toBe("gone");
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:azure", "provider:azure:storage", "local"], timeout: 180_000 },
 );
 
 const remoteQueue = (resourceGroupName: string, accountName: string, queueName: string) =>
@@ -108,5 +108,5 @@ test.provider(
       );
       expect(after).toBe("gone");
     }),
-  { timeout: 300_000 },
+  { tags: ["provider:azure", "provider:azure:storage", "live"], timeout: 300_000 },
 );

@@ -239,14 +239,12 @@ export const JobTargetGroupProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        retryWhileAgentBusy(
-          sql.DeleteJobTargetGroup({
-            ...jobAgentPath(subscriptionId, output),
-            targetGroupName: output.targetGroupName,
-          }),
-        ),
-      );
+      yield* sql
+        .DeleteJobTargetGroup({
+          ...jobAgentPath(subscriptionId, output),
+          targetGroupName: output.targetGroupName,
+        })
+        .pipe(retryWhileAgentBusy, ignoreNotFound);
       yield* waitUntilGone(
         `sql job target group ${output.targetGroupName}`,
         getChild(subscriptionId, output, output.targetGroupName),

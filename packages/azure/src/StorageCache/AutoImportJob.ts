@@ -347,12 +347,10 @@ export const AutoImportJobProvider = () =>
           output?.location ??
           (yield* getAmlFilesystem(subscriptionId, resourceGroup, filesystem))?.location;
         if (location === undefined) {
-          return yield* Effect.fail(
-            new AmlFilesystemMissing({
-              amlFilesystem: filesystem,
-              message: `AML file system ${filesystem} in ${resourceGroup} does not exist`,
-            }),
-          );
+          return yield* new AmlFilesystemMissing({
+            amlFilesystem: filesystem,
+            message: `AML file system ${filesystem} in ${resourceGroup} does not exist`,
+          });
         }
         yield* storagecache.AutoImportJobsCreateOrUpdate({
           ...where,

@@ -103,7 +103,7 @@ test.provider(
       );
       expect(jobsQueue).toBe("gone");
     }),
-  { timeout: 240_000 },
+  { tags: ["provider:azure", "provider:azure:functions", "local"], timeout: 240_000 },
 );
 
 test.provider(
@@ -131,7 +131,7 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { timeout: 180_000 },
+  { tags: ["provider:azure", "provider:azure:functions", "local"], timeout: 180_000 },
 );
 
 const siteStatus = (resourceGroupName: string, name: string) =>
@@ -191,5 +191,5 @@ test.provider(
       );
       expect(after).toBe("gone");
     }),
-  { timeout: 600_000 },
+  { tags: ["provider:azure", "provider:azure:functions", "live"], timeout: 600_000 },
 );

@@ -347,11 +347,12 @@ export const makeFileShareOperationBinding = <
   I extends { url: string; shareName: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Storage.DownloadFile`. */
   tag: string;
   /** The distilled `storage-file` operation. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** What the operation does on the share; one role per level. */
   access: FileShareAccess | readonly FileShareAccess[];
 }) =>

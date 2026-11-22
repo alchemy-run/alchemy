@@ -105,11 +105,16 @@ const at = (address: TableAddress) => Effect.all({ url: address.url, table: addr
  * the table's endpoint and name; the deploy-time half assigns `grant` on
  * the table.
  */
-export const makeTableOperationBinding = <I extends { url: string; table: string }, A, E>(options: {
+export const makeTableOperationBinding = <
+  I extends { url: string; table: string },
+  A,
+  E,
+  R,
+>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Storage.GetTableEntity`. */
   tag: string;
   /** The distilled operation; `url` and `table` are injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   grant: TableGrant;
 }) =>
   Effect.gen(function* () {
@@ -131,11 +136,11 @@ export const makeTableOperationBinding = <I extends { url: string; table: string
  * tables): the runtime callable fills in the account's table endpoint; the
  * deploy-time half assigns `grant` on the storage account.
  */
-export const makeTableServiceOperationBinding = <I extends { url: string }, A, E>(options: {
+export const makeTableServiceOperationBinding = <I extends { url: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Storage.CreateTable`. */
   tag: string;
   /** The distilled operation; `url` is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   grant: TableGrant;
 }) =>
   Effect.gen(function* () {

@@ -62,18 +62,18 @@ const GrantOnProvider = Effect.gen(function* () {
 });
 
 /** A distilled attestation operation, resolved with the host's credentials. */
-type Operation<I, A, E> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+type Operation<I, A, E, R> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 
 /**
  * Build the impl Effect for an attestation operation whose request carries
  * `endpoint`: the runtime callable injects the bound {@link Provider}'s
  * attest URI, and the deploy-time half assigns `grant` on the provider.
  */
-export const makeAttestationHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeAttestationHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Attestation.GetPolicy`. */
   tag: string;
   /** The distilled operation; the attest URI is injected as `endpoint`. */
-  operation: Operation<I, A, E>;
+  operation: Operation<I, A, E, R>;
   /** Role assigned on the provider; `undefined` for anonymous endpoints. */
   grant: AttestationGrant | undefined;
 }) =>

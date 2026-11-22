@@ -1,4 +1,4 @@
-import type { AzureOpContext } from "@distilled.cloud/azure";
+import type { AzureOpContext, AzureOpError } from "@distilled.cloud/azure";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import type { ResourceLike } from "alchemy/Resource";
@@ -18,7 +18,7 @@ import {
 // Shared lifecycle of private-endpoint connection approvals on a private
 // link service or application gateway. Internal: not exported from index.ts.
 
-type Op<A> = Effect.Effect<A, any, AzureOpContext>;
+type Op<A> = Effect.Effect<A, AzureOpError, AzureOpContext>;
 
 export interface ObservedConnection {
   readonly id?: string;

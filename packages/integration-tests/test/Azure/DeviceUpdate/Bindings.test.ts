@@ -19,7 +19,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   state: Alchemy.localState(),
 });
 
-describe("Device Update request encoding", { tags: ["provider:azure"] }, () => {
+describe("Device Update request encoding", { tags: ["unit", "provider:azure"] }, () => {
   /** Capture the one request an operation sends, with a token per audience. */
   const captured = <A, E>(
     operation: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>,

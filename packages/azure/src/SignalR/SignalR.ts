@@ -567,8 +567,10 @@ const featureMatches = (
   if (lower(current.value) !== lower(desired.value)) return false;
   return (
     desired.properties === undefined ||
-    JSON.stringify(Object.entries(desired.properties).sort()) ===
-      JSON.stringify(Object.entries(current.properties ?? {}).sort())
+    JSON.stringify(Object.entries(desired.properties).sort(([a], [b]) => a.localeCompare(b))) ===
+      JSON.stringify(
+        Object.entries(current.properties ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+      )
   );
 };
 

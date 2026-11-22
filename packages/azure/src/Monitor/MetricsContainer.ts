@@ -133,16 +133,14 @@ const getContainer = (
   resourceGroupName: string,
   azureMonitorWorkspaceName: string,
 ) =>
-  untilReady(
-    orUndefinedIfNotFound(
-      monitoringservice.GetMetricsContainer({
-        subscriptionId,
-        resourceGroupName,
-        azureMonitorWorkspaceName,
-        metricsContainerName: CONTAINER_NAME,
-      }),
-    ),
-  );
+  monitoringservice
+    .GetMetricsContainer({
+      subscriptionId,
+      resourceGroupName,
+      azureMonitorWorkspaceName,
+      metricsContainerName: CONTAINER_NAME,
+    })
+    .pipe(orUndefinedIfNotFound, untilReady);
 
 const putVersion = (
   subscriptionId: string,

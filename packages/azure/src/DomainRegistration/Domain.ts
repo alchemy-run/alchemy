@@ -3,7 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
-import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import {
   collectAll,
@@ -439,8 +439,7 @@ export const DomainProvider = () =>
           }).pipe(
             Effect.map((page) => (page.value ?? []).map((agreement) => agreement.agreementKey)),
           ));
-        const agreedAt =
-          news.consent.agreedAt ?? new Date(yield* Clock.currentTimeMillis).toISOString();
+        const agreedAt = news.consent.agreedAt ?? DateTime.formatIso(yield* DateTime.now);
         yield* domainregistration.DomainsCreateOrUpdate({
           ...target,
           location: "global",

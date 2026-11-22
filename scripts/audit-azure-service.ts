@@ -224,7 +224,7 @@ const bindingFiles = new Set<string>();
 for (const file of alchemyFiles) {
   const text = fs.readFileSync(file, "utf8");
   const rel = path.relative(repo, file);
-  if (/Http\.ts$/.test(file) || /make\w*Binding\(|Binding\.Service</.test(text)) {
+  if (file.endsWith("Http.ts") || /make\w*Binding\(|Binding\.Service</.test(text)) {
     bindingFiles.add(rel);
   }
   const types = [
@@ -516,7 +516,9 @@ if (dataPlaneRoot) {
     if (!cur || m[3]! > cur.version) latest.set(key, { version: m[3]!, files: [file] });
     else if (m[3] === cur.version) cur.files.push(file);
   }
-  for (const [key, { version, files: all }] of [...latest].sort()) {
+  for (const [key, { version, files: all }] of [...latest].sort(([a], [b]) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  )) {
     // Storage ships a hand-written and a TypeSpec-generated (`generated_*`) copy.
     const files = all.some((f) => !path.basename(f).startsWith("generated_"))
       ? all.filter((f) => !path.basename(f).startsWith("generated_"))

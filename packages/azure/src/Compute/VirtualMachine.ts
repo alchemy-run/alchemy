@@ -20,7 +20,9 @@ import {
 import { packEnvValue } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { sha256Object } from "alchemy/Util/sha256";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -1127,8 +1129,11 @@ const releaseSas = Effect.fn(function* (
   hosting: VirtualMachineHosting,
   permission: string,
 ) {
-  const now = yield* Effect.sync(() => Date.now());
-  const expiry = new Date(now + 60 * 60 * 1000).toISOString().replace(/\.\d+Z$/, "Z");
+  const now = yield* Clock.currentTimeMillis;
+  const expiry = DateTime.formatIso(DateTime.makeUnsafe(now + 60 * 60 * 1000)).replace(
+    /\.\d+Z$/,
+    "Z",
+  );
   const { serviceSasToken } = yield* storage.ListStorageAccountServiceSAS({
     subscriptionId,
     resourceGroupName: hosting.resourceGroup,

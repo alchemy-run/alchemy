@@ -194,11 +194,12 @@ export const makeCosmosTableOperationBinding = <
   I extends { url: string; table: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.CosmosDB.GetTableEntity`. */
   tag: string;
   /** The distilled operation; `url` and `table` are injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   role: CosmosTableRole;
 }) =>
   Effect.gen(function* () {

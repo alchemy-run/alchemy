@@ -597,17 +597,15 @@ export const VolumeProvider = () =>
         output.volumeName,
       );
       yield* waitSettled(get, (volume) => volume.properties?.provisioningState);
-      yield* whileBusy(
-        ignoreNotFound(
-          netapp.DeleteVolume({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            accountName: output.account,
-            poolName: output.pool,
-            volumeName: output.volumeName,
-          }),
-        ),
-      );
+      yield* netapp
+        .DeleteVolume({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          accountName: output.account,
+          poolName: output.pool,
+          volumeName: output.volumeName,
+        })
+        .pipe(ignoreNotFound, whileBusy);
       yield* waitUntilGone(`netapp volume ${output.volumeName}`, get, LRO_BUDGET);
     }),
 

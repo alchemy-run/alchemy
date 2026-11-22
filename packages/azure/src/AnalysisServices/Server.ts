@@ -291,11 +291,14 @@ const toFirewallSettings = (
   enablePowerBIService: firewall.enablePowerBIService ?? false,
 });
 
+/** The order `Array.prototype.sort` uses without a comparator. */
+const byCodeUnits = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 const firewallKey = (settings: analysisservices.IPv4FirewallSettings | undefined) =>
   JSON.stringify({
     rules: [...(settings?.firewallRules ?? [])]
       .map((r) => [r.firewallRuleName ?? "", r.rangeStart, r.rangeEnd])
-      .sort(),
+      .sort((a, b) => byCodeUnits(a.join(), b.join())),
     powerBi: settings?.enablePowerBIService ?? false,
   });
 

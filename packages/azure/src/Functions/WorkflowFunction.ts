@@ -215,21 +215,30 @@ export const WorkflowFunction =
       return { scheduler, taskHub } satisfies WorkflowDurableTask;
     });
     // The function resource, from anywhere: its own init, or another runtime's.
-    const self = (Function as any)()(id);
+    type FunctionEffect = Effect.Effect<Function, never, Function["Providers"]>;
+    const self: FunctionEffect = (Function as any)()(id);
     return Object.assign(
       fn,
       {
         workflows: options.workflows,
         durableTask,
-        make: (props: unknown, workflows: Layer.Layer<any, any, any>) =>
+        make: <ROut, E, RIn, PropsReq>(
+          props:
+            | InputProps<FunctionProps>
+            | Effect.Effect<InputProps<FunctionProps>, ConfigError, PropsReq>,
+          workflows: Layer.Layer<ROut, E, RIn>,
+        ) =>
           make(
             Effect.isEffect(props)
-              ? Effect.map(props as Effect.Effect<FunctionProps, unknown, unknown>, withDurableTask)
+              ? Effect.map(
+                  props as Effect.Effect<FunctionProps, ConfigError, PropsReq>,
+                  withDurableTask,
+                )
               : withDurableTask(props as FunctionProps),
             makeWorkflowHost(options.workflows, durableTask, workflows),
           ),
       },
-      Effectable.Prototype({
+      Effectable.Prototype<FunctionEffect>({
         label: `Azure.Functions.WorkflowFunction<${id}>`,
         evaluate: () => self,
       }),
@@ -256,9 +265,9 @@ const withDurableTask = (props: FunctionProps): FunctionProps => ({
  * engine, and register one orchestrator function per workflow plus the step
  * activity.
  */
-const makeWorkflowHost = <ROut, E, RIn>(
+const makeWorkflowHost = <ROut, E, RIn, DurableTaskReq>(
   workflows: ReadonlyArray<Workflow.Any>,
-  durableTask: Effect.Effect<WorkflowDurableTask, never, any>,
+  durableTask: Effect.Effect<WorkflowDurableTask, never, DurableTaskReq>,
   layer: Layer.Layer<ROut, E, RIn>,
 ) =>
   Effect.gen(function* () {

@@ -234,16 +234,14 @@ export const BackupVaultProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* whileBusy(
-        ignoreNotFound(
-          netapp.DeleteBackupVault({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            accountName: output.account,
-            backupVaultName: output.backupVaultName,
-          }),
-        ),
-      );
+      yield* netapp
+        .DeleteBackupVault({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          accountName: output.account,
+          backupVaultName: output.backupVaultName,
+        })
+        .pipe(ignoreNotFound, whileBusy);
       yield* waitUntilGone(
         `backup vault ${output.backupVaultName}`,
         getBackupVault(

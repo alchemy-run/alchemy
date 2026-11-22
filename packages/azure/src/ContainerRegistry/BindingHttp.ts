@@ -121,11 +121,11 @@ export const registryEndpointOf = (registry: Registry) =>
  * {@link Registry}'s endpoint, and the deploy-time half assigns `grants` on
  * the registry.
  */
-export const makeRegistryHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeRegistryHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.ContainerRegistry.GetManifest`. */
   tag: string;
   /** The distilled operation; the registry endpoint is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Roles assigned on the registry. */
   grants: readonly RegistryGrant[];
 }) =>
@@ -149,9 +149,9 @@ export const makeRegistryHttpBinding = <I extends { endpoint: string }, A, E>(op
  * (`UploadBlob`): `makeCall` receives the resolved operations and the
  * registry endpoint and returns the runtime callable.
  */
-export const makeRegistryCompositeBinding = <Ops, Call>(options: {
+export const makeRegistryCompositeBinding = <Ops, Call, R>(options: {
   tag: string;
-  operations: Effect.Effect<Ops, never, any>;
+  operations: Effect.Effect<Ops, never, R>;
   grants: readonly RegistryGrant[];
   makeCall: (ops: Ops, endpoint: Effect.Effect<string>, label: string) => Call;
 }) =>

@@ -113,13 +113,13 @@ const LedgerCalls = Effect.gen(function* () {
 });
 
 /** A distilled ledger operation, resolved with the host's credentials. */
-type Operation<I, A, E> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+type Operation<I, A, E, R> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 
 /** A distilled paginated ledger operation, resolved with the host's credentials. */
-type PagedOperation<I, Item, E> = Effect.Effect<
+type PagedOperation<I, Item, E, R> = Effect.Effect<
   { readonly items: (input: I) => Stream.Stream<Item, E> },
   never,
-  any
+  R
 >;
 
 /**
@@ -127,11 +127,11 @@ type PagedOperation<I, Item, E> = Effect.Effect<
  * `ledgerEndpoint`: the runtime callable injects the bound {@link Ledger}'s
  * endpoint, and the deploy-time half gives the host `role` on the ledger.
  */
-export const makeLedgerHttpBinding = <I extends { ledgerEndpoint: string }, A, E>(options: {
+export const makeLedgerHttpBinding = <I extends { ledgerEndpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.ConfidentialLedger.CreateLedgerEntry`. */
   tag: string;
   /** The distilled operation; the ledger endpoint is injected. */
-  operation: Operation<I, A, E>;
+  operation: Operation<I, A, E, R>;
   /** Ledger role the host gets. */
   role: LedgerRoleName;
 }) =>
@@ -155,11 +155,16 @@ export const makeLedgerHttpBinding = <I extends { ledgerEndpoint: string }, A, E
  * Build the impl Effect for a paginated ledger list operation: the runtime
  * callable injects the ledger endpoint and returns every item across pages.
  */
-export const makeLedgerListHttpBinding = <I extends { ledgerEndpoint: string }, Item, E>(options: {
+export const makeLedgerListHttpBinding = <
+  I extends { ledgerEndpoint: string },
+  Item,
+  E,
+  R,
+>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.ConfidentialLedger.ListCollections`. */
   tag: string;
   /** The distilled paginated operation. */
-  operation: PagedOperation<I, Item, E>;
+  operation: PagedOperation<I, Item, E, R>;
   /** Ledger role the host gets. */
   role: LedgerRoleName;
 }) =>

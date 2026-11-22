@@ -205,11 +205,12 @@ export const makeFileSystemOperationBinding = <
   I extends { url: string; filesystem: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Storage.ReadPath`. */
   tag: string;
   /** The distilled `storage-datalake` operation. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   access: DataLakeAccess;
   /** @default "dfs" */
   endpoint?: DataLakeEndpoint;
@@ -236,11 +237,11 @@ export const makeFileSystemOperationBinding = <
  * {@link StorageAccount}, and the callable fills in its `dfs` endpoint as
  * `url`.
  */
-export const makeAccountOperationBinding = <I extends { url: string }, A, E>(options: {
+export const makeAccountOperationBinding = <I extends { url: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Storage.CreateFileSystem`. */
   tag: string;
   /** The distilled `storage-datalake` operation. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   access: DataLakeAccess;
 }) =>
   Effect.gen(function* () {

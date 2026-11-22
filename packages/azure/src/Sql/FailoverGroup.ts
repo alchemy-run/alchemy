@@ -289,8 +289,8 @@ const toAttrs = (
 });
 
 const sameIdSet = (a: readonly string[], b: readonly string[]) => {
-  const left = a.map(lower).sort();
-  const right = b.map(lower).sort();
+  const left = a.map(lower).sort((x, y) => (x ?? "").localeCompare(y ?? ""));
+  const right = b.map(lower).sort((x, y) => (x ?? "").localeCompare(y ?? ""));
   return left.join(",") === right.join(",");
 };
 

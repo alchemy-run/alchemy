@@ -78,11 +78,12 @@ export const makeDeviceUpdateHttpBinding = <
   I extends { endpoint: string; instanceId: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.DeviceUpdate.GetUpdate`. */
   tag: string;
   /** The distilled operation; the endpoint and instance name are injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Custom role assigned on the instance. */
   grant: DeviceUpdateGrant;
 }) =>

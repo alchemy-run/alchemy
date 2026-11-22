@@ -324,16 +324,14 @@ export const SnapshotPolicyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* whileBusy(
-        ignoreNotFound(
-          netapp.DeleteSnapshotPolicy({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            accountName: output.account,
-            snapshotPolicyName: output.snapshotPolicyName,
-          }),
-        ),
-      );
+      yield* netapp
+        .DeleteSnapshotPolicy({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          accountName: output.account,
+          snapshotPolicyName: output.snapshotPolicyName,
+        })
+        .pipe(ignoreNotFound, whileBusy);
       yield* waitUntilGone(
         `snapshot policy ${output.snapshotPolicyName}`,
         getSnapshotPolicy(

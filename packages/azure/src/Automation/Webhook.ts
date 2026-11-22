@@ -3,6 +3,8 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
+import * as Clock from "effect/Clock";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import {
@@ -220,7 +222,9 @@ export const WebhookProvider = () =>
         // Azure rejects a webhook without an expiry time.
         const expiryTime =
           news.expiryTime ??
-          (yield* Effect.sync(() => new Date(Date.now() + 365 * 24 * 3600_000).toISOString()));
+          DateTime.formatIso(
+            DateTime.makeUnsafe((yield* Clock.currentTimeMillis) + 365 * 24 * 3600_000),
+          );
         yield* automation.WebhookCreateOrUpdate({
           ...where,
           name,

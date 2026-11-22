@@ -275,17 +275,15 @@ export const ProvisioningServiceCertificateProvider = () =>
       );
       const observed = yield* get;
       if (observed !== undefined) {
-        yield* ignoreNotFound(
-          retryWhileTransitioning(
-            dps.DeleteDpsCertificate({
-              subscriptionId,
-              resourceGroupName: output.resourceGroup,
-              provisioningServiceName: output.provisioningService,
-              certificateName: output.certificateName,
-              ifMatch: observed.etag ?? "*",
-            }),
-          ),
-        );
+        yield* dps
+          .DeleteDpsCertificate({
+            subscriptionId,
+            resourceGroupName: output.resourceGroup,
+            provisioningServiceName: output.provisioningService,
+            certificateName: output.certificateName,
+            ifMatch: observed.etag ?? "*",
+          })
+          .pipe(retryWhileTransitioning, ignoreNotFound);
       }
       yield* waitUntilGone(`dps certificate ${output.certificateName}`, get);
     }),

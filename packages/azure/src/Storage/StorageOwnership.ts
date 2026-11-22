@@ -110,7 +110,7 @@ const normalizePolicies = (
     policies
       .map((policy) => ({
         id: policy.id ?? "",
-        permission: [...(policy.accessPolicy?.permission ?? "")].sort().join(""),
+        permission: (policy.accessPolicy?.permission ?? "").split("").sort().join(""),
         start: instant(policy.accessPolicy?.startTime),
         expiry: instant(policy.accessPolicy?.expiryTime),
       }))

@@ -73,7 +73,7 @@ const parseResourceId = (resourceId: string) => {
 };
 
 /** A distilled operation, resolved with the host's credentials. */
-type Operation<I, A, E> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+type Operation<I, A, E, R> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 
 type ContainerAppKeys = "subscriptionId" | "resourceGroupName" | "containerAppName";
 
@@ -86,11 +86,12 @@ export const makeContainerAppActionBinding = <
   I extends { subscriptionId: string; resourceGroupName: string; containerAppName: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.ContainerApps.StartContainerApp`. */
   tag: string;
   /** The distilled operation; the app's identifiers are injected. */
-  operation: Operation<I, A, E>;
+  operation: Operation<I, A, E, R>;
   /** Custom role assigned on the app. */
   grant: ContainerAppsGrant;
 }) =>
@@ -127,11 +128,12 @@ export const makeJobActionBinding = <
   I extends { subscriptionId: string; resourceGroupName: string; jobName: string },
   A,
   E,
+  R,
 >(options: {
   /** Fully-qualified binding tag, e.g. `Azure.ContainerApps.StartJob`. */
   tag: string;
   /** The distilled operation; the job's identifiers are injected. */
-  operation: Operation<I, A, E>;
+  operation: Operation<I, A, E, R>;
   /** Custom role assigned on the job. */
   grant: ContainerAppsGrant;
 }) =>

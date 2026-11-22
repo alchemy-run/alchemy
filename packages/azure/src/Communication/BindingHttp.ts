@@ -1,4 +1,4 @@
-import { fromStaticToken } from "@distilled.cloud/azure";
+import { fromStaticToken, type AzureOpContext } from "@distilled.cloud/azure";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
@@ -94,11 +94,11 @@ type Operation<I, A, E> = (input: I) => Effect.Effect<A, E>;
  * injects the bound {@link CommunicationService}'s endpoint, and the
  * deploy-time half assigns `grant` on the service.
  */
-export const makeCommunicationHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeCommunicationHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Communication.SendEmail`. */
   tag: string;
   /** The distilled operation; the endpoint is injected. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
   /** Role assigned on the communication service. */
   grant: CommunicationGrant;
 }) =>
@@ -128,7 +128,7 @@ export const makeChatHttpBinding = <I extends { endpoint: string }, A, E>(option
   /** Fully-qualified binding tag, e.g. `Azure.Communication.SendChatMessage`. */
   tag: string;
   /** The distilled `communication-chat` operation; the endpoint is injected. */
-  operation: (input: I) => Effect.Effect<A, E, any>;
+  operation: (input: I) => Effect.Effect<A, E, AzureOpContext>;
 }) =>
   Effect.gen(function* () {
     return Effect.fn(function* (service: CommunicationService) {
@@ -147,12 +147,9 @@ export const makeChatHttpBinding = <I extends { endpoint: string }, A, E>(option
         // Azure credentials already in the caller's context. `Omit<I,
         // "endpoint"> & { endpoint }` is `I`, but TypeScript cannot prove it
         // for a generic `I`.
-        const call = options
+        return yield* options
           .operation({ ...rest, endpoint: url } as unknown as I)
           .pipe(Effect.provide(Layer.mergeAll(credentials, FetchHttpClient.layer)));
-        // `any` in the operation's requirements is the generated
-        // `AzureOpContext`, which the layer above satisfies.
-        return yield* call as Effect.Effect<A, E>;
       });
     });
   });

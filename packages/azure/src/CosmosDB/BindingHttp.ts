@@ -199,12 +199,12 @@ const onContainer = <I, A, E>(name: string, op: Operation<I, A, E>, address: Con
  * Build a per-operation binding: assigns `role` on the container at deploy
  * and returns `operation` with the container's identifiers filled in.
  */
-export const makeDocumentBinding = <I, A, E>(options: {
+export const makeDocumentBinding = <I, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.CosmosDB.GetDocument`. */
   tag: string;
   role: ContainerRole;
   /** The distilled `cosmos-nosql` operation. */
-  operation: Effect.Effect<Operation<I, A, E>, never, any>;
+  operation: Effect.Effect<Operation<I, A, E>, never, R>;
 }) =>
   Effect.gen(function* () {
     const grantOnContainer = yield* GrantOnContainer;

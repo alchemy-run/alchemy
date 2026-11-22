@@ -104,11 +104,11 @@ const GrantBatchRoles = Effect.gen(function* () {
  * `https://<account endpoint>`, and the deploy-time half assigns `grants`
  * on the account.
  */
-export const makeBatchAccountBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeBatchAccountBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.Batch.CreateJob`. */
   tag: string;
   /** The distilled operation; the account endpoint is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Roles assigned on the account. */
   grants: readonly BatchGrant[];
 }) =>

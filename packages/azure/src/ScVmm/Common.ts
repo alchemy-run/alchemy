@@ -28,7 +28,7 @@ export const toExtendedLocation = (location: ScVmmExtendedLocation) => ({
 });
 
 const canonical = (value: unknown): unknown => {
-  if (Redacted.isRedacted(value)) return canonical(Redacted.value(value));
+  if (Redacted.isRedacted(value)) return value.pipe(Redacted.value, canonical);
   if (Array.isArray(value)) return value.map(canonical);
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(

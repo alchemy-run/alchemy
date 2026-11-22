@@ -214,14 +214,12 @@ export const JobPrivateEndpointProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        retryWhileAgentBusy(
-          sql.DeleteJobPrivateEndpoint({
-            ...jobAgentPath(subscriptionId, output),
-            privateEndpointName: output.privateEndpointName,
-          }),
-        ),
-      );
+      yield* sql
+        .DeleteJobPrivateEndpoint({
+          ...jobAgentPath(subscriptionId, output),
+          privateEndpointName: output.privateEndpointName,
+        })
+        .pipe(retryWhileAgentBusy, ignoreNotFound);
       yield* waitUntilGone(
         `sql job private endpoint ${output.privateEndpointName}`,
         getChild(subscriptionId, output, output.privateEndpointName),

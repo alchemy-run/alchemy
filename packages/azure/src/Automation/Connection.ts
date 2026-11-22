@@ -139,8 +139,11 @@ const toAttrs = (
 const plainValues = (values: ConnectionProps["fieldDefinitionValues"]): Record<string, string> =>
   Object.fromEntries(Object.entries(values ?? {}).map(([k, v]) => [k, reveal(v) as string]));
 
+/** Entries ordered by key (keys are unique). */
+const byKey = ([a]: [string, string], [b]: [string, string]) => (a < b ? -1 : a > b ? 1 : 0);
+
 const sameValues = (a: Record<string, string>, b: Record<string, string>) =>
-  JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
+  JSON.stringify(Object.entries(a).sort(byKey)) === JSON.stringify(Object.entries(b).sort(byKey));
 
 export const ConnectionProvider = () =>
   Provider.succeed(Connection, {

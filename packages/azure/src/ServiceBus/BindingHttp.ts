@@ -115,7 +115,7 @@ const subscriptionTarget = (subscription: Subscription) =>
   });
 
 /** A distilled operation resolved with the host's credentials. */
-type Operation<I, A, E> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+type Operation<I, A, E, R> = Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
 
 /**
  * Bind `op` to a target of type `T`: the callable injects the target's
@@ -139,11 +139,11 @@ const makeOperationBinding =
   <R extends ServiceBusEntity, T extends object>(
     resolveTarget: (entity: R) => Effect.Effect<Target<T>>,
   ) =>
-  <I extends T, A, E>(options: {
+  <I extends T, A, E, Req>(options: {
     /** Fully-qualified binding tag, e.g. `Azure.ServiceBus.SendMessage`. */
     tag: string;
     /** The distilled `servicebus-messaging` operation. */
-    operation: Operation<I, A, E>;
+    operation: Operation<I, A, E, Req>;
     roles: ReadonlyArray<string>;
   }) =>
     Effect.gen(function* () {
@@ -282,9 +282,10 @@ export const makeWriteServiceBusClient =
 /** `send` only, as {@link SendServiceBusQueueClient}. */
 export const makeSendServiceBusClient =
   (ops: ServiceBusOperations) =>
-  (label: string, target: Target<EntityTarget>): SendServiceBusQueueClient => ({
-    send: makeWriteServiceBusClient(ops)(label, target).send,
-  });
+  (label: string, target: Target<EntityTarget>): SendServiceBusQueueClient => {
+    const client = makeWriteServiceBusClient(ops)(label, target);
+    return { send: (body, options) => client.send(body, options) };
+  };
 
 type Received = {
   body?: Uint8Array;

@@ -15,18 +15,19 @@
  * which the Storage emulator route drops in favour of Azurite's SAS. A
  * binding to a remote (non-emulated) resource therefore fails to authorize.
  */
-import { Credentials, fromStaticToken } from "@distilled.cloud/azure";
+import { fromStaticToken } from "@distilled.cloud/azure";
 import * as storageQueue from "@distilled.cloud/azure/storage-queue";
 import { NodeServices } from "@effect/platform-node";
 import { RuntimeConfigProviderLive } from "alchemy/Runtime";
 import { entrypointLayer, stackFromEnv } from "alchemy/Runtime/Bootstrap";
 import * as Clock from "effect/Clock";
+import * as Config from "effect/Config";
 import * as Cron from "effect/Cron";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
-import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Redacted from "effect/Redacted";
@@ -46,8 +47,11 @@ const localCredentials = fromStaticToken({
 
 const runtimeLayer = Layer.mergeAll(localCredentials, FetchHttpClient.layer);
 
-const withRuntime = <A, E>(effect: Effect.Effect<A, E, Credentials | HttpClient.HttpClient>) =>
+const withRuntime = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provide(runtimeLayer));
+
+/** Invocation ids come from Web Crypto, like `crypto.randomUUID()`. */
+const withRandom = Effect.provide(SecureRandom.layerWebCrypto);
 
 const tryJson = (text: string): unknown => {
   try {
@@ -68,15 +72,21 @@ const invoke = (
   trigger: RegisteredTrigger,
   invocation: Omit<TriggerInvocation, "functionName" | "invocationId">,
 ) =>
-  Effect.tryPromise(() =>
-    trigger.run({ ...invocation, functionName: name, invocationId: crypto.randomUUID() }),
-  );
+  Effect.gen(function* () {
+    const random = yield* SecureRandom.SecureRandom;
+    const invocationId = yield* random.uuidV4();
+    return yield* Effect.tryPromise(() =>
+      trigger.run({ ...invocation, functionName: name, invocationId }),
+    );
+  });
 
 /** Poll a Storage queue and run `trigger` once per message. */
 const consumeQueue = (name: string, trigger: RegisteredTrigger) =>
   Effect.gen(function* () {
     const connection = settingValue(trigger.binding.connection) ?? "AzureWebJobsStorage";
-    const url = process.env[`${connection}__queueServiceUri`];
+    const url = yield* Config.String(`${connection}__queueServiceUri`).pipe(
+      Config.withDefault(undefined),
+    );
     const queueName = settingValue(trigger.binding.queueName);
     if (url === undefined || queueName === undefined || queueName === "") {
       return yield* Effect.logWarning(
@@ -133,7 +143,7 @@ const consumeQueue = (name: string, trigger: RegisteredTrigger) =>
         Effect.tap((messages) => Effect.forEach(messages, handle, { discard: true })),
         Effect.map((messages) => messages.length),
       );
-    yield* withRuntime(poll).pipe(
+    return yield* withRuntime(poll).pipe(
       Effect.catch((error) =>
         Effect.logWarning(`queue trigger ${name}: polling ${queueName} failed`, error).pipe(
           Effect.as(0),
@@ -147,13 +157,14 @@ const consumeQueue = (name: string, trigger: RegisteredTrigger) =>
 /** Run `trigger` on its NCRONTAB schedule (six fields, seconds first). */
 const runTimer = (name: string, trigger: RegisteredTrigger) =>
   Effect.gen(function* () {
-    const schedule = String(trigger.binding.schedule ?? "");
+    const raw = trigger.binding.schedule ?? "";
+    const schedule = typeof raw === "string" ? raw : JSON.stringify(raw);
     const parsed = Cron.parse(schedule);
     if (Result.isFailure(parsed)) {
       return yield* Effect.logWarning(`timer trigger ${name}: cannot parse "${schedule}"`);
     }
     const cron = parsed.success;
-    yield* Effect.gen(function* () {
+    return yield* Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
       const next = Cron.next(cron, now).getTime();
       yield* Effect.sleep(Duration.millis(Math.max(0, next - now)));
@@ -198,13 +209,13 @@ export const bootstrap = async (entrypoint: unknown): Promise<void> => {
       ),
     ),
   );
-  await Effect.runPromise(Deferred.await(initialized));
+  await initialized.pipe(Deferred.await, Effect.runPromise);
 
   const registry = functionRegistry();
   for (const [name, trigger] of registry.triggers) {
     const type = trigger.binding.type.toLowerCase();
-    if (type === "queuetrigger") Effect.runFork(consumeQueue(name, trigger));
-    else if (type === "timertrigger") Effect.runFork(runTimer(name, trigger));
+    if (type === "queuetrigger") Effect.runFork(consumeQueue(name, trigger).pipe(withRandom));
+    else if (type === "timertrigger") Effect.runFork(runTimer(name, trigger).pipe(withRandom));
     else console.warn(`${trigger.binding.type} function ${name} does not run under alchemy dev`);
   }
   await listen(registry.http);

@@ -148,16 +148,14 @@ const getPolicy = (
   resourceName: string,
   policyName: string,
 ) =>
-  orUndefinedIfNotFound(
-    retryWhileVaultRegistering(
-      asr.GetReplicationPolicy({
-        subscriptionId,
-        resourceGroupName,
-        resourceName,
-        policyName,
-      }),
-    ),
-  );
+  asr
+    .GetReplicationPolicy({
+      subscriptionId,
+      resourceGroupName,
+      resourceName,
+      policyName,
+    })
+    .pipe(retryWhileVaultRegistering, orUndefinedIfNotFound);
 
 const detailsOf = (observed: Observed) =>
   (observed.properties?.providerSpecificDetails ?? {}) as Record<string, unknown>;
@@ -186,7 +184,7 @@ const toAttrs = (
     vault,
     resourceGroup,
     policyId: observed.id ?? "",
-    instanceType: String(details.instanceType ?? ""),
+    instanceType: typeof details.instanceType === "string" ? details.instanceType : "",
     providerSpecificDetails: details,
   };
 };
@@ -299,16 +297,14 @@ export const ReplicationPolicyProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      yield* ignoreNotFound(
-        retryWhileVaultRegistering(
-          asr.DeleteReplicationPolicy({
-            subscriptionId,
-            resourceGroupName: output.resourceGroup,
-            resourceName: output.vault,
-            policyName: output.policyName,
-          }),
-        ),
-      );
+      yield* asr
+        .DeleteReplicationPolicy({
+          subscriptionId,
+          resourceGroupName: output.resourceGroup,
+          resourceName: output.vault,
+          policyName: output.policyName,
+        })
+        .pipe(retryWhileVaultRegistering, ignoreNotFound);
       yield* waitUntilGone(
         `site recovery policy ${output.policyName}`,
         getPolicy(subscriptionId, output.resourceGroup, output.vault, output.policyName),

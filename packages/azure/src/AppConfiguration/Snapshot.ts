@@ -169,8 +169,12 @@ const toAttrs = (
 const canonicalFilters = (filters: ReadonlyArray<SnapshotFilter>) =>
   JSON.stringify(filters.map((f) => ({ key: f.key, label: f.label ?? null })));
 
+/** Entries ordered by key (keys are unique). */
+const byKey = ([a]: [string, string], [b]: [string, string]) => (a < b ? -1 : a > b ? 1 : 0);
+
 const sameTags = (a: Record<string, string> | undefined, b: Record<string, string> | undefined) =>
-  JSON.stringify(Object.entries(a ?? {}).sort()) === JSON.stringify(Object.entries(b ?? {}).sort());
+  JSON.stringify(Object.entries(a ?? {}).sort(byKey)) ===
+  JSON.stringify(Object.entries(b ?? {}).sort(byKey));
 
 export const SnapshotProvider = () =>
   Provider.succeed(Snapshot, {

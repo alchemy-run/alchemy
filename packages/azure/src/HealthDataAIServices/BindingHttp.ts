@@ -83,11 +83,11 @@ const GrantDeidRole = Effect.gen(function* () {
  * runtime callable injects the bound {@link DeidService}'s `serviceUrl` as
  * `endpoint`, and the deploy-time half assigns `grant` on the service.
  */
-export const makeDeidHttpBinding = <I extends { endpoint: string }, A, E>(options: {
+export const makeDeidHttpBinding = <I extends { endpoint: string }, A, E, R>(options: {
   /** Fully-qualified binding tag, e.g. `Azure.HealthDataAIServices.DeidentifyText`. */
   tag: string;
   /** The distilled operation; the endpoint is injected. */
-  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, any>;
+  operation: Effect.Effect<(input: I) => Effect.Effect<A, E>, never, R>;
   /** Role assigned on the service. */
   grant: DeidGrant;
 }) =>
