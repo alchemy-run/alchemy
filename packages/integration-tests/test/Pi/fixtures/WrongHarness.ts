@@ -1,7 +1,6 @@
 import * as AI from "@alchemy.run/ai";
 import * as AICloudflare from "@alchemy.run/ai/Cloudflare";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as OpenCode from "@alchemy.run/opencode";
 import * as Pi from "@alchemy.run/pi";
 import * as PiCloudflare from "@alchemy.run/pi/Cloudflare";
 import * as Effect from "effect/Effect";
@@ -9,7 +8,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import { Fast } from "./models.ts";
 
-/** A Pi harness whose `AI.Bash` was given OpenCode's Layer: it compiles, and must not run. */
+/** A Pi harness whose `AI.Bash` was given another harness's own tool: it compiles, and must not run. */
 export class PiWrongHarness extends Cloudflare.DurableObject<PiWrongHarness>()(
   "PiWrongHarness",
   Effect.gen(function* () {
@@ -23,7 +22,7 @@ export class PiWrongHarness extends Cloudflare.DurableObject<PiWrongHarness>()(
       Layer.mergeAll(
         AICloudflare.Model(Fast, { model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" }),
         PiCloudflare.DurableObjectStorage,
-        OpenCode.Bash,
+        AI.Bash.native("opencode", "shell"),
       ),
     ),
   ),

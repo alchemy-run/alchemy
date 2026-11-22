@@ -9,7 +9,7 @@ import {
 import type { DeclaredNamespace, DeclaredTool, JsonSchema } from "@alchemy.run/ai/Declarations";
 import { isMcpServer, type AnyMcpServer, type McpServerService } from "@alchemy.run/ai/McpServer";
 import type { AnyModel, ModelService } from "@alchemy.run/ai/Model";
-import { Sandbox, Sandboxes, sandboxOf, type SandboxHandle } from "@alchemy.run/ai/Sandbox";
+import { Sandbox, SandboxError, Sandboxes, sandboxOf } from "@alchemy.run/ai/Sandbox";
 import type { AnySkill } from "@alchemy.run/ai/Skill";
 import {
   callTool,
@@ -21,20 +21,24 @@ import {
   type ToolSpec,
   type ToolTagService,
 } from "@alchemy.run/ai/Tool";
+import type { Plugin } from "@opencode/plugin";
+import * as Alchemy from "alchemy";
+import type { Callback } from "alchemy/Callback";
 import { RuntimeContext } from "alchemy/RuntimeContext";
+import { InstanceSetup } from "alchemy/Workers/InstanceSetup";
 import { LanguageModel, McpClient, Tool as AiToolSchema } from "effect/ai";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
+import type * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
-import * as Stream from "effect/Stream";
+import * as Semaphore from "effect/Semaphore";
 import { NotOnHarness, OpenCodeError } from "./Errors.ts";
-import { Instance } from "./Instance.ts";
-import { complete, type ChatRequest } from "./internal/chat.ts";
-import { BRIDGE, CALL, CLIENT, INSTALL, LAUNCH, OPENCODE, PORTS } from "./internal/scripts.ts";
+import { chatResponse, complete, type ChatRequest } from "./internal/chat.ts";
+import { Storage, type Host } from "./Storage.ts";
 import {
   ENGINE,
   flattenTools,
@@ -74,8 +78,10 @@ export interface HarnessOptions<
   /** Skills every session can load when a task calls for one. */
   readonly skills?: Skills;
   /**
-   * The directory sessions work in.
-   * @default the sandbox user's home
+   * The directory sessions work in: where a tool's `AI.Sandbox` runs
+   * commands and resolves relative paths, and the directory OpenCode files
+   * its sessions under.
+   * @default the sandbox's own working directory
    */
   readonly cwd?: string;
   /** OpenCode's own configuration (`opencode.json`), merged under what the harness sets. */
@@ -96,8 +102,8 @@ export interface PromptOptions {
   /** One of OpenCode's agents (`build`, `plan`, or one from `config`). */
   readonly agent?: string;
   /**
-   * Makes the prompt exactly-once while its sandbox runs: a retry with the
-   * same id waits for the original.
+   * Makes the prompt exactly-once while this instance runs: a retry with
+   * the same id waits for the original and gets its answer.
    */
   readonly requestId?: string;
 }
@@ -117,7 +123,7 @@ export interface Message {
 export interface Content {
   readonly type: string;
   readonly text?: string;
-  /** A `tool` call's tool, as OpenCode names it (`shell`, `alchemy_add`, `execute`). */
+  /** A `tool` call's tool, as OpenCode names it (`alchemy_add`, `webfetch`, `execute`). */
   readonly name?: string;
   readonly state?: {
     readonly status: "streaming" | "running" | "completed" | "error";
@@ -145,7 +151,7 @@ export interface Reply {
   readonly messages: ReadonlyArray<Message>;
 }
 
-/** One session: an OpenCode session in a sandbox of its own. */
+/** One session of OpenCode. */
 export interface Session {
   readonly name: string;
   /**
@@ -153,7 +159,7 @@ export interface Session {
    * `AI.Sandboxes` Layer names or labels the sandbox by.
    */
   readonly sandboxKey: string;
-  /** OpenCode's id for the session. Opens the sandbox. */
+  /** OpenCode's id for the session. */
   readonly id: Effect.Effect<string, OpenCodeError, RuntimeContext>;
   /** Send a prompt and wait for the answer, through every tool call it takes. */
   readonly prompt: (
@@ -166,30 +172,31 @@ export interface Session {
   readonly messages: Effect.Effect<ReadonlyArray<Message>, OpenCodeError, RuntimeContext>;
   /**
    * Stop the session's sandbox and keep its files, where its platform can
-   * (`AI.Sandboxes`'s `suspend`). Its next call resumes it.
+   * (`AI.Sandboxes`'s `suspend`). Its next tool call resumes it. Does
+   * nothing on a harness without sandboxes.
    */
   readonly suspendSandbox: Effect.Effect<void, OpenCodeError, RuntimeContext>;
   /**
-   * Delete the session's sandbox (`AI.Sandboxes`'s `remove`), and the
-   * session with it. Its next call starts both again, empty.
+   * Delete the session's sandbox (`AI.Sandboxes`'s `remove`). Its next
+   * tool call starts one again, empty. The session keeps its transcript.
    */
   readonly removeSandbox: Effect.Effect<void, OpenCodeError, RuntimeContext>;
-  /** Call OpenCode's own HTTP API in the session's sandbox, for what this view doesn't cover. */
-  readonly request: (
-    method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
-    path: string,
-    body?: unknown,
-  ) => Effect.Effect<unknown, OpenCodeError, RuntimeContext>;
 }
 
 /** A harness: sessions, and the models, tools and skills they may use. */
 export interface Harness {
   /**
-   * The session with this name. Nothing runs until it is used: its first
-   * call opens its sandbox and starts OpenCode there. `defaults` are what
-   * its prompts run with unless they say otherwise.
+   * The session with this name. Nothing runs until it is used. `defaults`
+   * are what its prompts run with unless they say otherwise.
    */
   readonly session: (name: string, defaults?: PromptOptions) => Session;
+  /**
+   * Call OpenCode's own client, for what this view doesn't cover. Starts
+   * OpenCode in this instance when it is not running.
+   */
+  readonly use: <A>(
+    call: (client: Host) => Promise<A>,
+  ) => Effect.Effect<A, OpenCodeError, RuntimeContext>;
 }
 
 type ModelServices<Models extends ReadonlyArray<AnyModel>> = Models[number] extends infer M
@@ -228,21 +235,6 @@ const messageOf = (cause: unknown): string =>
 
 const fail = (message: string, cause?: unknown) =>
   new OpenCodeError({ message, ...(cause !== undefined ? { cause } : {}) });
-
-const toBase64 = (text: string) => {
-  const bytes = new TextEncoder().encode(text);
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(binary);
-};
-
-const fromBase64 = (text: string) =>
-  new TextDecoder().decode(Uint8Array.from(atob(text), (char) => char.charCodeAt(0)));
-
-/** The largest request body passed as a command argument; a larger one goes through a file. */
-const ARGUMENT_BYTES = 48 * 1024;
 
 interface BridgeTool {
   readonly name: string;
@@ -283,9 +275,12 @@ interface Built {
   readonly programmed: ReadonlyMap<string, Programmed>;
   /** How programs are written, when the harness runs them itself. */
   readonly convention?: Convention;
-  readonly files: ReadonlyArray<readonly [path: string, content: string]>;
-  readonly epoch: string;
 }
+
+/** How long OpenCode stays open after its last call with nothing running. */
+const IDLE_CLOSE = Duration.seconds(30);
+/** How long one alarm waits on a running prompt before the next takes over. */
+const WAKE_SLICE = Duration.minutes(5);
 
 /** The harness's own tool that runs a program, under a shared convention. */
 const CODEMODE_TOOL = "codemode";
@@ -352,37 +347,18 @@ interface Resolved {
   readonly handler: ToolHandler<ToolSpec>;
 }
 
-interface Finished {
-  readonly status: number;
-  readonly body: string;
-}
-
-/** A session's sandbox, with OpenCode running in it and its requests followed. */
-interface Connection {
-  readonly handle: SandboxHandle;
-  readonly sessionId: string;
-  readonly call: (
-    target: "opencode" | "bridge",
-    method: string,
-    path: string,
-    body?: unknown,
-  ) => Effect.Effect<Finished, OpenCodeError, RuntimeContext>;
-  /** Prompts waiting for OpenCode to finish, by request id. */
-  readonly waiting: Map<string, Deferred.Deferred<Finished, OpenCodeError>>;
-  /** The session settings last applied, as JSON, so an unchanged one is not sent again. */
-  readonly applied: Map<string, string>;
-  readonly close: Effect.Effect<void>;
-}
-
 /**
- * An OpenCode harness. OpenCode is a program, so each session runs it in a
- * sandbox of its own (`AI.Sandboxes`); the harness, where you yield it,
- * answers its model requests with your `AI.Model` Layers and runs your
- * `AI.Tool` handlers. No API key and no inbound address is put in the
- * sandbox: OpenCode's requests are relayed over the sandbox's own exec.
+ * An OpenCode harness. OpenCode runs where you yield it, on the instance's
+ * own storage (`OpenCode.Storage`): in a Durable Object, on its SQLite.
+ * Its model requests are answered by your `AI.Model` Layers and its tool
+ * calls run your `AI.Tool` handlers, all in the same isolate.
+ *
+ * Nothing of OpenCode runs in a sandbox. A tool that needs files or a
+ * shell uses `AI.Sandbox`, which the harness opens for the session from
+ * `AI.Sandboxes`; a harness whose tools need neither takes no sandbox.
  *
  * Yield it where the runtime's dependencies are resolved (a Durable
- * Object's outer Effect): the models, tools and sandboxes it needs are
+ * Object's outer Effect): the models, tools and storage it needs are
  * Layers provided there.
  *
  * **Example:** A harness in a Durable Object
@@ -415,12 +391,15 @@ export const Harness = <
 ): Effect.Effect<
   Harness,
   never,
-  Instance | Sandboxes | ModelServices<Models> | ToolRequirements<Tools[number]>
+  Storage | ModelServices<Models> | ToolRequirements<Tools[number]>
 > =>
   Effect.gen(function* () {
     const name = options.name ?? "alchemy";
-    const instanceId = yield* (yield* Instance).id;
-    const sandboxes = yield* Sandboxes;
+    const storage = yield* (yield* Storage).instance;
+    const instanceId = storage.id;
+    // Where tools find files and a shell. A harness without sandboxes runs
+    // only tools that need neither.
+    const sandboxes = Option.getOrUndefined(yield* Effect.serviceOption(Sandboxes));
 
     // Resolve every model and tool implementation here, where their Layers
     // (and the bindings those declare) are provided.
@@ -463,8 +442,8 @@ export const Harness = <
       listed.filter((tool): tool is ToolRef => !isMcpServer(tool)),
       (tool) => ("key" in tool ? String(tool.key) : tool.toolName),
     );
-    // A tool tag is whatever its Layer provided: OpenCode's own tool of
-    // that name, or a tool of yours that the bridge serves.
+    // A tool tag is whatever its Layer provided: one of OpenCode's own
+    // tools, or a tool of yours.
     const tags = yield* Effect.forEach(refs.filter(isToolTag), (tool) =>
       Effect.flatMap(
         Effect.service(tool as unknown as Context.Key<unknown, ToolTagService>),
@@ -611,85 +590,6 @@ export const Harness = <
               ]),
             ),
           };
-          const config = {
-            ...options.config,
-            autoupdate: false,
-            share: "disabled",
-            permission: "allow",
-            model: `${name}/${models[0]!.model.modelName}`,
-            small_model: `${name}/${models[0]!.model.modelName}`,
-            skills: { paths: ["~/.alchemy/opencode/skills"] },
-            provider: {
-              ...(options.config?.provider as object | undefined),
-              [name]: {
-                npm: "@ai-sdk/openai-compatible",
-                name,
-                options: { baseURL: `http://127.0.0.1:${PORTS.bridge}/v1`, apiKey: name },
-                models: Object.fromEntries(
-                  models.map(({ model }) => [
-                    model.modelName,
-                    {
-                      name: model.modelName,
-                      tool_call: true,
-                      attachment: model.options.images === true,
-                      limit: {
-                        context: model.options.contextWindow ?? 128_000,
-                        output: model.options.maxTokens ?? 8192,
-                      },
-                    },
-                  ]),
-                ),
-              },
-            },
-            mcp: {
-              ...(options.config?.mcp as object | undefined),
-              ...Object.fromEntries(
-                Object.keys(bridgeServers).map((server) => [
-                  server,
-                  {
-                    type: "remote",
-                    url: `http://127.0.0.1:${PORTS.bridge}/mcp/${server}`,
-                    oauth: false,
-                  },
-                ]),
-              ),
-            },
-          };
-          const files: Array<readonly [string, string]> = [
-            ["bridge.js", BRIDGE],
-            ["call.js", CLIENT],
-            ["opencode.json", JSON.stringify(config)],
-            ...skills.flatMap((skill) => [
-              [
-                `skills/${skill.skillName}/SKILL.md`,
-                `---\nname: ${skill.skillName}\ndescription: ${JSON.stringify(skill.skill.description)}\n---\n\n${skill.skill.instructions}\n`,
-              ] as const,
-              ...Object.entries(skill.skill.files ?? {}).map(
-                ([path, content]) => [`skills/${skill.skillName}/${path}`, content] as const,
-              ),
-            ]),
-          ];
-          const digest = yield* Effect.promise(() =>
-            crypto.subtle.digest(
-              "SHA-256",
-              new TextEncoder().encode(
-                JSON.stringify([OPENCODE.version, options.cwd, bridgeServers, files]),
-              ),
-            ),
-          );
-          const epoch = [...new Uint8Array(digest).subarray(0, 8)]
-            .map((byte) => byte.toString(16).padStart(2, "0"))
-            .join("");
-          files.push([
-            "bridge.json",
-            JSON.stringify({
-              epoch,
-              port: PORTS.bridge,
-              opencodePort: PORTS.opencode,
-              servers: bridgeServers,
-              ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
-            }),
-          ]);
           // Every tool a program may call, by the name it has where scripts run.
           const programmed = new Map<string, Programmed>([
             ...tools.map(
@@ -789,8 +689,6 @@ export const Harness = <
             call,
             programmed,
             ...(program === undefined ? {} : { convention: program.convention }),
-            files,
-            epoch,
           } satisfies Built;
         });
         built = Effect.runPromiseWith(context)(make);
@@ -801,264 +699,381 @@ export const Harness = <
       }).pipe(Effect.tapError(() => Effect.sync(() => (built = undefined))));
     });
 
-    const connections = new Map<string, Promise<Connection>>();
+    /** The host OpenCode asks for model answers, which never leaves this isolate. */
+    const MODEL_HOST = "alchemy-harness.invalid";
+    const directory = options.cwd ?? "/workspace";
+    const sessionTitle = (session: string) => `alchemy:${session}`;
 
-    const connect = (session: string) =>
-      Effect.gen(function* () {
-        const state = yield* build;
-        const run = Effect.runForkWith(base!);
-        const handle = yield* sandboxes
-          .open(sandboxKey(instanceId, session))
-          .pipe(Effect.mapError((cause) => fail(`Sandbox: ${messageOf(cause)}`, cause)));
-        const exec = (command: readonly [string, ...string[]], timeout: string) =>
-          handle.exec(command, { timeout }).pipe(
-            Effect.mapError((cause) => fail(`Sandbox: ${messageOf(cause)}`, cause)),
-            Effect.map((result) => ({
-              exitCode: result.exitCode ?? 0,
-              stdout: result.stdout ?? result.result ?? "",
-              stderr: result.stderr ?? "",
-            })),
-          );
-
-        // Install OpenCode, and learn where the harness keeps its files and
-        // which configuration the sandbox last ran with.
-        const installed = yield* exec(
-          [
-            "sh",
-            "-c",
-            `${INSTALL}\nprintf 'oc-dir:%s\\n' "$dir"\nprintf 'oc-epoch:%s\\n' "$(cat "$dir/epoch" 2>/dev/null)"`,
-          ],
-          "5 minutes",
-        );
-        const dir = /^oc-dir:(.+)$/m.exec(installed.stdout)?.[1]?.trim();
-        if (installed.exitCode !== 0 || dir === undefined) {
-          return yield* fail(
-            `OpenCode install exited ${installed.exitCode}: ${installed.stderr.trim() || installed.stdout.trim()}`,
-          );
-        }
-        const files = sandboxOf(handle);
-        if (/^oc-epoch:(.*)$/m.exec(installed.stdout)?.[1]?.trim() !== state.epoch) {
-          yield* Effect.forEach(
-            [...state.files, ["epoch", state.epoch] as const],
-            ([path, content]) => files.writeFile(`${dir}/${path}`, content),
-            { discard: true },
-          ).pipe(Effect.mapError((cause) => fail(`Sandbox: ${cause.message}`, cause)));
-        }
-
-        const call: Connection["call"] = (target, method, path, body) =>
-          Effect.gen(function* () {
-            const text = body === undefined ? undefined : JSON.stringify(body);
-            let argument: ReadonlyArray<string> = [];
-            if (text !== undefined && text.length > ARGUMENT_BYTES) {
-              // oxlint-disable-next-line effecttsgo/crypto-random-uuid-in-effect -- only a unique file name
-              const file = `${dir}/body-${crypto.randomUUID()}`;
-              yield* files
-                .writeFile(file, text)
-                .pipe(Effect.mapError((cause) => fail(`Sandbox: ${cause.message}`, cause)));
-              argument = [`@${file}`];
-            } else if (text !== undefined) {
-              argument = [toBase64(text)];
-            }
-            const result = yield* exec(
-              ["sh", "-c", CALL, "call", target, method, path, ...argument],
-              "2 minutes",
-            );
-            const line = /^oc:([A-Za-z0-9+/=]+)\r?$/m.exec(result.stdout)?.[1];
-            if (line === undefined) {
-              return yield* fail(
-                `OpenCode ${method} ${path}: no answer (${result.stderr.trim() || `exit ${result.exitCode}`})`,
-              );
-            }
-            const answer = JSON.parse(fromBase64(line)) as Finished;
-            if (answer.status === 0) {
-              return yield* fail(`OpenCode ${method} ${path}: ${answer.body}`);
-            }
-            return answer;
-          });
-
-        // Start the bridge, and OpenCode under it, unless this configuration is already running.
-        const healthy = yield* call("bridge", "GET", "/_health").pipe(
-          Effect.map(
-            (answer) => (JSON.parse(answer.body) as { epoch?: string }).epoch === state.epoch,
-          ),
-          Effect.orElseSucceed(() => false),
-        );
-        const scope = yield* Scope.make();
-        if (!healthy) {
-          yield* handle.start(["sh", "-c", LAUNCH]).pipe(
-            Scope.provide(scope),
-            Effect.mapError((cause) => fail(`Sandbox: ${messageOf(cause)}`, cause)),
-          );
-          const ready = yield* exec(["sh", "-c", CALL, "call", "wait", state.epoch], "90 seconds");
-          if (
-            !/^oc:/m.test(ready.stdout) ||
-            !ready.stdout.includes(toBase64('{"status":200').slice(0, 12))
-          ) {
-            const log = yield* exec(
-              ["sh", "-c", `tail -c 2000 "${dir}/bridge.log"`],
-              "30 seconds",
-            ).pipe(
-              Effect.map((result) => result.stdout),
-              Effect.orElseSucceed(() => ""),
-            );
-            return yield* fail(`OpenCode did not start: ${log.trim() || ready.stderr.trim()}`);
-          }
-        }
-
-        // The session is the one titled after its name; a new sandbox has none yet.
-        const title = `alchemy:${session}`;
-        const existing = yield* call(
-          "opencode",
-          "GET",
-          `/api/session?search=${encodeURIComponent(title)}&limit=100`,
-        ).pipe(Effect.flatMap((answer) => ok(answer, "list sessions")));
-        const found = (
-          existing as { readonly data: ReadonlyArray<{ id: string; title?: string }> }
-        ).data.find((candidate) => candidate.title === title);
-        const sessionId =
-          found?.id ??
-          (
-            (yield* call("opencode", "POST", "/api/session", { title }).pipe(
-              Effect.flatMap((answer) => ok(answer, "create session")),
-            )) as { readonly data: { readonly id: string } }
-          ).data.id;
-
-        const waiting: Connection["waiting"] = new Map();
-        const answer = (request: {
-          readonly id: string;
-          readonly kind: "model" | "tool" | "done";
-          readonly [key: string]: unknown;
-        }) =>
-          Effect.gen(function* () {
-            switch (request.kind) {
-              case "model": {
-                const body = request.body as ChatRequest;
-                const model = state.models.get(body.model);
-                if (model === undefined) return { error: `No model ${body.model} on this harness` };
-                return yield* complete(model, body).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.succeed({ error: messageOf(cause.pipe(Cause.squash)) }),
-                  ),
-                );
-              }
-              case "tool":
-                return yield* state.call(
-                  request.server as string,
-                  request.name as string,
-                  request.arguments,
-                  Context.make(ToolCall, { conversationId: session, callId: request.id }).pipe(
-                    Context.add(Sandbox, files),
-                  ),
-                );
-              case "done": {
-                const waiter = waiting.get(request.requestId as string);
-                if (waiter !== undefined) {
-                  waiting.delete(request.requestId as string);
-                  yield* Deferred.succeed(waiter, {
-                    status: request.status as number,
-                    body: request.body as string,
-                  });
-                }
-                return {};
-              }
-            }
-          }).pipe(
-            Effect.flatMap((reply) => call("bridge", "POST", `/_reply/${request.id}`, reply)),
-            Effect.ignore,
-          );
-
-        // Follow the bridge's requests for as long as the sandbox runs.
-        const inFlight = new Set<string>();
-        let frames: Array<string> = [];
-        let text = "";
-        const decoder = new TextDecoder();
-        const receive = (data: Uint8Array) => {
-          text += decoder.decode(data, { stream: true });
-          const lines = text.split("\n");
-          text = lines.pop() ?? "";
-          for (const raw of lines) {
-            const line = raw.replace(/\r$/, "");
-            if (line === "oc.") {
-              const request = JSON.parse(fromBase64(frames.join(""))) as Parameters<
-                typeof answer
-              >[0];
-              frames = [];
-              if (inFlight.has(request.id)) continue;
-              inFlight.add(request.id);
-              run(answer(request));
-            } else if (line.startsWith("oc:")) {
-              frames.push(line.slice(3));
-            }
-          }
-        };
-        const follower = yield* handle.start(["sh", "-c", CALL, "call", "follow"]).pipe(
-          Scope.provide(scope),
-          Effect.mapError((cause) => fail(`Sandbox: ${messageOf(cause)}`, cause)),
-        );
-        const close = Effect.suspend(() => {
-          connections.delete(session);
-          const lost = [...waiting.values()];
-          waiting.clear();
-          return Effect.forEach(
-            lost,
-            (waiter) => Deferred.fail(waiter, fail("The session's sandbox stopped answering")),
-            { discard: true },
-          ).pipe(Effect.andThen(Scope.close(scope, Exit.void)));
-        });
-        run(
-          follower.output.pipe(
-            Stream.runForEach((chunk) =>
-              Effect.sync(() => {
-                if (chunk.fd === "stdout") receive(chunk.data);
-              }),
-            ),
-            Effect.ignore,
-            Effect.andThen(close),
-          ),
-        );
-        return { handle, sessionId, call, waiting, applied: new Map(), close } satisfies Connection;
-      });
-
-    const connection = (session: string) =>
-      Effect.gen(function* () {
-        let opening = connections.get(session);
+    /** Each session's sandbox as `AI.Sandbox`, opened on a tool's first use. */
+    const opened = new Map<string, Promise<Sandbox["Service"]>>();
+    const sandboxFor = (session: string): Sandbox["Service"] | undefined => {
+      if (sandboxes === undefined) return undefined;
+      const open = Effect.suspend(() => {
+        let opening = opened.get(session);
         if (opening === undefined) {
-          const context = yield* Effect.context<RuntimeContext>();
-          opening = Effect.runPromiseWith(Context.omit(Scope.Scope)(context) as typeof context)(
-            connect(session),
+          opening = Effect.runPromiseWith(base!)(
+            Effect.map(sandboxes.open(sandboxKey(instanceId, session)), sandboxOf),
           );
-          connections.set(session, opening);
+          opened.set(session, opening);
           opening.catch(() => {
-            if (connections.get(session) === opening) connections.delete(session);
+            if (opened.get(session) === opening) opened.delete(session);
           });
         }
-        return yield* Effect.tryPromise({
+        return Effect.tryPromise({
           try: () => opening!,
-          catch: (cause) => fail(messageOf(cause), cause),
+          catch: (cause) =>
+            new SandboxError({ operation: "open", code: "unknown", message: messageOf(cause) }),
         });
       });
-
-    const disconnect = (session: string) =>
-      Effect.suspend(() => {
-        const opening = connections.get(session);
-        if (opening === undefined) return Effect.void;
-        return Effect.promise(() =>
-          opening.then(
-            (open) => open,
-            () => undefined,
+      // Commands run in the harness's `cwd`, and relative paths start there.
+      const cwd = options.cwd;
+      const at = (path: string) =>
+        cwd === undefined || path.startsWith("/") ? path : `${cwd.replace(/\/+$/, "")}/${path}`;
+      return {
+        exec: (command, execOptions) =>
+          Effect.flatMap(open, (sandbox) =>
+            sandbox.exec(command, {
+              ...(cwd === undefined ? {} : { cwd }),
+              ...execOptions,
+            }),
           ),
-        ).pipe(Effect.flatMap((open) => (open === undefined ? Effect.void : open.close)));
-      });
+        readFile: (path) => Effect.flatMap(open, (sandbox) => sandbox.readFile(at(path))),
+        readTextFile: (path) => Effect.flatMap(open, (sandbox) => sandbox.readTextFile(at(path))),
+        writeFile: (path, content) =>
+          Effect.flatMap(open, (sandbox) => sandbox.writeFile(at(path), content)),
+      };
+    };
 
-    const ok = (answer: Finished, what: string) =>
-      answer.status >= 200 && answer.status < 300
-        ? Effect.succeed(answer.body.length > 0 ? (JSON.parse(answer.body) as unknown) : undefined)
-        : Effect.fail(fail(`OpenCode ${what}: ${answer.status} ${answer.body.slice(0, 500)}`));
+    /** OpenCode's id for each session, and the session each id is. */
+    const sessionIds = new Map<string, Promise<string>>();
+    const namesById = new Map<string, string>();
+
+    /** Our tools, skills and models, as the plugin OpenCode loads them from. */
+    const pluginOf = (state: Built, client: () => Promise<Host>): Plugin.Plugin => ({
+      id: `alchemy.${name}`,
+      setup: async (ctx) => {
+        const run = Effect.runPromiseWith(base!);
+        // Under OpenCode's own code mode, its `execute` tool reaches the
+        // tools listed for programs; every other tool is a direct call.
+        const programs =
+          codemode?.kind === "native"
+            ? new Set(
+                harnessTools.programs.flatMap((tool) =>
+                  isMcpServer(tool)
+                    ? (state.servers[tool.serverName] ?? []).map((entry) =>
+                        nameOf(tool.serverName, entry.name),
+                      )
+                    : [nameOf(name, tool.toolName)],
+                ),
+              )
+            : new Set<string>();
+        /** The session a call belongs to: an instance that restarted asks OpenCode. */
+        const sessionOf = async (sessionID: string) => {
+          const known = namesById.get(sessionID);
+          if (known !== undefined) return known;
+          const prefix = sessionTitle("");
+          const title = (await (await client()).session.get({ sessionID })).title ?? "";
+          const session = title.startsWith(prefix) ? title.slice(prefix.length) : sessionID;
+          namesById.set(sessionID, session);
+          return session;
+        };
+        const tools = await ctx.tool.transform((editor) => {
+          for (const [server, listed] of Object.entries(state.servers)) {
+            for (const tool of listed) {
+              const toolName = nameOf(server, tool.name);
+              editor.add({
+                name: toolName,
+                description: tool.description,
+                input: tool.inputSchema as never,
+                ...(tool.outputSchema !== undefined ? { output: tool.outputSchema as never } : {}),
+                options: { codemode: programs.has(toolName), permission: toolName },
+                execute: async (input, context) => {
+                  const session = await sessionOf(context.sessionID);
+                  const sandbox = sandboxFor(session);
+                  const call = Context.make(ToolCall, {
+                    conversationId: session,
+                    callId: context.id,
+                  });
+                  const result = await run(
+                    state.call(
+                      server,
+                      tool.name,
+                      input ?? {},
+                      // A harness without sandboxes lists no tool that uses one.
+                      (sandbox === undefined
+                        ? call
+                        : Context.add(call, Sandbox, sandbox)) as Context.Context<
+                        Sandbox | ToolCall
+                      >,
+                    ),
+                  );
+                  // A thrown error is how OpenCode reports a failed call to the model.
+                  if (result.isError) throw new Error(result.text);
+                  return {
+                    content: result.text,
+                    ...(result.structured !== undefined ? { output: result.structured } : {}),
+                  } as never;
+                },
+              });
+            }
+          }
+        });
+        const loaded = await ctx.skill.transform((editor) => {
+          for (const skill of skills) {
+            editor.add({
+              id: skill.skillName,
+              name: skill.skillName,
+              description: skill.skill.description,
+              path: `${directory}/.alchemy/skills/${skill.skillName}/SKILL.md`,
+              content: skill.skill.instructions,
+            } as never);
+          }
+        });
+        return async () => {
+          await loaded.dispose();
+          await tools.dispose();
+        };
+      },
+    });
+
+    /** Answer OpenCode's model requests here; every other request goes out as it is. */
+    const fetchOf =
+      (state: Built) =>
+      async (input: Request | string | URL, init?: RequestInit): Promise<Response> => {
+        const request = new Request(input, init);
+        if (new URL(request.url).hostname !== MODEL_HOST) return fetch(request);
+        const body = (await request.json()) as ChatRequest & { readonly stream?: boolean };
+        const model = state.models.get(body.model);
+        if (model === undefined) {
+          return Response.json(
+            { error: { message: `No model ${body.model} on this harness`, type: "not_found" } },
+            { status: 404 },
+          );
+        }
+        const reply = await Effect.runPromiseWith(base!)(
+          complete(model, body).pipe(
+            Effect.map((reply) => ({ reply })),
+            Effect.catchCause((cause) =>
+              Effect.succeed({ error: messageOf(cause.pipe(Cause.squash)) }),
+            ),
+          ),
+        );
+        return "error" in reply
+          ? Response.json(
+              { error: { message: reply.error, type: "server_error" } },
+              { status: 500 },
+            )
+          : chatResponse(body, reply.reply);
+      };
+
+    // OpenCode starts once per instance, and again after it was closed for
+    // being idle. Starting it resumes a prompt an eviction cut off.
+    const host = { client: undefined as Promise<Host> | undefined, inFlight: 0 };
+    const open = Effect.gen(function* () {
+      const state = yield* build;
+      if (host.client === undefined) {
+        const starting: Promise<Host> = Effect.runPromiseWith(base!)(
+          storage.open({
+            config: {
+              ...options.config,
+              autoupdate: false,
+              share: "disabled",
+              permission: "allow",
+              model: `${name}/${models[0]!.model.modelName}`,
+              small_model: `${name}/${models[0]!.model.modelName}`,
+              provider: {
+                ...(options.config?.provider as object | undefined),
+                [name]: {
+                  npm: "@ai-sdk/openai-compatible",
+                  name,
+                  options: { baseURL: `https://${MODEL_HOST}/v1`, apiKey: name },
+                  models: Object.fromEntries(
+                    models.map(({ model }) => [
+                      model.modelName,
+                      {
+                        name: model.modelName,
+                        tool_call: true,
+                        attachment: model.options.images === true,
+                        limit: {
+                          context: model.options.contextWindow ?? 128_000,
+                          output: model.options.maxTokens ?? 8192,
+                        },
+                      },
+                    ]),
+                  ),
+                },
+              },
+            } as never,
+            // The models are the harness's own: nothing to look up.
+            models: { fetch: false },
+            fetch: fetchOf(state),
+            plugins: [pluginOf(state, () => starting)],
+          }),
+        );
+        host.client = starting;
+        starting.catch(() => {
+          if (host.client === starting) host.client = undefined;
+        });
+      }
+      return yield* Effect.tryPromise({
+        try: () => host.client!,
+        catch: (cause) => fail(`OpenCode did not start: ${messageOf(cause)}`, cause),
+      });
+    });
+
+    /** What OpenCode said went wrong, with the reason its client keeps beside the status. */
+    const failureOf = (what: string | undefined, cause: unknown) => {
+      const detail = (cause as { readonly cause?: unknown } | undefined)?.cause;
+      return fail(
+        [
+          what === undefined ? undefined : `OpenCode ${what}`,
+          messageOf(cause),
+          detail && messageOf(detail),
+        ]
+          .filter((part) => typeof part === "string" && part.length > 0)
+          .join(": "),
+        cause,
+      );
+    };
+
+    const use = <A>(call: (client: Host) => Promise<A>, what?: string) =>
+      Effect.acquireUseRelease(
+        Effect.andThen(
+          Effect.sync(() => host.inFlight++),
+          open,
+        ),
+        (client) =>
+          Effect.tryPromise({
+            try: () => call(client),
+            catch: (cause) => failureOf(what, cause),
+          }),
+        () => Effect.sync(() => host.inFlight--),
+      );
+
+    /** The sessions OpenCode is working on now. */
+    const active = Effect.map(
+      use((client) => client.session.active()),
+      (sessions) => new Set(Object.keys(sessions)),
+    );
+
+    // An open OpenCode keeps timers running, which keep a Durable Object in
+    // memory. It is closed once idle and started again by the next call.
+    let close: Callback<null> | undefined;
+    // An evicted Durable Object is only started again by an alarm, so a
+    // running prompt keeps one armed: it waits with the prompt, and a
+    // prompt cut off by an eviction resumes when the alarm starts OpenCode.
+    let wake: Callback<string> | undefined;
+    const closeSoon = Effect.suspend(() =>
+      close === undefined
+        ? Effect.void
+        : close.schedule("idle", { payload: null, after: IDLE_CLOSE }).pipe(Effect.ignore),
+    );
+    const armWake = (sessionID: string) =>
+      Effect.suspend(() =>
+        wake === undefined
+          ? Effect.void
+          : wake.schedule(sessionID, { payload: sessionID, after: 0 }).pipe(Effect.ignore),
+      );
+    const callbacks = storage.callbacks;
+    if (storage.evictable && callbacks !== undefined) {
+      const setup = yield* Effect.serviceOption(InstanceSetup);
+      if (Option.isSome(setup)) {
+        setup.value.add(
+          Effect.gen(function* () {
+            const closeIdle = Effect.gen(function* () {
+              if (host.inFlight > 0 || (yield* active).size > 0) return;
+              const closing = host.client;
+              host.client = undefined;
+              if (closing !== undefined) {
+                yield* Effect.promise(() =>
+                  closing.then(
+                    (client) => client.close(),
+                    () => undefined,
+                  ),
+                );
+              }
+            }).pipe(Effect.ignore);
+            close = yield* Alchemy.makeCallback(`opencode:${name}:close`, (_: null) => closeIdle);
+            wake = yield* Alchemy.makeCallback(
+              `opencode:${name}:wake`,
+              Effect.fn(function* (sessionID: string) {
+                // The next alarm is armed before waiting: an eviction during
+                // the wait leaves it to start this instance again.
+                yield* wake!.schedule(sessionID, {
+                  payload: sessionID,
+                  after: Duration.sum(WAKE_SLICE, Duration.seconds(30)),
+                });
+                if ((yield* active).has(sessionID)) {
+                  yield* use((client) => client.experimental.session.wait({ sessionID })).pipe(
+                    Effect.timeoutOption(WAKE_SLICE),
+                  );
+                }
+                if ((yield* active).has(sessionID)) {
+                  return yield* wake!.schedule(sessionID, { payload: sessionID, after: 0 });
+                }
+                yield* wake!.cancel(sessionID);
+                yield* closeSoon;
+                // A failed wake is a defect, which the callbacks redeliver.
+              }, Effect.orDie),
+            );
+          }).pipe(Effect.provide(callbacks)),
+        );
+      }
+    }
+
+    const sessionIdOf = (session: string) =>
+      use((client) => {
+        let id = sessionIds.get(session);
+        if (id === undefined) {
+          const finding = (async () => {
+            // The session is the one titled after its name. OpenCode's own
+            // search reads a name as a query, so the titles are compared here.
+            const title = sessionTitle(session);
+            let found: { readonly id: string } | undefined;
+            let cursor: string | undefined;
+            for (;;) {
+              const page = await client.session.list(
+                cursor === undefined ? { limit: 100 } : { cursor },
+              );
+              found = page.data.find((candidate) => candidate.title === title);
+              const next = page.cursor?.next;
+              if (found !== undefined || typeof next !== "string" || next.length === 0) break;
+              cursor = next;
+            }
+            const sessionID =
+              found?.id ?? (await client.session.create({ title, location: { directory } })).id;
+            namesById.set(sessionID, session);
+            return sessionID;
+          })();
+          id = finding;
+          sessionIds.set(session, finding);
+          finding.catch(() => {
+            if (sessionIds.get(session) === finding) sessionIds.delete(session);
+          });
+        }
+        return id;
+      }, "session");
+
+    const transcript = (sessionID: string) =>
+      use(async (client) => {
+        const messages: Array<Message> = [];
+        let cursor: string | undefined;
+        for (;;) {
+          const page = await client.message.list({
+            sessionID,
+            ...(cursor === undefined ? { order: "asc" as const, limit: 200 } : { cursor }),
+          });
+          messages.push(...(page.data as unknown as ReadonlyArray<Message>));
+          const next = page.cursor?.next;
+          if (typeof next !== "string" || next.length === 0) return messages;
+          cursor = next;
+        }
+      }, "messages");
 
     /**
      * The session's permissions: every tool denied, then the chosen ones
-     * allowed. A sandbox image can bring OpenCode tools of its own; a prompt
-     * only gets what its harness lists.
+     * allowed. OpenCode has tools of its own; a prompt only gets what its
+     * harness lists.
      *
      * Tools in a code mode group are reached from programs. Under a shared
      * convention the harness's `codemode` tool runs them and those tools
@@ -1072,7 +1087,7 @@ export const Harness = <
           tools.map((tool) => ({ server, tool: tool.name, name: nameOf(server, tool.name) })),
         );
         const chosen = selected === undefined ? harnessTools : routed(selected);
-        /** The names OpenCode knows a listed tool by; ours go through the bridge. */
+        /** The names OpenCode knows a listed tool by. */
         const namesOf = (tool: ToolRef | AnyMcpServer) =>
           Effect.gen(function* () {
             if (isMcpServer(tool)) {
@@ -1102,7 +1117,7 @@ export const Harness = <
         }
         if (programs.some((entry) => !entry.own)) {
           return yield* fail(
-            "OpenCode's own tools (shell, read, edit, …) run inside OpenCode and cannot be called from a program: list them outside AI.CodeMode(...).",
+            "OpenCode's own tools (webfetch, websearch, subagent) run inside OpenCode and cannot be called from a program: list them outside AI.CodeMode(...).",
           );
         }
         const on = new Set<string>(direct.flatMap((entry) => entry.names));
@@ -1144,19 +1159,19 @@ export const Harness = <
         };
       });
 
-    /** Apply one session setting, unless it is what the session already has. */
+    /** The session settings last applied, as JSON, so an unchanged one is not sent again. */
+    const applied = new Map<string, string>();
     const apply = (
-      open: Connection,
+      sessionID: string,
       key: string,
       value: unknown,
-      send: Effect.Effect<Finished, OpenCodeError, RuntimeContext>,
+      send: (client: Host) => Promise<unknown>,
     ) =>
       Effect.suspend(() => {
         const json = JSON.stringify(value) ?? "null";
-        if (open.applied.get(key) === json) return Effect.void;
-        return send.pipe(
-          Effect.flatMap((answer) => ok(answer, `set ${key}`)),
-          Effect.tap(() => Effect.sync(() => open.applied.set(key, json))),
+        if (applied.get(`${sessionID}:${key}`) === json) return Effect.void;
+        return use(send, `set ${key}`).pipe(
+          Effect.tap(() => Effect.sync(() => applied.set(`${sessionID}:${key}`, json))),
           Effect.asVoid,
         );
       });
@@ -1173,13 +1188,39 @@ export const Harness = <
         )
         .join("");
 
-    const session = (sessionName: string, defaults: PromptOptions = {}): Session => ({
-      name: sessionName,
-      sandboxKey: sandboxKey(instanceId, sessionName),
-      id: Effect.map(connection(sessionName), (open) => open.sessionId),
-      prompt: (text, promptOptions = {}) =>
+    /** One prompt at a time per session: a second waits for the first. */
+    const locks = new Map<string, Semaphore.Semaphore>();
+    const lockOf = (session: string) => {
+      let lock = locks.get(session);
+      if (lock === undefined) {
+        lock = Semaphore.makeUnsafe(1);
+        locks.set(session, lock);
+      }
+      return lock;
+    };
+    /** Prompts given a `requestId`, by that id. */
+    const prompts = new Map<string, Promise<Exit.Exit<Reply, OpenCodeError | NotOnHarness>>>();
+
+    const onSandbox = (
+      session: string,
+      call: (
+        sandboxes: Sandboxes["Service"],
+        key: string,
+      ) => Effect.Effect<unknown, unknown, RuntimeContext>,
+    ) =>
+      sandboxes === undefined
+        ? Effect.void
+        : Effect.suspend(() => {
+            opened.delete(session);
+            return call(sandboxes, sandboxKey(instanceId, session));
+          }).pipe(
+            Effect.mapError((cause) => fail(`Sandbox: ${messageOf(cause)}`, cause)),
+            Effect.asVoid,
+          );
+
+    const session = (sessionName: string, defaults: PromptOptions = {}): Session => {
+      const run = (text: string, chosen: PromptOptions) =>
         Effect.gen(function* () {
-          const chosen = { ...defaults, ...promptOptions };
           if (
             chosen.model !== undefined &&
             !models.some(({ model }) => model.modelName === chosen.model!.modelName)
@@ -1187,69 +1228,35 @@ export const Harness = <
             return yield* new NotOnHarness({ kind: "model", missing: chosen.model.modelName });
           }
           const { rules, section } = yield* permissions(chosen.tools);
-          const open = yield* connection(sessionName);
-          const path = `/api/session/${open.sessionId}`;
+          const sessionID = yield* sessionIdOf(sessionName);
           // A prompt runs with what the session has: set what this one asks for.
           const model = { id: (chosen.model ?? models[0]!.model).modelName, providerID: name };
-          yield* apply(
-            open,
-            "model",
-            model,
-            open.call("opencode", "POST", `${path}/model`, { model }),
+          yield* apply(sessionID, "model", model, (client) =>
+            client.session.switchModel({ sessionID, model }),
           );
           const agent = chosen.agent ?? "build";
-          yield* apply(
-            open,
-            "agent",
-            agent,
-            open.call("opencode", "POST", `${path}/agent`, { agent }),
+          yield* apply(sessionID, "agent", agent, (client) =>
+            client.session.switchAgent({ sessionID, agent }),
           );
-          yield* apply(
-            open,
-            "permissions",
-            rules,
-            open.call("opencode", "PATCH", path, { permissions: rules }),
+          yield* apply(sessionID, "permissions", rules, (client) =>
+            client.session.update({ sessionID, permissions: rules as never }),
           );
-          const entry = `/api/experimental/session/${open.sessionId}/instructions/entries/alchemy`;
-          yield* apply(
-            open,
-            "instructions",
-            chosen.instructions ?? null,
+          const entries = (client: Host) => client.experimental.session.instructions.entry;
+          yield* apply(sessionID, "instructions", chosen.instructions ?? null, (client) =>
             chosen.instructions === undefined
-              ? open.call("opencode", "DELETE", entry)
-              : open.call("opencode", "PUT", entry, { value: chosen.instructions }),
+              ? entries(client).remove({ sessionID, key: "alchemy" })
+              : entries(client).put({ sessionID, key: "alchemy", value: chosen.instructions }),
           );
-          const catalog = `/api/experimental/session/${open.sessionId}/instructions/entries/alchemy-codemode`;
-          yield* apply(
-            open,
-            "codemode",
-            section ?? null,
+          yield* apply(sessionID, "codemode", section ?? null, (client) =>
             section === undefined
-              ? open.call("opencode", "DELETE", catalog)
-              : open.call("opencode", "PUT", catalog, { value: section }),
+              ? entries(client).remove({ sessionID, key: "alchemy-codemode" })
+              : entries(client).put({ sessionID, key: "alchemy-codemode", value: section }),
           );
-          // oxlint-disable-next-line effecttsgo/crypto-random-uuid-in-effect -- only a unique id for a prompt that gave none
-          const requestId = chosen.requestId ?? crypto.randomUUID();
-          let waiter = open.waiting.get(requestId);
-          if (waiter === undefined) {
-            waiter = yield* Deferred.make<Finished, OpenCodeError>();
-            open.waiting.set(requestId, waiter);
-          }
-          const admitted = (yield* open
-            .call("bridge", "POST", "/_prompt", {
-              requestId,
-              sessionId: open.sessionId,
-              body: { text },
-            })
-            .pipe(Effect.flatMap((answer) => ok(answer, "prompt")))) as {
-            readonly finished?: Finished;
-          };
-          // A retry of a prompt that already finished is given its answer again.
-          if (admitted.finished !== undefined) open.waiting.delete(requestId);
-          const finished = admitted.finished ?? (yield* Deferred.await(waiter));
-          const { messages } = (yield* ok(finished, "prompt")) as {
-            readonly messages: ReadonlyArray<Message>;
-          };
+          const before = (yield* transcript(sessionID)).length;
+          yield* use((client) => client.session.prompt({ sessionID, text }), "prompt");
+          yield* armWake(sessionID);
+          yield* use((client) => client.experimental.session.wait({ sessionID }), "wait");
+          const messages = (yield* transcript(sessionID)).slice(before);
           const idle = messages.findLast((message) => message.type === "idle") as
             | (Message & {
                 readonly outcome: "succeeded" | "failed" | "interrupted";
@@ -1260,54 +1267,39 @@ export const Harness = <
             return yield* fail(idle.error?.message ?? `The prompt was ${idle.outcome}`, idle.error);
           }
           return { text: textOf(messages), messages } satisfies Reply;
-        }),
-      abort: Effect.flatMap(connection(sessionName), (open) =>
-        Effect.asVoid(
-          Effect.flatMap(
-            open.call("opencode", "POST", `/api/session/${open.sessionId}/interrupt`),
-            (answer) => ok(answer, "interrupt"),
-          ),
+        }).pipe(lockOf(sessionName).withPermits(1), Effect.ensuring(closeSoon));
+      return {
+        name: sessionName,
+        sandboxKey: sandboxKey(instanceId, sessionName),
+        id: sessionIdOf(sessionName),
+        prompt: (text, promptOptions = {}) =>
+          Effect.gen(function* () {
+            const chosen = { ...defaults, ...promptOptions };
+            if (chosen.requestId === undefined) return yield* run(text, chosen);
+            // The first call runs the prompt; a retry waits for that run.
+            yield* build;
+            let running = prompts.get(chosen.requestId);
+            if (running === undefined) {
+              running = Effect.runPromiseExitWith(base!)(run(text, chosen));
+              prompts.set(chosen.requestId, running);
+            }
+            return yield* yield* Effect.promise(() => running!);
+          }),
+        abort: Effect.flatMap(sessionIdOf(sessionName), (sessionID) =>
+          Effect.asVoid(use((client) => client.session.interrupt({ sessionID }))),
         ),
-      ),
-      messages: Effect.flatMap(connection(sessionName), (open) =>
-        Effect.gen(function* () {
-          const messages: Array<Message> = [];
-          let query = "order=asc&limit=200";
-          for (;;) {
-            const page = (yield* open
-              .call("opencode", "GET", `/api/session/${open.sessionId}/message?${query}`)
-              .pipe(Effect.flatMap((answer) => ok(answer, "messages")))) as {
-              readonly data: ReadonlyArray<Message>;
-              readonly cursor?: { readonly next?: string | null };
-            };
-            messages.push(...page.data);
-            if (!page.cursor?.next) return messages as ReadonlyArray<Message>;
-            query = `cursor=${encodeURIComponent(page.cursor.next)}`;
-          }
-        }),
-      ),
-      suspendSandbox: disconnect(sessionName).pipe(
-        Effect.andThen(sandboxes.suspend(sandboxKey(instanceId, sessionName))),
-        Effect.mapError((cause) => fail(`Sandbox: ${messageOf(cause)}`, cause)),
-        Effect.asVoid,
-      ),
-      removeSandbox: disconnect(sessionName).pipe(
-        Effect.andThen(sandboxes.remove(sandboxKey(instanceId, sessionName))),
-        Effect.mapError((cause) => fail(`Sandbox: ${messageOf(cause)}`, cause)),
-        Effect.asVoid,
-      ),
-      request: (method, path, body) =>
-        Effect.flatMap(connection(sessionName), (open) =>
-          Effect.flatMap(open.call("opencode", method, path, body), (answer) =>
-            ok(answer, `${method} ${path}`),
-          ),
+        messages: Effect.flatMap(sessionIdOf(sessionName), transcript).pipe(
+          Effect.ensuring(closeSoon),
         ),
-    });
+        suspendSandbox: onSandbox(sessionName, (sandboxes, key) => sandboxes.suspend(key)),
+        removeSandbox: onSandbox(sessionName, (sandboxes, key) => sandboxes.remove(key)),
+      };
+    };
 
-    return { session } satisfies Harness;
+    return { session, use } satisfies Harness;
     // Models, tools and servers are read by tag, so their requirements are stated by the signature.
   }) as unknown as Effect.Effect<
     Harness,
     never,
-    Instance | Sandboxes | ModelServices<Models> | ToolRequirements<Tools[number]>
+    Storage | ModelServices<Models> | ToolRequirements<Tools[number]>
   >;

@@ -121,10 +121,13 @@ const HarnessLive = Layer.mergeAll(
   AddLive,
   WithdrawLive,
   CodesLive,
-  SandboxLive,
   OpenCode.CodingTools,
-  OpenCodeCloudflare.DurableObjectInstance,
-).pipe(Layer.provideMerge(Layer.mergeAll(Boat.CreateSandboxHttp, Cloudflare.Workers.FetchBinding)));
+  OpenCodeCloudflare.DurableObjectStorage,
+).pipe(
+  // The coding tools and the harness's own sandbox tools work in Boat sandboxes.
+  Layer.provideMerge(SandboxLive),
+  Layer.provideMerge(Layer.mergeAll(Boat.CreateSandboxHttp, Cloudflare.Workers.FetchBinding)),
+);
 
 const toolsByName = {
   add: Add,
@@ -185,12 +188,12 @@ const session = Effect.gen(function* () {
       }),
       /** What the harness added to the session's system prompt for code mode, if anything. */
       section: Effect.fn(function* (name: string) {
-        const open = harness.session(name);
-        const entries = (yield* open.request(
-          "GET",
-          `/api/experimental/session/${yield* open.id}/instructions/entries`,
-        )) as { readonly data: ReadonlyArray<{ readonly key: string; readonly value: string }> };
-        return entries.data.find((entry) => entry.key === "alchemy-codemode")?.value ?? null;
+        const sessionID = yield* harness.session(name).id;
+        const entries = yield* harness.use((client) =>
+          client.experimental.session.instructions.entry.list({ sessionID }),
+        );
+        const section = entries.find((entry) => entry.key === "alchemy-codemode")?.value;
+        return typeof section === "string" ? section : null;
       }),
       /** Every tool call the session made, as OpenCode names and reports it. */
       toolsUsed: Effect.fn(function* (name: string) {
@@ -246,7 +249,7 @@ export class OpenCodeEffectSession extends Cloudflare.DurableObject<OpenCodeEffe
   provided(AI.CodeModeEffect.pipe(Layer.provide(AICloudflare.EvalWorkerLoader()))),
 ) {}
 
-/** OpenCode's own code mode: its `execute` tool, in the sandbox. */
+/** OpenCode's own code mode: its `execute` tool. */
 export class OpenCodeNativeSession extends Cloudflare.DurableObject<OpenCodeNativeSession>()(
   "OpenCodeNativeSession",
   provided(OpenCode.CodeModeNative),

@@ -150,13 +150,13 @@ test(
       // The model answered after the tool: its wording is its own.
       expect(sum.text.length).toBeGreaterThan(0);
 
-      // OpenCode's own shell runs in the sandbox.
+      // The shell tool runs in the session's sandbox.
       yield* call(`/${name}/prompt`, {
-        text: "Use the shell tool to run exactly this command: printf 'opencode was here' > /home/user/hello.txt",
+        text: "Use the alchemy_bash tool to run exactly this command: printf 'opencode was here' > /home/user/hello.txt",
         tools: ["bash"],
         requestId: "write",
       });
-      const wrote = (yield* used("shell")).length;
+      const wrote = (yield* used("alchemy_bash")).length;
       expect(wrote).toBeGreaterThan(0);
       expect((yield* call(`/${name}/file`, { path: "/home/user/hello.txt" })).text).toBe(
         "opencode was here",
@@ -192,14 +192,14 @@ test(
 
       // The next prompt resumes it: the same session, with its transcript and files.
       yield* call(`/${name}/prompt`, {
-        text: "Use the shell tool to run exactly this command: cat /home/user/hello.txt",
+        text: "Use the alchemy_bash tool to run exactly this command: cat /home/user/hello.txt",
         tools: ["bash"],
         requestId: "read",
       });
       expect((yield* stateBecomes("running")).state).toBe("running");
       // The transcript from before the suspend is still there, and the shell ran again.
       expect((yield* used("alchemy_add")).length).toBeGreaterThan(0);
-      const shell = yield* used("shell");
+      const shell = yield* used("alchemy_bash");
       expect(shell.length).toBeGreaterThan(wrote);
       expect(shell.at(-1)!.output).toContain("opencode was here");
 

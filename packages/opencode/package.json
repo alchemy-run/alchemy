@@ -63,7 +63,9 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
-    "@alchemy.run/ai": "workspace:*"
+    "@alchemy.run/ai": "workspace:*",
+    "@opencode/plugin": "2.3.2",
+    "@opencode/sdk": "2.3.2"
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "workspace:*",

@@ -14,11 +14,11 @@ import { MARKER, SearchIssues, SearchIssuesLive } from "./tools.ts";
 const HarnessLive = Layer.mergeAll(
   FastLive,
   SearchIssuesLive,
-  Sandbox,
   OpenCode.CodingTools,
-  OpenCodeCloudflare.DurableObjectInstance,
+  OpenCodeCloudflare.DurableObjectStorage,
   GitHub.CreateIssueCommentHttp,
-);
+  // The coding tools work in the issue's sandbox.
+).pipe(Layer.provideMerge(Sandbox));
 
 const instructions = [
   "You answer issues on a GitHub repository, which is your working directory.",
@@ -26,7 +26,7 @@ const instructions = [
   "Your answer is posted on the issue as a comment, so write it in Markdown and keep it short.",
 ].join("\n");
 
-/** One Durable Object per issue: its OpenCode session, its sandbox and its answers. */
+/** One Durable Object per issue: OpenCode and its session, the sandbox its tools work in, and its answers. */
 export default class Issue extends Cloudflare.DurableObject<Issue>()(
   "Issue",
   Effect.gen(function* () {
