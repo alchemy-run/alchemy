@@ -1,15 +1,15 @@
 ---
 title: "Part 1: A harness in a Durable Object"
-description: Start an issue bot. Declare a model and where sandboxes run, yield an OpenCode harness in a Durable Object for each issue, and prompt it from a Worker.
+description: Start an issue bot. Declare a model and where its tools find files and a shell, yield an OpenCode harness in a Durable Object for each issue, and prompt it from a Worker.
 sidebar:
   order: 1
 ---
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-Build a bot that answers issues on a GitHub repository. When someone opens an issue, OpenCode reads the repository in a sandbox and the bot replies with a comment. When they reply, it continues the same session.
+Build a bot that answers issues on a GitHub repository. When someone opens an issue, OpenCode reads the repository with tools that work in a sandbox, and the bot replies with a comment. When they reply, it continues the same session.
 
-Each issue gets its own Durable Object, with its own OpenCode session and sandbox. This part builds that object and prompts it over HTTP. The later parts give it the repository, connect it to GitHub and clean up after it.
+Each issue gets its own Durable Object, which runs OpenCode and its session, and a sandbox for its tools. This part builds that object and prompts it over HTTP. The later parts give it the repository, connect it to GitHub and clean up after it.
 
 The finished code is in [`examples/cloudflare-opencode-github`](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-opencode-github).
 
@@ -38,11 +38,11 @@ export const FastLive = AICloudflare.Model(Fast, {
 });
 ```
 
-OpenCode will run in a sandbox, and this Layer stays in your Durable Object. The sandbox never has a key for the model.
+OpenCode runs in your Durable Object, and this Layer answers its model requests there. OpenCode holds no key for the model.
 
 ## Say where sandboxes run
 
-OpenCode needs a machine, so every session runs in a sandbox. An `AI.Sandboxes` Layer says where. `@alchemy.run/ai` has one for Boat, which takes the snapshot sandboxes start from:
+OpenCode runs in the Durable Object, which has no files and no shell. The tools that read a repository need both, so each session gets a sandbox for them. An `AI.Sandboxes` Layer says where. `@alchemy.run/ai` has one for Boat, which takes the snapshot sandboxes start from:
 
 ```typescript title="src/Sandbox.ts"
 import * as AIBoat from "@alchemy.run/ai/Boat";
@@ -85,10 +85,9 @@ import { Sandbox } from "./Sandbox.ts";
 
 const HarnessLive = Layer.mergeAll(
   FastLive,
-  Sandbox,
   OpenCode.CodingTools,
-  OpenCodeCloudflare.DurableObjectInstance,
-);
+  OpenCodeCloudflare.DurableObjectStorage,
+).pipe(Layer.provideMerge(Sandbox));
 
 export default class Issue extends Cloudflare.DurableObject<Issue>()(
   "Issue",
@@ -102,7 +101,7 @@ export default class Issue extends Cloudflare.DurableObject<Issue>()(
 ) {}
 ```
 
-`AI.CodingTools` names `bash`, `read`, `edit`, `write`, `grep` and `glob`, and `OpenCode.CodingTools` says they are OpenCode's own (its `shell` for `bash`), which OpenCode runs in the sandbox. `DurableObjectInstance` keys sandboxes on this object's id, so two issues never share one.
+`AI.CodingTools` names `bash`, `read`, `edit`, `write`, `grep` and `glob`, and `OpenCode.CodingTools` provides each as a tool that works in the session's sandbox, which is why `Sandbox` is provided to them. `DurableObjectStorage` runs OpenCode in this object, with its session in the object's SQLite.
 
 ## Prompt a session
 
@@ -129,7 +128,7 @@ Effect.gen(function* () {
 }).pipe(Effect.provide(HarnessLive)),
 ```
 
-`harness.session("issue", defaults)` is this object's one session. Its prompts get three of the coding tools, the ones that read. The first `prompt` opens the sandbox, installs OpenCode there and starts it.
+`harness.session("issue", defaults)` is this object's one session. Its prompts get three of the coding tools, the ones that read. The first `prompt` starts OpenCode in the object. The sandbox opens when a tool first needs it.
 
 ## Reach it from a Worker
 
@@ -195,10 +194,10 @@ export default Alchemy.Stack(
 The first deploy builds the snapshot, which takes a couple of minutes. Then ask the session to run a command:
 
 ```sh
-curl -X POST "$URL/issues/7" -d "Run uname -a in the shell and tell me the kernel version."
+curl -X POST "$URL/issues/7" -d "Run uname -a with the alchemy_bash tool and tell me the kernel version."
 ```
 
-The first prompt on a new issue waits for its sandbox and for OpenCode to install. The answer comes from OpenCode's `shell`, run in the sandbox, with the model answering from your Durable Object.
+The first prompt on a new issue waits for its sandbox to start. The command runs in the sandbox, and OpenCode and the model's Layer run in your Durable Object.
 
 ## Next
 

@@ -995,21 +995,21 @@ Pi Durable on Alchemy: conversations in a Durable Object, tools, extensions, ski
 
 OpenCode on Alchemy: sessions in a sandbox, prompts, model requests answered by your Layers, tools, MCP servers and skills.
 
-- [OpenCode](https://alchemy.run/opencode) — Run the OpenCode coding agent with Alchemy. A sandbox for each session, your models and tools answered from your own runtime, and no API key in the sandbox.
-- [What is OpenCode?](https://alchemy.run/opencode/what-is-opencode) — The concepts behind OpenCode on Alchemy — the server in a sandbox, sessions and prompts, the bridge that carries model requests and tool calls, tools, skills — and how @alchemy.run/opencode models each of them.
-- [Setup](https://alchemy.run/opencode/setup) — Install @alchemy.run/opencode and @alchemy.run/ai, choose a sandbox platform, and add an OpenCode harness to a Cloudflare Durable Object.
-- [Part 1: A harness in a Durable Object](https://alchemy.run/opencode/tutorial/part-1) — Start an issue bot. Declare a model and where sandboxes run, yield an OpenCode harness in a Durable Object for each issue, and prompt it from a Worker.
-- [Part 2: A sandbox with the repository](https://alchemy.run/opencode/tutorial/part-2) — Start every issue's sandbox from a snapshot with the repository cloned, and make it the directory OpenCode works in.
+- [OpenCode](https://alchemy.run/opencode) — Run the OpenCode coding agent with Alchemy, inside a Cloudflare Durable Object. Your models answer it and your tools run beside it, and a sandbox is only where tools find files and a shell.
+- [What is OpenCode?](https://alchemy.run/opencode/what-is-opencode) — The concepts behind OpenCode on Alchemy — OpenCode in a Durable Object, sessions and prompts, model requests, tools, skills, the sandbox tools work in — and how @alchemy.run/opencode models each of them.
+- [Setup](https://alchemy.run/opencode/setup) — Install @alchemy.run/opencode and @alchemy.run/ai, and add an OpenCode harness to a Cloudflare Durable Object. A sandbox platform is only needed for tools that use files or a shell.
+- [Part 1: A harness in a Durable Object](https://alchemy.run/opencode/tutorial/part-1) — Start an issue bot. Declare a model and where its tools find files and a shell, yield an OpenCode harness in a Durable Object for each issue, and prompt it from a Worker.
+- [Part 2: A sandbox with the repository](https://alchemy.run/opencode/tutorial/part-2) — Start every issue's sandbox from a snapshot with the repository cloned, and make it the directory the session's tools work in.
 - [Part 3: Answer issues](https://alchemy.run/opencode/tutorial/part-3) — Subscribe the Worker to the repository's issues with GitHub.consumeRepositoryEvents, run each prompt from the Durable Object's alarm, and post the answer as a comment.
 - [Part 4: Replies, your own tool, and cleanup](https://alchemy.run/opencode/tutorial/part-4) — Continue an issue's OpenCode session when someone replies, give OpenCode a tool that searches the repository's issues from your Durable Object, and remove the sandbox when the issue closes.
 - [Sessions & prompts](https://alchemy.run/opencode/sessions) — Name an OpenCode session, prompt it, choose the model, tools and instructions a prompt runs with, make prompts exactly-once, and read the transcript.
-- [Model requests](https://alchemy.run/opencode/model-requests) — OpenCode in the sandbox never holds an API key. Its model requests go to a bridge on the sandbox's loopback, and the harness answers them with your AI.Model Layer.
-- [Tools](https://alchemy.run/opencode/tools) — OpenCode runs its own coding tools in the sandbox and calls your tools in your Durable Object. Choose which a prompt may use, and replace any of OpenCode's with your own.
-- [MCP servers](https://alchemy.run/opencode/mcp-servers) — Give OpenCode sessions the tools of an MCP server. The harness connects from your Durable Object, so the server's credentials never enter the sandbox.
+- [Model requests](https://alchemy.run/opencode/model-requests) — OpenCode holds no API key. It runs in your Durable Object, and the harness answers each of its model requests with your AI.Model Layer, in the same isolate.
+- [Tools](https://alchemy.run/opencode/tools) — Your tools run in the Durable Object, beside OpenCode. The coding tools work in the session's sandbox. Choose which a prompt may use, and replace any coding tool with your own.
+- [MCP servers](https://alchemy.run/opencode/mcp-servers) — Give OpenCode sessions the tools of an MCP server. The harness connects from your Durable Object and gives OpenCode the server's tools.
 - [Code mode](https://alchemy.run/opencode/code-mode) — On OpenCode, tools listed inside AI.CodeMode are called from a JavaScript program the model writes, run by the harness or by OpenCode's own code mode.
-- [Skills](https://alchemy.run/opencode/skills) — Give OpenCode sessions skills. Each AI.Skill becomes an OpenCode skill in the sandbox, which the model loads with OpenCode's own skill tool.
-- [The session's sandbox](https://alchemy.run/opencode/sandbox) — Each OpenCode session runs in its own sandbox, which holds OpenCode, the bridge and the session's transcript. Suspend it to keep the session, remove it to delete both.
-- [OpenCode's own API](https://alchemy.run/opencode/api) — Call any route of OpenCode's HTTP server in a session's sandbox, pass OpenCode configuration through the harness, and run a harness outside a Durable Object.
+- [Skills](https://alchemy.run/opencode/skills) — Give OpenCode sessions skills. Each AI.Skill becomes an OpenCode skill, which the model loads with OpenCode's own skill tool.
+- [The session's sandbox](https://alchemy.run/opencode/sandbox) — OpenCode runs in the Durable Object. A sandbox is where a session's tools find files and a shell, opened on a tool's first use, and suspended or removed without touching the session.
+- [OpenCode's own API](https://alchemy.run/opencode/api) — Call OpenCode's own typed client from the Durable Object it runs in, and pass OpenCode configuration through the harness.
 
 ## Boat
 

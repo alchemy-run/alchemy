@@ -1,21 +1,23 @@
 ---
 title: OpenCode's own API
-description: Call any route of OpenCode's HTTP server in a session's sandbox, pass OpenCode configuration through the harness, and run a harness outside a Durable Object.
+description: Call OpenCode's own typed client from the Durable Object it runs in, and pass OpenCode configuration through the harness.
 ---
 
-A harness covers prompting a session and reading its transcript. OpenCode's server does more: diffs, reverts, sharing, its own agents. The harness lets you reach all of it.
+A harness covers prompting a session and reading its transcript. OpenCode does more: diffs, reverts, forks, its own agents. The harness lets you reach all of it.
 
-## Call OpenCode's server
+## Call OpenCode's client
 
-`session.request` calls a route of OpenCode's HTTP server in the session's sandbox and returns the response's JSON:
+`harness.use` hands your function OpenCode's own typed client, the one `@opencode/sdk` gives:
 
 ```typescript
 const session = harness.session("pr-142");
-const id = yield* session.id;
-const diff = yield* session.request("GET", `/api/session/${id}/diff`);
+const sessionID = yield* session.id;
+const diff = yield* harness.use((client) => client.session.diff({ sessionID }));
 ```
 
-`session.id` is OpenCode's own id for the session. The call goes over the sandbox's `exec`, like everything else, so the server is never exposed.
+`session.id` is OpenCode's own id for the session. The call stays in the isolate: OpenCode opens no port.
+
+`use` starts OpenCode in this instance when it is not running.
 
 ## OpenCode's configuration
 
@@ -37,23 +39,14 @@ A prompt then picks that agent:
 const reply = yield* session.prompt("Review the last commit.", { agent: "review" });
 ```
 
-The harness always sets the model provider, its own tools' server and where skills are found, and it turns off OpenCode's auto-update and session sharing.
+The harness always sets the model provider, and it turns off OpenCode's auto-update and session sharing.
 
-## Outside a Durable Object
+## Where OpenCode runs
 
-The harness needs an id for the instance it runs in, so two instances never share a sandbox. In a Durable Object that is `OpenCodeCloudflare.DurableObjectInstance`. In one long-lived process, such as a Fly Machine or an ECS task, name it:
+`OpenCode.Storage` is where a harness keeps its sessions, and so where OpenCode runs. `OpenCodeCloudflare.DurableObjectStorage` is the one Layer for it today: OpenCode in a Durable Object, on the object's SQLite, in tables prefixed `opencode_`.
 
-```typescript
-const HarnessLive = Layer.mergeAll(
-  FastLive,
-  Sandbox,
-  OpenCode.CodingTools,
-  OpenCode.NamedInstance("agent-1"),
-);
-```
-
-OpenCode still runs in a sandbox there. The process only drives it.
+OpenCode is closed when it has been idle for thirty seconds, so the object can leave memory, and started again by the next call.
 
 ## The version of OpenCode
 
-The harness installs one version of OpenCode, the one it was tested with, and checks the download's hash. A newer OpenCode arrives with a newer `@alchemy.run/opencode`.
+OpenCode is a dependency of `@alchemy.run/opencode`, pinned to the version it was tested with, and bundled into your Worker. A newer OpenCode arrives with a newer `@alchemy.run/opencode`.

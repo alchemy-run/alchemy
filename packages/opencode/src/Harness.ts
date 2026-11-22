@@ -247,7 +247,7 @@ const messageOf = (cause: unknown): string =>
 const fail = (message: string, cause?: unknown) =>
   new OpenCodeError({ message, ...(cause !== undefined ? { cause } : {}) });
 
-interface BridgeTool {
+interface ListedTool {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: object;
@@ -271,7 +271,7 @@ const outputSchemaOf = (spec: ToolSpec): object | undefined => {
 /** What one instance builds once: its models, and the tools each server gives. */
 interface Built {
   readonly models: ReadonlyMap<string, LanguageModel.LanguageModel>;
-  readonly servers: Readonly<Record<string, ReadonlyArray<BridgeTool>>>;
+  readonly servers: Readonly<Record<string, ReadonlyArray<ListedTool>>>;
   readonly call: (
     server: string,
     tool: string,
@@ -563,7 +563,7 @@ export const Harness = <
                   Effect.mapError((cause) => fail(`Code mode: ${cause.message}`, cause)),
                 )
               : undefined;
-          const ownTools: ReadonlyArray<BridgeTool> = [
+          const ownTools: ReadonlyArray<ListedTool> = [
             ...tools.map(({ tool }) => {
               const outputSchema = outputSchemaOf(tool.spec);
               return {
@@ -589,7 +589,7 @@ export const Harness = <
                   },
                 ]),
           ];
-          const bridgeServers: Record<string, ReadonlyArray<BridgeTool>> = {
+          const toolServers: Record<string, ReadonlyArray<ListedTool>> = {
             ...(ownTools.length > 0 ? { [name]: ownTools } : {}),
             ...Object.fromEntries(
               [...clients].map(([server, { tools }]) => [
@@ -700,7 +700,7 @@ export const Harness = <
           };
           return {
             models: languageModels,
-            servers: bridgeServers,
+            servers: toolServers,
             call,
             programmed,
             ...(program === undefined ? {} : { convention: program.convention }),
