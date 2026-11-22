@@ -2,19 +2,28 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 
-export const publicationApplications = (contexts: {
-  shared: string;
-  other: string;
-  changed: string;
-}) =>
+/**
+ * `first` and `second` publish one context to one `repository`, so they share
+ * a publication. Applications in different repositories each publish their own.
+ */
+export const publicationApplications = (
+  contexts: {
+    shared: string;
+    other: string;
+    changed: string;
+  },
+  repository: string,
+) =>
   Effect.gen(function* () {
     const first = yield* Cloudflare.Container("PublicationFirst", {
       context: contexts.shared,
+      publish: { repository },
       env: { SLOT: "first" },
       maxInstances: 2,
     }).Application;
     const second = yield* Cloudflare.Container("PublicationSecond", {
       context: contexts.shared,
+      publish: { repository },
       env: { SLOT: "second" },
       maxInstances: 3,
     }).Application;
@@ -66,11 +75,21 @@ export const historyApplications = (converge = false) =>
     return { first, second, target };
   });
 
-export const recoveryApplications = (delay: number, includeSecond = false) =>
+/**
+ * `run` makes the image content new for each test run, so a repository kept
+ * from an earlier run holds no tag for it.
+ */
+export const recoveryApplications = (
+  delay: number,
+  repository: string,
+  run: string,
+  includeSecond = false,
+) =>
   Effect.gen(function* () {
     const props = {
+      publish: { repository },
       dockerfile: {
-        content: `FROM alpine:3.19\nRUN sleep ${delay}\nCMD ["sleep", "3600"]\n`,
+        content: `FROM alpine:3.19\nLABEL run=${JSON.stringify(run)}\nRUN sleep ${delay}\nCMD ["sleep", "3600"]\n`,
       },
       maxInstances: 2,
     };
