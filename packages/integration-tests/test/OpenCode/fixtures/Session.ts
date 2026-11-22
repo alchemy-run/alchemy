@@ -237,7 +237,7 @@ const provided = <R>(CodeModeLive: Layer.Layer<AI.CodeModeConvention, never, R>)
 /** Programs written with promises, run on the Durable Object's own thread. */
 export default class OpenCodeSession extends Cloudflare.DurableObject<OpenCodeSession>()(
   "OpenCodeSession",
-  provided(AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalInline()))),
+  provided(AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalQuickJS()))),
 ) {}
 
 /** Programs written as Effects, run in an isolate loaded for them. */

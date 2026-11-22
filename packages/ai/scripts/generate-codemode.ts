@@ -2,11 +2,11 @@
  * Generate the code mode runtimes shipped as source strings:
  *
  * - `src/internal/codemode-effect.generated.ts`: the effect modules that
- *   `Pi.CodeModeEffect` scripts get in scope, as one script that assigns
+ *   `AI.CodeModeEffect` scripts get in scope, as one script that assigns
  *   them to `__alchemyEffect`. It is prepended to every script, so it runs
- *   inside the QuickJS VM wherever the VM runs.
+ *   wherever the script runs.
  * - `src/internal/codemode-isolate.generated.ts`: the main module of the
- *   isolate `PiCloudflare.EvalWorkerLoader` loads, which runs the VM with
+ *   isolate `AICloudflare.EvalQuickJSWorkerLoader` loads, which runs the VM with
  *   `serveCodemodeRemote`.
  *
  * Run after bumping `effect` or `@earendil-works/pi-codemode`:
@@ -116,7 +116,7 @@ const effect = await bundle(
 writeFileSync(
   effectFile,
   [
-    header("The effect modules in scope of a Pi.CodeModeEffect script"),
+    header("The effect modules in scope of a AI.CodeModeEffect script"),
     `/** The names a script has in scope: the members of \`__alchemyEffect\`. */`,
     `export const EFFECT_NAMES: ReadonlyArray<string> = ${JSON.stringify(EFFECT_NAMES)};`,
     ``,
@@ -146,7 +146,7 @@ const isolate = await bundle(
 writeFileSync(
   isolateFile,
   [
-    header("The main module of the isolate PiCloudflare.EvalWorkerLoader loads"),
+    header("The main module of the isolate AICloudflare.EvalQuickJSWorkerLoader loads"),
     `/** Imports \`./quickjs.wasm\`; its default entrypoint serves \`RemoteCodemodeSandbox\`. */`,
     `export const ISOLATE_MODULE: string = ${JSON.stringify(isolate)};`,
     ``,

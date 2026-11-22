@@ -764,15 +764,19 @@ export const Harness = <
                     });
                   }
                 }
-                const [sandbox, convention] = yield* Effect.all([
-                  codemode.sandbox,
-                  codemode.convention,
-                ]).pipe(
+                const convention = yield* codemode.convention.pipe(
                   Effect.mapError(
                     (cause) => new PiError({ message: `Code mode: ${cause.message}`, cause }),
                   ),
                 );
-                return [yield* makeCodeMode(sandbox, convention, programmed)];
+                return [
+                  yield* makeCodeMode(
+                    codemode.evaluator,
+                    convention,
+                    programmed,
+                    base as Context.Context<RuntimeContext>,
+                  ),
+                ];
               }).pipe(Effect.provideContext(base));
         // Selected by default: the base and every extension; skills only where added.
         const defaultExtensions = [

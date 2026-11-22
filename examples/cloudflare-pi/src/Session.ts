@@ -15,7 +15,7 @@ import { Add, AddLive } from "./tools.ts";
 const HarnessLive = Layer.mergeAll(
   FastLive,
   AddLive,
-  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalInline())),
+  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalQuickJS())),
   PiCloudflare.DurableObjectStorage,
   Cloudflare.KV.ReadWriteNamespaceBinding,
 );

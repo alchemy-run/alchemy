@@ -22,7 +22,7 @@ const HarnessLive = Layer.mergeAll(
   AddLive,
   WithdrawLive,
   GlobLive,
-  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalInline())),
+  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalQuickJS())),
   PiCloudflare.DurableObjectStorage,
   Cloudflare.KV.ReadWriteNamespaceBinding,
 );

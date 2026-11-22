@@ -1,6 +1,6 @@
 ---
 title: Code mode
-description: On Pi, tools listed inside AI.CodeMode are called from a JavaScript program the model writes, which replays from a journal after a crash.
+description: On Pi, tools listed inside AI.CodeMode are called from a JavaScript program the model writes, which can resume from a journal after a crash.
 ---
 
 In [code mode](/ai/code-mode) the model writes a program that calls tools, and only what the program returns goes back to the model. On Pi, every tool can be reached this way: yours, an MCP server's, and Pi's own.
@@ -25,7 +25,7 @@ const HarnessLive = Layer.mergeAll(
   AddLive,
   WithdrawLive,
   PiCloudflare.DurableObjectStorage,
-  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalInline())),
+  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalQuickJS())),
 );
 
 export default class Session extends Cloudflare.DurableObject<Session>()(
@@ -91,16 +91,18 @@ The section follows the conversation: a tool it has disabled is left out. See [w
 `AI.CodeModeEffect` declares each tool as an `Effect` with its failures in the error type:
 
 ```typescript
-const CodeModeLive = AI.CodeModeEffect.pipe(Layer.provide(AICloudflare.EvalInline()));
+const CodeModeLive = AI.CodeModeEffect.pipe(Layer.provide(AICloudflare.EvalQuickJS()));
 ```
 
 ```javascript
-const added = yield* tools.add({ a: 2, b: 3 });
-const balance = yield* tools.withdraw({ account: "checking", amount: 500 }).pipe(
-  Effect.map((result) => result.balance),
-  Effect.catchTag("InsufficientFunds", (error) => Effect.succeed(error.balance)),
-);
-console.log(added.sum, balance);
+export default Effect.gen(function* () {
+  const added = yield* tools.add({ a: 2, b: 3 });
+  const balance = yield* tools.withdraw({ account: "checking", amount: 500 }).pipe(
+    Effect.map((result) => result.balance),
+    Effect.catchTag("InsufficientFunds", (error) => Effect.succeed(error.balance)),
+  );
+  return added.sum + balance;
+});
 ```
 
 See [Effect programs](/ai/code-mode#effect-programs).
@@ -121,10 +123,18 @@ yield* harness.configure("pr-142", { tools: { add: [AI.CodeMode(Add, Withdraw)] 
 
 Whether a tool is also offered directly is set on the harness, by where it is listed there.
 
-## Programs after a crash
-
-A program runs deterministically, and each tool call it finishes is stored. A program cut off by an eviction runs again from the top, gets the stored result for each call it already made, and continues from there.
-
 ## Where programs run
 
-Provide any `AI.Eval`: the Durable Object's thread, an isolate of its own, or a worker thread on a machine. See [where programs run](/ai/code-mode#where-programs-run), and [Other hosts](/pi/other-hosts) for a harness outside a Durable Object.
+Provide any `AI.Eval`. `AICloudflare.EvalWorkerLoader()` runs each program in an isolate of its own:
+
+```typescript
+const CodeModeLive = AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalWorkerLoader()));
+```
+
+See [where programs run](/ai/code-mode#where-programs-run), and [Other hosts](/pi/other-hosts) for a harness outside a Durable Object.
+
+## Resume after a crash
+
+A [QuickJS evaluator](/ai/code-mode#run-programs-in-quickjs) runs a program deterministically, and Pi stores each tool call the program finishes. A program cut off by an eviction runs again from the top, gets the stored result for each call it already made, and continues from there.
+
+Under `AICloudflare.EvalWorkerLoader()` a program runs once. One cut off by an eviction fails, and the model is told so.

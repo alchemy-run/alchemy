@@ -62,7 +62,7 @@ const HarnessLive = Layer.mergeAll(
   ModelsLive,
   AddLive,
   CodesLive,
-  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalInline())),
+  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalQuickJSWorkerLoader())),
   PiCloudflare.DurableObjectStorage,
 ).pipe(Layer.provideMerge(Cloudflare.Workers.FetchBinding));
 

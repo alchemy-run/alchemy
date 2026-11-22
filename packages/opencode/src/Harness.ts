@@ -1,8 +1,10 @@
 import {
   CodeModeConvention,
   isCodeMode,
+  renderEvaluation,
   type CodeModeGroup,
   type Convention,
+  type Evaluator,
 } from "@alchemy.run/ai/CodeMode";
 import type { DeclaredNamespace, DeclaredTool, JsonSchema } from "@alchemy.run/ai/Declarations";
 import { isMcpServer, type AnyMcpServer, type McpServerService } from "@alchemy.run/ai/McpServer";
@@ -310,27 +312,23 @@ const namespaceOf = (programmed: ReadonlyArray<Programmed>): Omit<DeclaredNamesp
 };
 
 /**
- * Run one program in a sandbox of its own, with every tool a program may
- * call. A call's declared failure rejects with its fields as JSON, which
- * the convention's wrapper turns into the failure's class.
+ * Run one program where the evaluator runs it, with every tool a program
+ * may call. A call's declared failure rejects with its fields as JSON,
+ * which the convention's wrapper turns into the failure's class.
  */
 const runProgram = (
-  program: {
-    readonly convention: Convention;
-    readonly sandbox: Extract<CodeModeConvention["Service"], { kind: "shared" }>["sandbox"];
-  },
+  program: { readonly convention: Convention; readonly evaluator: Evaluator },
   programmed: ReadonlyMap<string, Programmed>,
   call: Built["call"],
   code: string,
   services: Context.Context<Sandbox | ToolCall>,
 ): Effect.Effect<{ readonly text: string; readonly isError: boolean }, never, RuntimeContext> =>
   Effect.gen(function* () {
-    const sandbox = yield* program.sandbox;
     const context = yield* Effect.context<RuntimeContext>();
-    for (const [callAs, { server, tool }] of programmed) {
-      sandbox.registerTool({
-        name: callAs,
-        execute: async (args) => {
+    const tools = Object.fromEntries(
+      [...programmed].map(([callAs, { server, tool }]) => [
+        callAs,
+        async (args: unknown) => {
           const result = await Effect.runPromiseWith(context)(
             call(server, tool.name, args ?? {}, services),
           );
@@ -338,23 +336,10 @@ const runProgram = (
           if (result.isError) throw new Error(result.text);
           return result.structured ?? result.text;
         },
-      });
-    }
-    const { wrap } = program.convention.program(namespaceOf([...programmed.values()]));
-    const result = yield* Effect.promise(() => sandbox.execute(wrap(code))).pipe(
-      Effect.ensuring(Effect.promise(() => sandbox.close().catch(() => undefined))),
+      ]),
     );
-    const printed = result.output.flatMap((item) => (item.type === "text" ? [item.text] : []));
-    if (!result.ok) {
-      return { text: [...printed, result.error.message].join("\n"), isError: true };
-    }
-    return {
-      text: [
-        ...printed,
-        ...(result.value === undefined ? [] : [JSON.stringify(result.value)]),
-      ].join("\n"),
-      isError: false,
-    };
+    const { wrap } = program.convention.program(namespaceOf([...programmed.values()]));
+    return renderEvaluation(yield* program.evaluator.run(wrap(code), tools));
   }).pipe(
     Effect.catchCause((cause) =>
       Effect.succeed({ text: messageOf(cause.pipe(Cause.squash)), isError: true }),
@@ -580,7 +565,7 @@ export const Harness = <
           const program =
             codemode?.kind === "shared"
               ? yield* codemode.convention.pipe(
-                  Effect.map((convention) => ({ convention, sandbox: codemode.sandbox })),
+                  Effect.map((convention) => ({ convention, evaluator: codemode.evaluator })),
                   Effect.mapError((cause) => fail(`Code mode: ${cause.message}`, cause)),
                 )
               : undefined;
@@ -603,7 +588,7 @@ export const Harness = <
                     inputSchema: {
                       type: "object",
                       properties: {
-                        code: { type: "string", description: "The program, as raw JavaScript." },
+                        code: { type: "string", description: "The program's source." },
                       },
                       required: ["code"],
                     },

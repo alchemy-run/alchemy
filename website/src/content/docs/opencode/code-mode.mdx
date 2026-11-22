@@ -28,7 +28,7 @@ const HarnessLive = Layer.mergeAll(
   SandboxLive,
   OpenCode.CodingTools,
   OpenCodeCloudflare.DurableObjectInstance,
-  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalInline())),
+  AI.CodeModeAsync.pipe(Layer.provide(AICloudflare.EvalWorkerLoader())),
 );
 
 export default class Session extends Cloudflare.DurableObject<Session>()(
@@ -93,16 +93,18 @@ The entry follows the prompt: it declares the tools that prompt put in a group. 
 `AI.CodeModeEffect` declares each tool as an `Effect` with its failures in the error type:
 
 ```typescript
-const CodeModeLive = AI.CodeModeEffect.pipe(Layer.provide(AICloudflare.EvalInline()));
+const CodeModeLive = AI.CodeModeEffect.pipe(Layer.provide(AICloudflare.EvalWorkerLoader()));
 ```
 
 ```javascript
-const added = yield* tools.add({ a: 2, b: 3 });
-const balance = yield* tools.withdraw({ account: "checking", amount: 500 }).pipe(
-  Effect.map((result) => result.balance),
-  Effect.catchTag("InsufficientFunds", (error) => Effect.succeed(error.balance)),
-);
-return added.sum + balance;
+export default Effect.gen(function* () {
+  const added = yield* tools.add({ a: 2, b: 3 });
+  const balance = yield* tools.withdraw({ account: "checking", amount: 500 }).pipe(
+    Effect.map((result) => result.balance),
+    Effect.catchTag("InsufficientFunds", (error) => Effect.succeed(error.balance)),
+  );
+  return added.sum + balance;
+});
 ```
 
 See [Effect programs](/ai/code-mode#effect-programs).
@@ -125,9 +127,9 @@ const reply = yield* session.prompt("Settle every account.", {
 
 ## Where programs run
 
-Programs run where the harness runs, not in the sandbox: provide any `AI.Eval`, such as the Durable Object's thread or an isolate of its own. Each tool call a program makes runs its handler there too. See [where programs run](/ai/code-mode#where-programs-run).
+Programs run beside the harness, not in the sandbox: provide any `AI.Eval`, such as an isolate of its own or a QuickJS VM on the Durable Object's thread. Each tool call a program makes runs its handler in the Durable Object. See [where programs run](/ai/code-mode#where-programs-run).
 
-A program does not replay after a crash. A prompt cut off while one runs fails, and the next prompt starts a new one.
+A program does not resume after a crash, under any evaluator. A prompt cut off while one runs fails, and the next prompt starts a new one.
 
 ## OpenCode's own code mode
 
