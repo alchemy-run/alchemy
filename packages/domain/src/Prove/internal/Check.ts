@@ -68,7 +68,20 @@ export const solve = Effect.fn(function* (
   reads: ReadonlyArray<Smt.Term> = [],
 ) {
   const applications = [...run.applications.values()];
-  const named = reads.map((term, index) => ({ term, name: Smt.symbol(`$out.${index}`) }));
+  // What each tested result of an opaque function was called on: the real function is run on it.
+  const tests = [...run.tests.values()].map((test) => {
+    const terms = new Map<string, Smt.Term>();
+    computed(test.applied, terms);
+    return { ...test, terms: [...terms.values()] };
+  });
+  const wanted = new Map<string, Smt.Term>(reads.map((term) => [term.text, term]));
+  for (const test of tests)
+    for (const term of test.terms)
+      if (!run.declarations.has(term.text)) wanted.set(term.text, term);
+  const named = [...wanted.values()].map((term, index) => ({
+    term,
+    name: Smt.symbol(`$out.${index}`),
+  }));
   const declarations = [...run.declarations.values()];
   const base = [
     ...run.conditions,
@@ -115,18 +128,55 @@ export const solve = Effect.fn(function* (
     return { _tag: "Sat", model } as const;
   });
 
-  /** What the real functions say at the arguments the model chose. */
-  const real = (model: Model) =>
-    applications.flatMap((application) => {
+  /**
+   * What the real functions say at the arguments the model chose. `pin` holds
+   * the model to those arguments and the real result, and `fact` is what the
+   * real function showed, true of every model.
+   */
+  const real = (
+    model: Model,
+  ): ReadonlyArray<{
+    readonly agrees: boolean;
+    readonly pin: ReadonlyArray<string>;
+    readonly fact: string;
+  }> => [
+    ...applications.flatMap((application) => {
       const argument = model.get(application.argument);
       if (typeof argument !== "number") return [];
       const value = application.real(argument);
       const at = application.sort === "Real" ? Smt.real(argument) : Smt.int(argument);
       const point = `(= (${functionOf(application)} ${at.text}) ${Smt.string(value).text})`;
       return [
-        { application, argument, value, point, agrees: model.get(application.term) === value },
+        {
+          agrees: model.get(application.term) === value,
+          pin: [`(= ${application.argument} ${at.text})`, point],
+          fact: point,
+        },
       ];
-    });
+    }),
+    // Whether an opaque function's result is truthy: the real function says, on these arguments.
+    ...tests.flatMap((test) => {
+      const built = Symbolic.concretize(test.applied, model, run.lists);
+      if (!("value" in built)) return [];
+      const truthy = Smt.bool(Boolean(built.value)).text;
+      const at = test.terms.flatMap((term) => {
+        const value = model.get(term.text);
+        return value === undefined ? [] : [`(= ${term.text} ${literalOf(term.sort, value)})`];
+      });
+      if (at.length < test.terms.length) return [];
+      const result = `(= ${test.term.text} ${truthy})`;
+      return [
+        {
+          agrees: model.get(test.term.text) === Boolean(built.value),
+          pin: [...at, result],
+          fact:
+            at.length === 0
+              ? result
+              : `(=> ${at.length === 1 ? at[0]! : `(and ${at.join(" ")})`} ${result})`,
+        },
+      ];
+    }),
+  ];
 
   for (let round = 0; round < 8; round++) {
     const answer = yield* ask([]);
@@ -134,18 +184,18 @@ export const solve = Effect.fn(function* (
     const points = real(answer.model);
     if (points.every((p) => p.agrees)) return answer;
     // Same arguments, with the functions' real values: often still a counterexample.
-    const pinned = yield* ask(
-      points.flatMap((p) => [
-        `(= ${p.application.argument} ${(p.application.sort === "Real" ? Smt.real(p.argument) : Smt.int(p.argument)).text})`,
-        p.point,
-      ]),
-    );
+    const pinned = yield* ask(points.flatMap((p) => p.pin));
     if (pinned._tag === "Sat" && real(pinned.model).every((p) => p.agrees)) return pinned;
-    facts.push(...points.map((p) => p.point));
+    facts.push(...points.map((p) => p.fact));
   }
   return {
     _tag: "Unknown",
-    reason: `every counterexample the solver found needs ${[...new Set(applications.map(functionOf))].join(", ")} to return something it does not`,
+    reason: `every counterexample the solver found needs ${[
+      ...new Set([
+        ...applications.map(functionOf),
+        ...tests.map((test) => (test.applied._tag === "Applied" ? test.applied.name : "")),
+      ]),
+    ].join(", ")} to return something it does not`,
   } as const;
 });
 
@@ -372,10 +422,25 @@ const computed = (value: V, into: Map<string, Smt.Term>): void => {
     case "Arr":
       for (const item of value.items) computed(item, into);
       return;
+    case "Applied":
+      for (const argument of value.args) computed(argument, into);
+      return;
     default:
       return;
   }
 };
+
+/** A value the solver found, as the solver writes it. */
+const literalOf = (sort: Smt.Sort, value: number | bigint | string | boolean): string =>
+  typeof value === "string"
+    ? Smt.string(value).text
+    : typeof value === "boolean"
+      ? Smt.bool(value).text
+      : typeof value === "bigint"
+        ? Smt.big(value).text
+        : sort === "Real"
+          ? Smt.real(value).text
+          : Smt.int(value).text;
 
 /** What comparing a path with the real code gave. */
 export type Agreement =
