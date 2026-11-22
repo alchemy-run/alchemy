@@ -7,7 +7,6 @@
     "@alchemy.run/archil": "workspace:*",
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/axiom": "workspace:*",
-    "@alchemy.run/azure": "workspace:*",
     "@alchemy.run/boat": "workspace:*",
     "@alchemy.run/cloudflare": "workspace:*",
     "@alchemy.run/convex": "workspace:*",

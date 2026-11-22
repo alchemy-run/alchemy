@@ -243,7 +243,6 @@ export const resolveWorkloadImage = Effect.fn(function* (options: ResolveWorkloa
   if (adapter.registry !== undefined) {
     return yield* adapter.registry.resolve({
       id: options.id,
-      connection: options.connection,
       source,
       platform: options.platform,
       port: options.port,
