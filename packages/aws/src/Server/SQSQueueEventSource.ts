@@ -33,7 +33,9 @@ export const SQSQueueEventSource = Layer.effect(
             const queueArn = yield* QueueArn;
             const region = queueArn.split(":")[3]!;
             const result = yield* receiveMessage({
-              MaxNumberOfMessages: props.maxNumberOfMessages ?? props.batchSize ?? 10,
+              // ReceiveMessage returns at most 10 messages; `batchSize` may be
+              // up to 10,000 for the Lambda event source mapping.
+              MaxNumberOfMessages: Math.min(props.maxNumberOfMessages ?? props.batchSize ?? 10, 10),
               MessageAttributeNames: ["All"],
               MessageSystemAttributeNames: ["All"],
               WaitTimeSeconds:

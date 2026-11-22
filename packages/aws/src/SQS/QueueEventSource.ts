@@ -17,8 +17,9 @@ export interface MessagesProps extends QueueEventSourceProps {
    */
   waitTime?: Duration.Input;
   /**
-   * Maximum number of messages to receive per poll when using the process (run) path.
-   * @default 10
+   * Maximum number of messages to receive per poll when using the process
+   * (run) path. Capped at 10, the most SQS returns per `ReceiveMessage`.
+   * @default `batchSize`, capped at 10
    */
   maxNumberOfMessages?: number;
 }
@@ -149,6 +150,24 @@ export function consumeQueueMessages<Q extends Queue, E = never, Req = never, Re
  * );
  * ```
  *
+ * ### Large FIFO Batches
+ * **Example:** Up to 10,000 FIFO messages per batch in provisioned mode
+ * ```typescript
+ * const queue = yield* SQS.Queue("Orders", { fifo: true });
+ *
+ * yield* SQS.consumeQueueMessages(
+ *   queue,
+ *   {
+ *     batchSize: 10_000,
+ *     maximumBatchingWindow: "5 seconds",
+ *     provisionedPollerConfig: { MinimumPollers: 2, MaximumPollers: 10 },
+ *   },
+ *   Effect.fn(function* (event) {
+ *     yield* Effect.log(`received ${event.Records.length} messages`);
+ *   }),
+ * );
+ * ```
+ *
  * @binding
  */
 export interface QueueEventSource extends Binding.Service<
@@ -162,6 +181,10 @@ export const QueueEventSource = Binding.Service<QueueEventSource>("AWS.SQS.Queue
 export interface QueueEventSourceProps {
   /**
    * The maximum number of records in each batch that Lambda pulls from the queue.
+   *
+   * Up to 10,000 on a standard queue. On a FIFO queue, up to 10 by default,
+   * or up to 10,000 when `provisionedPollerConfig` puts the mapping in
+   * provisioned mode. Above 10, set `maximumBatchingWindow` too.
    * @default 10
    */
   batchSize?: number;
@@ -172,6 +195,16 @@ export interface QueueEventSourceProps {
    * @default 0
    */
   maximumBatchingWindow?: Duration.Input;
+  /**
+   * (Lambda) Runs the event-source mapping in provisioned mode, with
+   * dedicated pollers kept warm between `MinimumPollers` and
+   * `MaximumPollers`. Provisioned mode is billed per event poller unit, and
+   * is required for FIFO batches larger than 10 messages.
+   */
+  provisionedPollerConfig?: {
+    MinimumPollers?: number;
+    MaximumPollers?: number;
+  };
 }
 
 export type QueueEventSourceService = <E = never, Req = never>(
