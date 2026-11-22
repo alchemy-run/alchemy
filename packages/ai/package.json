@@ -81,6 +81,7 @@
         "worker": "./src/Modal/index.ts",
         "default": "./lib/Modal/index.js"
       },
+      "./internal/*": null,
       "./*": {
         "types": "./lib/*.d.ts",
         "bun": "./src/*.ts",
