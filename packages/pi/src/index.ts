@@ -1,6 +1,7 @@
 export {
   CodeMode,
   CodeModeAsync,
+  CodeModeEffect,
   CodeModeConvention,
   Eval,
   EvalQuickJS,
