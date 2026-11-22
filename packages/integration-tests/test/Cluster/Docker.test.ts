@@ -4,7 +4,11 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
 import { ensureDockerSwarm } from "../Docker/Runtime.ts";
 import { conformanceTests, get, waitForReady } from "./conformance.ts";
@@ -60,18 +64,42 @@ describe.skipIf(!!process.env.FAST)(
       { timeout: 120_000 },
     );
 
-    // Last: it redeploys the stack. Every redeploy bundles the pool's program
-    // again, once for each resource that reads it, all in one plan.
+    // Last: it redeploys the stack. Each deploy bundles each pool's program
+    // once, however many of its resources read it, in the plan and in apply.
     test(
-      "a pool redeployed again and again bundles its program each time",
+      "a pool redeployed again and again bundles its program once per deploy",
       Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const root = path.resolve(".alchemy", "cluster");
         for (let i = 0; i < 3; i++) {
+          // Every bundle writes its pool's directory anew: count the
+          // directories each pool's path held during the deploy.
+          const seen = new Map<string, Set<bigint>>();
+          const sampler = yield* Effect.gen(function* () {
+            for (const entry of yield* fs.readDirectory(root)) {
+              const info = yield* fs.stat(path.join(root, entry)).pipe(Effect.option);
+              if (Option.isSome(info) && Option.isSome(info.value.ino)) {
+                const inodes = seen.get(entry) ?? new Set<bigint>();
+                inodes.add(info.value.ino.value);
+                seen.set(entry, inodes);
+              }
+            }
+          }).pipe(Effect.repeat(Schedule.spaced("10 millis")), Effect.forkChild);
+          yield* Effect.sleep("100 millis");
+          const before = new Map([...seen].map(([entry, inodes]) => [entry, inodes.size]));
           yield* sharedStack.deploy(
             Effect.gen(function* () {
               const front = yield* Front;
               return { front: front.name };
             }).pipe(Effect.provide(Lives)),
           );
+          yield* Fiber.interrupt(sampler);
+          const bundles = [...seen].map(
+            ([entry, inodes]) => inodes.size - (before.get(entry) ?? 0),
+          );
+          expect(bundles.length).toBeGreaterThan(0);
+          for (const count of bundles) expect(count).toBeLessThanOrEqual(1);
         }
         expect((yield* get(`${baseUrl}/echo/again`)).value).toBe("echo again");
       }),

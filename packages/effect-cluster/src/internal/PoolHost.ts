@@ -9,6 +9,7 @@
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
+import * as Artifacts from "alchemy/Artifacts";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
@@ -22,7 +23,6 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
-import * as Semaphore from "effect/Semaphore";
 import { DATABASE_MAX_CONNECTIONS, Database, type DatabaseShape } from "../Database.ts";
 import { shardGroupKey, type Entity } from "../Entity.ts";
 import { Pool, type PoolEntity } from "../Pool.ts";
@@ -312,81 +312,72 @@ const runnerEntry = (name: "runner" | "external-runner") =>
   );
 
 /**
- * One lock per pool's bundles. Every resource that reads a pool's program
- * (its image, its service) resolves the bundle on its own, and a plan diffs
- * them at once.
- */
-const bundleLocks = new Map<string, Semaphore.Semaphore>();
-const bundleLock = (dir: string) => {
-  let lock = bundleLocks.get(dir);
-  if (lock === undefined) {
-    lock = Semaphore.makeUnsafe(1);
-    bundleLocks.set(dir, lock);
-  }
-  return lock;
-};
-
-/**
  * Bundle the runner program and its Dockerfile into a directory of their
  * own, once the pool knows its classes, and resolve to the directory.
  *
- * Each bundle is written to a directory of its own and then kept under its
- * hash, so a directory a resource was given is never emptied under it:
- * another resource's bundle of the same program resolves to the same one.
+ * Every Output read of the program resolves it again, in the plan and again
+ * in apply, and a pool's resources read it more than once (an image's build
+ * context and its tag). The bundle is kept in the run's artifacts, so a
+ * deploy bundles once and every reader shares that one directory: a second
+ * bundle would empty the directory under a resource still reading it.
  */
 const bundleProgram = Effect.fn(function* (id: string, pool: Pool, dockerfile: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const root = path.resolve(yield* dotAlchemyDirectory, "cluster", yield* stackDnsLabel(id));
-  return Output.mapEffect((entities: PoolEntity[]) =>
-    Effect.gen(function* () {
-      yield* fs.makeDirectory(root, { recursive: true });
-      const dir = yield* fs.makeTempDirectory({ directory: root, prefix: ".bundle-" });
-      // An external program is bundled on its own and embedded in the
-      // runner, which writes it out and runs it as its own process: it reads
-      // its settings from its environment when it loads, so it can't share
-      // the runner's modules. One file, on every host.
-      const program = entities.find((entity) => entity.program !== undefined)?.program;
-      let programSource: string | undefined;
-      if (program !== undefined) {
-        const programDir = path.join(dir, "program");
-        yield* Bundle.build(
-          {
-            input: path.resolve(program),
-            platform: "node",
-            resolve: { conditionNames: [...Bundle.NODE_CONDITION_NAMES] },
-          },
-          { dir: programDir, format: "esm", entryFileNames: "program.mjs", codeSplitting: false },
-        );
-        programSource = yield* fs.readFileString(path.join(programDir, "program.mjs"));
-        yield* fs.remove(programDir, { recursive: true });
-      }
-      const runner = yield* Bundle.build(
+  const dir = path.resolve(yield* dotAlchemyDirectory, "cluster", yield* stackDnsLabel(id));
+  // Only when this resolves outside a deploy, which gives every run its own store.
+  const fallback = Artifacts.createArtifactStore();
+  const bundle = Effect.fn(function* (entities: PoolEntity[]) {
+    yield* fs.remove(dir, { recursive: true, force: true });
+    yield* fs.makeDirectory(dir, { recursive: true });
+    // An external program is bundled on its own and embedded in the
+    // runner, which writes it out and runs it as its own process: it reads
+    // its settings from its environment when it loads, so it can't share
+    // the runner's modules. One file, on every host.
+    const program = entities.find((entity) => entity.program !== undefined)?.program;
+    let programSource: string | undefined;
+    if (program !== undefined) {
+      const programDir = path.join(dir, "program");
+      yield* Bundle.build(
         {
-          input: runnerEntry(program === undefined ? "runner" : "external-runner"),
+          input: path.resolve(program),
           platform: "node",
           resolve: { conditionNames: [...Bundle.NODE_CONDITION_NAMES] },
-          plugins: [...entitiesPlugin(entities), ...programPlugin(programSource)],
         },
-        { dir, format: "esm", entryFileNames: "runner.mjs", codeSplitting: false },
+        { dir: programDir, format: "esm", entryFileNames: "program.mjs", codeSplitting: false },
       );
-      const hashes = [runner.hash, dockerfile];
-      yield* fs.writeFileString(path.join(dir, "Dockerfile"), dockerfile);
-      const hash = yield* Effect.sync(() =>
-        createHash("sha256").update(hashes.join("\n")).digest("hex").slice(0, 16),
+      programSource = yield* fs.readFileString(path.join(programDir, "program.mjs"));
+      yield* fs.remove(programDir, { recursive: true });
+    }
+    const runner = yield* Bundle.build(
+      {
+        input: runnerEntry(program === undefined ? "runner" : "external-runner"),
+        platform: "node",
+        resolve: { conditionNames: [...Bundle.NODE_CONDITION_NAMES] },
+        plugins: [...entitiesPlugin(entities), ...programPlugin(programSource)],
+      },
+      { dir, format: "esm", entryFileNames: "runner.mjs", codeSplitting: false },
+    );
+    const hashes = [runner.hash, dockerfile];
+    yield* fs.writeFileString(path.join(dir, "Dockerfile"), dockerfile);
+    const hash = yield* Effect.sync(() =>
+      createHash("sha256").update(hashes.join("\n")).digest("hex").slice(0, 16),
+    );
+    return { dir, hash };
+  }, Effect.orDie);
+  return Output.mapEffect((entities: PoolEntity[]) =>
+    Effect.gen(function* () {
+      const store = Option.getOrElse(
+        yield* Effect.serviceOption(Artifacts.ArtifactStore),
+        () => fallback,
       );
-      const kept = path.join(root, hash);
-      return yield* Effect.gen(function* () {
-        if (yield* fs.exists(kept)) yield* fs.remove(dir, { recursive: true });
-        else yield* fs.rename(dir, kept);
-        // Earlier programs' bundles: no resource of this plan reads them.
-        for (const entry of yield* fs.readDirectory(root)) {
-          if (entry !== hash && !entry.startsWith(".bundle-")) {
-            yield* fs.remove(path.join(root, entry), { recursive: true, force: true });
-          }
-        }
-        return { dir: kept, hash };
-      }).pipe(bundleLock(root).withPermits(1));
-    }).pipe(Effect.orDie),
+      return yield* bundle(entities).pipe(
+        Artifacts.cached("program"),
+        Effect.provideService(
+          Artifacts.Artifacts,
+          Artifacts.makeScopedArtifacts(store, `cluster:${dir}`),
+        ),
+      );
+    }),
   )(pool.entities);
 });
