@@ -1,0 +1,127 @@
+---
+title: Vinext
+description: "Deploy a vinext App Router app to Azure with Azure.Website.Vinext — rendering and route handlers on a Flex Consumption Function, assets on Blob Storage, both behind Azure Front Door."
+sidebar:
+  order: 13
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const devDeps = "@alchemy.run/frontend-frameworks";
+
+`Azure.Website.Vinext` deploys a [vinext](https://vinext.dev) App Router app
+to Azure. Alchemy runs vinext's Vite build. vinext's fetch handler renders
+pages and runs route handlers on a Flex Consumption Function, which scales
+to zero. The client build goes to the static website endpoint of an Azure
+Storage account. Azure Front Door sends `/_next/static/*` and the public
+files to Blob Storage and every other path to the Function. No Docker
+image and no App Service plan are involved.
+
+## Install
+
+Keep `vinext`, `react`, `react-dom`, and `react-server-dom-webpack` in your
+application dependencies, with `vite` and `@vitejs/plugin-rsc` for
+building. Add the Alchemy integration as a dev dependency:
+
+<PackageManagers dev={devDeps} />
+
+## Configure vinext
+
+```typescript
+// vite.config.ts
+import { defineConfig } from "vite";
+import vinext from "vinext";
+
+export default defineConfig({
+  plugins: [vinext({ prerender: true })],
+});
+```
+
+No Alchemy plugin is needed in `vite.config.ts`. Leave Cloudflare plugins
+and Worker entrypoints out of this application.
+
+## Deploy the site
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export default Alchemy.Stack(
+  "MyVinextSite",
+  { providers: Azure.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const site = yield* Azure.Website.Vinext("Website", { location: "eastus" });
+    return { url: site.url };
+  }),
+);
+```
+
+Run `alchemy deploy`. `site.url` is the Front Door endpoint,
+`https://{endpoint}.z01.azurefd.net`. A new endpoint takes 10-20 minutes to
+serve everywhere. Pick a `location` that offers Flex Consumption.
+
+The `@alchemy.run/frontend-frameworks/vinext/azure` target wraps vinext's
+App Router handler (`dist/server/index.js`) as an Azure Functions handler.
+It bundles React into the server, so the Function ships no `node_modules`.
+Pages Router builds are not supported: the build fails without an App
+Router entry.
+
+## Pass environment variables
+
+```diff lang="typescript"
+-const site = yield* Azure.Website.Vinext("Website", { location: "eastus" });
++const site = yield* Azure.Website.Vinext("Website", {
++  location: "eastus",
++  env: { GREETING: "Hello from vinext on Azure!" },
++});
+```
+
+The values become app settings of the Function. A route handler reads them:
+
+```typescript
+// app/api/hello/route.ts
+export function GET() {
+  return Response.json({ greeting: process.env.GREETING ?? "hello" });
+}
+```
+
+## Share the data cache
+
+ISR and `"use cache"` use the Function's in-process memory by default, so
+each instance keeps its own cache. Set `REDIS_URL` for one Redis store that
+every instance shares:
+
+```typescript
+const site = yield* Azure.Website.Vinext("Website", {
+  env: { REDIS_URL: "rediss://:password@cache.redis.cache.windows.net:6380" },
+});
+```
+
+Alchemy injects vinext's cache adapter during the build.
+
+## Share a Front Door profile
+
+```typescript
+const profile = yield* Azure.Cdn.Profile("Edge");
+const site = yield* Azure.Website.Vinext("Website", { frontDoor: { profile } });
+```
+
+Each profile bills a monthly base fee, so share one across sites. See
+[Websites](/azure/frontend/websites) for caching, purges, and the other
+shared settings.
+
+## Local development
+
+`alchemy dev` runs native `vinext dev` with hot reload and creates nothing
+in Azure. `env` reaches the dev server's `process.env`. Wrap the site in
+`Alchemy.remote()` to deploy it for real during dev.
+
+See the [`azure-website-vinext`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-website-vinext)
+example.
+
+## Where next
+
+- [Websites](/azure/frontend/websites) — the settings every site shares.
+- [Website reference](/providers/azure/website#vinext) — every prop.

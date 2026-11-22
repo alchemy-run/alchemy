@@ -23,7 +23,7 @@ describe("optional frontend-frameworks peer", { tags: ["unit", "local"] }, () =>
         );
         expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: "" });
         expect(JSON.parse(stdout)).toEqual({
-          providers: ["Prisma", "Neon", "Fly", "Hetzner", "Railway"],
+          providers: ["Prisma", "Neon", "Fly", "Hetzner", "Railway", "Azure"],
           providerImportAttempts: 0,
           loaderImportAttempts: 1,
           defect: true,

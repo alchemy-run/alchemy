@@ -1,0 +1,168 @@
+---
+title: Local development
+description: Run Azure Functions and Azure Storage on your machine with alchemy dev — a local Node.js process, Azurite in Docker, restarts on save, and no Azure credentials.
+---
+
+`alchemy dev` runs your Azure Functions on your machine. Each Function is
+a local Node.js process on `http://localhost:<port>`, and Storage accounts,
+blob containers, and queues run on
+[Azurite](https://github.com/Azure/Azurite) in Docker. No Azure call runs,
+so you don't need Azure credentials.
+
+## Start Docker
+
+Azurite runs in Docker. Start Docker before you run `alchemy dev`.
+
+## Declare the storage
+
+```typescript
+// src/Storage.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+
+export const Data = Azure.Storage.StorageAccount("Data");
+
+export const Files = Effect.gen(function* () {
+  const account = yield* Data;
+  return yield* Azure.Storage.BlobContainer("Files", {
+    storageAccount: account.storageAccountName,
+  });
+});
+
+export const Jobs = Effect.gen(function* () {
+  const account = yield* Data;
+  return yield* Azure.Storage.Queue("Jobs", {
+    storageAccount: account.storageAccountName,
+  });
+});
+```
+
+You write the same declarations for `alchemy dev` and `alchemy deploy`.
+
+## Bind it in a Function
+
+```typescript
+// src/Api.ts
+import * as Azure from "@alchemy.run/azure";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Files, Jobs } from "./Storage.ts";
+
+export default class Api extends Azure.Functions.Function<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const filesContainer = yield* Files;
+    const jobsQueue = yield* Jobs;
+    const files = yield* Azure.Storage.BlobContainerReadWrite(filesContainer);
+
+    yield* Azure.Storage.consumeQueueMessages(jobsQueue, (message) =>
+      files.put("last-job.json", JSON.stringify(message.body)).pipe(Effect.orDie),
+    );
+
+    return {
+      fetch: Effect.gen(function* () {
+        yield* files.put("hello.txt", "hello from blob storage");
+        const blob = yield* files.get("hello.txt");
+        return HttpServerResponse.text(blob?.text() ?? "missing");
+      }).pipe(Effect.orDie),
+    };
+  }).pipe(
+    Effect.provide([
+      Azure.Storage.BlobContainerReadWriteHttp,
+      Azure.Functions.StorageQueueEventSource,
+    ]),
+  ),
+) {}
+```
+
+## Run it
+
+```sh
+alchemy dev
+# api: 'http://localhost:41237'
+```
+
+`api.url` is the local process's URL. Resource IDs start with `dev:`, and
+the storage account is Azurite's `devstoreaccount1`.
+
+## Edit and save
+
+Change a file while `alchemy dev` runs. Alchemy rebundles the Function and
+restarts it on the same URL.
+
+## What runs where
+
+| Resource                       | `alchemy dev`                                 | `alchemy deploy`                    |
+| ------------------------------ | --------------------------------------------- | ----------------------------------- |
+| `Azure.Functions.Function`     | `node index.mjs` on `http://localhost:<port>` | Flex Consumption function app       |
+| `Azure.Storage.StorageAccount` | Azurite's `devstoreaccount1`                  | Standard_LRS account                |
+| `Azure.Storage.BlobContainer`  | Container in Azurite                          | Container in the account            |
+| `Azure.Storage.Queue`          | Queue in Azurite                              | Queue in the account                |
+| Storage queue consumer         | The local runtime polls the queue             | The Functions host's `queueTrigger` |
+| `Azure.Functions.schedule`     | The local runtime runs the timer              | The Functions host's `timerTrigger` |
+| Resource group                 | None                                          | `<stack>-<stage>`                   |
+| `Azure.Website.*`              | The framework's own dev server                | The built site in Azure             |
+
+Every other resource deploys to Azure, in your personal
+[stage](/environments/stages). See [Websites](/azure/frontend/websites) for
+the framework dev servers.
+
+## Know the limits
+
+A local Function reaches only local Storage. Bindings attach no role
+assignments, so a local Function can't authorize against a resource in
+Azure. Event Grid, Service Bus, Event Hubs, Cosmos DB, and Durable Task
+triggers don't run locally. They log a warning.
+
+## Keep a Function in Azure
+
+Pipe the Function through `Alchemy.remote()` to deploy it to Azure during
+dev:
+
+```typescript
+const api = yield* Effect.gen(function* () {
+  return yield* Api;
+}).pipe(Alchemy.remote());
+```
+
+Make the resources it binds remote too. A remote Function can't reach
+Azurite.
+
+Moving a resource between local and remote plans a replacement, so dev
+state never becomes cloud state. See
+[Local development](/environments/local-development) for the shared rules.
+
+## Manage Azurite
+
+Alchemy starts Azurite as the Docker container `alchemy-azurite` on ports
+10100 (blob), 10101 (queue), and 10102 (table). The container keeps
+running between sessions. Local Storage calls are signed with Azurite's
+public development key.
+
+## Test against the local stack
+
+`Test.make({ dev: true })` runs a suite's deploys through the local
+providers, the same way `alchemy dev` does:
+
+```typescript
+const { test } = Test.make({ providers: Azure.providers(), dev: true });
+```
+
+The same HTTP assertions run with no Azure credentials. See
+[Test harness](/testing/test-harness#dev).
+
+## Example
+
+[`examples/azure-dev`](https://github.com/alchemy-run/alchemy/tree/main/examples/azure-dev)
+runs one Function with a blob container, a queue, and a queue consumer
+under `alchemy dev`, and deploys the same code to Azure.
+
+## Where next
+
+- [Azure Functions](/azure/compute/functions) — the runtime that runs
+  locally.
+- [Local development](/environments/local-development) — `alchemy dev`
+  across providers.
+- [Local providers](/infrastructure-as-code/local-provider) — build the
+  local implementation of a resource.

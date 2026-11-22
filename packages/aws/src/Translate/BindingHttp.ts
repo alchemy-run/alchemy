@@ -61,7 +61,7 @@ export const makeTranslateHttpBinding = <I, A, E, R>(options: {
  * auto-generates it) — a UUID is generated per call when omitted.
  */
 export const makeTranslateStartJobHttpBinding = <
-  I extends { DataAccessRoleArn: string; ClientToken: string },
+  I extends { DataAccessRoleArn: string; ClientToken?: string },
   A,
   E,
   R,
