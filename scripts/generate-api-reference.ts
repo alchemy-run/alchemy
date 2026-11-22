@@ -143,6 +143,11 @@ const sourceRoots: SourceRoot[] = [
     providerPrefix: "Railway",
     sourceDisplayPrefix: "packages/railway/src",
   },
+  {
+    srcRoot: "packages/render/src",
+    providerPrefix: "Render",
+    sourceDisplayPrefix: "packages/render/src",
+  },
   { srcRoot: "packages/fly/src", providerPrefix: "Fly", sourceDisplayPrefix: "packages/fly/src" },
   {
     srcRoot: "packages/github/src",

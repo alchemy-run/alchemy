@@ -37,6 +37,7 @@ const packages = [
   "hetzner",
   "digitalocean",
   "railway",
+  "render",
   "fly",
   "github",
   "stripe",

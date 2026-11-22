@@ -190,6 +190,9 @@
       "path": "./packages/railway/tsconfig.json"
     },
     {
+      "path": "./packages/render/tsconfig.json"
+    },
+    {
       "path": "./packages/fly/tsconfig.json"
     },
     {

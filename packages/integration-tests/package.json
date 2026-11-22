@@ -41,6 +41,7 @@
     "@alchemy.run/prisma": "workspace:*",
     "@alchemy.run/railway": "workspace:*",
     "@alchemy.run/redis": "workspace:*",
+    "@alchemy.run/render": "workspace:*",
     "@alchemy.run/rivet": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
     "@alchemy.run/stripe": "workspace:*",

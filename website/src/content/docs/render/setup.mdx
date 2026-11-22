@@ -1,0 +1,32 @@
+---
+title: Setup
+description: Connect Alchemy to Render — workspace owner ID, API key, profiles, and optional SQL drivers.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Create an API key in the Render Dashboard under **Account Settings -> API Keys**. Install `@alchemy.run/render`:
+
+<PackageManagers add="@alchemy.run/render" />
+
+Register the provider on your stack:
+
+```typescript
+// alchemy.run.ts
+import * as Render from "@alchemy.run/render";
+
+providers: Render.providers(),
+```
+
+Run `alchemy profile edit --add Render` and provide your Render API key (`ownerId` is optional and auto-resolved when your token belongs to a single workspace/owner).
+
+In CI (`CI=true`), profiles are bypassed. Set `RENDER_API_KEY` (or `RENDER_TOKEN`); `RENDER_OWNER_ID` and `RENDER_API_BASE_URL` are optional.
+
+If you use `migrations` or `importFiles` on `Render.Postgres`, also install `pg` and `@effect/sql-pg` in your project.
+
+See [Profiles](/environments/profiles) for how credentials are stored and switched.
+
+## Next steps
+
+- [Render overview](/render) — resources, workflows, previews, and runtime bindings.
+- [API reference](/providers/render) — generated docs for all 21 resources and 6 bindings.
