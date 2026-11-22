@@ -128,7 +128,6 @@ import * as PeeringProviders from "./Peering/Providers.ts";
 import * as PlanetaryComputerProviders from "./PlanetaryComputer/Providers.ts";
 import * as PolicyProviders from "./Policy/Providers.ts";
 import * as PolicyInsightsProviders from "./PolicyInsights/Providers.ts";
-import * as PortalProviders from "./Portal/Providers.ts";
 import * as PostgreSQLProviders from "./PostgreSQL/Providers.ts";
 import * as PowerBIProviders from "./PowerBI/Providers.ts";
 import * as PrivateDnsProviders from "./PrivateDns/Providers.ts";
@@ -295,7 +294,6 @@ const services: ReadonlyArray<ServiceProviders> = [
   PlanetaryComputerProviders,
   PolicyProviders,
   PolicyInsightsProviders,
-  PortalProviders,
   PostgreSQLProviders,
   PowerBIProviders,
   PrivateDnsProviders,

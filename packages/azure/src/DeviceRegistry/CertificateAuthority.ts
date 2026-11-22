@@ -229,10 +229,12 @@ const toAttrs = (
     type: props?.certificateAuthorityType ?? "Root",
     keyType: props?.keyType ?? "ECC",
     issuerType: issuer?.issuerType,
-    issuerCertificateAuthorityId: issuer?.certificateAuthorityResourceId,
-    certificateSigningRequest: issuer?.certificateSigningRequest,
-    thumbprint: issuer?.thumbprint,
-    status: issuer?.status,
+    issuerCertificateAuthorityId:
+      issuer?.issuerType === "Microsoft" ? issuer.certificateAuthorityResourceId : undefined,
+    certificateSigningRequest:
+      issuer?.issuerType === "External" ? issuer.certificateSigningRequest : undefined,
+    thumbprint: issuer?.issuerType === "External" ? issuer.thumbprint : undefined,
+    status: issuer?.issuerType === "External" ? issuer.status : undefined,
     subject: props?.subject,
     validityNotBefore: props?.validityNotBefore,
     validityNotAfter: props?.validityNotAfter,
@@ -296,7 +298,10 @@ export const CertificateAuthorityProvider = () =>
         (news.type ?? "Root") !== output.type ||
         (news.keyType ?? "ECC") !== output.keyType ||
         issuer?.issuerType !== output.issuerType ||
-        !sameName(issuer?.certificateAuthorityResourceId, output.issuerCertificateAuthorityId)
+        !sameName(
+          issuer?.issuerType === "Microsoft" ? issuer.certificateAuthorityResourceId : undefined,
+          output.issuerCertificateAuthorityId,
+        )
       ) {
         return { action: "replace" } as const;
       }

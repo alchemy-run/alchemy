@@ -147,7 +147,6 @@
     "./PlanetaryComputer": "./src/PlanetaryComputer/index.ts",
     "./Policy": "./src/Policy/index.ts",
     "./PolicyInsights": "./src/PolicyInsights/index.ts",
-    "./Portal": "./src/Portal/index.ts",
     "./PostgreSQL": "./src/PostgreSQL/index.ts",
     "./PowerBI": "./src/PowerBI/index.ts",
     "./PrivateDns": "./src/PrivateDns/index.ts",
@@ -797,11 +796,6 @@
         "types": "./lib/PolicyInsights/index.d.ts",
         "bun": "./src/PolicyInsights/index.ts",
         "default": "./lib/PolicyInsights/index.js"
-      },
-      "./Portal": {
-        "types": "./lib/Portal/index.d.ts",
-        "bun": "./src/Portal/index.ts",
-        "default": "./lib/Portal/index.js"
       },
       "./PostgreSQL": {
         "types": "./lib/PostgreSQL/index.d.ts",
