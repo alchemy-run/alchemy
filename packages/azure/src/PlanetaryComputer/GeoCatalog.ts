@@ -1,4 +1,4 @@
-import * as planetarycomputer from "@distilled.cloud/azure/planetarycomputer";
+import * as planetarycomputer from "@distilled.cloud/azure/orbitalplanetarycomputer";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import type { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 import {
   desiredTags,
   ensureRegistered,
@@ -279,10 +280,10 @@ export const GeoCatalogProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      // The SDK no longer marks this list as pageable, so only the first
-      // page is read.
-      const page = yield* planetarycomputer.ListGeoCatalogBySubscription({ subscriptionId });
-      return (page.value ?? []).flatMap((catalog) => {
+      const catalogs = yield* Stream.runCollect(
+        planetarycomputer.ListGeoCatalogBySubscription.items({ subscriptionId }),
+      );
+      return Array.from(catalogs).flatMap((catalog) => {
         const group = resourceGroupOf(catalog.id);
         return hasAnyAlchemyTag(catalog.tags) && group !== undefined && catalog.name !== undefined
           ? [toAttrs(group, catalog.name, catalog)]

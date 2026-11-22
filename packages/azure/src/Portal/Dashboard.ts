@@ -251,7 +251,8 @@ export const DashboardProvider = () =>
 
     list: Effect.fn(function* () {
       const { subscriptionId } = yield* AzureEnvironment.current;
-      // The SDK no longer marks this list as pageable, so only the first
+      // Microsoft.Portal ships preview API versions only, so distilled's
+      // `portal` module is not regenerated and has no paging: only the first
       // page is read.
       const page = yield* portal.ListDashboardBySubscription({ subscriptionId });
       return (page.value ?? []).flatMap((dashboard) => {
