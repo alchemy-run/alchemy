@@ -7,6 +7,9 @@ import * as Option from "effect/Option";
 import { processBatch, traceparentLink } from "../internal/EventSourceBatch.ts";
 import * as SQS from "../SQS/index.ts";
 
+const capAt = (value: number | undefined, max: number) =>
+  value === undefined ? undefined : Math.min(value, max);
+
 export const SQSQueueEventSource = Layer.effect(
   SQS.QueueEventSource,
   Effect.gen(function* () {
@@ -38,8 +41,12 @@ export const SQSQueueEventSource = Layer.effect(
               MaxNumberOfMessages: Math.min(props.maxNumberOfMessages ?? props.batchSize ?? 10, 10),
               MessageAttributeNames: ["All"],
               MessageSystemAttributeNames: ["All"],
-              WaitTimeSeconds:
+              // ReceiveMessage waits at most 20 seconds; `maximumBatchingWindow`
+              // may be up to 300 for the Lambda event source mapping.
+              WaitTimeSeconds: capAt(
                 toWireSeconds(props.waitTime) ?? toWireSeconds(props.maximumBatchingWindow),
+                20,
+              ),
             });
 
             const messages = result.Messages ?? [];
